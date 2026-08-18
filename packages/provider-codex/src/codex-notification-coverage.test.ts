@@ -10,6 +10,7 @@ import {
   CODEX_IGNORED_NOTIFICATION_METHODS,
   CODEX_MAPPED_NOTIFICATION_METHODS,
   CODEX_NOTIFICATION_METHODS,
+  CODEX_OPT_OUT_NOTIFICATION_METHODS,
   CODEX_SPECIAL_NOTIFICATION_METHODS,
 } from "./codex-mapping-common.js";
 
@@ -55,5 +56,16 @@ describe("Codex notification coverage", () => {
 
     expect(duplicates).toEqual([]);
     expect(CODEX_NOTIFICATION_METHODS).toEqual(officialMethods);
+  });
+
+  it("opts out every notification that the product intentionally ignores", () => {
+    expect(CODEX_OPT_OUT_NOTIFICATION_METHODS).toEqual(
+      [...CODEX_IGNORED_NOTIFICATION_METHODS].sort(),
+    );
+    expect(
+      CODEX_OPT_OUT_NOTIFICATION_METHODS.filter((method) =>
+        CODEX_SPECIAL_NOTIFICATION_METHODS.has(method),
+      ),
+    ).toEqual([]);
   });
 });

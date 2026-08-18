@@ -7,6 +7,7 @@ import {
   type CodexVersionInfo,
 } from "./binary.js";
 import { JsonlRpcClient, RpcConnectionClosedError } from "./jsonl-rpc-client.js";
+import { CODEX_OPT_OUT_NOTIFICATION_METHODS } from "./codex-mapping-common.js";
 
 // 保留 Codex 对前向配置字段的默认兼容行为，避免 Desktop 与打包 CLI 的配置版本差异阻断启动。
 const APP_SERVER_ARGUMENTS = ["app-server", "--listen", "stdio://"] as const;
@@ -221,7 +222,10 @@ export async function startCodexAppServer(
   try {
     await runtime.waitForSpawn();
     await runtime.client.request("initialize", {
-      capabilities: { experimentalApi: true },
+      capabilities: {
+        experimentalApi: true,
+        optOutNotificationMethods: CODEX_OPT_OUT_NOTIFICATION_METHODS,
+      },
       clientInfo: {
         name: "code_agent",
         title: "CodeAgent",

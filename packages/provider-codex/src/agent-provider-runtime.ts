@@ -35,6 +35,7 @@ import {
 
 export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
   public receiveNotification(method: string, params: unknown): void {
+    if (this.handleProjectStateNotification(method, params)) return;
     this.handleNotification(method, params);
   }
 
@@ -84,10 +85,6 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
         this.runtime.activeReviewWorkerTaskIds.add(reviewWorker.parentTaskId);
         void this.resumeReviewWorker(reviewWorker.workerTaskId);
       }
-      return;
-    }
-    if (method === "thread/goal/updated" || method === "thread/goal/cleared") {
-      // Goal 状态由 Codex 持久化；当前产品只复用其 Turn 输出，不重复发布时间线事件。
       return;
     }
     const nativeTaskId = readTaskId(params) ?? "";
@@ -322,7 +319,7 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
   }
 
   protected routeEvent(event: AgentProviderEvent): void {
-    if (this.runtime.projectTaskIds.has(event.taskId)) {
+    if (event.type === "skills.changed" || this.runtime.projectTaskIds.has(event.taskId)) {
       this.publishEvent(event);
       return;
     }

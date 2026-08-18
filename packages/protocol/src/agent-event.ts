@@ -141,6 +141,34 @@ export const McpServerStatusUpdatedEventSchema = createEventSchema({
   type: Type.Literal("mcp_server.status_updated"),
 });
 
+export const TaskStatusUpdatedEventSchema = createEventSchema({
+  payload: Type.Object(
+    {
+      status: Type.Union([Type.Literal("idle"), Type.Literal("running"), Type.Literal("failed")]),
+    },
+    { additionalProperties: false },
+  ),
+  type: Type.Literal("task.status_updated"),
+});
+
+export const TaskMetadataChangedEventSchema = createEventSchema({
+  payload: Type.Object({}, { additionalProperties: false }),
+  type: Type.Literal("task.metadata_changed"),
+});
+
+export const TaskRemovedEventSchema = createEventSchema({
+  payload: Type.Object(
+    { reason: Type.Union([Type.Literal("archived"), Type.Literal("deleted")]) },
+    { additionalProperties: false },
+  ),
+  type: Type.Literal("task.removed"),
+});
+
+export const SkillsChangedEventSchema = createEventSchema({
+  payload: Type.Object({}, { additionalProperties: false }),
+  type: Type.Literal("skills.changed"),
+});
+
 export const CommandOutputDeltaEventSchema = createEventSchema({
   itemId: Type.String({ minLength: 1 }),
   payload: Type.Object({ delta: Type.String() }, { additionalProperties: false }),
@@ -250,6 +278,10 @@ export const AgentEventSchema = Type.Union([
   ProviderErrorEventSchema,
   TaskNoticeEventSchema,
   McpServerStatusUpdatedEventSchema,
+  TaskStatusUpdatedEventSchema,
+  TaskMetadataChangedEventSchema,
+  TaskRemovedEventSchema,
+  SkillsChangedEventSchema,
   PendingRequestCreatedEventSchema,
   PendingRequestResolvedEventSchema,
   PendingRequestExpiredEventSchema,

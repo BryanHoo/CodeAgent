@@ -32,6 +32,8 @@ export const settings = {
     saving: "正在保存",
   },
   appearance: {
+    automatic: "自动",
+    automaticMode: "自动模式",
     colorMode: "颜色模式",
     dark: "深色",
     darkMode: "深色模式",

@@ -51,9 +51,12 @@ export const CODEX_SPECIAL_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "account/updated",
   "mcpServer/startupStatus/updated",
   "serverRequest/resolved",
-  "thread/goal/cleared",
-  "thread/goal/updated",
+  "skills/changed",
+  "thread/archived",
+  "thread/deleted",
+  "thread/name/updated",
   "thread/started",
+  "thread/status/changed",
 ]);
 
 export const CODEX_IGNORED_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
@@ -75,14 +78,12 @@ export const CODEX_IGNORED_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "rawResponse/completed",
   "rawResponseItem/completed",
   "remoteControl/status/changed",
-  "skills/changed",
-  "thread/archived",
   "thread/closed",
   "thread/compacted",
-  "thread/deleted",
   "thread/environment/connected",
   "thread/environment/disconnected",
-  "thread/name/updated",
+  "thread/goal/cleared",
+  "thread/goal/updated",
   "thread/realtime/closed",
   "thread/realtime/error",
   "thread/realtime/itemAdded",
@@ -92,12 +93,16 @@ export const CODEX_IGNORED_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "thread/realtime/transcript/delta",
   "thread/realtime/transcript/done",
   "thread/settings/updated",
-  "thread/status/changed",
   "thread/unarchived",
   "turn/moderationMetadata",
   "windows/worldWritableWarning",
   "windowsSandbox/setupCompleted",
 ]);
+
+// 在 initialize 阶段阻止 App Server 发送产品不消费的通知，避免无效 JSONL 解析和路由。
+export const CODEX_OPT_OUT_NOTIFICATION_METHODS: readonly string[] = [
+  ...CODEX_IGNORED_NOTIFICATION_METHODS,
+].sort();
 
 // 每个官方 Notification 必须明确映射、专门消费或主动忽略，禁止静默遗漏。
 export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([

@@ -25,6 +25,8 @@ export type ProjectRuntimeManagerOptions = Readonly<{
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
   onMcpServerStatusChanged?: (projectId: string, taskId: string) => void;
+  onSkillsChanged?: (projectId: string) => void;
+  onTaskRemoved?: (projectId: string, taskId: string) => void;
   onProjectGitActivity?: (
     projectId: string,
     taskId: string,
@@ -33,7 +35,7 @@ export type ProjectRuntimeManagerOptions = Readonly<{
   onTaskMetadataChanged?: (
     projectId: string,
     taskId: string,
-    reason: "assistant_reply_started" | "turn_completed",
+    reason: "assistant_reply_started" | "native_notification" | "turn_completed",
   ) => void;
   taskNotifier?: TaskNotifier;
 }>;

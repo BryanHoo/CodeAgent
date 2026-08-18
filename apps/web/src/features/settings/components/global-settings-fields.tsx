@@ -89,12 +89,12 @@ export function ThemeButton({
     <Button
       aria-label={ariaLabel}
       aria-pressed={selected}
-      className={`inline-flex h-8 items-center justify-center gap-2 rounded-[5px] text-body-small font-medium transition-colors ${selected ? "bg-raised text-foreground shadow-control" : "text-muted-foreground hover:text-foreground"}`}
+      className={`inline-flex h-8 items-center justify-center gap-1 rounded-[5px] px-1 text-body-small font-medium transition-colors ${selected ? "bg-raised text-foreground shadow-control" : "text-muted-foreground hover:text-foreground"}`}
       onClick={onClick}
       type="button"
       variant="ghost"
     >
-      <Icon aria-hidden="true" className="size-4" />
+      <Icon aria-hidden="true" className="hidden size-4 min-[360px]:block" />
       <span>{label}</span>
     </Button>
   );

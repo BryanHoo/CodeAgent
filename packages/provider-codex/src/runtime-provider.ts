@@ -267,6 +267,12 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     this.#providerConnection = new CodexProviderConnectionService(client, options);
     client.onNotification((notification) => {
       this.#providerConnection.receiveNotification(notification.method, notification.params);
+      if (notification.method === "skills/changed") {
+        for (const provider of this.#rawProviders.values()) {
+          provider.receiveNotification(notification.method, notification.params);
+        }
+        return;
+      }
       const taskId = readTaskId(notification.params);
       if (taskId === undefined) {
         return;
@@ -294,6 +300,13 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       this.#rawProviders
         .get(projectId ?? "")
         ?.receiveNotification(notification.method, notification.params);
+      if (
+        projectId !== undefined &&
+        (notification.method === "thread/archived" || notification.method === "thread/deleted")
+      ) {
+        const project = this.#projects.get(projectId);
+        if (project !== undefined) this.#owners.releaseTask(project, taskId);
+      }
       if (workerOwner !== undefined && notification.method === "turn/completed") {
         this.#reviewWorkerOwners.delete(taskId);
       }

@@ -5,7 +5,7 @@ import type {
   AppInfoResponse,
   ProjectOpenApp,
 } from "@code-agent/protocol";
-import { Moon, Settings, Sun, X } from "lucide-react";
+import { MonitorCog, Moon, Settings, Sun, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
@@ -15,11 +15,7 @@ import { TooltipContent } from "../../../shared/components/core/tooltip.js";
 import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
-import {
-  applyThemePreference,
-  saveThemePreference,
-  type ThemePreference,
-} from "../theme-preference.js";
+import { setThemePreference, type ThemePreference } from "../theme-preference.js";
 import {
   ModelSelect,
   ReasoningSelect,
@@ -108,8 +104,7 @@ export function GlobalSettingsDialog({
     setTheme(nextTheme);
     // 外观偏好属于浏览器本地状态，选择后立即应用，不依赖服务端保存。
     if (typeof window !== "undefined") {
-      saveThemePreference(nextTheme, window.localStorage);
-      applyThemePreference(nextTheme, document.documentElement);
+      setThemePreference(nextTheme);
     }
   };
 
@@ -252,7 +247,16 @@ export function GlobalSettingsDialog({
                     title={t("sections.appearance")}
                   >
                     <SettingsField label={t("appearance.colorMode")}>
-                      <div className="grid grid-cols-2 rounded-control bg-control p-0.5">
+                      <div className="grid grid-cols-3 rounded-control bg-control p-0.5">
+                        <ThemeButton
+                          ariaLabel={t("appearance.automaticMode")}
+                          icon={MonitorCog}
+                          label={t("appearance.automatic")}
+                          onClick={() => {
+                            selectTheme("system");
+                          }}
+                          selected={theme === "system"}
+                        />
                         <ThemeButton
                           ariaLabel={t("appearance.lightMode")}
                           icon={Sun}

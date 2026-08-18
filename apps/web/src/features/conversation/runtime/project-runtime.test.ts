@@ -356,6 +356,64 @@ describe("project runtime manager", () => {
     manager.dispose();
   });
 
+  it("applies native task state and project cache invalidation events", () => {
+    const harness = createClientHarness();
+    const onSkillsChanged = vi.fn();
+    const onTaskMetadataChanged = vi.fn();
+    const onTaskRemoved = vi.fn();
+    const manager = createProjectRuntimeManager(harness.client, {
+      onSkillsChanged,
+      onTaskMetadataChanged,
+      onTaskRemoved,
+    });
+    manager.observeSnapshot(createSnapshotResponse("task-1", { status: "idle" }));
+
+    const envelope = {
+      provider: "codex",
+      sessionId: "runtime-1",
+      timestamp: "2026-07-28T00:00:01.000Z",
+      version: 2,
+    } as const;
+    harness.emit({
+      ...envelope,
+      payload: { status: "running" },
+      sequence: 1,
+      taskId: "task-1",
+      type: "task.status_updated",
+    });
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").isRunning).toBe(true);
+    harness.emit({
+      ...envelope,
+      payload: {},
+      sequence: 2,
+      taskId: "task-1",
+      type: "task.metadata_changed",
+    });
+    harness.emit({
+      ...envelope,
+      payload: {},
+      sequence: 3,
+      taskId: "project-1",
+      type: "skills.changed",
+    });
+    harness.emit({
+      ...envelope,
+      payload: { reason: "deleted" },
+      sequence: 4,
+      taskId: "task-1",
+      type: "task.removed",
+    });
+
+    expect(onTaskMetadataChanged).toHaveBeenCalledWith(
+      "project-1",
+      "task-1",
+      "native_notification",
+    );
+    expect(onSkillsChanged).toHaveBeenCalledWith("project-1");
+    expect(onTaskRemoved).toHaveBeenCalledWith("project-1", "task-1");
+    manager.dispose();
+  });
+
   it("reports optimistic and realtime Project Git activity", () => {
     const harness = createClientHarness();
     const onProjectGitActivity = vi.fn();

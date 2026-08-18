@@ -52,5 +52,5 @@ export function createFallbackSettings(models: readonly AgentModel[]): AgentGlob
 }
 
 export function readInitialTheme(): ThemePreference {
-  return typeof window === "undefined" ? "light" : readThemePreference(window.localStorage);
+  return typeof window === "undefined" ? "system" : readThemePreference(window.localStorage);
 }

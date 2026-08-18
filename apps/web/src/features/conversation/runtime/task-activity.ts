@@ -190,6 +190,10 @@ export function reduceTaskActivityEvent(
       attention = null;
       isRunning = true;
       break;
+    case "task.status_updated":
+      isRunning = event.payload.status === "running";
+      if (isRunning) attention = null;
+      break;
     case "turn.completed":
       // `failed` 与 `interrupted` 都是未完成终态，必须保留到用户进入 Task 或新 Turn 开始。
       attention = isViewed

@@ -103,6 +103,26 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
 }
 
 describe("task store", () => {
+  it("applies native thread status updates to snapshot metadata", () => {
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ status: "idle" }),
+    );
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        payload: { status: "running" },
+        type: "task.status_updated",
+      },
+    ]);
+
+    expect(store.getState().snapshotMetadata).toMatchObject({
+      status: "running",
+      updatedAt: "2026-07-28T00:00:01.000Z",
+    });
+  });
+
   it("applies streamed plan, reasoning sections, tool progress, file changes, and turn diff", () => {
     const store = createTaskStore(
       { projectId: "project-1", taskId: "task-1" },

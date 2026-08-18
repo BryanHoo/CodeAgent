@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexAppServerExitedError, CodexAppServerProcess } from "./app-server-process.js";
+import { CODEX_OPT_OUT_NOTIFICATION_METHODS } from "./codex-mapping-common.js";
 import { RpcConnectionClosedError, RpcProtocolError, RpcTimeoutError } from "./jsonl-rpc-client.js";
 
 const fakeAppServerPath = fileURLToPath(
@@ -38,7 +39,10 @@ async function startFake(scenario = "normal"): Promise<CodexAppServerProcess> {
   );
   await runtime.waitForSpawn();
   await runtime.client.request("initialize", {
-    capabilities: { experimentalApi: true },
+    capabilities: {
+      experimentalApi: true,
+      optOutNotificationMethods: CODEX_OPT_OUT_NOTIFICATION_METHODS,
+    },
     clientInfo: { name: "code_agent", title: "CodeAgent", version: "1.2.3" },
   });
   runtime.client.notify("initialized", {});
@@ -75,7 +79,10 @@ describe("CodexAppServerProcess", () => {
     await expect(runtime.client.request("inspect")).resolves.toEqual({
       args: ["app-server", "--listen", "stdio://"],
       initializeParams: {
-        capabilities: { experimentalApi: true },
+        capabilities: {
+          experimentalApi: true,
+          optOutNotificationMethods: CODEX_OPT_OUT_NOTIFICATION_METHODS,
+        },
         clientInfo: { name: "code_agent", title: "CodeAgent", version: "1.2.3" },
       },
       initialized: true,

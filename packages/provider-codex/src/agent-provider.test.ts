@@ -759,6 +759,31 @@ describe("CodexAgentProvider", () => {
     );
   });
 
+  it("publishes task state and skill invalidation notifications", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const runtime = createCodexRuntimeProvider({ client: rpc });
+    const provider = runtime.forProject(project);
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitNotification("thread/status/changed", {
+      status: { activeFlags: [], type: "active" },
+      threadId: "task-1",
+    });
+    rpc.emitNotification("thread/name/updated", { threadId: "task-1", threadName: "Renamed" });
+    rpc.emitNotification("skills/changed", {});
+    rpc.emitNotification("thread/archived", { threadId: "task-1" });
+
+    expect(events).toEqual([
+      { payload: { status: "running" }, taskId: "task-1", type: "task.status_updated" },
+      { payload: {}, taskId: "task-1", type: "task.metadata_changed" },
+      { payload: {}, taskId: project.id, type: "skills.changed" },
+      { payload: { reason: "archived" }, taskId: "task-1", type: "task.removed" },
+    ]);
+    expect(runtime.isTaskOwner(project, "task-1")).toBe(false);
+  });
+
   it("validates background terminal ownership only on the first query", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread() },

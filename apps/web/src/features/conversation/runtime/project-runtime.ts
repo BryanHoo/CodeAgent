@@ -39,6 +39,8 @@ export class ProjectRuntimeManager {
     ProjectRuntimeManagerOptions["onMcpServerStatusChanged"]
   >;
   readonly #onProjectGitActivity: NonNullable<ProjectRuntimeManagerOptions["onProjectGitActivity"]>;
+  readonly #onSkillsChanged: NonNullable<ProjectRuntimeManagerOptions["onSkillsChanged"]>;
+  readonly #onTaskRemoved: NonNullable<ProjectRuntimeManagerOptions["onTaskRemoved"]>;
   readonly #onTaskMetadataChanged: NonNullable<
     ProjectRuntimeManagerOptions["onTaskMetadataChanged"]
   >;
@@ -58,6 +60,8 @@ export class ProjectRuntimeManager {
     this.#maxEventHistoryEvents = options.maxEventHistoryEvents ?? MAX_PROJECT_EVENT_HISTORY_EVENTS;
     this.#onMcpServerStatusChanged = options.onMcpServerStatusChanged ?? (() => undefined);
     this.#onProjectGitActivity = options.onProjectGitActivity ?? (() => undefined);
+    this.#onSkillsChanged = options.onSkillsChanged ?? (() => undefined);
+    this.#onTaskRemoved = options.onTaskRemoved ?? (() => undefined);
     this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
     this.#taskNotifier = options.taskNotifier ?? createBrowserTaskNotifier();
     if (!Number.isSafeInteger(this.#idleTimeoutMs) || this.#idleTimeoutMs < 0) {
@@ -184,7 +188,14 @@ export class ProjectRuntimeManager {
       {
         getTaskActivity: () => this.#taskActivity,
         onActivityEvent: (eventProjectId, event) => {
-          if (event.type === "mcp_server.status_updated") {
+          if (event.type === "skills.changed") {
+            this.#onSkillsChanged(eventProjectId);
+          } else if (event.type === "task.metadata_changed") {
+            this.#onTaskMetadataChanged(eventProjectId, event.taskId, "native_notification");
+          } else if (event.type === "task.removed") {
+            this.#onTaskRemoved(eventProjectId, event.taskId);
+            this.forgetTask(eventProjectId, event.taskId);
+          } else if (event.type === "mcp_server.status_updated") {
             this.#onMcpServerStatusChanged(eventProjectId, event.taskId);
           } else if (event.type === "turn.started") {
             this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_started");

@@ -26,6 +26,8 @@ import { PendingRequestLifecycle } from "./pending-request-lifecycle.js";
 import { listCodexMcpServers, reloadCodexMcpServers } from "./agent-provider-mcp.js";
 import { TaskRuntimeState } from "./task-runtime-state.js";
 import { normalizedPathIdentity } from "./runtime-owner-registry.js";
+import { mapCodexProjectStateNotification } from "./agent-provider-notifications.js";
+import { warnDroppedCodexNotification } from "./agent-provider-diagnostics.js";
 import {
   CodexProtocolMappingError,
   type CodexSkill,
@@ -190,6 +192,44 @@ export abstract class CodexAgentProviderBase {
   protected abstract routeEvent(event: AgentProviderEvent): void;
   public abstract receiveNotification(method: string, params: unknown): void;
   public abstract receiveServerRequest(request: RpcServerRequest): void;
+
+  protected handleProjectStateNotification(method: string, params: unknown): boolean {
+    if (
+      method !== "skills/changed" &&
+      method !== "thread/archived" &&
+      method !== "thread/deleted" &&
+      method !== "thread/name/updated" &&
+      method !== "thread/status/changed"
+    ) {
+      return false;
+    }
+    try {
+      const event = mapCodexProjectStateNotification(method, params);
+      if (event === undefined) return true;
+      if (event.type === "skills.changed") {
+        this.skillsById.clear();
+        this.routeEvent({ ...event, taskId: this.project.id });
+        return true;
+      }
+      if (event.type === "task.status_updated") {
+        if (event.payload.status === "running") this.runtime.runningTaskIds.add(event.taskId);
+        else this.runtime.runningTaskIds.delete(event.taskId);
+      }
+      this.routeEvent(event);
+      if (event.type === "task.removed") this.clearTaskRuntimeState(event.taskId);
+    } catch {
+      // 状态通知字段漂移时沿用统一丢弃诊断，不影响后续 JSONL 帧。
+      warnDroppedCodexNotification(
+        this.logger,
+        this.project.id,
+        "invalid_notification",
+        method,
+        params,
+      );
+      return true;
+    }
+    return true;
+  }
 
   public constructor(
     client: CodexRpcClient,

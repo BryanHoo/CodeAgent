@@ -1,3 +1,4 @@
+import type { AgentProviderEvent } from "@code-agent/core";
 import type { AgentMcpServerFailureReason, AgentMcpServerStatus } from "@code-agent/protocol";
 
 import {
@@ -74,6 +75,47 @@ export function readTaskId(value: unknown): string | undefined {
   }
   const thread = value["thread"];
   return isRecord(thread) && typeof thread["id"] === "string" ? thread["id"] : undefined;
+}
+
+export function mapCodexProjectStateNotification(
+  method: string,
+  value: unknown,
+): AgentProviderEvent | undefined {
+  const params = expectRecord(value, `Codex ${method} params`);
+  if (method === "skills/changed") {
+    return { payload: {}, taskId: "project", type: "skills.changed" };
+  }
+
+  const taskId = expectString(params["threadId"], `Codex ${method} threadId`);
+  if (method === "thread/status/changed") {
+    const status = expectRecord(params["status"], "Codex thread status")["type"];
+    if (
+      status !== "active" &&
+      status !== "idle" &&
+      status !== "notLoaded" &&
+      status !== "systemError"
+    ) {
+      throw new CodexProtocolMappingError("Codex thread status is invalid");
+    }
+    return {
+      payload: {
+        status: status === "active" ? "running" : status === "systemError" ? "failed" : "idle",
+      },
+      taskId,
+      type: "task.status_updated",
+    };
+  }
+  if (method === "thread/name/updated") {
+    return { payload: {}, taskId, type: "task.metadata_changed" };
+  }
+  if (method === "thread/archived" || method === "thread/deleted") {
+    return {
+      payload: { reason: method === "thread/archived" ? "archived" : "deleted" },
+      taskId,
+      type: "task.removed",
+    };
+  }
+  return undefined;
 }
 
 export function readNotificationTurnId(method: string, value: unknown): string | undefined {

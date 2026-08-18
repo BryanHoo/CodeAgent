@@ -114,6 +114,40 @@ test("opens the requested settings section and aligns the sidebar footer with th
   );
 });
 
+test("defaults appearance to automatic and follows the system color scheme", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/p/code-agent/t/task-1");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  await page.getByRole("button", { exact: true, name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "全局设置" });
+  const automaticMode = dialog.getByRole("button", { name: "自动模式" });
+  await expect(automaticMode).toHaveAttribute("aria-pressed", "true");
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  await dialog.getByRole("button", { name: "深色模式" }).click();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  await automaticMode.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  await dialog.getByRole("combobox", { name: "语言" }).selectOption("en");
+  await page.setViewportSize({ height: 844, width: 320 });
+  const englishDialog = page.getByRole("dialog", { name: "Global settings" });
+  for (const name of ["Automatic mode", "Light mode", "Dark mode"]) {
+    await expect(englishDialog.getByRole("button", { name })).toBeVisible();
+    expect(
+      await englishDialog.getByRole("button", { name }).evaluate((button) => {
+        return button.scrollWidth <= button.clientWidth;
+      }),
+    ).toBe(true);
+  }
+});
+
 test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
   const workbenchUrl = page.url();

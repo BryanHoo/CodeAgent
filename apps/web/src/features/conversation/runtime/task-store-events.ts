@@ -321,6 +321,20 @@ export function applyAcceptedEvent(
     case "mcp_server.status_updated":
       // MCP 清单由独立 Query 持有；Task Store 只推进统一事件 checkpoint。
       return { checkpoint };
+    case "task.status_updated":
+      return {
+        checkpoint,
+        snapshotMetadata: {
+          ...snapshotMetadata,
+          status: event.payload.status,
+          updatedAt: event.timestamp,
+        },
+      };
+    case "skills.changed":
+    case "task.metadata_changed":
+    case "task.removed":
+      // Project 级缓存由 Runtime 回调同步，Task Store 只推进 checkpoint。
+      return { checkpoint };
     case "item.started":
     case "item.completed": {
       if (state.turnsById[event.turnId] === undefined) {

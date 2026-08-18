@@ -37,6 +37,7 @@ import {
   projectRenameMutationOptions,
   projectReorderMutationOptions,
   projectsQueryOptions,
+  removeArchivedProjectTaskAndRefill,
   reorderProjectPage,
   taskSnapshotQueryOptions,
   updateTaskTitleInProjectListCaches,
@@ -77,9 +78,22 @@ export function ProjectProvider({
           gitStatusCoordinator.handleActivity(projectId, taskId, reason);
         }
       },
+      onSkillsChanged(projectId) {
+        void queryClient.invalidateQueries({
+          exact: true,
+          queryKey: ["projects", projectId, "skills"],
+        });
+      },
+      onTaskRemoved(projectId, taskId) {
+        void removeArchivedProjectTaskAndRefill(queryClient, projectId, taskId);
+        queryClient.removeQueries({
+          exact: true,
+          queryKey: ["projects", projectId, "tasks", taskId],
+        });
+      },
       onTaskMetadataChanged(projectId, taskId, reason) {
         const syncTaskMetadata = async () => {
-          if (reason === "turn_completed") {
+          if (reason === "turn_completed" || reason === "native_notification") {
             // 终态先校准服务端列表顺序，再用 Task Snapshot 保证标题不会被旧列表覆盖。
             await Promise.all([
               queryClient.invalidateQueries({

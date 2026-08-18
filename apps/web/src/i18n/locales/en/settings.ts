@@ -32,6 +32,8 @@ export const settings = {
     saving: "Saving",
   },
   appearance: {
+    automatic: "Automatic",
+    automaticMode: "Automatic mode",
     colorMode: "Color mode",
     dark: "Dark",
     darkMode: "Dark mode",

@@ -77,6 +77,7 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain("提交消息");
     expect(markup).toContain("应用集成");
     expect(markup).toContain("模型服务");
+    expect(markup).toContain('aria-label="自动模式"');
     expect(markup).toContain('aria-label="浅色模式"');
     expect(markup).toContain('aria-label="深色模式"');
     expect(markup).toContain('aria-label="审批"');
