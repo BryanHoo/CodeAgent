@@ -14,7 +14,6 @@
     "@code-agent/core": "workspace:*",
     "@code-agent/protocol": "workspace:*",
     "@code-agent/provider-codex": "workspace:*",
-    "@fastify/compress": "catalog:",
     "@fastify/cookie": "catalog:",
     "@fastify/multipart": "catalog:",
     "@fastify/static": "catalog:",

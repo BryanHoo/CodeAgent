@@ -3,7 +3,6 @@ import { isIP } from "node:net";
 import { domainToASCII } from "node:url";
 
 import { MAX_AGENT_FILE_BYTES, TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
-import fastifyCompress from "@fastify/compress";
 import fastifyCookie from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
@@ -226,13 +225,10 @@ export async function configureServerDelivery(
 
   const { staticRoot } = options;
   if (staticRoot !== undefined) {
-    // 压缩插件必须先于静态插件注册，确保静态文件流进入响应压缩钩子。
-    await app.register(fastifyCompress, {
-      encodings: ["br", "gzip"],
-      globalDecompression: false,
-    });
     await app.register(fastifyStatic, {
       cacheControl: false,
+      // 直接交付构建期旁路文件，避免请求阶段占用 Node.js CPU 压缩静态内容。
+      preCompressed: true,
       root: staticRoot,
       setHeaders: (reply, filePath) => {
         const [topLevelDirectory] = relative(staticRoot, filePath).split(sep);

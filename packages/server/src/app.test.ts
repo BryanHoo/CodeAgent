@@ -26,7 +26,13 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { brotliDecompressSync, gunzipSync } from "node:zlib";
+import {
+  brotliCompressSync,
+  brotliDecompressSync,
+  constants as zlibConstants,
+  gzipSync,
+  gunzipSync,
+} from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCodeAgentServer } from "./app.js";
@@ -4208,19 +4214,31 @@ describe("CodeAgent Server", () => {
     expect(listTasks).not.toHaveBeenCalled();
   });
 
-  it("compresses static assets and applies content-aware cache policies", async () => {
+  it("serves precompressed static assets and applies content-aware cache policies", async () => {
     const staticRoot = await mkdtemp(join(tmpdir(), "code-agent-web-"));
     const assetsRoot = join(staticRoot, "assets");
+    const htmlBody = "<main>CodeAgent Web</main>";
     const assetBody = "export const value = 'CodeAgent';\n".repeat(128);
+    const brotliAsset = brotliCompressSync(assetBody, {
+      params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 1 },
+    });
+    const gzipAsset = gzipSync(assetBody, { level: 1 });
     await mkdir(assetsRoot);
-    await writeFile(join(staticRoot, "index.html"), "<main>CodeAgent Web</main>", "utf8");
+    await writeFile(join(staticRoot, "index.html"), htmlBody, "utf8");
+    await writeFile(join(staticRoot, "index.html.br"), brotliCompressSync(htmlBody));
     await writeFile(join(assetsRoot, "index-CqRfgh3W.js"), assetBody, "utf8");
+    await writeFile(join(assetsRoot, "index-CqRfgh3W.js.br"), brotliAsset);
+    await writeFile(join(assetsRoot, "index-CqRfgh3W.js.gz"), gzipAsset);
     const app = await createCodeAgentServer(
       createServerOptions(createProvider().provider, { staticRoot }),
     );
     closeCallbacks.push(() => app.close());
 
-    const routeResponse = await app.inject({ method: "GET", url: "/p/code-agent/t/task-1" });
+    const routeResponse = await app.inject({
+      headers: { "accept-encoding": "br" },
+      method: "GET",
+      url: "/p/code-agent/t/task-1",
+    });
     const brotliAssetResponse = await app.inject({
       headers: { "accept-encoding": "br" },
       method: "GET",
@@ -4231,18 +4249,29 @@ describe("CodeAgent Server", () => {
       method: "GET",
       url: "/assets/index-CqRfgh3W.js",
     });
+    const identityAssetResponse = await app.inject({
+      headers: { "accept-encoding": "identity" },
+      method: "GET",
+      url: "/assets/index-CqRfgh3W.js",
+    });
     const apiResponse = await app.inject({ method: "GET", url: "/v1/missing" });
 
     expect(routeResponse.statusCode).toBe(200);
-    expect(routeResponse.body).toContain("CodeAgent Web");
+    expect(routeResponse.headers["content-encoding"]).toBe("br");
+    expect(brotliDecompressSync(routeResponse.rawPayload).toString("utf8")).toBe(htmlBody);
     expect(routeResponse.headers["cache-control"]).toBe("public, max-age=0");
     expect(brotliAssetResponse.headers["cache-control"]).toBe(
       "public, max-age=31536000, immutable",
     );
+    expect(brotliAssetResponse.headers.vary?.toLowerCase()).toContain("accept-encoding");
     expect(brotliAssetResponse.headers["content-encoding"]).toBe("br");
+    expect(brotliAssetResponse.rawPayload).toEqual(brotliAsset);
     expect(brotliDecompressSync(brotliAssetResponse.rawPayload).toString("utf8")).toBe(assetBody);
     expect(gzipAssetResponse.headers["content-encoding"]).toBe("gzip");
+    expect(gzipAssetResponse.rawPayload).toEqual(gzipAsset);
     expect(gunzipSync(gzipAssetResponse.rawPayload).toString("utf8")).toBe(assetBody);
+    expect(identityAssetResponse.headers["content-encoding"]).toBeUndefined();
+    expect(identityAssetResponse.body).toBe(assetBody);
     expect(apiResponse.statusCode).toBe(404);
     expect(apiResponse.headers["content-type"]).toContain("application/json");
   });
