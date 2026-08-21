@@ -158,19 +158,19 @@ export function WorkbenchInspector({
     requestedTab: tab,
     taskId,
   });
+  const isGitProject = gitStatus !== undefined && gitStatus.repositoryMode !== "none";
   const { changeStats, displayChanges, fileChangesByPath } = useMemo(
     () =>
-      activeTab === "context" || activeTab === "project"
+      isGitProject && (activeTab === "context" || activeTab === "project")
         ? deriveInspectorGitChangeState(gitStatus, gitStatusDetails)
         : {
             changeStats: undefined,
             displayChanges: [],
             fileChangesByPath: emptyFileChangesByPath,
           },
-    [activeTab, gitStatus, gitStatusDetails],
+    [activeTab, gitStatus, gitStatusDetails, isGitProject],
   );
   const projectRootName = projectPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? projectName;
-  const isGitProject = gitStatus !== undefined && gitStatus.repositoryMode !== "none";
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
       {isGitProject && displayChanges.length > 0 ? (

@@ -16,6 +16,24 @@ type InspectorActivationInput = Readonly<{
   taskId: string | undefined;
 }>;
 
+export function shouldEnableProjectGitDetails({
+  activePanel,
+  gitStatus,
+  temporary,
+}: Readonly<{
+  activePanel: boolean;
+  gitStatus: InspectorGitAvailability | undefined;
+  temporary: boolean;
+}>): boolean {
+  return (
+    !temporary &&
+    activePanel &&
+    gitStatus !== undefined &&
+    gitStatus.repositoryMode !== "none" &&
+    gitStatus.staged.length + gitStatus.unstaged.length > 0
+  );
+}
+
 export function getAvailableWorkbenchInspectorTabs(
   taskId: string | undefined,
   gitStatus: InspectorGitAvailability | undefined,

@@ -53,6 +53,7 @@ export const conversation = {
   },
   inspector: {
     attachmentDetail: "附件",
+    changeIndicator: "{{path}}，新增 {{additions}} 行，删除 {{removals}} 行",
     changeStats: "变更统计",
     changes: "变更",
     commit: "提交",

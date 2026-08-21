@@ -5,8 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PROJECT_FILE_TREE_ROW_HEIGHT_PX,
   WorkbenchProjectFileTree,
-  pruneCollapsedProjectFileTreePaths,
 } from "./workbench-project-file-tree.js";
+import {
+  collectVisibleProjectFileTreeChangeStats,
+  ProjectFileTreeChangeIndicator,
+  pruneCollapsedProjectFileTreePaths,
+} from "./project-file-tree-changes.js";
 
 describe("WorkbenchProjectFileTree", () => {
   it("removes expanded descendants when their parent is collapsed", () => {
@@ -48,5 +52,58 @@ describe("WorkbenchProjectFileTree", () => {
     expect(markup).toContain('aria-label="项目文件"');
     expect(markup).toContain("cursor-default");
     expect(markup).toContain("CodeAgent");
+  });
+
+  it("places Git line stats on the deepest visible file or directory", () => {
+    const visibleEntries = [
+      { kind: "entry", name: "src", path: "src", type: "directory" },
+      {
+        kind: "entry",
+        name: "components",
+        path: "src/components",
+        type: "directory",
+      },
+      {
+        kind: "entry",
+        name: "app.tsx",
+        path: "src/components/app.tsx",
+        type: "file",
+      },
+    ] as const;
+    const changes = new Map([
+      [
+        "src/components/app.tsx",
+        {
+          diff: "@@ -1,1 +1,2 @@\n-old\n+new\n+next",
+          kind: "update" as const,
+          path: "src/components/app.tsx",
+        },
+      ],
+      [
+        "src/components/removed.tsx",
+        {
+          diff: "@@ -1,2 +0,0 @@\n-old\n-content",
+          kind: "delete" as const,
+          path: "src/components/removed.tsx",
+        },
+      ],
+    ]);
+
+    expect(collectVisibleProjectFileTreeChangeStats(changes, visibleEntries)).toEqual(
+      new Map([
+        ["src/components/app.tsx", { additions: 2, removals: 1 }],
+        ["src/components", { additions: 0, removals: 2 }],
+      ]),
+    );
+  });
+
+  it("renders additions and removals at the end of a changed tree row", () => {
+    const markup = renderToStaticMarkup(
+      <ProjectFileTreeChangeIndicator path="src/app.tsx" stats={{ additions: 2, removals: 1 }} />,
+    );
+
+    expect(markup).toContain('aria-label="src/app.tsx，新增 2 行，删除 1 行"');
+    expect(markup).toContain(">+2</span>");
+    expect(markup).toContain(">-1</span>");
   });
 });

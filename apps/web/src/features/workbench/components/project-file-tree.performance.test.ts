@@ -9,7 +9,7 @@ import {
   PROJECT_FILE_TREE_ROOT_ID,
   type ProjectFileTreeItem,
 } from "./project-file-tree-model.js";
-import { getProjectFileTreeMaximumMountedRows } from "./workbench-project-file-tree.js";
+import { getProjectFileTreeMaximumMountedRows } from "./project-file-tree-changes.js";
 
 describe("project file tree performance", () => {
   it("builds 10,000 flat items while keeping mounted rows bounded", async () => {

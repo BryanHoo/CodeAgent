@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveWorkbenchInspectorActivation } from "./workbench-inspector-activation.js";
+import {
+  deriveWorkbenchInspectorActivation,
+  shouldEnableProjectGitDetails,
+} from "./workbench-inspector-activation.js";
 
 const gitStatus = {
   repositoryMode: "root" as const,
@@ -76,5 +79,19 @@ describe("deriveWorkbenchInspectorActivation", () => {
       history: false,
       project: false,
     });
+  });
+
+  it("keeps detailed Git reads disabled for non-Git projects", () => {
+    expect(
+      shouldEnableProjectGitDetails({
+        activePanel: true,
+        gitStatus: {
+          repositoryMode: "none",
+          staged: [{ path: "unexpected.ts" }],
+          unstaged: [],
+        },
+        temporary: false,
+      }),
+    ).toBe(false);
   });
 });

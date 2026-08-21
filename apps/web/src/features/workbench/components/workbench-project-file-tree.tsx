@@ -42,6 +42,11 @@ import {
   PROJECT_FILE_TREE_ROOT_ID,
   type ProjectFileTreeItem,
 } from "./project-file-tree-model.js";
+import {
+  collectVisibleProjectFileTreeChangeStats,
+  ProjectFileTreeChangeIndicator,
+  pruneCollapsedProjectFileTreePaths,
+} from "./project-file-tree-changes.js";
 import { ProjectFileTreeRootActions } from "./workbench-inspector-file-tree.js";
 import {
   getProjectTargetAbsolutePath,
@@ -54,15 +59,6 @@ export const PROJECT_FILE_TREE_ROW_HEIGHT_PX = 28;
 const PROJECT_FILE_TREE_INDENT_PX = 16;
 const PROJECT_FILE_TREE_OVERSCAN = 8;
 const PROJECT_FILE_TREE_INITIAL_RECT = { height: 600, width: 320 };
-
-export function getProjectFileTreeMaximumMountedRows(
-  itemCount: number,
-  viewportHeight: number,
-): number {
-  const visibleRows = Math.ceil(viewportHeight / PROJECT_FILE_TREE_ROW_HEIGHT_PX);
-  return Math.min(itemCount, visibleRows + PROJECT_FILE_TREE_OVERSCAN * 2);
-}
-
 type WorkbenchProjectFileTreeProps = Readonly<{
   client: CodeAgentFileTreeClient;
   expandedPaths: ReadonlySet<string>;
@@ -82,19 +78,6 @@ type WorkbenchProjectFileTreeProps = Readonly<{
 }>;
 
 type TreeItemProps = HTMLAttributes<HTMLDivElement> & Readonly<{ ref?: RefCallback<HTMLElement> }>;
-
-export function pruneCollapsedProjectFileTreePaths(
-  previousPaths: ReadonlySet<string>,
-  nextPaths: ReadonlySet<string>,
-): Set<string> {
-  const collapsedPaths = [...previousPaths].filter((path) => !nextPaths.has(path));
-  return new Set(
-    [...nextPaths].filter(
-      (path) => !collapsedPaths.some((collapsedPath) => path.startsWith(`${collapsedPath}/`)),
-    ),
-  );
-}
-
 function resolveState<T>(value: T | ((old: T) => T), current: T): T {
   return typeof value === "function" ? (value as (old: T) => T)(current) : value;
 }
@@ -128,6 +111,7 @@ function createTarget(
 }
 
 type ProjectFileTreeRowProps = Readonly<{
+  changeStatsByPath: ReturnType<typeof collectVisibleProjectFileTreeChangeStats>;
   item: ItemInstance<ProjectFileTreeItem>;
   onOpenProjectPath: (appId: ProjectOpenAppId, path?: string) => void;
   onReferenceProjectPath: (entry: ProjectFileSearchEntry) => void;
@@ -141,6 +125,7 @@ type ProjectFileTreeRowProps = Readonly<{
 }>;
 
 const ProjectFileTreeRow = memo(function ProjectFileTreeRow({
+  changeStatsByPath,
   item,
   onOpenProjectPath,
   onReferenceProjectPath,
@@ -167,6 +152,7 @@ const ProjectFileTreeRow = memo(function ProjectFileTreeRow({
   const isExpanded = item.isExpanded();
   const isLoading = item.isLoading();
   const refreshName = data.kind === "status" ? data.name : name;
+  const changeStats = data.kind === "entry" ? changeStatsByPath.get(data.path) : undefined;
 
   if (data.kind === "status") {
     return (
@@ -272,6 +258,9 @@ const ProjectFileTreeRow = memo(function ProjectFileTreeRow({
       <span className="min-w-0 flex-1 truncate" title={data.kind === "entry" ? data.path : name}>
         {name}
       </span>
+      {data.kind === "entry" && changeStats !== undefined ? (
+        <ProjectFileTreeChangeIndicator path={data.path} stats={changeStats} />
+      ) : null}
       {data.kind === "root" ? (
         <ProjectFileTreeRootActions
           onMenuOpen={() => {
@@ -398,6 +387,16 @@ export function WorkbenchProjectFileTree({
     state: { expandedItems, selectedItems },
   });
   const items = tree.getItems();
+  const changeStatsByPath = useMemo(
+    () =>
+      fileChangesByPath.size === 0
+        ? new Map()
+        : collectVisibleProjectFileTreeChangeStats(
+            fileChangesByPath,
+            items.map((item) => item.getItemData()),
+          ),
+    [fileChangesByPath, items],
+  );
   const itemIndexById = useMemo(
     () => new Map(items.map((item, index) => [item.getId(), index])),
     [items],
@@ -476,6 +475,7 @@ export function WorkbenchProjectFileTree({
               }}
             >
               <ProjectFileTreeRow
+                changeStatsByPath={changeStatsByPath}
                 item={item}
                 onOpenProjectPath={onOpenProjectPath}
                 onReferenceProjectPath={onReferenceProjectPath}

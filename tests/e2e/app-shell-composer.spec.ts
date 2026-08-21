@@ -1968,7 +1968,7 @@ test("selects and submits a host file as an attachment", async ({ page }) => {
   });
 });
 
-test("opens file diffs and review from the timeline while keeping Inspector commit-only", async ({
+test("opens timeline review while showing Git stats in the Inspector project tree", async ({
   page,
 }) => {
   const consoleErrors: string[] = [];
@@ -2059,7 +2059,7 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
     inspector
       .getByRole("tree", { name: "项目文件" })
       .getByLabel("package.json，新增 1 行，删除 1 行"),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   await contextTab.click();
   const [statsBox, commitBox] = await Promise.all([
     changeStats.boundingBox(),

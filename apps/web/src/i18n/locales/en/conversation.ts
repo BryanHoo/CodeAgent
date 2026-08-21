@@ -53,6 +53,7 @@ export const conversation = {
   },
   inspector: {
     attachmentDetail: "Attachment",
+    changeIndicator: "{{path}}, {{additions}} additions, {{removals}} deletions",
     changeStats: "Change statistics",
     changes: "Changes",
     commit: "Commit",

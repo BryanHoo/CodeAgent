@@ -43,7 +43,10 @@ import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
 import { getProjectFileManagerApp } from "./project-open-menu.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import type { WorkbenchInspectorTab } from "./workbench-inspector.js";
-import { deriveWorkbenchInspectorActivation } from "../workbench-inspector-activation.js";
+import {
+  deriveWorkbenchInspectorActivation,
+  shouldEnableProjectGitDetails,
+} from "../workbench-inspector-activation.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 
 const emptyExpandedFileTreePaths = new Set<string>();
@@ -314,11 +317,12 @@ export function useWorkbenchShellRuntime({
       projectId,
       null,
       gitStatusQuery.data?.snapshot ?? "",
-      !temporary &&
-        (inspectorActivation.context ||
-          inspectorActivation.project ||
-          inspectorActivation.changes) &&
-        (gitStatusQuery.data?.staged.length ?? 0) + (gitStatusQuery.data?.unstaged.length ?? 0) > 0,
+      shouldEnableProjectGitDetails({
+        activePanel:
+          inspectorActivation.context || inspectorActivation.project || inspectorActivation.changes,
+        gitStatus: gitStatusQuery.data,
+        temporary,
+      }),
       client,
     ),
   );
