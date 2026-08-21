@@ -1,7 +1,6 @@
 import { Buffer } from "node:buffer";
 
 import type {
-  AgentModel,
   AgentProviderAccount,
   AgentProviderConnectionMutationResponse,
   AgentProviderConnectionStatus,
@@ -11,20 +10,20 @@ import type {
 } from "@code-agent/protocol";
 
 import type { CodexRpcClient } from "./agent-provider-base.js";
+import {
+  CodexProviderConnectionError,
+  mapCustomModels,
+  normalizeManualModels,
+  readDiscoveredModels,
+  type CustomModelDefinition,
+} from "./custom-model-catalog.js";
+
+export { CodexProviderConnectionError } from "./custom-model-catalog.js";
 
 const CUSTOM_PROVIDER_ID = "code_agent_custom";
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_MODEL_RESPONSE_MAX_BYTES = 1 * 1_024 * 1_024;
 const DEFAULT_MODEL_COUNT_LIMIT = 1_000;
-const CUSTOM_MODEL_REASONING_EFFORTS: AgentModel["supportedReasoningEfforts"] = [
-  { description: "", id: "minimal" },
-  { description: "", id: "low" },
-  { description: "", id: "medium" },
-  { description: "", id: "high" },
-  { description: "", id: "xhigh" },
-];
-
-type CustomModelDefinition = NonNullable<ConfigureCustomProviderRequest["models"]>[number];
 
 type PendingLogin = Readonly<{
   error: string | null;
@@ -37,13 +36,6 @@ export interface CodexProviderConnectionServiceOptions {
   modelCountLimit?: number;
   modelRequestTimeoutMs?: number;
   modelResponseMaxBytes?: number;
-}
-
-export class CodexProviderConnectionError extends Error {
-  public constructor(message: string) {
-    super(message);
-    this.name = "CodexProviderConnectionError";
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -106,73 +98,6 @@ async function readBoundedBody(response: Response, maximumBytes: number): Promis
   return Buffer.concat(chunks, total);
 }
 
-function readDiscoveredModels(value: unknown, countLimit: number): CustomModelDefinition[] {
-  if (!isRecord(value) || !Array.isArray(value["data"])) {
-    throw new CodexProviderConnectionError("Custom model endpoint returned an invalid response");
-  }
-  if (value["data"].length > countLimit) {
-    throw new CodexProviderConnectionError("Custom model endpoint returned too many models");
-  }
-
-  const models: CustomModelDefinition[] = [];
-  for (const item of value["data"]) {
-    if (!isRecord(item) || typeof item["id"] !== "string") continue;
-    const id = item["id"].trim();
-    if (id.length === 0 || id.length > 256) continue;
-    const candidateName = typeof item["name"] === "string" ? item["name"].trim() : "";
-    models.push({
-      id,
-      name: candidateName.length > 0 && candidateName.length <= 256 ? candidateName : id,
-    });
-  }
-  return models;
-}
-
-function normalizeManualModels(
-  values: readonly CustomModelDefinition[],
-  countLimit: number,
-): CustomModelDefinition[] {
-  const models = new Map<string, CustomModelDefinition>();
-  for (const value of values) {
-    const id = value.id.trim();
-    const name = value.name.trim();
-    if (id.length === 0 || name.length === 0 || id.length > 256 || name.length > 256) {
-      throw new CodexProviderConnectionError("Custom model id or name is invalid");
-    }
-    models.set(id, { id, name });
-  }
-  if (models.size > countLimit) {
-    throw new CodexProviderConnectionError("Custom provider returned too many models");
-  }
-  return [...models.values()];
-}
-
-function mapCustomModels(
-  values: readonly CustomModelDefinition[],
-  countLimit: number,
-): ConfigureCustomProviderResponse["models"] {
-  const modelsById = new Map(values.map((model) => [model.id, model]));
-  const orderedModels = [...modelsById.values()].sort((left, right) =>
-    left.id.localeCompare(right.id, "en"),
-  );
-  if (orderedModels.length > countLimit) {
-    throw new CodexProviderConnectionError("Custom provider returned too many models");
-  }
-  if (orderedModels.length === 0) {
-    throw new CodexProviderConnectionError("Custom provider returned no usable models");
-  }
-  // OpenAI-compatible /models 通常不声明思考量能力；向自定义模型开放 Codex 可传递的现有五档选项。
-  const data: AgentModel[] = orderedModels.map(({ id, name }, index) => ({
-    defaultReasoningEffort: "medium",
-    description: "",
-    displayName: name,
-    id,
-    isDefault: index === 0,
-    supportedReasoningEfforts: CUSTOM_MODEL_REASONING_EFFORTS,
-  }));
-  return { data, nextCursor: null };
-}
-
 function mapAccount(value: unknown): AgentProviderAccount | null {
   if (!isRecord(value)) return null;
   if (value["type"] === "apiKey") return { type: "apiKey" };
@@ -227,6 +152,17 @@ function readAccountResponse(response: unknown): {
     account: mapAccount(response["account"]),
     requiresOpenaiAuth: response["requiresOpenaiAuth"],
   };
+}
+
+function readProviderCapabilities(response: unknown): void {
+  if (
+    !isRecord(response) ||
+    typeof response["namespaceTools"] !== "boolean" ||
+    typeof response["imageGeneration"] !== "boolean" ||
+    typeof response["webSearch"] !== "boolean"
+  ) {
+    throw new CodexProviderConnectionError("Codex returned invalid model provider capabilities");
+  }
 }
 
 export class CodexProviderConnectionService {
@@ -354,6 +290,8 @@ export class CodexProviderConnectionService {
         { keyPath: "model_provider", mergeStrategy: "upsert", value: CUSTOM_PROVIDER_ID },
       ],
     });
+    // 0.149.0 会从最新 config 解析当前 Provider；在返回成功前确认其运行时能力可被读取。
+    readProviderCapabilities(await this.#client.request("modelProvider/capabilities/read", {}));
     this.#pendingLogin = null;
     return { models, status: await this.readStatus() };
   }

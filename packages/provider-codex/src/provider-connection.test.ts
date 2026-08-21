@@ -148,6 +148,11 @@ describe("CodexProviderConnectionService", () => {
     const client = new FakeRpcClient();
     client.enqueue("account/login/start", { type: "apiKey" });
     client.enqueue("config/batchWrite", {});
+    client.enqueue("modelProvider/capabilities/read", {
+      imageGeneration: true,
+      namespaceTools: true,
+      webSearch: true,
+    });
     client.enqueue("config/read", {
       config: {
         model_provider: "code_agent_custom",
@@ -158,10 +163,33 @@ describe("CodexProviderConnectionService", () => {
     });
     client.enqueue("account/read", { account: { type: "apiKey" }, requiresOpenaiAuth: true });
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ id: "zeta" }, { id: "alpha" }, { id: "alpha" }] }), {
-        headers: { "content-type": "application/json" },
-        status: 200,
-      }),
+      new Response(
+        JSON.stringify({
+          models: [
+            {
+              default_reasoning_level: "ultra",
+              display_name: "Zeta",
+              slug: "zeta",
+              supported_reasoning_levels: [
+                { description: "Low", effort: "low" },
+                { description: "Maximum", effort: "max" },
+                { description: "Proactive", effort: "ultra" },
+                { description: "Provider defined", effort: "focused" },
+              ],
+            },
+            {
+              default_reasoning_level: "medium",
+              display_name: "Alpha",
+              slug: "alpha",
+              supported_reasoning_levels: [{ description: "Medium", effort: "medium" }],
+            },
+          ],
+        }),
+        {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        },
+      ),
     );
     const service = new CodexProviderConnectionService(client, { fetch: fetchMock });
 
@@ -181,16 +209,21 @@ describe("CodexProviderConnectionService", () => {
             displayName: "Alpha Custom",
             id: "alpha",
             isDefault: true,
-            supportedReasoningEfforts: [
-              { description: "", id: "minimal" },
-              { description: "", id: "low" },
-              { description: "", id: "medium" },
-              { description: "", id: "high" },
-              { description: "", id: "xhigh" },
-            ],
+            supportedReasoningEfforts: [{ description: "Medium", id: "medium" }],
           },
           { displayName: "Manual Model", id: "manual-model", isDefault: false },
-          { id: "zeta", isDefault: false },
+          {
+            defaultReasoningEffort: "ultra",
+            displayName: "Zeta",
+            id: "zeta",
+            isDefault: false,
+            supportedReasoningEfforts: [
+              { description: "Low", id: "low" },
+              { description: "Maximum", id: "max" },
+              { description: "Proactive", id: "ultra" },
+              { description: "Provider defined", id: "focused" },
+            ],
+          },
         ],
       },
       status: { customBaseUrl: "https://api.example.com/v1", state: "connected" },
@@ -226,11 +259,20 @@ describe("CodexProviderConnectionService", () => {
         ],
       },
     });
+    expect(client.requests).toContainEqual({
+      method: "modelProvider/capabilities/read",
+      params: {},
+    });
   });
 
   it("uses manually configured models when the custom model endpoint is unavailable", async () => {
     const client = new FakeRpcClient();
     client.enqueue("config/batchWrite", {});
+    client.enqueue("modelProvider/capabilities/read", {
+      imageGeneration: true,
+      namespaceTools: true,
+      webSearch: true,
+    });
     client.enqueue("config/read", {
       config: {
         model_provider: "code_agent_custom",
@@ -255,12 +297,79 @@ describe("CodexProviderConnectionService", () => {
     ).resolves.toMatchObject({
       models: {
         data: [
-          { displayName: "Local Model Override", id: "local-model", isDefault: true },
-          { displayName: "Other Model", id: "other-model", isDefault: false },
+          {
+            defaultReasoningEffort: "medium",
+            displayName: "Local Model Override",
+            id: "local-model",
+            isDefault: true,
+            supportedReasoningEfforts: [{ description: "", id: "medium" }],
+          },
+          {
+            defaultReasoningEffort: "medium",
+            displayName: "Other Model",
+            id: "other-model",
+            isDefault: false,
+            supportedReasoningEfforts: [{ description: "", id: "medium" }],
+          },
         ],
       },
       status: { mode: "custom", state: "connected" },
     });
+  });
+
+  it("uses a conservative reasoning default for standard OpenAI model catalogs", async () => {
+    const client = new FakeRpcClient();
+    client.enqueue("config/batchWrite", {});
+    client.enqueue("modelProvider/capabilities/read", {
+      imageGeneration: true,
+      namespaceTools: true,
+      webSearch: true,
+    });
+    client.enqueue("config/read", {
+      config: {
+        model_provider: "code_agent_custom",
+        model_providers: {
+          code_agent_custom: { base_url: "https://api.example.com/v1" },
+        },
+      },
+    });
+    client.enqueue("account/read", { account: null, requiresOpenaiAuth: false });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: "plain-model" }] }), { status: 200 }),
+      );
+    const service = new CodexProviderConnectionService(client, { fetch: fetchMock });
+
+    await expect(
+      service.configureCustom({ baseUrl: "https://api.example.com/v1" }),
+    ).resolves.toMatchObject({
+      models: {
+        data: [
+          {
+            defaultReasoningEffort: "medium",
+            id: "plain-model",
+            supportedReasoningEfforts: [{ description: "", id: "medium" }],
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects invalid capabilities after activating a custom provider", async () => {
+    const client = new FakeRpcClient();
+    client.enqueue("config/batchWrite", {});
+    client.enqueue("modelProvider/capabilities/read", { namespaceTools: true });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: "plain-model" }] }), { status: 200 }),
+      );
+    const service = new CodexProviderConnectionService(client, { fetch: fetchMock });
+
+    await expect(
+      service.configureCustom({ baseUrl: "https://api.example.com/v1" }),
+    ).rejects.toThrow("Codex returned invalid model provider capabilities");
   });
 
   it("times out after response headers while the model response body remains open", async () => {

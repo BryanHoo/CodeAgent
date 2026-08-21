@@ -7,6 +7,7 @@
 ### 工程
 
 - 升级内置 Codex 至 `0.149.0`，刷新真实 App Server Schema 基线，并对齐原生 Project 归属、异步消息投递和严格审核通知。
+- 动态映射自定义 Provider 的模型思考量元数据，支持 `max`、`ultra` 和 Provider 自定义档位，并校验当前 Provider 运行时能力。
 
 ## [1.12.0] - 2026-08-18
 
