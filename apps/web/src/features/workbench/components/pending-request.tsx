@@ -1,10 +1,5 @@
-import type {
-  PendingApprovalDecision,
-  PendingRequest,
-  ResolvePendingRequestRequest,
-} from "@code-agent/protocol";
+import type { PendingApprovalDecision, PendingRequest } from "@code-agent/protocol";
 import { useEffect, useRef, useState } from "react";
-import { v4 as createUuid } from "uuid";
 
 import {
   Confirmation,
@@ -27,30 +22,19 @@ import {
   FileSystemPermissionDetails,
   PermissionApprovalRequestCard,
 } from "./permission-approval-request.js";
+import { McpElicitationRequestCard } from "./mcp-elicitation-request.js";
+import {
+  resolvePendingRequestAttempt,
+  type PendingRequestResolutionAttempt,
+  type PendingRequestResolveHandler,
+} from "./pending-request-resolution.js";
 
-export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];
-
-export type PendingRequestResolutionAttempt = Readonly<{
-  fingerprint: string;
-  key: string;
-}>;
-
-export function resolvePendingRequestAttempt(
-  attempt: PendingRequestResolutionAttempt | undefined,
-  resolution: PendingRequestResolution,
-  createKey: () => string = createUuid,
-): PendingRequestResolutionAttempt {
-  const fingerprint = JSON.stringify(resolution);
-  return attempt?.fingerprint === fingerprint ? attempt : { fingerprint, key: createKey() };
-}
+export { resolvePendingRequestAttempt } from "./pending-request-resolution.js";
+export type { PendingRequestResolution } from "./pending-request-resolution.js";
 
 type PendingRequestCardProps = Readonly<{
   interactive: boolean;
-  onResolve: (
-    request: PendingRequest,
-    resolution: PendingRequestResolution,
-    idempotencyKey: string,
-  ) => Promise<void>;
+  onResolve: PendingRequestResolveHandler;
   request: PendingRequest;
 }>;
 
@@ -372,6 +356,15 @@ export function PendingRequestCard(props: PendingRequestCardProps) {
   if (props.request.type === "permissions_approval") {
     return (
       <PermissionApprovalRequestCard
+        interactive={props.interactive}
+        onResolve={props.onResolve}
+        request={props.request}
+      />
+    );
+  }
+  if (props.request.type === "mcp_elicitation") {
+    return (
+      <McpElicitationRequestCard
         interactive={props.interactive}
         onResolve={props.onResolve}
         request={props.request}

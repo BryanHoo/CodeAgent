@@ -32,7 +32,8 @@ function isApprovalRequest(request: PendingRequest): boolean {
   return (
     request.type === "command_approval" ||
     request.type === "file_change_approval" ||
-    request.type === "permissions_approval"
+    request.type === "permissions_approval" ||
+    request.type === "mcp_elicitation"
   );
 }
 

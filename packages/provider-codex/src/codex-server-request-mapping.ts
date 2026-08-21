@@ -10,6 +10,7 @@ import {
   type PendingCodexRequest,
 } from "./codex-mapping-common.js";
 import type { RpcServerRequest } from "./jsonl-rpc-client.js";
+import { mapMcpServerElicitationRequest } from "./codex-mcp-elicitation-mapping.js";
 
 type NetworkAccess = NonNullable<
   Extract<PendingRequest, { type: "command_approval" }>["networkAccess"]
@@ -262,6 +263,9 @@ export function mapCodexServerRequest(
   serverRequest: RpcServerRequest,
   project: Project,
 ): PendingCodexRequest | undefined {
+  if (serverRequest.method === "mcpServer/elicitation/request") {
+    return mapMcpServerElicitationRequest(serverRequest, project);
+  }
   if (serverRequest.method === "item/permissions/requestApproval") {
     return mapPermissionRequest(
       serverRequest,

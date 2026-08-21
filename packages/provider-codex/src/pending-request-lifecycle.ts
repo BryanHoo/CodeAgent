@@ -10,6 +10,7 @@ import {
   userInputAnswersMatchRequest,
 } from "./codex-protocol-mapping.js";
 import type { RpcRequestId } from "./jsonl-rpc-client.js";
+import { mcpElicitationContentMatchesRequest } from "./codex-mcp-elicitation-mapping.js";
 
 const MAX_TERMINAL_PENDING_REQUESTS = 1_000;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -123,7 +124,23 @@ export class PendingRequestLifecycle {
 
     let answerItem: UserInputAnswerItem | undefined;
     let result: unknown;
-    if (input.type === "permissions_approval") {
+    if (input.type === "mcp_elicitation") {
+      if (request.type !== "mcp_elicitation") {
+        throw new PendingRequestResolutionError("mismatch", "Pending request type does not match");
+      }
+      const resolution = input.resolution;
+      if (
+        resolution.action === "accept" &&
+        !mcpElicitationContentMatchesRequest(request, resolution.content)
+      ) {
+        throw new PendingRequestResolutionError(
+          "mismatch",
+          "MCP elicitation content does not match the requested form",
+        );
+      }
+      // MCP 明确区分接受、拒绝与取消，且拒绝或取消时 content 必须为 null。
+      result = resolution;
+    } else if (input.type === "permissions_approval") {
       if (request.type !== "permissions_approval" || entry.nativePermissionProfile === undefined) {
         throw new PendingRequestResolutionError("mismatch", "Pending request type does not match");
       }
@@ -164,7 +181,11 @@ export class PendingRequestLifecycle {
       };
       answerItem = createUserInputAnswerItem(request, input.resolution.answers);
     } else {
-      if (request.type === "user_input" || request.type === "permissions_approval") {
+      if (
+        request.type === "user_input" ||
+        request.type === "permissions_approval" ||
+        request.type === "mcp_elicitation"
+      ) {
         throw new PendingRequestResolutionError("mismatch", "Pending request type does not match");
       }
       const decision = input.resolution.decision;

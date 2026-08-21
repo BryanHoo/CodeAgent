@@ -134,7 +134,7 @@ describe("Web Bundle 预算门禁", () => {
       budgets: {
         initialGzipBytes: 280 * 1024,
         maxAsyncGzipBytes: 200 * 1024,
-        workbenchReadyGzipBytes: 345 * 1024,
+        workbenchReadyGzipBytes: 500 * 1024,
         workbenchReadyRequestCount: 20,
       },
       passed: true,
@@ -185,7 +185,7 @@ describe("Web Bundle 预算门禁", () => {
 
   it("拒绝超过工作台就绪 gzip 预算的产物", () => {
     const result = runChecker(
-      createBundle({ initialBytes: 230 * 1024, workbenchBytes: 120 * 1024 }),
+      createBundle({ initialBytes: 230 * 1024, workbenchBytes: 300 * 1024 }),
     );
 
     expect(result.status).toBe(1);

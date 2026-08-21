@@ -200,6 +200,70 @@ describe("PendingRequestCard", () => {
     expect(markup).toMatch(/class="[^"]*bg-brand[^"]*"[^>]*>提交回答<\/button>/);
   });
 
+  it("renders MCP form fields and URL confirmation with accessible controls", () => {
+    const form = {
+      ...identity,
+      fields: [
+        {
+          defaultValue: true,
+          description: "允许工具继续执行",
+          id: "confirmed",
+          required: true,
+          title: "确认",
+          type: "boolean",
+        },
+        {
+          defaultValue: "staging",
+          description: null,
+          id: "environment",
+          options: [
+            { label: "Staging", value: "staging" },
+            { label: "Production", value: "production" },
+          ],
+          required: true,
+          title: "环境",
+          type: "select",
+        },
+        {
+          defaultValue: null,
+          description: null,
+          id: "replicas",
+          maximum: 10,
+          minimum: 1,
+          required: false,
+          title: "副本数",
+          type: "integer",
+        },
+      ],
+      message: "配置部署",
+      mode: "form",
+      serverName: "deploy",
+      type: "mcp_elicitation",
+    } as unknown as PendingRequest;
+    const formMarkup = renderToStaticMarkup(
+      <PendingRequestCard interactive onResolve={vi.fn()} request={form} />,
+    );
+    expect(formMarkup).toContain("配置部署");
+    expect(formMarkup).toContain('type="checkbox"');
+    expect(formMarkup).toContain("Staging");
+    expect(formMarkup).toContain('type="number"');
+
+    const url = {
+      ...identity,
+      message: "连接 GitHub 账号",
+      mode: "url",
+      serverName: "github",
+      type: "mcp_elicitation",
+      url: "https://github.com/login/oauth/authorize",
+    } as unknown as PendingRequest;
+    const urlMarkup = renderToStaticMarkup(
+      <PendingRequestCard interactive onResolve={vi.fn()} request={url} />,
+    );
+    expect(urlMarkup).toContain('target="_blank"');
+    expect(urlMarkup).toContain('rel="noreferrer noopener"');
+    expect(urlMarkup).toContain("连接 GitHub 账号");
+  });
+
   it("keeps expired requests visible without interactive controls", () => {
     const request: PendingRequest = {
       ...identity,

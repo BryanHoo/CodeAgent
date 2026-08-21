@@ -42,6 +42,22 @@ function pendingRequestParams(
   kind,
   identity = { itemId: `${kind}-item`, threadId: "task-1", turnId: "turn-1" },
 ) {
+  if (kind === "elicitation") {
+    return {
+      message: "Allow this request?",
+      mode: "form",
+      requestedSchema: {
+        properties: {
+          confirmed: { title: "Confirm", type: "boolean" },
+        },
+        required: ["confirmed"],
+        type: "object",
+      },
+      serverName: "fake-mcp",
+      threadId: identity.threadId,
+      turnId: identity.turnId,
+    };
+  }
   if (kind === "command") {
     return {
       ...identity,
@@ -116,7 +132,9 @@ function sendPendingRequest(
         ? "item/fileChange/requestApproval"
         : kind === "permissions"
           ? "item/permissions/requestApproval"
-          : "item/tool/requestUserInput";
+          : kind === "elicitation"
+            ? "mcpServer/elicitation/request"
+            : "item/tool/requestUserInput";
   pendingServerRequests.set(requestId, {
     completeOnResolve,
     kind,
@@ -837,7 +855,13 @@ input.on("line", (line) => {
 
   if (pendingRequestScenario && message.method === "trigger/pending") {
     const kind = message.params?.kind;
-    if (kind !== "command" && kind !== "file" && kind !== "permissions" && kind !== "user_input") {
+    if (
+      kind !== "command" &&
+      kind !== "elicitation" &&
+      kind !== "file" &&
+      kind !== "permissions" &&
+      kind !== "user_input"
+    ) {
       send({ error: { code: -32602, message: "invalid pending request kind" }, id: message.id });
       return;
     }

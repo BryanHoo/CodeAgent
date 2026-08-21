@@ -1357,10 +1357,28 @@ describe("project protocol", () => {
       requestId: "string:permissions-1",
       type: "permissions_approval",
     } as const;
+    const elicitationRequest = {
+      ...identity,
+      fields: [
+        {
+          defaultValue: true,
+          description: "允许工具继续执行",
+          id: "confirmed",
+          required: true,
+          title: "确认",
+          type: "boolean",
+        },
+      ],
+      message: "Allow this request?",
+      mode: "form",
+      requestId: "string:elicitation-1",
+      serverName: "example",
+      type: "mcp_elicitation",
+    } as const;
 
     expect(
-      [commandRequest, fileRequest, inputRequest, permissionRequest].every((request) =>
-        Value.Check(PendingRequestSchema, request),
+      [commandRequest, fileRequest, inputRequest, permissionRequest, elicitationRequest].every(
+        (request) => Value.Check(PendingRequestSchema, request),
       ),
     ).toBe(true);
     expect(
@@ -1420,6 +1438,26 @@ describe("project protocol", () => {
         type: permissionRequest.type,
       }),
     ).toBe(false);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: elicitationRequest.itemId,
+        projectId: elicitationRequest.projectId,
+        resolution: { action: "accept", content: { confirmed: true } },
+        taskId: elicitationRequest.taskId,
+        turnId: elicitationRequest.turnId,
+        type: elicitationRequest.type,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: elicitationRequest.itemId,
+        projectId: elicitationRequest.projectId,
+        resolution: { action: "decline", content: null },
+        taskId: elicitationRequest.taskId,
+        turnId: elicitationRequest.turnId,
+        type: elicitationRequest.type,
+      }),
+    ).toBe(true);
     expect(
       Value.Check(ResolvePendingRequestRequestSchema, {
         itemId: inputRequest.itemId,

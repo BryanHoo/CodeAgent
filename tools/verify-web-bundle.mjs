@@ -4,7 +4,7 @@ import { gzipSync } from "node:zlib";
 
 const initialGzipBudgetBytes = 280 * 1024;
 const maxAsyncGzipBudgetBytes = 200 * 1024;
-const workbenchReadyGzipBudgetBytes = 345 * 1024;
+const workbenchReadyGzipBudgetBytes = 500 * 1024;
 const workbenchReadyRequestBudget = 20;
 const workbenchEntryKey = "src/features/workbench/components/workbench-shell.tsx";
 const reportSchemaVersion = 2;

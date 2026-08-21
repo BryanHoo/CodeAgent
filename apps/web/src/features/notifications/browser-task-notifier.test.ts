@@ -110,6 +110,16 @@ function createPendingRequestEvent(type: PendingRequest["type"]): AgentEvent {
         type,
       };
       break;
+    case "mcp_elicitation":
+      request = {
+        ...common,
+        fields: [],
+        message: "确认 MCP 请求",
+        mode: "form",
+        serverName: "example",
+        type,
+      };
+      break;
   }
   return {
     itemId: request.itemId,
@@ -186,6 +196,7 @@ describe("browser task notifier", () => {
     ["command_approval", "Task 等待审批"],
     ["file_change_approval", "Task 等待审批"],
     ["permissions_approval", "Task 等待审批"],
+    ["mcp_elicitation", "Task 等待审批"],
     ["user_input", "Task 等待输入"],
   ] as const)("maps a %s request to an actionable notification", (type, body) => {
     const harness = createHarness();

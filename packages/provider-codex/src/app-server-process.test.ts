@@ -101,6 +101,7 @@ describe("CodexAppServerProcess", () => {
     const runtime = await startFake("pending-requests");
     const decisions = {
       command: { decision: "acceptForSession" },
+      elicitation: { action: "accept", content: { confirmed: true } },
       file: { decision: "decline" },
       permissions: {
         permissions: { network: { enabled: true } },
@@ -114,6 +115,7 @@ describe("CodexAppServerProcess", () => {
       const kind = request.id.toString().split("-")[1];
       if (
         kind !== "command" &&
+        kind !== "elicitation" &&
         kind !== "file" &&
         kind !== "permissions" &&
         kind !== "user_input"
@@ -124,7 +126,7 @@ describe("CodexAppServerProcess", () => {
       responseWrites.push(runtime.client.respondToServerRequest(request.id, decisions[kind]));
     });
 
-    for (const kind of ["command", "file", "user_input", "permissions"] as const) {
+    for (const kind of ["command", "file", "user_input", "permissions", "elicitation"] as const) {
       await runtime.client.request("trigger/pending", { kind });
     }
     await Promise.all(responseWrites);
@@ -135,11 +137,12 @@ describe("CodexAppServerProcess", () => {
           { id: "fake-file-2", result: decisions.file },
           { id: "fake-user_input-3", result: decisions.user_input },
           { id: "fake-permissions-4", result: decisions.permissions },
+          { id: "fake-elicitation-5", result: decisions.elicitation },
         ],
       });
     });
 
-    expect(received).toEqual(["command", "file", "user_input", "permissions"]);
+    expect(received).toEqual(["command", "file", "user_input", "permissions", "elicitation"]);
     unsubscribe();
   });
 
