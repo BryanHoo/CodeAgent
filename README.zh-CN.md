@@ -24,7 +24,7 @@ CodeAgent 运行在你的电脑上，既可以本机使用，也可以在可信�
 
 请先准备：
 
-- Node.js 24 或更高版本
+- Node.js 22.13.0 或更高版本
 - Chrome/Chromium 116+、Firefox 124+ 或 Safari 17.4+
 
 CodeAgent 通过 `@openai/codex` 自带受支持的 Codex CLI 二进制，无需单独安装。如需在诊断或启动时使用其他可执行文件，可传入 `--codex-bin <path>` 或设置 `CODE_AGENT_CODEX_BIN`。

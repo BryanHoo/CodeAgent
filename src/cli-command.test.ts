@@ -182,7 +182,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     locateCodexBinary: vi.fn(() =>
       Promise.resolve({ path: "/fake/codex", source: "explicit" as const }),
     ),
-    nodeVersion: "24.1.0",
+    nodeVersion: "22.13.0",
     openBrowser: vi.fn(() => {
       lifecycle.push("browser.open");
       return Promise.resolve();
@@ -268,7 +268,7 @@ describe("runCli", () => {
       explicitPath: "/custom/codex",
     });
     expect(harness.dependencies.checkCodexVersion).toHaveBeenCalledWith("/fake/codex");
-    expect(harness.stdout.join("")).toContain("[成功] Node.js 24.1.0");
+    expect(harness.stdout.join("")).toContain("[成功] Node.js 22.13.0");
     expect(harness.stdout.join("")).toContain("[成功] Codex 0.147.0 (/fake/codex)");
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "state.sqlite3"),
@@ -281,10 +281,10 @@ describe("runCli", () => {
   });
 
   it("returns a non-zero code when doctor finds an unsupported Node.js", async () => {
-    const harness = createHarness({ nodeVersion: "22.0.0" });
+    const harness = createHarness({ nodeVersion: "22.12.0" });
 
     await expect(runCli(["doctor"], harness.options)).resolves.toBe(1);
-    expect(harness.stderr.join("")).toContain("需要 Node.js 24 或更高版本");
+    expect(harness.stderr.join("")).toContain("需要 Node.js 22.13.0 或更高版本");
     expect(harness.dependencies.locateCodexBinary).not.toHaveBeenCalled();
   });
 

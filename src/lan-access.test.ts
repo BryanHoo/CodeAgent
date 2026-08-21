@@ -55,7 +55,6 @@ describe("LAN access helpers", () => {
       internal,
       mac: "00:00:00:00:00:00",
       netmask: "255.255.255.0",
-      scopeid: 0,
     });
     const urls = listLanAccessUrls(3210, {
       en0: [ipv4("192.168.1.20"), ipv4("127.0.0.1", true)],
