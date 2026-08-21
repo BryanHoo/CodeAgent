@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { createComposerDraftStore } from "../composer-draft-context.js";
 import { createPromptSkillContent } from "./prompt-skill-content.js";
 import { createComposerSubmission } from "./workbench-composer-submission.js";
 
@@ -43,12 +42,9 @@ const turn: Awaited<ReturnType<ComposerSubmissionOptions["client"]["startTurn"]>
 
 function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
   const promptContent = overrides.promptContent ?? createPromptSkillContent("提交内容");
-  const setAttachments = vi.fn();
   const setIsSubmitting = vi.fn();
   const setMutationError = vi.fn();
   const setPendingTaskState = vi.fn();
-  const setPromptContent = vi.fn();
-  const setQueuedPrompts = vi.fn();
   const setSubmittedTurnState = vi.fn();
   const startTask = vi.fn<ComposerSubmissionOptions["client"]["startTask"]>(() =>
     Promise.resolve({ task }),
@@ -59,7 +55,8 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
   const steerTurn = vi.fn<ComposerSubmissionOptions["client"]["steerTurn"]>(() =>
     Promise.resolve({ status: "accepted", taskId: "task-1", turnId: "turn-1" }),
   );
-  const draftStore = createComposerDraftStore();
+  const clearComposerInput = vi.fn();
+  const saveQueuedSubmission = vi.fn(() => Promise.resolve(true));
   const skillEditor = {
     focus: vi.fn(),
     getContent: vi.fn(() => promptContent),
@@ -87,12 +84,10 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
     activeTurnId: undefined,
     canSteer: false,
     canSubmit: true,
-    clearComposerInput: vi.fn(),
-    activeAssistantMessages: [],
+    clearComposerInput,
+    activeUserMessageIds: [],
     client: { startTask, startTurn, steerTurn },
-    composerDraftStore: draftStore,
     composerMode: undefined,
-    composerScope: "code-agent:draft",
     controller,
     followUpBehavior: "queue",
     onDirectSubmission: vi.fn(),
@@ -105,13 +100,10 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
     pendingTask: undefined,
     projectId: "code-agent",
     promptContent,
-    queuedPrompts: [],
     routeScope: "code-agent:draft",
     selectedModel: model,
     selectedReasoningEffort: "high",
-    setAttachments,
-    setPromptContent,
-    setQueuedPrompts,
+    saveQueuedSubmission,
     skillEditorRef: { current: skillEditor },
     state: "idle",
     taskId: undefined,
@@ -122,12 +114,11 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
 
   return {
     controller,
+    clearComposerInput,
     onTaskCreated,
     onTaskStarted,
     onTurnStarted,
-    setAttachments,
-    setPromptContent,
-    setQueuedPrompts,
+    saveQueuedSubmission,
     skillEditor,
     startTask,
     startTurn,
@@ -154,10 +145,12 @@ describe("createComposerSubmission", () => {
   });
 
   it("queues a follow-up and clears the active draft while a Turn is running", async () => {
+    const onDirectSubmission = vi.fn();
     const harness = createHarness({
       activeTaskId: "task-1",
       activeTurnId: "turn-1",
       canSteer: true,
+      onDirectSubmission,
       promptContent: createPromptSkillContent("排队处理"),
       state: "running",
       taskId: "task-1",
@@ -166,19 +159,18 @@ describe("createComposerSubmission", () => {
     const submitted = await harness.submit({ files: [], text: "排队处理" });
 
     expect(submitted).toBe(true);
-    expect(harness.setQueuedPrompts).toHaveBeenCalledWith([
-      expect.objectContaining({ files: [], skills: [], status: "queued", text: "排队处理" }),
-    ]);
-    expect(harness.setPromptContent).toHaveBeenCalledWith([]);
-    expect(harness.setAttachments).toHaveBeenCalledWith([]);
-    expect(harness.skillEditor.replace).toHaveBeenCalledWith([]);
+    expect(harness.saveQueuedSubmission).toHaveBeenCalledWith(
+      { attachments: [], skills: [], text: "排队处理", type: "prompt" },
+      expect.any(String),
+    );
+    expect(harness.clearComposerInput).toHaveBeenCalledOnce();
     expect(harness.startTurn).not.toHaveBeenCalled();
+    expect(onDirectSubmission).not.toHaveBeenCalled();
   });
 
   it("keeps a directly accepted steer visible until the assistant responds", async () => {
     const onSteerAccepted = vi.fn();
     const harness = createHarness({
-      activeAssistantMessages: [{ id: "assistant-before", textLength: 4 }],
       activeTaskId: "task-1",
       activeTurnId: "turn-1",
       canSteer: true,
@@ -194,11 +186,11 @@ describe("createComposerSubmission", () => {
     expect(submitted).toBe(true);
     expect(harness.steerTurn).toHaveBeenCalledOnce();
     expect(onSteerAccepted).toHaveBeenCalledWith({
-      assistantMessages: [{ id: "assistant-before", textLength: 4 }],
       files: [],
       skills: [],
       text: "补充失败测试",
       turnId: "turn-1",
+      userMessageIds: [],
     });
   });
 

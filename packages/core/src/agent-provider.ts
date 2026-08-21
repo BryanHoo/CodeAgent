@@ -3,6 +3,7 @@ import type {
   AgentApprovalsReviewer,
   AgentCapabilities,
   AgentAttachmentMediaType,
+  AgentAttachmentKind,
   AgentBackgroundTerminalPage,
   AgentEvent,
   AgentImageMediaType,
@@ -13,6 +14,8 @@ import type {
   AgentSkillPage,
   AgentSkillReference,
   AgentTask,
+  AgentQueuedSubmission,
+  AgentQueuedSubmissionPage,
   AgentTaskPage,
   AgentTaskSnapshot,
   AgentTurn,
@@ -42,6 +45,28 @@ export type ListAgentTasksInput = Readonly<{
   pinnedOnly?: true;
 }>;
 
+export type ListAgentQueuedSubmissionsInput = Readonly<{
+  cursor?: string;
+  limit?: number;
+}>;
+
+export interface AgentProviderQueue {
+  add(
+    taskId: string,
+    input: AgentProviderTurnInput,
+    clientUserMessageId: string,
+  ): Promise<AgentQueuedSubmission>;
+  delete(taskId: string, queuedSubmissionId: string): Promise<boolean>;
+  list(taskId: string, input?: ListAgentQueuedSubmissionsInput): Promise<AgentQueuedSubmissionPage>;
+  reorder(taskId: string, queuedSubmissionIds: readonly string[]): Promise<void>;
+  start(taskId: string, queuedSubmissionId?: string): Promise<AgentTurn>;
+  update(
+    taskId: string,
+    queuedSubmissionId: string,
+    input: AgentProviderTurnInput,
+  ): Promise<AgentQueuedSubmission>;
+}
+
 export type StartAgentTaskOptions = Readonly<{
   ephemeral?: boolean;
 }>;
@@ -68,6 +93,7 @@ export type AgentProviderTurnInput = Readonly<{
 
 export type AgentProviderAttachment = Readonly<{
   content: Uint8Array;
+  kind: AgentAttachmentKind;
   mediaType: AgentAttachmentMediaType;
   name: string;
   size: number;
@@ -110,6 +136,7 @@ export class PendingRequestResolutionError extends Error {
 
 // Core 只声明 Provider 无关能力，具体 RPC、传输顺序与进程生命周期留在外层。
 export interface AgentProvider {
+  readonly queue?: AgentProviderQueue;
   archiveTask(taskId: string): Promise<void>;
   compactTask(taskId: string): Promise<void>;
   forkTask(taskId: string, lastTurnId?: string): Promise<AgentTask>;

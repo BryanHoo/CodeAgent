@@ -1170,6 +1170,129 @@ describe("CodexAgentProvider", () => {
     });
   });
 
+  it("maps the complete persistent thread queue API", async () => {
+    const attachmentRoot = mkdtempSync(join(tmpdir(), "code-agent-queue-file-"));
+    const attachmentPath = join(attachmentRoot, "requirements.md");
+    writeFileSync(attachmentPath, "队列附件内容", "utf8");
+    const attachmentPlaceholder = `code-agent-file:${Buffer.from(
+      JSON.stringify({ mediaType: "text/markdown", name: "requirements.md" }),
+    ).toString("base64url")}`;
+    const queuedSubmission = {
+      clientUserMessageId: "client-message-1",
+      id: "queue-1",
+      input: [
+        { text: "排队处理", text_elements: [], type: "text" },
+        {
+          text: attachmentPath,
+          text_elements: [
+            {
+              byteRange: { end: Buffer.byteLength(attachmentPath, "utf8"), start: 0 },
+              placeholder: attachmentPlaceholder,
+            },
+          ],
+          type: "text",
+        },
+      ],
+    };
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-2",
+      items: [],
+      itemsView: { type: "notLoaded" },
+      startedAt: null,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { queuedSubmission },
+      { data: [queuedSubmission], nextCursor: null },
+      {
+        queuedSubmission: {
+          ...queuedSubmission,
+          input: [{ text: "更新内容", text_elements: [], type: "text" }],
+        },
+      },
+      { deleted: true },
+      {},
+      { thread: nativeThread() },
+      { turn: runningTurn },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+    const input = {
+      files: [
+        {
+          mediaType: "text/markdown",
+          name: "requirements.md",
+          path: attachmentPath,
+        },
+      ],
+      images: [],
+      skills: [],
+      text: "排队处理",
+      textAttachments: [],
+    };
+
+    const added = await provider.queue.add("task-1", input, "client-message-1");
+    expect(added).toMatchObject({
+      clientUserMessageId: "client-message-1",
+      id: "queue-1",
+      text: "排队处理",
+    });
+    expect(added.attachments).toEqual([
+      expect.objectContaining({
+        kind: "file",
+        mediaType: "text/markdown",
+        name: "requirements.md",
+      }),
+    ]);
+    await expect(provider.queue.list("task-1")).resolves.toEqual({
+      data: [expect.objectContaining({ id: "queue-1", text: "排队处理" })],
+      nextCursor: null,
+    });
+    await expect(
+      provider.queue.update("task-1", "queue-1", { ...input, text: "更新内容" }),
+    ).resolves.toMatchObject({ id: "queue-1", text: "更新内容" });
+    await expect(provider.queue.delete("task-1", "queue-1")).resolves.toBe(true);
+    await expect(provider.queue.reorder("task-1", ["queue-2", "queue-1"])).resolves.toBeUndefined();
+    await expect(provider.queue.start("task-1", "queue-1")).resolves.toMatchObject({
+      id: "turn-2",
+      status: "running",
+    });
+
+    expect(
+      rpc.calls
+        .filter((call) => call.method.startsWith("thread/queue/"))
+        .map((call) => call.method),
+    ).toEqual([
+      "thread/queue/add",
+      "thread/queue/list",
+      "thread/queue/update",
+      "thread/queue/delete",
+      "thread/queue/reorder",
+      "thread/queue/start",
+    ]);
+    expect(rpc.calls.at(-1)?.params).toEqual({
+      queuedSubmissionId: "queue-1",
+      threadId: "task-1",
+    });
+    rmSync(attachmentRoot, { force: true, recursive: true });
+  });
+
+  it("publishes native thread queue changes", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitNotification("thread/queue/changed", { threadId: "task-1" });
+
+    expect(events).toContainEqual({ payload: {}, taskId: "task-1", type: "queue.changed" });
+  });
+
   it("shares one resume request across concurrent turns for a restored task", async () => {
     let resolveResume!: (response: unknown) => void;
     const resumeResponse = new Promise<unknown>((resolveResponse) => {
@@ -2740,7 +2863,13 @@ describe("CodexAgentProvider", () => {
             },
             {
               text: "/tmp/specification.pdf",
-              text_elements: [],
+              text_elements: [
+                {
+                  byteRange: { end: 22, start: 0 },
+                  placeholder:
+                    "code-agent-file:eyJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9wZGYiLCJuYW1lIjoic3BlY2lmaWNhdGlvbi5wZGYifQ",
+                },
+              ],
               type: "text",
             },
             { type: "image", url: "data:image/png;base64,aW1hZ2U=" },

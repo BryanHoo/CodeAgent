@@ -58,6 +58,17 @@ export const ProjectTaskTurnParamsSchema = {
   type: "object",
 } as const;
 
+export const ProjectTaskQueueParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    queuedSubmissionId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId", "queuedSubmissionId"],
+  type: "object",
+} as const;
+
 export const ProjectTaskTerminalParamsSchema = {
   additionalProperties: false,
   properties: {
@@ -103,6 +114,15 @@ export const TaskPageQuerySchema = {
     cursor: { minLength: 1, type: "string" },
     limit: { maximum: 100, minimum: 1, type: "integer" },
     pinned: { const: true, type: "boolean" },
+  },
+  type: "object",
+} as const;
+
+export const QueuePageQuerySchema = {
+  additionalProperties: false,
+  properties: {
+    cursor: { minLength: 1, type: "string" },
+    limit: { maximum: 100, minimum: 1, type: "integer" },
   },
   type: "object",
 } as const;

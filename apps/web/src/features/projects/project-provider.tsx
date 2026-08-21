@@ -1,20 +1,11 @@
 import { TEMPORARY_TASK_SCOPE_ID, type Project, type ProjectPage } from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { i18n } from "../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../shared/utils/async-action-lock.js";
 import { createProjectRuntimeManager } from "../conversation/runtime/project-runtime.js";
 import { notifyActionError, notifyActionSuccess } from "../notifications/action-notifications.js";
-import type { TaskNotifier } from "../notifications/browser-task-notifier.js";
 import {
   ProjectActionsContext,
   ProjectActivityContext,
@@ -31,6 +22,7 @@ import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js
 import {
   capabilitiesQueryOptions,
   codeAgentClient,
+  invalidateTaskQueue,
   PROJECT_PINNED_TASKS_KEY,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectRemoveMutationOptions,
@@ -41,16 +33,10 @@ import {
   reorderProjectPage,
   taskSnapshotQueryOptions,
   updateTaskTitleInProjectListCaches,
-  type CodeAgentWorkbenchClient,
 } from "./project-queries.js";
+import type { ProjectProviderProps } from "./project-provider-types.js";
 
 const emptyProjects: readonly Project[] = [];
-
-type ProjectProviderProps = Readonly<{
-  children: ReactNode;
-  client?: CodeAgentWorkbenchClient;
-  taskNotifier?: TaskNotifier;
-}>;
 
 export function ProjectProvider({
   children,
@@ -77,6 +63,9 @@ export function ProjectProvider({
         if (projectId !== TEMPORARY_TASK_SCOPE_ID) {
           gitStatusCoordinator.handleActivity(projectId, taskId, reason);
         }
+      },
+      onQueueChanged(projectId, taskId) {
+        void invalidateTaskQueue(queryClient, projectId, taskId);
       },
       onSkillsChanged(projectId) {
         void queryClient.invalidateQueries({

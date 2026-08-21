@@ -324,7 +324,7 @@ export class CodeAgentTransport {
     body: unknown,
     schema: T,
     options: MutationOptions,
-    method: "POST" | "PUT" = "POST",
+    method: "DELETE" | "POST" | "PUT" = "POST",
     timeoutMs = this.requestTimeouts.mutationMs,
   ): Promise<Static<T>> {
     return this.request(

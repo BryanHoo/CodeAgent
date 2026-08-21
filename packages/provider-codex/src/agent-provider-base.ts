@@ -205,6 +205,7 @@ export abstract class CodexAgentProviderBase {
       method !== "thread/archived" &&
       method !== "thread/deleted" &&
       method !== "thread/name/updated" &&
+      method !== "thread/queue/changed" &&
       method !== "thread/status/changed"
     ) {
       return false;

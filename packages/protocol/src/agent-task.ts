@@ -5,9 +5,11 @@ import {
   AgentAttachmentMediaTypeSchema,
   AgentCommandItemSchema,
   AgentItemStatusSchema,
+  AgentMessageAttachmentSchema,
   AgentMessageItemSchema,
   AgentReasoningItemSchema,
   MAX_AGENT_ATTACHMENT_BYTES,
+  MAX_AGENT_HISTORY_IMAGES,
 } from "./agent-attachments.js";
 import { NullableDateTimeSchema } from "./project-files.js";
 import { AgentFileChangeSchema } from "./project-git.js";
@@ -356,3 +358,28 @@ export const AgentPromptInputSchema = Type.Union([
 ]);
 
 export type AgentPromptInput = Readonly<Static<typeof AgentPromptInputSchema>>;
+
+export const AgentQueuedSubmissionSchema = Type.Object(
+  {
+    attachments: Type.Array(AgentMessageAttachmentSchema, {
+      maxItems: MAX_AGENT_HISTORY_IMAGES,
+    }),
+    clientUserMessageId: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    skills: Type.Array(AgentSkillReferenceSchema),
+    text: Type.String({ maxLength: 100_000 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentQueuedSubmission = Readonly<Static<typeof AgentQueuedSubmissionSchema>>;
+
+export const AgentQueuedSubmissionPageSchema = Type.Object(
+  {
+    data: Type.Array(AgentQueuedSubmissionSchema),
+    nextCursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentQueuedSubmissionPage = Readonly<Static<typeof AgentQueuedSubmissionPageSchema>>;

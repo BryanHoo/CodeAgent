@@ -27,7 +27,9 @@ let subagentRealtimeRunning = false;
 let nextActionTask = 1;
 let nextActionTurn = 1;
 let nextSteerMessage = 1;
+let nextQueuedSubmission = 1;
 const actionThreads = new Map();
+const queuedSubmissionsByThread = new Map();
 const pendingServerRequests = new Map();
 const pendingServerResponses = [];
 let nextPendingRequest = 1;
@@ -184,6 +186,60 @@ function actionTurn(id, status, items) {
   };
 }
 
+function queuedSubmissions(threadId) {
+  const existing = queuedSubmissionsByThread.get(threadId);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const created = [];
+  queuedSubmissionsByThread.set(threadId, created);
+  return created;
+}
+
+function notifyQueueChanged(threadId) {
+  send({ method: "thread/queue/changed", params: { threadId } });
+}
+
+function beginQueuedActionTurn(threadId, queuedSubmission) {
+  const thread = actionThreads.get(threadId);
+  if (thread === undefined) {
+    return undefined;
+  }
+  const turnId = `turn-action-${String(nextActionTurn)}`;
+  nextActionTurn += 1;
+  const userMessage = {
+    content: queuedSubmission.input,
+    id: `${turnId}-user`,
+    type: "userMessage",
+  };
+  const turn = actionTurn(turnId, "inProgress", [userMessage]);
+  actionThreads.set(threadId, actionThread(threadId, [...thread.turns, turn]));
+  return { turn, userMessage };
+}
+
+function publishQueuedActionTurn(threadId, started) {
+  const turnId = started.turn.id;
+  send({ method: "turn/started", params: { threadId, turn: started.turn } });
+  send({ method: "item/started", params: { item: started.userMessage, threadId, turnId } });
+  send({ method: "item/completed", params: { item: started.userMessage, threadId, turnId } });
+  setTimeout(() => completeActionTurn(threadId, turnId), 120);
+}
+
+function startNextQueuedSubmission(threadId) {
+  const queue = queuedSubmissions(threadId);
+  const queuedSubmission = queue.shift();
+  if (queuedSubmission === undefined) {
+    return;
+  }
+  const started = beginQueuedActionTurn(threadId, queuedSubmission);
+  if (started === undefined) {
+    queue.unshift(queuedSubmission);
+    return;
+  }
+  notifyQueueChanged(threadId);
+  publishQueuedActionTurn(threadId, started);
+}
+
 let subagentThread = actionThread("frontend-analysis", [
   actionTurn("turn-frontend-analysis", "inProgress", [
     {
@@ -300,6 +356,7 @@ function completeActionTurn(threadId, turnId) {
       turn: usesSyntheticSnapshotIds ? actionTurn(turnId, "completed", [message]) : completedTurn,
     },
   });
+  setTimeout(() => startNextQueuedSubmission(threadId), 20);
 }
 
 function scheduleOperationStatusTurn(threadId, turnId) {
@@ -872,6 +929,106 @@ input.on("line", (line) => {
     return;
   }
 
+  if (actionScenario && message.method === "thread/queue/add") {
+    const threadId = message.params?.threadId;
+    const queue = queuedSubmissions(threadId);
+    const queuedSubmission = {
+      clientUserMessageId: message.params?.clientUserMessageId,
+      id: `queued-${String(nextQueuedSubmission)}`,
+      input: message.params?.input ?? [],
+    };
+    nextQueuedSubmission += 1;
+    queue.push(queuedSubmission);
+    send({ id: message.id, result: { queuedSubmission } });
+    notifyQueueChanged(threadId);
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/queue/list") {
+    const queue = queuedSubmissions(message.params?.threadId);
+    const offset = Number(message.params?.cursor ?? "0");
+    const limit = Number(message.params?.limit ?? 100);
+    const nextOffset = offset + limit;
+    send({
+      id: message.id,
+      result: {
+        data: queue.slice(offset, nextOffset),
+        nextCursor: nextOffset < queue.length ? String(nextOffset) : null,
+      },
+    });
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/queue/update") {
+    const queue = queuedSubmissions(message.params?.threadId);
+    const index = queue.findIndex((item) => item.id === message.params?.queuedSubmissionId);
+    const current = queue[index];
+    if (current === undefined) {
+      send({ error: { code: -32600, message: "queue item not found" }, id: message.id });
+      return;
+    }
+    const queuedSubmission = { ...current, input: message.params?.input ?? [] };
+    queue[index] = queuedSubmission;
+    send({ id: message.id, result: { queuedSubmission } });
+    notifyQueueChanged(message.params?.threadId);
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/queue/delete") {
+    const threadId = message.params?.threadId;
+    const queue = queuedSubmissions(threadId);
+    const index = queue.findIndex((item) => item.id === message.params?.queuedSubmissionId);
+    const deleted = index >= 0;
+    if (deleted) {
+      queue.splice(index, 1);
+    }
+    send({ id: message.id, result: { deleted } });
+    if (deleted) {
+      notifyQueueChanged(threadId);
+    }
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/queue/reorder") {
+    const threadId = message.params?.threadId;
+    const queue = queuedSubmissions(threadId);
+    const byId = new Map(queue.map((item) => [item.id, item]));
+    const reordered = (message.params?.queuedSubmissionIds ?? []).flatMap((id) =>
+      byId.has(id) ? [byId.get(id)] : [],
+    );
+    queuedSubmissionsByThread.set(threadId, reordered);
+    send({ id: message.id, result: {} });
+    notifyQueueChanged(threadId);
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/queue/start") {
+    const threadId = message.params?.threadId;
+    const queue = queuedSubmissions(threadId);
+    const index =
+      message.params?.queuedSubmissionId === undefined
+        ? 0
+        : queue.findIndex((item) => item.id === message.params.queuedSubmissionId);
+    const queuedSubmission = index < 0 ? undefined : queue[index];
+    const hasRunningTurn = actionThreads
+      .get(threadId)
+      ?.turns.some((turn) => turn.status === "inProgress");
+    if (queuedSubmission === undefined || hasRunningTurn === true) {
+      send({ error: { code: -32600, message: "queue item cannot start" }, id: message.id });
+      return;
+    }
+    const started = beginQueuedActionTurn(threadId, queuedSubmission);
+    if (started === undefined) {
+      send({ error: { code: -32600, message: "thread not loaded" }, id: message.id });
+      return;
+    }
+    queue.splice(index, 1);
+    send({ id: message.id, result: { turn: started.turn } });
+    notifyQueueChanged(threadId);
+    publishQueuedActionTurn(threadId, started);
+    return;
+  }
+
   if (actionScenario && message.method === "turn/start") {
     const threadId = message.params?.threadId;
     const thread = actionThreads.get(threadId);
@@ -942,7 +1099,36 @@ input.on("line", (line) => {
     }
     send({ id: message.id, result: { turnId } });
     const messageId = `${turnId}-steer-${String(nextSteerMessage)}`;
+    const userMessage = {
+      content: message.params?.input ?? [],
+      id: `${messageId}-user`,
+      type: "userMessage",
+    };
     nextSteerMessage += 1;
+    setTimeout(() => {
+      const currentThread = actionThreads.get(threadId);
+      const currentTurn = currentThread?.turns.find((turn) => turn.id === turnId);
+      if (
+        currentThread === undefined ||
+        currentTurn === undefined ||
+        currentTurn.status !== "inProgress"
+      ) {
+        return;
+      }
+      actionThreads.set(
+        threadId,
+        actionThread(
+          threadId,
+          currentThread.turns.map((turn) =>
+            turn.id === turnId
+              ? actionTurn(turnId, "inProgress", [...currentTurn.items, userMessage])
+              : turn,
+          ),
+        ),
+      );
+      send({ method: "item/started", params: { item: userMessage, threadId, turnId } });
+      send({ method: "item/completed", params: { item: userMessage, threadId, turnId } });
+    }, 1_000);
     setTimeout(() => {
       const currentThread = actionThreads.get(threadId);
       const currentTurn = currentThread?.turns.find((turn) => turn.id === turnId);
@@ -976,7 +1162,7 @@ input.on("line", (line) => {
         method: "item/agentMessage/delta",
         params: { delta: assistantMessage.text, itemId: messageId, threadId, turnId },
       });
-    }, 750);
+    }, 1_400);
     return;
   }
 
@@ -999,6 +1185,7 @@ input.on("line", (line) => {
     );
     send({ id: message.id, result: {} });
     send({ method: "turn/completed", params: { threadId, turn: interruptedTurn } });
+    setTimeout(() => startNextQueuedSubmission(threadId), 20);
     return;
   }
 

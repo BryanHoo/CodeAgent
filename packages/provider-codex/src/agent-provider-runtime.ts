@@ -1,7 +1,6 @@
 import type { AgentProvider, AgentProviderEvent } from "@code-agent/core";
 import type { AgentMessageAttachment } from "@code-agent/protocol";
 import type { RpcErrorPayload, RpcServerRequest } from "./jsonl-rpc-client.js";
-import { readStagedImage, stagedImageName } from "./jsonl-frame-processor.js";
 import { SUPPORTED_CODEX_VERSION } from "./binary.js";
 import {
   CodexProtocolMappingError,
@@ -11,7 +10,6 @@ import {
   expectString,
   mapCodexNotification,
   mapCodexServerRequest,
-  optionalString,
   requestIdKey,
 } from "./codex-protocol-mapping.js";
 
@@ -32,6 +30,7 @@ import {
   readReviewWorkerThread,
   readTaskId,
 } from "./agent-provider-notifications.js";
+import { mapCodexMessageImage, mapCodexMessageText } from "./agent-provider-message-attachments.js";
 
 export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
   public receiveNotification(method: string, params: unknown): void {
@@ -381,44 +380,7 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
     part: Record<string, unknown>,
     imageIndex: number,
   ): AgentMessageAttachment | undefined {
-    const staged = readStagedImage(part);
-    if (staged !== undefined) {
-      const name = optionalString(part["name"]) ?? stagedImageName(part, imageIndex);
-      return this.historicalAttachments.addStagedImage(taskId, staged, imageIndex, name);
-    }
-    if (part["type"] === "imageGeneration") {
-      const savedPath = optionalString(part["savedPath"]);
-      if (savedPath !== undefined) {
-        const savedAttachment = this.historicalAttachments.addLocalImage(
-          taskId,
-          savedPath,
-          imageIndex,
-        );
-        if (savedAttachment !== undefined) {
-          return savedAttachment;
-        }
-      }
-      const encoded = optionalString(part["result"]);
-      return encoded === undefined
-        ? undefined
-        : this.historicalAttachments.addBase64Image(taskId, { encoded }, imageIndex);
-    }
-    if (part["type"] === "image") {
-      const url = optionalString(part["url"]);
-      if (url === undefined) {
-        return undefined;
-      }
-      const name = optionalString(part["name"]);
-      return this.historicalAttachments.addDataUrl(
-        taskId,
-        { ...(name === undefined ? {} : { name }), url },
-        imageIndex,
-      );
-    }
-    const path = optionalString(part["path"]);
-    return path === undefined
-      ? undefined
-      : this.historicalAttachments.addLocalImage(taskId, path, imageIndex);
+    return mapCodexMessageImage(this.historicalAttachments, taskId, part, imageIndex);
   }
 
   protected mapMessageText(
@@ -426,7 +388,7 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
     input: Readonly<{ name: string; text: string }>,
     textIndex: number,
   ): AgentMessageAttachment | undefined {
-    return this.historicalAttachments.addText(taskId, input, textIndex);
+    return mapCodexMessageText(this.historicalAttachments, taskId, input, textIndex);
   }
 
   protected assertKnownProjectTask(taskId: string): void {

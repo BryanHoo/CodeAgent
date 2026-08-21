@@ -238,6 +238,7 @@ function createProvider() {
       taskId === task.id && attachmentId === "history/image-1"
         ? {
             content: historicalImageContent,
+            kind: "image" as const,
             mediaType: "image/png" as const,
             name: "diagram.png",
             size: historicalImageContent.byteLength,
@@ -267,6 +268,56 @@ function createProvider() {
       }),
   );
   const steerTurn = vi.fn<AgentProvider["steerTurn"]>(() => Promise.resolve());
+  let queuedSubmissions: Awaited<ReturnType<NonNullable<AgentProvider["queue"]>["list"]>>["data"] =
+    [];
+  const queue = {
+    add: vi.fn<NonNullable<AgentProvider["queue"]>["add"]>(
+      (_taskId, input, clientUserMessageId) => {
+        const queuedSubmission = {
+          attachments: [],
+          clientUserMessageId,
+          id: `queue-${String(queuedSubmissions.length + 1)}`,
+          skills: [...input.skills],
+          text: input.text,
+        };
+        queuedSubmissions = [...queuedSubmissions, queuedSubmission];
+        return Promise.resolve(queuedSubmission);
+      },
+    ),
+    delete: vi.fn<NonNullable<AgentProvider["queue"]>["delete"]>((_taskId, id) => {
+      const retained = queuedSubmissions.filter((item) => item.id !== id);
+      const deleted = retained.length !== queuedSubmissions.length;
+      queuedSubmissions = retained;
+      return Promise.resolve(deleted);
+    }),
+    list: vi.fn<NonNullable<AgentProvider["queue"]>["list"]>(() =>
+      Promise.resolve({ data: queuedSubmissions, nextCursor: null }),
+    ),
+    reorder: vi.fn<NonNullable<AgentProvider["queue"]>["reorder"]>((_taskId, ids) => {
+      const byId = new Map(queuedSubmissions.map((item) => [item.id, item]));
+      queuedSubmissions = ids.flatMap((id) => byId.get(id) ?? []);
+      return Promise.resolve();
+    }),
+    start: vi.fn<NonNullable<AgentProvider["queue"]>["start"]>(() =>
+      Promise.resolve({
+        completedAt: null,
+        error: null,
+        id: "queued-turn",
+        items: [],
+        startedAt: null,
+        status: "running",
+      }),
+    ),
+    update: vi.fn<NonNullable<AgentProvider["queue"]>["update"]>((_taskId, id, input) => {
+      const current = queuedSubmissions.find((item) => item.id === id);
+      if (current === undefined) {
+        return Promise.reject(new Error("Queue item not found"));
+      }
+      const updated = { ...current, skills: [...input.skills], text: input.text };
+      queuedSubmissions = queuedSubmissions.map((item) => (item.id === id ? updated : item));
+      return Promise.resolve(updated);
+    }),
+  };
   const interruptTurn = vi.fn(() => Promise.resolve());
   const listBackgroundTerminals = vi.fn<() => Promise<AgentBackgroundTerminalPage>>(() =>
     Promise.resolve({ data: [] }),
@@ -297,6 +348,7 @@ function createProvider() {
     listSkills,
     listTasks,
     pinTask,
+    queue,
     readSandboxMode,
     readTask,
     readTaskAttachment,
@@ -335,6 +387,7 @@ function createProvider() {
     listBackgroundTerminals,
     pinTask,
     provider,
+    queue,
     readSandboxMode,
     readTask,
     readTaskAttachment,
@@ -514,6 +567,7 @@ async function createHarness(
     listSkills,
     pinTask,
     provider,
+    queue,
     readTask,
     readTaskAttachment,
     reloadMcpServers,
@@ -554,6 +608,7 @@ async function createHarness(
     listModels,
     listSkills,
     pinTask,
+    queue,
     readTask,
     readTaskAttachment,
     readDefaultSettings,
@@ -3477,6 +3532,71 @@ describe("CodeAgent Server", () => {
     expect(replayedInterrupt.statusCode).toBe(202);
     expect(replayedInterrupt.json()).toEqual(interrupted.json());
     expect(interruptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves the complete persistent task queue API", async () => {
+    const { app, queue } = await createHarness();
+    const baseUrl = "/v1/projects/code-agent/tasks/task-1/queue";
+    const add = await app.inject({
+      headers: { "idempotency-key": "queue-add-1" },
+      method: "POST",
+      payload: {
+        clientUserMessageId: "client-message-1",
+        input: { attachments: [], skills: [], text: "排队处理", type: "prompt" },
+      },
+      url: baseUrl,
+    });
+    const list = await app.inject({ method: "GET", url: baseUrl });
+    const update = await app.inject({
+      headers: { "idempotency-key": "queue-update-1" },
+      method: "PUT",
+      payload: {
+        input: { attachments: [], skills: [], text: "更新内容", type: "prompt" },
+      },
+      url: `${baseUrl}/queue-1`,
+    });
+    const reorder = await app.inject({
+      headers: { "idempotency-key": "queue-reorder-1" },
+      method: "PUT",
+      payload: { queuedSubmissionIds: ["queue-1"] },
+      url: `${baseUrl}/reorder`,
+    });
+    const start = await app.inject({
+      headers: { "idempotency-key": "queue-start-1" },
+      method: "POST",
+      payload: { queuedSubmissionId: "queue-1" },
+      url: `${baseUrl}/start`,
+    });
+    const remove = await app.inject({
+      headers: { "idempotency-key": "queue-delete-1" },
+      method: "DELETE",
+      url: `${baseUrl}/queue-1`,
+    });
+
+    expect(add.statusCode).toBe(201);
+    expect(list.json()).toMatchObject({ data: [{ id: "queue-1", text: "排队处理" }] });
+    expect(update.json()).toMatchObject({ queuedSubmission: { text: "更新内容" } });
+    expect(reorder.json()).toEqual({ status: "reordered" });
+    expect(start.json()).toMatchObject({ taskId: "task-1", turn: { id: "queued-turn" } });
+    expect(remove.json()).toEqual({ deleted: true });
+    expect(queue.add).toHaveBeenCalledOnce();
+    expect(queue.list).toHaveBeenCalledWith("task-1", {});
+    expect(queue.update).toHaveBeenCalledOnce();
+    expect(queue.reorder).toHaveBeenCalledWith("task-1", ["queue-1"]);
+    expect(queue.start).toHaveBeenCalledWith("task-1", "queue-1");
+    expect(queue.delete).toHaveBeenCalledWith("task-1", "queue-1");
+  });
+
+  it("reconciles queued attachments after native queue changes", async () => {
+    const { app, emitEvent, queue } = await createHarness();
+    await app.inject({ method: "GET", url: "/v1/projects/code-agent/tasks/task-1/queue" });
+    queue.list.mockClear();
+
+    emitEvent({ payload: {}, taskId: "task-1", type: "queue.changed" });
+
+    await vi.waitFor(() => {
+      expect(queue.list).toHaveBeenCalledWith("task-1", { limit: 100 });
+    });
   });
 
   it("reuses a created task when settings persistence is retried", async () => {

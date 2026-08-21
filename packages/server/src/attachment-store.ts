@@ -5,7 +5,6 @@ import { mkdir, open, readFile, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { Transform } from "node:stream";
-import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { TextDecoder } from "node:util";
 
@@ -22,6 +21,22 @@ import {
   type AgentAttachmentMediaType,
   type AgentImageMediaType,
 } from "@code-agent/protocol";
+import { AttachmentQueueIndex } from "./attachment-queue-index.js";
+import type {
+  AttachmentStoreOptions,
+  AttachmentUploadInput,
+  ResolvedAttachment,
+  StoredAttachmentContent,
+  StoredAttachmentUpload,
+} from "./attachment-store-types.js";
+
+export type {
+  AttachmentStoreOptions,
+  AttachmentUploadInput,
+  ResolvedAttachment,
+  StoredAttachmentContent,
+  StoredAttachmentUpload,
+} from "./attachment-store-types.js";
 
 const DEFAULT_ATTACHMENT_TTL_MS = 30 * 60 * 1_000;
 const DEFAULT_MAX_ENTRIES = 1_500;
@@ -42,33 +57,6 @@ export class AttachmentNotFoundError extends Error {
   }
 }
 
-export interface AttachmentStoreOptions {
-  attachmentDirectory?: string;
-  clock?: () => number;
-  createId?: () => string;
-  maxBytes?: number;
-  maxEntries?: number;
-  maxTotalBytes?: number;
-  ttlMs?: number;
-}
-
-export type AttachmentUploadInput = Readonly<{
-  content: Readable;
-  kind: AgentAttachmentKind;
-  mediaType: AgentAttachmentMediaType;
-  name: string;
-}>;
-
-export type StoredAttachmentUpload = Readonly<{
-  attachment: AgentAttachment;
-  contentDigest: string;
-}>;
-
-export type StoredAttachmentContent = Readonly<{
-  attachment: AgentAttachment;
-  content: Buffer;
-}>;
-
 interface StoredAttachment {
   attachment: AgentAttachment;
   consumedTurnId?: string;
@@ -76,22 +64,6 @@ interface StoredAttachment {
   path: string;
   projectId: string;
 }
-
-export type ResolvedAttachment =
-  | Readonly<{
-      kind: "file";
-      mediaType: AgentAttachmentMediaType;
-      name: string;
-      path: string;
-      size: number;
-    }>
-  | Readonly<{
-      kind: "image";
-      mediaType: AgentImageMediaType;
-      size: number;
-      url: string;
-    }>
-  | Readonly<{ kind: "text"; mediaType: "text/plain"; name: string; size: number; text: string }>;
 
 function maximumBytesFor(kind: AgentAttachmentKind): number {
   if (kind === "image") {
@@ -245,6 +217,7 @@ export class AttachmentStore {
   readonly #clock: () => number;
   readonly #createId: () => string;
   readonly #entries = new Map<string, StoredAttachment>();
+  readonly #queueIndex = new AttachmentQueueIndex();
   readonly #maxBytes: number | undefined;
   readonly #maxEntries: number;
   readonly #maxTotalBytes: number;
@@ -420,6 +393,50 @@ export class AttachmentStore {
     }
   }
 
+  public retainQueue(
+    projectId: string,
+    ids: readonly string[],
+    queuedSubmissionId: string,
+  ): Promise<void> {
+    const uniqueIds = [...new Set(ids)];
+    for (const id of uniqueIds) {
+      const entry = this.#entries.get(id);
+      if (entry?.projectId !== projectId || entry.consumedTurnId !== undefined) {
+        throw new AttachmentNotFoundError();
+      }
+      entry.expiresAt = this.#clock() + this.#ttlMs;
+    }
+    this.#queueIndex.retain(projectId, queuedSubmissionId, uniqueIds);
+    return Promise.resolve();
+  }
+
+  public startQueue(projectId: string, queuedSubmissionId: string, turnId: string): Promise<void> {
+    for (const attachmentId of this.#queueIndex.take(projectId, queuedSubmissionId)) {
+      const entry = this.#entries.get(attachmentId);
+      if (entry?.projectId === projectId) {
+        entry.consumedTurnId = turnId;
+        entry.expiresAt = this.#clock() + this.#ttlMs;
+      }
+    }
+    return Promise.resolve();
+  }
+
+  public reconcileQueue(projectId: string, queuedSubmissionIds: readonly string[]): void {
+    const retainedIds = new Set(queuedSubmissionIds);
+    for (const attachmentId of this.#queueIndex.releaseMissing(projectId, retainedIds)) {
+      const entry = this.#entries.get(attachmentId);
+      if (entry?.projectId === projectId) {
+        // 自动启动没有经过 HTTP start；保留短暂宽限期，供 Provider 消费本机文件路径。
+        entry.expiresAt = this.#clock() + this.#ttlMs;
+      }
+    }
+  }
+
+  public async releaseQueue(projectId: string, queuedSubmissionId: string): Promise<void> {
+    const attachmentIds = this.#queueIndex.take(projectId, queuedSubmissionId);
+    await Promise.all(attachmentIds.map((attachmentId) => this.#delete(attachmentId)));
+  }
+
   public async discard(id: string): Promise<void> {
     await this.#delete(id);
   }
@@ -433,8 +450,19 @@ export class AttachmentStore {
   }
 
   public async releaseProject(projectId: string): Promise<void> {
+    this.#queueIndex.clearProject(projectId);
     const attachmentIds = [...this.#entries]
       .filter(([, entry]) => entry.projectId === projectId)
+      .map(([attachmentId]) => attachmentId);
+    await Promise.all(attachmentIds.map((attachmentId) => this.#delete(attachmentId)));
+  }
+
+  public async releaseProjectRuntime(projectId: string): Promise<void> {
+    const attachmentIds = [...this.#entries]
+      .filter(
+        ([attachmentId, entry]) =>
+          entry.projectId === projectId && !this.#queueIndex.hasAttachment(attachmentId),
+      )
       .map(([attachmentId]) => attachmentId);
     await Promise.all(attachmentIds.map((attachmentId) => this.#delete(attachmentId)));
   }
@@ -454,6 +482,7 @@ export class AttachmentStore {
       return;
     }
     this.#entries.delete(id);
+    this.#queueIndex.deleteAttachment(id);
     this.#totalBytes -= entry.attachment.size;
     await removeFile(entry.path);
   }
@@ -461,7 +490,7 @@ export class AttachmentStore {
   async #pruneExpired(): Promise<void> {
     const now = this.#clock();
     for (const [id, entry] of this.#entries) {
-      if (entry.expiresAt <= now) {
+      if (entry.expiresAt <= now && !this.#queueIndex.hasAttachment(id)) {
         await this.#delete(id);
       }
     }

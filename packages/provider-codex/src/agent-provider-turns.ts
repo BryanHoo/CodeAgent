@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import type {
   AgentProviderEventListener,
   AgentProviderTurnInput,
@@ -26,8 +25,9 @@ import {
   optionalString,
 } from "./codex-protocol-mapping.js";
 
-import { CODEX_PINNED_THREAD_SECTION_ID, CodexAgentProviderBase } from "./agent-provider-base.js";
+import { CODEX_PINNED_THREAD_SECTION_ID } from "./agent-provider-base.js";
 import { isBackgroundTerminalThreadMissingError, mapAgentTask } from "./agent-provider-base.js";
+import { CodexAgentProviderQueue } from "./agent-provider-queue.js";
 
 function mapCodexTurnSettings(options: AgentTurnOptions) {
   // 普通 Turn 与 Goal 自动 Turn 必须使用完全相同的执行设置。
@@ -50,7 +50,7 @@ function mapCodexTurnSettings(options: AgentTurnOptions) {
   };
 }
 
-export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
+export abstract class CodexAgentProviderTurns extends CodexAgentProviderQueue {
   public async startTask(options: StartAgentTaskOptions = {}): Promise<AgentTask> {
     const response = expectRecord(
       await this.client.request("thread/start", {
@@ -178,62 +178,6 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
     if (response["turnId"] !== turnId) {
       throw new CodexProtocolMappingError("turn/steer returned an unexpected turn id");
     }
-  }
-
-  protected async mapTurnInput(input: AgentProviderTurnInput) {
-    if (input.skills.some((skill) => !this.skillsById.has(skill.id))) {
-      await this.listSkills();
-    }
-    // 每个引用独立解析为 Codex 原生 Skill part，并保持 Composer 中的选择顺序。
-    const skills = input.skills.map((reference) => {
-      const skill = this.skillsById.get(reference.id);
-      if (skill?.name !== reference.name) {
-        throw new CodexProtocolMappingError("Provider turn skill is unavailable");
-      }
-      return { name: skill.name, path: skill.path, type: "skill" as const };
-    });
-    const images = input.images.map((image) => {
-      if (!image.url.startsWith(`data:${image.mediaType};base64,`)) {
-        throw new CodexProtocolMappingError("Provider image URL does not match its media type");
-      }
-      return { type: "image" as const, url: image.url };
-    });
-    const files = input.files.map((file) => ({
-      text: file.path,
-      text_elements: [],
-      type: "text" as const,
-    }));
-    const textAttachments = input.textAttachments.map((attachment) => ({
-      text: attachment.text,
-      text_elements: [
-        {
-          byteRange: { end: Buffer.byteLength(attachment.text, "utf8"), start: 0 },
-          placeholder: attachment.name,
-        },
-      ],
-      type: "text" as const,
-    }));
-    const skillIndexText =
-      input.text.length === 0 && skills.length > 0
-        ? skills.map((skill) => `$${skill.name}`).join(" ")
-        : undefined;
-    const codexInput = [
-      // Codex 只会索引文本输入；为纯 Skill Turn 补充可恢复的命令文本，展示层会与 Skill 合并。
-      ...(skillIndexText === undefined
-        ? []
-        : [{ text: skillIndexText, text_elements: [], type: "text" as const }]),
-      ...skills,
-      ...(input.text.length === 0
-        ? []
-        : [{ text: input.text, text_elements: [], type: "text" as const }]),
-      ...textAttachments,
-      ...files,
-      ...images,
-    ];
-    if (codexInput.length === 0) {
-      throw new CodexProtocolMappingError("Provider turn input must not be empty");
-    }
-    return codexInput;
   }
 
   public async startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn> {

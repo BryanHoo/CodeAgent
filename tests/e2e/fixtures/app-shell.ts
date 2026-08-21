@@ -14,6 +14,20 @@ interface WorkerFixtures {
   e2eServerUrl: string;
 }
 
+interface FixtureQueuedSubmission {
+  attachments: readonly Readonly<{
+    id: string;
+    kind: "file";
+    mediaType: "text/plain";
+    name: string;
+    size: number;
+  }>[];
+  clientUserMessageId: string;
+  id: string;
+  skills: readonly Readonly<{ id: string; name: string }>[];
+  text: string;
+}
+
 async function waitForServerUrl(
   serverProcess: ChildProcessWithoutNullStreams,
   workerLabel: string,
@@ -579,6 +593,8 @@ export async function mockAppShellApi(
       "connected" | "disconnected" | "failed" | "pending",
   };
   let routedModels = models;
+  let nextQueuedSubmission = 1;
+  const queuedSubmissionsByTask = new Map<string, FixtureQueuedSubmission[]>();
   const handleApiRoute = async (route: Route) => {
     const url = new URL(route.request().url());
     const defaultsMatch = /^\/v1\/projects\/([^/]+)\/defaults$/u.exec(url.pathname);
@@ -596,6 +612,16 @@ export async function mockAppShellApi(
     const temporaryTurnMatch = /^\/v1\/temporary\/tasks\/([^/]+)\/turns$/u.exec(url.pathname);
     const projectRenameMatch = /^\/v1\/projects\/([^/]+)\/rename$/u.exec(url.pathname);
     const projectRemoveMatch = /^\/v1\/projects\/([^/]+)\/remove$/u.exec(url.pathname);
+    const queueMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/queue$/u.exec(url.pathname);
+    const queueItemMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/queue\/([^/]+)$/u.exec(
+      url.pathname,
+    );
+    const queueReorderMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/queue\/reorder$/u.exec(
+      url.pathname,
+    );
+    const queueStartMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/queue\/start$/u.exec(
+      url.pathname,
+    );
     if (
       url.pathname === "/v1/projects/code-agent/files/image" ||
       url.pathname === "/v1/temporary/files/image"
@@ -1135,6 +1161,124 @@ export async function mockAppShellApi(
         taskSettings.set(key, parseTaskSettingsRequest(route.request().postData()));
       }
       body = { settings: taskSettings.get(key) ?? taskSnapshot.settings };
+    } else if (queueMatch !== null) {
+      const taskKey = `${queueMatch[1] ?? ""}:${queueMatch[2] ?? ""}`;
+      const queue = queuedSubmissionsByTask.get(taskKey) ?? [];
+      if (route.request().method() === "POST") {
+        const request = parseRequestRecord(route.request().postData());
+        const input = request["input"];
+        const clientUserMessageId = request["clientUserMessageId"];
+        if (!isRequestRecord(input) || typeof clientUserMessageId !== "string") {
+          throw new Error("Invalid queue add request");
+        }
+        const attachmentReferences = input["attachments"];
+        const skillReferences = input["skills"];
+        if (!Array.isArray(attachmentReferences) || !Array.isArray(skillReferences)) {
+          throw new Error("Invalid queued input");
+        }
+        const queuedSubmission: FixtureQueuedSubmission = {
+          attachments: attachmentReferences.map((reference) => {
+            if (!isRequestRecord(reference) || typeof reference["id"] !== "string") {
+              throw new Error("Invalid queued attachment");
+            }
+            return {
+              id: reference["id"],
+              kind: "file",
+              mediaType: "text/plain",
+              name: reference["id"],
+              size: 1,
+            };
+          }),
+          clientUserMessageId,
+          id: `fixture-queue-${String(nextQueuedSubmission)}`,
+          skills: skillReferences.map((reference) => {
+            if (
+              !isRequestRecord(reference) ||
+              typeof reference["id"] !== "string" ||
+              typeof reference["name"] !== "string"
+            ) {
+              throw new Error("Invalid queued Skill");
+            }
+            return { id: reference["id"], name: reference["name"] };
+          }),
+          text: typeof input["text"] === "string" ? input["text"] : "",
+        };
+        nextQueuedSubmission += 1;
+        queue.push(queuedSubmission);
+        queuedSubmissionsByTask.set(taskKey, queue);
+        body = { queuedSubmission };
+      } else {
+        const limit = Number(url.searchParams.get("limit") ?? "100");
+        const offset = Number(url.searchParams.get("cursor") ?? "0");
+        const nextOffset = offset + limit;
+        body = {
+          data: queue.slice(offset, nextOffset),
+          nextCursor: nextOffset < queue.length ? String(nextOffset) : null,
+        };
+      }
+    } else if (queueReorderMatch !== null && route.request().method() === "PUT") {
+      const taskKey = `${queueReorderMatch[1] ?? ""}:${queueReorderMatch[2] ?? ""}`;
+      const request = parseRequestRecord(route.request().postData());
+      const ids = request["queuedSubmissionIds"];
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
+        throw new Error("Invalid queue reorder request");
+      }
+      const byId = new Map(
+        (queuedSubmissionsByTask.get(taskKey) ?? []).map((submission) => [
+          submission.id,
+          submission,
+        ]),
+      );
+      queuedSubmissionsByTask.set(
+        taskKey,
+        ids.flatMap((id) => byId.get(id) ?? []),
+      );
+      body = { status: "reordered" };
+    } else if (queueStartMatch !== null && route.request().method() === "POST") {
+      const taskKey = `${queueStartMatch[1] ?? ""}:${queueStartMatch[2] ?? ""}`;
+      const queue = queuedSubmissionsByTask.get(taskKey) ?? [];
+      const request = parseRequestRecord(route.request().postData());
+      const requestedId = request["queuedSubmissionId"];
+      const index =
+        typeof requestedId === "string"
+          ? queue.findIndex((submission) => submission.id === requestedId)
+          : 0;
+      if (index >= 0) {
+        queue.splice(index, 1);
+      }
+      body = {
+        taskId: queueStartMatch[2] ?? "",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: `fixture-queue-turn-${String(nextQueuedSubmission)}`,
+          items: [],
+          startedAt: "2026-08-21T00:00:00.000Z",
+          status: "running",
+        },
+      };
+    } else if (queueItemMatch !== null) {
+      const taskKey = `${queueItemMatch[1] ?? ""}:${queueItemMatch[2] ?? ""}`;
+      const queuedSubmissionId = queueItemMatch[3] ?? "";
+      const queue = queuedSubmissionsByTask.get(taskKey) ?? [];
+      const index = queue.findIndex((submission) => submission.id === queuedSubmissionId);
+      if (route.request().method() === "DELETE") {
+        const deleted = index >= 0;
+        if (deleted) {
+          queue.splice(index, 1);
+        }
+        body = { deleted };
+      } else {
+        const current = queue[index];
+        const request = parseRequestRecord(route.request().postData());
+        const input = request["input"];
+        if (current === undefined || !isRequestRecord(input) || typeof input["text"] !== "string") {
+          throw new Error("Invalid queue update request");
+        }
+        const queuedSubmission = { ...current, text: input["text"] };
+        queue[index] = queuedSubmission;
+        body = { queuedSubmission };
+      }
     } else if (pinMatch !== null) {
       const taskId = pinMatch[2] ?? "";
       const request = parseRequestRecord(route.request().postData());

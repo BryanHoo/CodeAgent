@@ -11,11 +11,7 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "
 
 import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
-import {
-  createComposerDraftScope,
-  useComposerDraftStore,
-  type QueuedComposerPrompt,
-} from "../composer-draft-context.js";
+import { createComposerDraftScope, useComposerDraftStore } from "../composer-draft-context.js";
 import {
   deriveComposerActions,
   deriveComposerInputAvailability,
@@ -107,9 +103,6 @@ export function useComposerSession({
   const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null);
   const [composerModeState, setComposerModeState] =
     useState<Readonly<{ mode: ComposerMode; scope: string }>>();
-  const [queuedPrompts, setQueuedPrompts] = useState<readonly QueuedComposerPrompt[]>(
-    initialComposerDraft.queuedPrompts,
-  );
   const composerController = useWorkbenchComposerController(routeScope, onSubmissionStateChange);
   const {
     isSubmitting,
@@ -347,17 +340,6 @@ export function useComposerSession({
     skillEditorRef.current?.replace([]);
   }, [composerDraftStore, composerScope]);
 
-  const replaceQueuedPrompts = useCallback(
-    (nextQueuedPrompts: readonly QueuedComposerPrompt[]) => {
-      setQueuedPrompts(nextQueuedPrompts);
-      composerDraftStore.update(composerScope, (current) => ({
-        ...current,
-        queuedPrompts: nextQueuedPrompts,
-      }));
-    },
-    [composerDraftStore, composerScope],
-  );
-
   useLayoutEffect(() => {
     if (previousRouteScopeRef.current === routeScope) {
       return;
@@ -373,7 +355,6 @@ export function useComposerSession({
       promptHistoryDraftRef.current = restoredDraft.content;
       setAttachments(restoredDraft.attachments);
       setAttachmentPickerKind(undefined);
-      setQueuedPrompts(restoredDraft.queuedPrompts);
       skillEditorRef.current?.replace(restoredDraft.content);
       setSettingsOverride(undefined);
       setComposerModeState(undefined);
@@ -435,10 +416,8 @@ export function useComposerSession({
     composerMode,
     promptContent,
     promptSubmission,
-    queuedPrompts,
     referenceProjectPath,
     replacePromptContent,
-    replaceQueuedPrompts,
     reviewMenuMode,
     routeScope,
     selectedModel,
@@ -459,7 +438,6 @@ export function useComposerSession({
     setPendingTaskState,
     setComposerModeState,
     setPromptContent,
-    setQueuedPrompts,
     setReviewMenuMode,
     setSettingsOverride,
     setSubmittedTurnState,

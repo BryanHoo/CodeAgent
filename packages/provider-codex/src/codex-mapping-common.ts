@@ -56,6 +56,7 @@ export const CODEX_SPECIAL_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "thread/name/updated",
   "thread/started",
   "thread/status/changed",
+  "thread/queue/changed",
 ]);
 
 export const CODEX_IGNORED_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
@@ -84,7 +85,6 @@ export const CODEX_IGNORED_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "thread/environment/disconnected",
   "thread/goal/cleared",
   "thread/goal/updated",
-  "thread/queue/changed",
   "thread/project/updated",
   "thread/realtime/closed",
   "thread/realtime/error",

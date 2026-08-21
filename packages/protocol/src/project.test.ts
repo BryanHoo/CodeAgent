@@ -14,6 +14,11 @@ import {
   AgentProjectDefaultsResponseSchema,
   AgentProjectDefaultsSchema,
   AgentPromptInputSchema,
+  AddAgentQueuedSubmissionRequestSchema,
+  AgentQueuedSubmissionPageSchema,
+  ReorderAgentQueuedSubmissionsRequestSchema,
+  StartAgentQueuedSubmissionResponseSchema,
+  UpdateAgentQueuedSubmissionRequestSchema,
   AgentSkillPageSchema,
   AgentMutationErrorSchema,
   CommitProjectChangesRequestSchema,
@@ -107,6 +112,54 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
+  it("validates the complete task queue contract", () => {
+    const input = { attachments: [], skills: [], text: "继续实现", type: "prompt" } as const;
+    const queuedSubmission = {
+      attachments: [],
+      clientUserMessageId: "client-message-1",
+      id: "queue-1",
+      skills: [],
+      text: "继续实现",
+    };
+
+    expect(
+      Value.Check(AddAgentQueuedSubmissionRequestSchema, {
+        clientUserMessageId: "client-message-1",
+        input,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentQueuedSubmissionPageSchema, {
+        data: [queuedSubmission],
+        nextCursor: null,
+      }),
+    ).toBe(true);
+    expect(Value.Check(UpdateAgentQueuedSubmissionRequestSchema, { input })).toBe(true);
+    expect(
+      Value.Check(ReorderAgentQueuedSubmissionsRequestSchema, {
+        queuedSubmissionIds: ["queue-2", "queue-1"],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ReorderAgentQueuedSubmissionsRequestSchema, {
+        queuedSubmissionIds: ["queue-1", "queue-1"],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(StartAgentQueuedSubmissionResponseSchema, {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-2",
+          items: [],
+          startedAt: null,
+          status: "running",
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("defines a stable public scope for temporary tasks", () => {
     expect(TEMPORARY_TASK_SCOPE_ID).toBe("temporary");
     expect(TEMPORARY_TASK_API_PATH).toBe("/v1/temporary");

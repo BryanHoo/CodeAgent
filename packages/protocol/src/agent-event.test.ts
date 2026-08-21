@@ -66,6 +66,11 @@ describe("Agent Event v2 protocol", () => {
       },
       {
         ...baseEvent,
+        payload: {},
+        type: "queue.changed",
+      },
+      {
+        ...baseEvent,
         itemId: "item-1",
         payload: { delta: "流式文本" },
         turnId: "turn-1",

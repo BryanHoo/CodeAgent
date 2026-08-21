@@ -25,6 +25,7 @@ export type ProjectRuntimeManagerOptions = Readonly<{
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
   onMcpServerStatusChanged?: (projectId: string, taskId: string) => void;
+  onQueueChanged?: (projectId: string, taskId: string) => void;
   onSkillsChanged?: (projectId: string) => void;
   onTaskRemoved?: (projectId: string, taskId: string) => void;
   onProjectGitActivity?: (

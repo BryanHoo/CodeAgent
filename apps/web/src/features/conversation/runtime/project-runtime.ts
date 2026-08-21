@@ -39,6 +39,7 @@ export class ProjectRuntimeManager {
     ProjectRuntimeManagerOptions["onMcpServerStatusChanged"]
   >;
   readonly #onProjectGitActivity: NonNullable<ProjectRuntimeManagerOptions["onProjectGitActivity"]>;
+  readonly #onQueueChanged: NonNullable<ProjectRuntimeManagerOptions["onQueueChanged"]>;
   readonly #onSkillsChanged: NonNullable<ProjectRuntimeManagerOptions["onSkillsChanged"]>;
   readonly #onTaskRemoved: NonNullable<ProjectRuntimeManagerOptions["onTaskRemoved"]>;
   readonly #onTaskMetadataChanged: NonNullable<
@@ -60,6 +61,7 @@ export class ProjectRuntimeManager {
     this.#maxEventHistoryEvents = options.maxEventHistoryEvents ?? MAX_PROJECT_EVENT_HISTORY_EVENTS;
     this.#onMcpServerStatusChanged = options.onMcpServerStatusChanged ?? (() => undefined);
     this.#onProjectGitActivity = options.onProjectGitActivity ?? (() => undefined);
+    this.#onQueueChanged = options.onQueueChanged ?? (() => undefined);
     this.#onSkillsChanged = options.onSkillsChanged ?? (() => undefined);
     this.#onTaskRemoved = options.onTaskRemoved ?? (() => undefined);
     this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
@@ -190,6 +192,8 @@ export class ProjectRuntimeManager {
         onActivityEvent: (eventProjectId, event) => {
           if (event.type === "skills.changed") {
             this.#onSkillsChanged(eventProjectId);
+          } else if (event.type === "queue.changed") {
+            this.#onQueueChanged(eventProjectId, event.taskId);
           } else if (event.type === "task.metadata_changed") {
             this.#onTaskMetadataChanged(eventProjectId, event.taskId, "native_notification");
           } else if (event.type === "task.removed") {

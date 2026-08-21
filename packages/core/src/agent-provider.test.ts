@@ -6,6 +6,45 @@ describe("AgentProvider", () => {
   it("defines provider-independent read and mutation contracts", async () => {
     const listeners = new Set<(event: AgentProviderEvent) => void>();
     const provider: AgentProvider = {
+      queue: {
+        add(_taskId, input, clientUserMessageId) {
+          return Promise.resolve({
+            attachments: [],
+            clientUserMessageId,
+            id: "queue-1",
+            skills: [...input.skills],
+            text: input.text,
+          });
+        },
+        delete() {
+          return Promise.resolve(true);
+        },
+        list() {
+          return Promise.resolve({ data: [], nextCursor: null });
+        },
+        reorder() {
+          return Promise.resolve();
+        },
+        start(taskId) {
+          return Promise.resolve({
+            completedAt: null,
+            error: null,
+            id: `${taskId}-queued-turn`,
+            items: [],
+            startedAt: null,
+            status: "running",
+          });
+        },
+        update(_taskId, queuedSubmissionId, input) {
+          return Promise.resolve({
+            attachments: [],
+            clientUserMessageId: "client-message-1",
+            id: queuedSubmissionId,
+            skills: [...input.skills],
+            text: input.text,
+          });
+        },
+      },
       archiveTask() {
         return Promise.resolve();
       },
@@ -108,6 +147,7 @@ describe("AgentProvider", () => {
         }
         return Promise.resolve({
           content: Uint8Array.from([137, 80, 78, 71]),
+          kind: "image",
           mediaType: "image/png",
           name: "diagram.png",
           size: 4,
@@ -272,6 +312,13 @@ describe("AgentProvider", () => {
       }),
     ).resolves.toMatchObject({ requestId: "number:7", status: "resolved" });
     await expect(provider.startTask()).resolves.toMatchObject({ id: "task-1" });
+    await expect(
+      provider.queue?.add(
+        "task-1",
+        { files: [], images: [], skills: [], text: "排队", textAttachments: [] },
+        "client-message-1",
+      ),
+    ).resolves.toMatchObject({ id: "queue-1", text: "排队" });
     await expect(provider.pinTask("task-1", true)).resolves.toMatchObject({
       id: "task-1",
       pinned: true,

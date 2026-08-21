@@ -1,15 +1,20 @@
-import type { AgentSkill } from "@code-agent/protocol";
-import { useEffect, useEffectEvent } from "react";
+import type { AgentPromptInput, AgentQueuedSubmission, AgentSkill } from "@code-agent/protocol";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { v4 as createUuid } from "uuid";
 
 import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
-import type { TaskStoreState } from "../../conversation/runtime/task-store.js";
-import type { QueuedComposerPrompt } from "../composer-draft-context.js";
+import { taskQueueQueryKey, type CodeAgentMutationClient } from "../../projects/project-queries.js";
 import {
-  hasQueuedPromptReceivedAssistantResponse,
-  getTaskStoreAssistantMessageCheckpoints,
-  hasQueuedPromptReceivedAssistantCheckpoints,
+  getTaskStoreUserMessageIds,
+  hasQueuedPromptReceivedUserMessage,
+  hasQueuedPromptReceivedUserMessageInSnapshot,
+  mapAgentQueuedSubmission,
   resolveQueuedPromptEdit,
+  retainAcceptedSteerPrompt,
+  type AcceptedSteerPrompt,
+  type QueuedComposerPrompt,
 } from "../composer-queue-state.js";
 import {
   createPromptSkillContentFromSubmission,
@@ -30,64 +35,101 @@ type SubmitPrompt = (
 ) => Promise<boolean>;
 
 type ComposerQueueOptions = Readonly<{
-  activeTaskId: string | undefined;
   activeTurnId: string | undefined;
-  autoStartedQueueIds: { current: Set<string> };
-  connectionState: TaskRuntimeView["connectionState"];
+  client: CodeAgentMutationClient;
   handleAttachmentsChange: (files: readonly PromptInputAttachment[]) => void;
-  isCurrentScope: (scope: string) => boolean;
-  isSubmitting: boolean;
-  queuedPrompts: readonly QueuedComposerPrompt[];
+  projectId: string;
   replacePromptContent: (content: PromptSkillContent, cursorOffset?: number) => void;
-  replaceQueuedPrompts: (prompts: readonly QueuedComposerPrompt[]) => void;
   routeScope: string;
   runtime: TaskRuntimeView | undefined;
   skillEditorRef: { current: PromptSkillEditorHandle | null };
-  submitPrompt: SubmitPrompt;
+  skills: readonly AgentSkill[];
+  taskId: string | undefined;
 }>;
 
+async function listAllQueuedSubmissions(
+  client: CodeAgentMutationClient,
+  projectId: string,
+  taskId: string,
+  signal: AbortSignal,
+): Promise<readonly AgentQueuedSubmission[]> {
+  const submissions: AgentQueuedSubmission[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await client.listQueuedSubmissions(
+      projectId,
+      taskId,
+      { ...(cursor === undefined ? {} : { cursor }), limit: 100 },
+      { signal },
+    );
+    submissions.push(...page.data);
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor !== undefined);
+  return submissions;
+}
+
 export function useComposerQueue({
-  activeTaskId,
   activeTurnId,
-  autoStartedQueueIds,
-  connectionState,
+  client,
   handleAttachmentsChange,
-  isCurrentScope,
-  isSubmitting,
-  queuedPrompts,
+  projectId,
   replacePromptContent,
-  replaceQueuedPrompts,
   routeScope,
   runtime,
   skillEditorRef,
-  submitPrompt,
+  skills,
+  taskId,
 }: ComposerQueueOptions) {
-  const dismissRespondedSteers = useEffectEvent(() => {
-    const retained = queuedPrompts.filter(
-      (prompt) => !hasQueuedPromptReceivedAssistantResponse(prompt, runtime?.snapshot),
-    );
-    if (retained.length !== queuedPrompts.length) {
-      replaceQueuedPrompts(retained);
-    }
+  const queryClient = useQueryClient();
+  const queryKey = taskQueueQueryKey(projectId, taskId ?? "");
+  const queueQuery = useQuery({
+    enabled: taskId !== undefined,
+    queryFn: ({ signal }) => listAllQueuedSubmissions(client, projectId, taskId ?? "", signal),
+    queryKey,
+    staleTime: Number.POSITIVE_INFINITY,
   });
+  const [awaitingSteers, setAwaitingSteers] = useState<
+    readonly Readonly<{ prompt: QueuedComposerPrompt; scope: string }>[]
+  >([]);
+  const [editingQueue, setEditingQueue] = useState<Readonly<{ id: string; scope: string }>>();
+
+  const serverPrompts = useMemo(
+    () =>
+      taskId === undefined
+        ? []
+        : (queueQuery.data ?? []).map((submission) =>
+            mapAgentQueuedSubmission(
+              submission,
+              projectId,
+              taskId,
+              client.getTaskAttachmentUrl.bind(client),
+              skills,
+            ),
+          ),
+    [client, projectId, queueQuery.data, skills, taskId],
+  );
+  const currentAwaiting = awaitingSteers
+    .filter((entry) => entry.scope === routeScope)
+    .map((entry) => entry.prompt);
+  const awaitingIds = new Set(currentAwaiting.map((prompt) => prompt.id));
+  const queuedPrompts = [
+    ...serverPrompts.filter((prompt) => !awaitingIds.has(prompt.id)),
+    ...currentAwaiting,
+  ];
 
   useEffect(() => {
-    dismissRespondedSteers();
-  }, [runtime?.snapshot]);
-
-  const dismissRespondedSteersFromStore = useEffectEvent((state: TaskStoreState) => {
-    const retained = queuedPrompts.filter(
-      (prompt) =>
-        prompt.status !== "awaiting-response" ||
-        !hasQueuedPromptReceivedAssistantCheckpoints(
-          prompt,
-          getTaskStoreAssistantMessageCheckpoints(state, prompt.turnId),
-        ),
-    );
-    if (retained.length !== queuedPrompts.length) {
-      replaceQueuedPrompts(retained);
+    // 实时 store 存在时只比较 store 中的消息 ID，避免快照 ID 不同而提前结束 loading。
+    if (runtime?.store !== undefined) {
+      return;
     }
-  });
+    setAwaitingSteers((current) =>
+      current.filter(
+        (entry) =>
+          entry.scope !== routeScope ||
+          !hasQueuedPromptReceivedUserMessageInSnapshot(entry.prompt, runtime?.snapshot),
+      ),
+    );
+  }, [routeScope, runtime?.snapshot, runtime?.store]);
 
   useEffect(() => {
     const store = runtime?.store;
@@ -95,57 +137,53 @@ export function useComposerQueue({
       return undefined;
     }
     return store.subscribe((state) => {
-      dismissRespondedSteersFromStore(state);
+      setAwaitingSteers((current) =>
+        current.filter((entry) => {
+          if (entry.scope !== routeScope || entry.prompt.status !== "awaiting-response") {
+            return true;
+          }
+          return !hasQueuedPromptReceivedUserMessage(
+            entry.prompt,
+            getTaskStoreUserMessageIds(state, entry.prompt.turnId),
+          );
+        }),
+      );
     });
-  }, [runtime?.store]);
+  }, [routeScope, runtime?.store]);
 
-  const submitQueuedPrompt = useEffectEvent(
-    (queuedPrompt: QueuedComposerPrompt, queuedScope: string) => {
-      void submitPrompt(
-        { files: queuedPrompt.files, text: queuedPrompt.text },
-        queuedPrompt.skills,
-        {
-          clearInputOnSuccess: false,
-          forceAction: "start",
-          requestTimelineScroll: false,
-        },
-      ).then((sent) => {
-        if (sent && isCurrentScope(queuedScope)) {
-          replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPrompt.id));
-        }
+  const invalidateQueue = async () => {
+    await queryClient.invalidateQueries({ exact: true, queryKey });
+  };
+  const saveQueuedSubmission = async (
+    input: AgentPromptInput,
+    clientUserMessageId: string,
+  ): Promise<boolean> => {
+    if (taskId === undefined) {
+      return false;
+    }
+    const editingId = editingQueue?.scope === routeScope ? editingQueue.id : undefined;
+    if (editingId === undefined) {
+      await client.addQueuedSubmission(projectId, taskId, input, clientUserMessageId, {
+        idempotencyKey: createUuid(),
       });
-    },
-  );
+    } else {
+      await client.updateQueuedSubmission(projectId, taskId, editingId, input, {
+        idempotencyKey: createUuid(),
+      });
+      setEditingQueue(undefined);
+    }
+    await invalidateQueue();
+    return true;
+  };
 
-  useEffect(() => {
-    const queuedPrompt = queuedPrompts[0];
-    if (
-      queuedPrompt?.status !== "queued" ||
-      activeTurnId !== undefined ||
-      activeTaskId === undefined ||
-      isSubmitting ||
-      connectionState !== "connected" ||
-      autoStartedQueueIds.current.has(queuedPrompt.id)
-    ) {
+  const removeQueuedPrompt = async (queuedPromptId: string) => {
+    if (taskId === undefined) {
       return;
     }
-    autoStartedQueueIds.current.add(queuedPrompt.id);
-    submitQueuedPrompt(queuedPrompt, routeScope);
-  }, [
-    activeTaskId,
-    activeTurnId,
-    autoStartedQueueIds,
-    connectionState,
-    isSubmitting,
-    queuedPrompts,
-    routeScope,
-  ]);
-
-  const removeQueuedPrompt = (queuedPromptId: string) => {
-    const prompt = queuedPrompts.find((candidate) => candidate.id === queuedPromptId);
-    if (prompt?.status === "queued") {
-      replaceQueuedPrompts(queuedPrompts.filter((candidate) => candidate.id !== queuedPromptId));
-    }
+    await client.deleteQueuedSubmission(projectId, taskId, queuedPromptId, {
+      idempotencyKey: createUuid(),
+    });
+    await invalidateQueue();
   };
 
   const editQueuedPrompt = (queuedPrompt: QueuedComposerPrompt) => {
@@ -157,7 +195,7 @@ export function useComposerQueue({
       editablePrompt.text,
       editablePrompt.skills,
     );
-    removeQueuedPrompt(queuedPrompt.id);
+    setEditingQueue({ id: queuedPrompt.id, scope: routeScope });
     replacePromptContent(content, serializePromptSkillContent(content).length);
     handleAttachmentsChange(editablePrompt.files);
     requestAnimationFrame(() => {
@@ -165,21 +203,88 @@ export function useComposerQueue({
     });
   };
 
-  const steerQueuedPrompt = async (queuedPrompt: QueuedComposerPrompt) => {
-    if (queuedPrompt.status !== "queued") {
-      return;
-    }
-    await submitPrompt(
-      { files: queuedPrompt.files, text: queuedPrompt.text },
-      queuedPrompt.skills,
-      {
-        clearInputOnSuccess: false,
-        forceAction: "steer",
-        queuedPromptId: queuedPrompt.id,
-        requestTimelineScroll: false,
-      },
-    );
+  const onSteerAccepted = (accepted: AcceptedSteerPrompt) => {
+    setAwaitingSteers((current) => {
+      const prompts = current
+        .filter((entry) => entry.scope === routeScope)
+        .map((entry) => entry.prompt);
+      const retained = retainAcceptedSteerPrompt(prompts, accepted, createUuid);
+      return [
+        ...current.filter((entry) => entry.scope !== routeScope),
+        ...retained.map((prompt) => ({ prompt, scope: routeScope })),
+      ];
+    });
   };
 
-  return { editQueuedPrompt, removeQueuedPrompt, steerQueuedPrompt } as const;
+  const sendQueuedPrompt = async (
+    queuedPrompt: QueuedComposerPrompt,
+    submitPrompt: SubmitPrompt,
+  ) => {
+    if (queuedPrompt.status !== "queued" || taskId === undefined) {
+      return;
+    }
+    if (activeTurnId !== undefined) {
+      const sent = await submitPrompt(
+        { files: queuedPrompt.files, text: queuedPrompt.text },
+        queuedPrompt.skills,
+        {
+          clearInputOnSuccess: false,
+          forceAction: "steer",
+          queuedPromptId: queuedPrompt.id,
+          requestTimelineScroll: false,
+        },
+      );
+      if (!sent) {
+        return;
+      }
+      await removeQueuedPrompt(queuedPrompt.id);
+      return;
+    }
+    const response = await client.startQueuedSubmission(projectId, taskId, queuedPrompt.id, {
+      idempotencyKey: createUuid(),
+    });
+    onSteerAccepted({
+      files: queuedPrompt.files,
+      id: queuedPrompt.id,
+      skills: queuedPrompt.skills,
+      text: queuedPrompt.text,
+      turnId: response.turn.id,
+      userMessageIds: [],
+    });
+    await invalidateQueue();
+  };
+
+  const moveQueuedPrompt = async (queuedPromptId: string, offset: -1 | 1) => {
+    if (taskId === undefined) {
+      return;
+    }
+    const ids = serverPrompts.map((prompt) => prompt.id);
+    const index = ids.indexOf(queuedPromptId);
+    const target = index + offset;
+    if (index < 0 || target < 0 || target >= ids.length) {
+      return;
+    }
+    const currentId = ids[index];
+    const targetId = ids[target];
+    if (currentId === undefined || targetId === undefined) {
+      return;
+    }
+    ids[index] = targetId;
+    ids[target] = currentId;
+    await client.reorderQueuedSubmissions(projectId, taskId, ids, {
+      idempotencyKey: createUuid(),
+    });
+    await invalidateQueue();
+  };
+
+  return {
+    editQueuedPrompt,
+    moveQueuedPrompt,
+    onSteerAccepted,
+    queueError: queueQuery.error,
+    queuedPrompts,
+    removeQueuedPrompt,
+    saveQueuedSubmission,
+    sendQueuedPrompt,
+  } as const;
 }

@@ -7,6 +7,25 @@ import { AgentEventStream, type AgentEventStreamOptions } from "./agent-event-st
 import type { AttachmentStore } from "./attachment-store.js";
 import type { ProjectRuntimeContext } from "./routes/context.js";
 
+async function reconcileQueuedAttachments(
+  attachmentStore: AttachmentStore,
+  projectId: string,
+  taskId: string,
+  queue: NonNullable<AgentProvider["queue"]>,
+): Promise<void> {
+  const queuedSubmissionIds: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await queue.list(taskId, {
+      ...(cursor === undefined ? {} : { cursor }),
+      limit: 100,
+    });
+    queuedSubmissionIds.push(...page.data.map((submission) => submission.id));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor !== undefined);
+  attachmentStore.reconcileQueue(projectId, queuedSubmissionIds);
+}
+
 export function createProjectRuntimeContext(
   options: Readonly<{
     attachmentStore: AttachmentStore;
@@ -37,6 +56,15 @@ export function createProjectRuntimeContext(
         void attachmentStore
           .releaseTurn(project.id, event.payload.turn.id)
           .catch(onAttachmentReleaseError);
+      }
+      if (event.type === "queue.changed" && provider.queue !== undefined) {
+        // CLI、其他浏览器和原生自动续发都通过通知触发附件引用对账。
+        void reconcileQueuedAttachments(
+          attachmentStore,
+          project.id,
+          event.taskId,
+          provider.queue,
+        ).catch(onAttachmentReleaseError);
       }
       eventStream.publish(event);
     }),

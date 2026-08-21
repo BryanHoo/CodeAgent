@@ -9,7 +9,6 @@ import type { AgentProviderAttachment } from "@code-agent/core";
 import {
   MAX_AGENT_HISTORY_IMAGES,
   MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES,
-  MAX_AGENT_TEXT_BYTES,
   type AgentAttachmentKind,
   type AgentAttachmentMediaType,
   type AgentImageMediaType,
@@ -26,6 +25,11 @@ import {
   readFileStatsAsync,
   type HistoricalFileStats,
 } from "./historical-attachment-files.js";
+import {
+  addHistoricalLocalFile,
+  type StoredHistoricalAttachment,
+} from "./historical-local-file-attachment.js";
+import { addHistoricalText } from "./historical-text-attachment.js";
 import type { StagedImageAttachment } from "./jsonl-frame-processor.js";
 
 const DEFAULT_ATTACHMENT_TTL_MS = 30 * 60 * 1_000;
@@ -49,22 +53,12 @@ export interface CodexHistoricalAttachmentStoreOptions {
   ttlMs?: number;
 }
 
-type StoredAttachmentBase = Readonly<{
-  attachment: AgentMessageAttachment;
-  expiresAt: number;
-  projectTaskId: string;
-}>;
-
-type StoredAttachment =
-  | (StoredAttachmentBase & Readonly<{ contentDigest: string; path: string; source: "managed" }>)
-  | (StoredAttachmentBase & Readonly<{ mtimeMs: number; path: string; source: "local" }>);
-
 export class CodexHistoricalAttachmentStore {
   readonly #attachmentDirectory: string;
   readonly #clock: () => number;
   readonly #cleanupTimer: ReturnType<typeof setInterval>;
   readonly #createId: () => string;
-  readonly #entries = new Map<string, StoredAttachment>();
+  readonly #entries = new Map<string, StoredHistoricalAttachment>();
   readonly #maxBytes: number;
   readonly #maxEntries: number;
   readonly #maxTotalBytes: number;
@@ -303,25 +297,39 @@ export class CodexHistoricalAttachmentStore {
     textIndex: number,
   ): AgentMessageAttachment | undefined {
     this.#pruneExpired();
-    const content = Buffer.from(input.text, "utf8");
-    if (content.byteLength === 0 || content.byteLength > MAX_AGENT_TEXT_BYTES) {
-      return undefined;
-    }
-    const name = normalizeAttachmentName(input.name, `Pasted text-${String(textIndex + 1)}.txt`);
-    const contentDigest = createHash("sha256").update(content).digest("hex");
-    for (const entry of this.#entries.values()) {
-      if (
-        entry.source === "managed" &&
-        entry.projectTaskId === taskId &&
-        entry.attachment.kind === "text" &&
-        entry.attachment.name === name &&
-        entry.attachment.size === content.byteLength &&
-        entry.contentDigest === contentDigest
-      ) {
-        return this.#refresh(entry);
-      }
-    }
-    return this.#addManagedAttachment(taskId, "text", "text/plain", name, content, contentDigest);
+    return addHistoricalText({
+      addManaged: (name, content, contentDigest) =>
+        this.#addManagedAttachment(taskId, "text", "text/plain", name, content, contentDigest),
+      entries: this.#entries.values(),
+      input,
+      refresh: (entry) => this.#refresh(entry),
+      taskId,
+      textIndex,
+    });
+  }
+
+  public addLocalFile(
+    taskId: string,
+    input: Readonly<{ mediaType: string; name: string; path: string }>,
+  ): AgentMessageAttachment | undefined {
+    this.#pruneExpired();
+    return addHistoricalLocalFile({
+      clock: this.#clock,
+      createAttachment: (kind, mediaType, name, size) =>
+        this.#createAttachment(kind, mediaType, name, size),
+      ensureCapacity: this.#ensureCapacity.bind(this),
+      entries: this.#entries.values(),
+      input,
+      maxBytes: this.#maxBytes,
+      refresh: (entry) => this.#refresh(entry),
+      register: (entry) => {
+        this.#entries.set(entry.attachment.id, entry);
+        this.#totalBytes += entry.attachment.size;
+      },
+      statFile: this.#statFile,
+      taskId,
+      ttlMs: this.#ttlMs,
+    });
   }
 
   #addManagedAttachment(
@@ -419,7 +427,7 @@ export class CodexHistoricalAttachmentStore {
     rmSync(this.#attachmentDirectory, { force: true, recursive: true });
   }
 
-  #refresh(entry: StoredAttachment): AgentMessageAttachment {
+  #refresh(entry: StoredHistoricalAttachment): AgentMessageAttachment {
     this.#touch({
       ...entry,
       expiresAt: this.#clock() + this.#ttlMs,
@@ -427,7 +435,7 @@ export class CodexHistoricalAttachmentStore {
     return entry.attachment;
   }
 
-  #touch(entry: StoredAttachment): void {
+  #touch(entry: StoredHistoricalAttachment): void {
     this.#entries.delete(entry.attachment.id);
     this.#entries.set(entry.attachment.id, entry);
   }

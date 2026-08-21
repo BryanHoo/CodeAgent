@@ -1,7 +1,12 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 import { AgentReviewTargetSchema, AgentTaskSchema } from "./agent-attachments.js";
-import { AgentMcpServerPageSchema, AgentPromptInputSchema, AgentTurnSchema } from "./agent-task.js";
+import {
+  AgentMcpServerPageSchema,
+  AgentPromptInputSchema,
+  AgentQueuedSubmissionSchema,
+  AgentTurnSchema,
+} from "./agent-task.js";
 import { AgentTurnOptionsSchema } from "./project-settings.js";
 
 export const StartAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
@@ -156,6 +161,83 @@ export const SteerAgentTurnResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 export type SteerAgentTurnResponse = Readonly<Static<typeof SteerAgentTurnResponseSchema>>;
+
+export const AddAgentQueuedSubmissionRequestSchema = Type.Object(
+  {
+    clientUserMessageId: Type.String({ minLength: 1 }),
+    input: AgentPromptInputSchema,
+  },
+  { additionalProperties: false },
+);
+export type AddAgentQueuedSubmissionRequest = Readonly<
+  Static<typeof AddAgentQueuedSubmissionRequestSchema>
+>;
+
+export const AddAgentQueuedSubmissionResponseSchema = Type.Object(
+  { queuedSubmission: AgentQueuedSubmissionSchema },
+  { additionalProperties: false },
+);
+export type AddAgentQueuedSubmissionResponse = Readonly<
+  Static<typeof AddAgentQueuedSubmissionResponseSchema>
+>;
+
+export const UpdateAgentQueuedSubmissionRequestSchema = Type.Object(
+  { input: AgentPromptInputSchema },
+  { additionalProperties: false },
+);
+export type UpdateAgentQueuedSubmissionRequest = Readonly<
+  Static<typeof UpdateAgentQueuedSubmissionRequestSchema>
+>;
+
+export const UpdateAgentQueuedSubmissionResponseSchema = AddAgentQueuedSubmissionResponseSchema;
+export type UpdateAgentQueuedSubmissionResponse = AddAgentQueuedSubmissionResponse;
+
+export const DeleteAgentQueuedSubmissionResponseSchema = Type.Object(
+  { deleted: Type.Boolean() },
+  { additionalProperties: false },
+);
+export type DeleteAgentQueuedSubmissionResponse = Readonly<
+  Static<typeof DeleteAgentQueuedSubmissionResponseSchema>
+>;
+
+export const ReorderAgentQueuedSubmissionsRequestSchema = Type.Object(
+  {
+    queuedSubmissionIds: Type.Array(Type.String({ minLength: 1 }), {
+      uniqueItems: true,
+    }),
+  },
+  { additionalProperties: false },
+);
+export type ReorderAgentQueuedSubmissionsRequest = Readonly<
+  Static<typeof ReorderAgentQueuedSubmissionsRequestSchema>
+>;
+
+export const ReorderAgentQueuedSubmissionsResponseSchema = Type.Object(
+  { status: Type.Literal("reordered") },
+  { additionalProperties: false },
+);
+export type ReorderAgentQueuedSubmissionsResponse = Readonly<
+  Static<typeof ReorderAgentQueuedSubmissionsResponseSchema>
+>;
+
+export const StartAgentQueuedSubmissionRequestSchema = Type.Object(
+  { queuedSubmissionId: Type.Optional(Type.String({ minLength: 1 })) },
+  { additionalProperties: false },
+);
+export type StartAgentQueuedSubmissionRequest = Readonly<
+  Static<typeof StartAgentQueuedSubmissionRequestSchema>
+>;
+
+export const StartAgentQueuedSubmissionResponseSchema = Type.Object(
+  {
+    taskId: Type.String({ minLength: 1 }),
+    turn: AgentTurnSchema,
+  },
+  { additionalProperties: false },
+);
+export type StartAgentQueuedSubmissionResponse = Readonly<
+  Static<typeof StartAgentQueuedSubmissionResponseSchema>
+>;
 
 export const InterruptAgentTurnRequestSchema = Type.Object(
   { taskId: Type.String({ minLength: 1 }) },

@@ -1,4 +1,4 @@
-import type { AgentProviderTurnInput } from "@code-agent/core";
+import type { AgentProvider, AgentProviderTurnInput } from "@code-agent/core";
 import {
   DEFAULT_COMMIT_MESSAGE_MODEL,
   MAX_AGENT_FILE_TOTAL_BYTES,
@@ -11,6 +11,7 @@ import {
   type AgentTaskSettings,
 } from "@code-agent/protocol";
 import Fastify, { type FastifyInstance } from "fastify";
+import { Readable } from "node:stream";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { commitSelectedProjectChanges } from "./git-commit.js";
 import { readProjectGitCommitFileDiff, readProjectGitCommitFiles } from "./git-commit-review.js";
@@ -46,6 +47,7 @@ import { registerProviderConnectionRoutes } from "./routes/provider-connection-r
 import { registerRuntimeRoutes } from "./routes/runtime-routes.js";
 import { registerTaskRoutes } from "./routes/task-routes.js";
 import { registerTurnRoutes } from "./routes/turn-routes.js";
+import { registerQueueRoutes } from "./routes/queue-routes.js";
 import { configureServerDelivery } from "./server-delivery.js";
 import type { CreateCodeAgentServerOptions } from "./server-options.js";
 import { runSingleFlight } from "./single-flight.js";
@@ -119,25 +121,53 @@ export async function createCodeAgentServer(
   const resolveProviderTurnInput = async (
     projectId: string,
     input: AgentPromptInput,
+    provider?: AgentProvider,
+    taskId?: string,
   ): Promise<
     Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }>
   > => {
-    const attachmentIds = input.attachments.map((attachment) => attachment.id);
-    if (new Set(attachmentIds).size !== attachmentIds.length) {
+    const requestedAttachmentIds = input.attachments.map((attachment) => attachment.id);
+    if (new Set(requestedAttachmentIds).size !== requestedAttachmentIds.length) {
       throw new MutationHttpError("INVALID_REQUEST", "Duplicate attachments are not allowed", 400);
     }
-    let resolvedAttachments;
-    try {
-      resolvedAttachments = await attachmentStore.resolve(projectId, attachmentIds);
-    } catch (error) {
-      if (error instanceof AttachmentNotFoundError) {
+    const attachmentIds: string[] = [];
+    const resolvedAttachments = [];
+    for (const requestedId of requestedAttachmentIds) {
+      try {
+        const [resolved] = await attachmentStore.resolve(projectId, [requestedId]);
+        if (resolved !== undefined) {
+          attachmentIds.push(requestedId);
+          resolvedAttachments.push(resolved);
+          continue;
+        }
+      } catch (error) {
+        if (!(error instanceof AttachmentNotFoundError)) {
+          throw error;
+        }
+      }
+      const historical =
+        provider === undefined || taskId === undefined
+          ? undefined
+          : await provider.readTaskAttachment(taskId, requestedId);
+      if (historical === undefined) {
         throw new MutationHttpError(
           "ATTACHMENT_NOT_FOUND",
           "Attachment was not found or has expired",
           404,
         );
       }
-      throw error;
+      // 历史或队列附件重新进入待提交 Store，后续仍走统一大小与类型校验。
+      const cloned = await attachmentStore.add(projectId, {
+        content: Readable.from([historical.content]),
+        kind: historical.kind,
+        mediaType: historical.mediaType,
+        name: historical.name,
+      });
+      const [resolved] = await attachmentStore.resolve(projectId, [cloned.attachment.id]);
+      if (resolved !== undefined) {
+        attachmentIds.push(cloned.attachment.id);
+        resolvedAttachments.push(resolved);
+      }
     }
     // Start 与 steer 共用同一映射，保证附件校验和 Provider 输入语义一致。
     const imageBytes = resolvedAttachments.reduce(
@@ -242,7 +272,10 @@ export async function createCodeAgentServer(
       return context;
     });
   };
-  const releaseProjectContext = async (projectId: string): Promise<void> => {
+  const releaseProjectContext = async (
+    projectId: string,
+    preserveQueuedAttachments = false,
+  ): Promise<void> => {
     projectRuntimeIdleReaper.forget(projectId);
     const context = projectContexts.get(projectId);
     if (context !== undefined) {
@@ -253,7 +286,9 @@ export async function createCodeAgentServer(
     }
     await Promise.all([
       options.provider.releaseProject(projectId),
-      attachmentStore.releaseProject(projectId),
+      preserveQueuedAttachments
+        ? attachmentStore.releaseProjectRuntime(projectId)
+        : attachmentStore.releaseProject(projectId),
     ]);
   };
   const projectRuntimeIdleReaper = new ProjectRuntimeIdleReaper({
@@ -264,7 +299,7 @@ export async function createCodeAgentServer(
     onReleaseError: (error, projectId) => {
       app.log.warn({ error, projectId }, "Failed to release idle Project runtime");
     },
-    release: releaseProjectContext,
+    release: (projectId) => releaseProjectContext(projectId, true),
   });
   const listModels = async (): Promise<readonly AgentModel[]> =>
     (await modelCatalogCache.read()).data;
@@ -379,7 +414,9 @@ export async function createCodeAgentServer(
     ...(options.allowedHosts === undefined ? {} : { allowedHosts: options.allowedHosts }),
     releaseResources: async () => {
       await projectRuntimeIdleReaper.close();
-      await Promise.all([...projectContexts.keys()].map(releaseProjectContext));
+      await Promise.all(
+        [...projectContexts.keys()].map((projectId) => releaseProjectContext(projectId)),
+      );
       await attachmentStore.dispose();
       activeGitMutations.clear();
       idempotencyRunner.clear();
@@ -453,6 +490,7 @@ export async function createCodeAgentServer(
   await app.register(registerProjectRoutes, routeContext);
   await app.register(registerTaskRoutes, routeContext);
   await app.register(registerTurnRoutes, routeContext);
+  await app.register(registerQueueRoutes, routeContext);
   await app.register(registerEventRoutes, routeContext);
   await app.ready();
   return app;

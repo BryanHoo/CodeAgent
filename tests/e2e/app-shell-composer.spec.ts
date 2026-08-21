@@ -2740,6 +2740,13 @@ test("scrolls direct user submissions to the bottom without scrolling queued mes
     element.scrollTop = 120;
     element.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
+  await expect
+    .poll(() =>
+      conversation.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeGreaterThan(100);
   await prompt.fill("运行中排队的消息");
   await page.getByRole("button", { exact: true, name: "排队消息" }).click();
   await expect(page.getByRole("list", { name: "排队消息" })).toContainText("运行中排队的消息");

@@ -221,6 +221,8 @@ export interface ServerRouteContext {
   readonly resolveProviderTurnInput: (
     projectId: string,
     input: AgentPromptInput,
+    provider?: AgentProvider,
+    taskId?: string,
   ) => Promise<
     Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }>
   >;

@@ -34,7 +34,6 @@ export function useWorkbenchComposerController(
   const startTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const steerTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const interruptAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
-  const autoStartedQueueIds = useRef(new Set<string>());
   const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
   const uploadAttempts = useRef(new Map<string, string>());
   const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
@@ -79,7 +78,6 @@ export function useWorkbenchComposerController(
       startTurnAttempt.current = undefined;
       steerTurnAttempt.current = undefined;
       interruptAttempt.current = undefined;
-      autoStartedQueueIds.current.clear();
       uploadedAttachments.current.clear();
       uploadAttempts.current.clear();
       commandAttempts.current.clear();
@@ -89,7 +87,6 @@ export function useWorkbenchComposerController(
 
   return {
     actionLock,
-    autoStartedQueueIds,
     commandAttempts,
     interruptAttempt,
     isCurrentScope,

@@ -15,7 +15,7 @@ import type {
   PromptInputAttachmentKind,
   PromptInputMessage,
 } from "../../../shared/components/agent/prompt-input.js";
-import type { QueuedComposerPrompt } from "../composer-draft-context.js";
+import type { QueuedComposerPrompt } from "../composer-queue-state.js";
 import type { ComposerState, ComposerSubmitAction } from "../composer-state.js";
 import type { PromptCommandItem } from "./prompt-command.js";
 import type { PromptSkillContent, PromptSkillEditorHandle } from "./prompt-skill-editor.js";
@@ -57,6 +57,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   hasComposerInput: boolean;
   isSubmitting: boolean;
   menuItemCount: number;
+  moveQueuedPrompt: (queuedPromptId: string, offset: -1 | 1) => void;
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;

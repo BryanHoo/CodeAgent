@@ -155,6 +155,59 @@ describe("AttachmentStore", () => {
     );
   });
 
+  it("retains queued attachments until delete or transfers them to a started turn", async () => {
+    let nextId = 1;
+    const store = new AttachmentStore({ createId: () => `attachment-${String(nextId++)}` });
+    const first = await store.add(
+      "code-agent",
+      uploadInput(pastedTextDataUrl, "text", "queued.txt"),
+    );
+    await store.retainQueue("code-agent", [first.attachment.id], "queue-1");
+    await expect(store.resolve("code-agent", [first.attachment.id])).resolves.toHaveLength(1);
+    await store.startQueue("code-agent", "queue-1", "turn-queued");
+    await expect(store.resolve("code-agent", [first.attachment.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
+    await store.releaseTurn("code-agent", "turn-queued");
+
+    const second = await store.add(
+      "code-agent",
+      uploadInput(pastedTextDataUrl, "text", "delete.txt"),
+    );
+    await store.retainQueue("code-agent", [second.attachment.id], "queue-2");
+    await store.releaseQueue("code-agent", "queue-2");
+    await expect(store.resolve("code-agent", [second.attachment.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
+  });
+
+  it("keeps native queue attachments past TTL and expires them after queue reconciliation", async () => {
+    let now = 0;
+    let nextId = 1;
+    const store = new AttachmentStore({
+      clock: () => now,
+      createId: () => `attachment-${String(nextId++)}`,
+      ttlMs: 10,
+    });
+    const queued = await store.add(
+      "code-agent",
+      uploadInput(pastedTextDataUrl, "text", "queued.txt"),
+    );
+    await store.retainQueue("code-agent", [queued.attachment.id], "queue-1");
+
+    now = 20;
+    await store.add("code-agent", uploadInput(pastedTextDataUrl, "text", "trigger.txt"));
+    await store.releaseProjectRuntime("code-agent");
+    await expect(store.resolve("code-agent", [queued.attachment.id])).resolves.toHaveLength(1);
+
+    store.reconcileQueue("code-agent", []);
+    now = 40;
+    await store.add("code-agent", uploadInput(pastedTextDataUrl, "text", "prune.txt"));
+    await expect(store.resolve("code-agent", [queued.attachment.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
+  });
+
   it("releases only attachments owned by the removed project", async () => {
     let nextId = 1;
     const store = new AttachmentStore({ createId: () => `attachment-${String(nextId++)}` });

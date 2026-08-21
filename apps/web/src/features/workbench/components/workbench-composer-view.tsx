@@ -8,7 +8,7 @@ import {
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentSandboxMode,
 } from "@code-agent/protocol";
-import { Folder, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Folder, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/components/agent/context.js";
@@ -95,7 +95,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
         <ComposerFileMenu props={props} />
         {props.queuedPrompts.length === 0 ? null : (
           <div aria-label={t("composer.queuedMessages")} className="mb-2 space-y-1.5" role="list">
-            {props.queuedPrompts.map((queuedPrompt) => {
+            {props.queuedPrompts.map((queuedPrompt, index) => {
               const summary = resolveQueuedPromptSummary(
                 queuedPrompt,
                 t("composer.attachmentCount", { count: queuedPrompt.files.length }),
@@ -123,6 +123,42 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
+                            aria-label={t("composer.moveQueuedUp", { summary })}
+                            disabled={props.isSubmitting || index === 0}
+                            onClick={() => {
+                              props.moveQueuedPrompt(queuedPrompt.id, -1);
+                            }}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <ArrowUp aria-hidden="true" className="size-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("composer.moveQueuedUpTooltip")}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            aria-label={t("composer.moveQueuedDown", { summary })}
+                            disabled={
+                              props.isSubmitting || index === props.queuedPrompts.length - 1
+                            }
+                            onClick={() => {
+                              props.moveQueuedPrompt(queuedPrompt.id, 1);
+                            }}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <ArrowDown aria-hidden="true" className="size-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("composer.moveQueuedDownTooltip")}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
                             aria-label={t("composer.editQueued", { summary })}
                             disabled={props.isSubmitting}
                             onClick={() => {
@@ -143,9 +179,11 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                             aria-label={t("composer.steerNow", { summary })}
                             className="hover:text-brand"
                             disabled={
-                              !props.canSteer ||
-                              props.activeTurnId === undefined ||
-                              props.isSubmitting
+                              props.isSubmitting ||
+                              props.taskId === undefined ||
+                              (props.activeTurnId === undefined
+                                ? !props.canSubmit
+                                : !props.canSteer)
                             }
                             onClick={() => {
                               props.steerQueuedPrompt(queuedPrompt);

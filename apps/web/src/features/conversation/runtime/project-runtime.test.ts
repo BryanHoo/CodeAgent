@@ -359,10 +359,12 @@ describe("project runtime manager", () => {
   it("applies native task state and project cache invalidation events", () => {
     const harness = createClientHarness();
     const onSkillsChanged = vi.fn();
+    const onQueueChanged = vi.fn();
     const onTaskMetadataChanged = vi.fn();
     const onTaskRemoved = vi.fn();
     const manager = createProjectRuntimeManager(harness.client, {
       onSkillsChanged,
+      onQueueChanged,
       onTaskMetadataChanged,
       onTaskRemoved,
     });
@@ -398,8 +400,15 @@ describe("project runtime manager", () => {
     });
     harness.emit({
       ...envelope,
-      payload: { reason: "deleted" },
+      payload: {},
       sequence: 4,
+      taskId: "task-1",
+      type: "queue.changed",
+    });
+    harness.emit({
+      ...envelope,
+      payload: { reason: "deleted" },
+      sequence: 5,
       taskId: "task-1",
       type: "task.removed",
     });
@@ -410,6 +419,7 @@ describe("project runtime manager", () => {
       "native_notification",
     );
     expect(onSkillsChanged).toHaveBeenCalledWith("project-1");
+    expect(onQueueChanged).toHaveBeenCalledWith("project-1", "task-1");
     expect(onTaskRemoved).toHaveBeenCalledWith("project-1", "task-1");
     manager.dispose();
   });

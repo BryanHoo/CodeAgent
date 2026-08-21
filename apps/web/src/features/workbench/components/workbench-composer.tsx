@@ -1,13 +1,8 @@
 import type { AgentTaskSettings } from "@code-agent/protocol";
 import { useEffect, useImperativeHandle, useState } from "react";
-import { v4 as createUuid } from "uuid";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import {
-  getTaskStoreAssistantMessageCheckpoints,
-  getTurnAssistantMessageCheckpoints,
-  retainAcceptedSteerPrompt,
-} from "../composer-queue-state.js";
+import { getTaskStoreUserMessageIds, getTurnUserMessageIds } from "../composer-queue-state.js";
 import {
   interruptPromptTurn,
   resolveComposerSubmitAction,
@@ -115,9 +110,7 @@ export function WorkbenchComposer({
     commandSurfaceRef,
     composerMode,
     composerController,
-    composerDraftStore,
     composerScope,
-    connectionState,
     contextUsage,
     draftInputDisabled,
     filteredCommands,
@@ -134,9 +127,7 @@ export function WorkbenchComposer({
     pendingTask,
     promptContent,
     promptSubmission,
-    queuedPrompts,
     referenceProjectPath,
-    replaceQueuedPrompts,
     reviewMenuMode,
     routeScope,
     selectedModel,
@@ -144,12 +135,9 @@ export function WorkbenchComposer({
     selectFileReference,
     setActiveCommandIndex,
     setAttachmentPickerKind,
-    setAttachments,
     setIsSubmitting,
     setMutationError,
     setComposerModeState,
-    setPromptContent,
-    setQueuedPrompts,
     setReviewMenuMode,
     setSettingsOverride,
     skillEditorRef,
@@ -161,12 +149,7 @@ export function WorkbenchComposer({
   const fastModeEnabled =
     fastModeAvailable &&
     (fastModeSelection?.scope === composerScope ? fastModeSelection.enabled : fastModeDefault);
-  const {
-    actionLock: composerActionLock,
-    autoStartedQueueIds,
-    interruptAttempt,
-    isCurrentScope,
-  } = composerController;
+  const { actionLock: composerActionLock, interruptAttempt, isCurrentScope } = composerController;
   const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
     const requestScope = routeScope;
     setSettingsOverride({ scope: requestScope, settings: nextSettings });
@@ -216,11 +199,28 @@ export function WorkbenchComposer({
     };
   }, [closeCommandMenu, closeFileMenu, commandMenuOpen, commandSurfaceRef, fileMenuOpen]);
 
+  const composerQueue = useComposerQueue({
+    activeTurnId,
+    client,
+    handleAttachmentsChange,
+    projectId,
+    replacePromptContent: session.replacePromptContent,
+    routeScope,
+    runtime,
+    skillEditorRef,
+    skills,
+    taskId,
+  });
+  useEffect(() => {
+    if (composerQueue.queueError !== null) {
+      setMutationError(composerQueue.queueError);
+    }
+  }, [composerQueue.queueError, setMutationError]);
   const submitPrompt = createComposerSubmission({
-    activeAssistantMessages:
+    activeUserMessageIds:
       runtime?.store === undefined
-        ? getTurnAssistantMessageCheckpoints(runtime?.snapshot, activeTurnId)
-        : getTaskStoreAssistantMessageCheckpoints(runtime.store.getState(), activeTurnId),
+        ? getTurnUserMessageIds(runtime?.snapshot, activeTurnId)
+        : getTaskStoreUserMessageIds(runtime.store.getState(), activeTurnId),
     activeSettings,
     activeTaskId,
     activeTurnId,
@@ -228,8 +228,6 @@ export function WorkbenchComposer({
     canSubmit,
     clearComposerInput,
     client,
-    composerDraftStore,
-    composerScope,
     controller: composerController,
     composerMode,
     followUpBehavior,
@@ -238,9 +236,7 @@ export function WorkbenchComposer({
     onGoalStarted: () => {
       setComposerModeState(undefined);
     },
-    onSteerAccepted: (accepted) => {
-      replaceQueuedPrompts(retainAcceptedSteerPrompt(queuedPrompts, accepted, createUuid));
-    },
+    onSteerAccepted: composerQueue.onSteerAccepted,
     onRequestNotificationPermission,
     onTaskCreated,
     onTaskStarted,
@@ -248,13 +244,10 @@ export function WorkbenchComposer({
     pendingTask,
     projectId,
     promptContent,
-    queuedPrompts,
     routeScope,
     selectedModel,
     selectedReasoningEffort,
-    setAttachments,
-    setPromptContent,
-    setQueuedPrompts,
+    saveQueuedSubmission: composerQueue.saveQueuedSubmission,
     skillEditorRef,
     state,
     taskId,
@@ -272,23 +265,6 @@ export function WorkbenchComposer({
     },
     referenceProjectPath,
   }));
-
-  const { editQueuedPrompt, removeQueuedPrompt, steerQueuedPrompt } = useComposerQueue({
-    activeTaskId,
-    activeTurnId,
-    autoStartedQueueIds,
-    connectionState,
-    handleAttachmentsChange,
-    isCurrentScope,
-    isSubmitting,
-    queuedPrompts,
-    replacePromptContent: session.replacePromptContent,
-    replaceQueuedPrompts,
-    routeScope,
-    runtime,
-    skillEditorRef,
-    submitPrompt,
-  });
 
   const {
     executePromptCommand,
@@ -381,10 +357,13 @@ export function WorkbenchComposer({
       hasComposerInput={hasComposerInput}
       isSubmitting={isSubmitting}
       menuItemCount={menuItemCount}
+      moveQueuedPrompt={(queuedPromptId, offset) => {
+        void composerQueue.moveQueuedPrompt(queuedPromptId, offset).catch(setMutationError);
+      }}
       models={models}
       modelsError={modelsError}
       modelsPending={modelsPending}
-      editQueuedPrompt={editQueuedPrompt}
+      editQueuedPrompt={composerQueue.editQueuedPrompt}
       onComposerModeRemove={() => {
         setComposerModeState(undefined);
       }}
@@ -430,8 +409,10 @@ export function WorkbenchComposer({
       projectToolsEnabled={projectToolsEnabled}
       promptContent={promptContent}
       promptSubmissionText={promptSubmission.text}
-      queuedPrompts={queuedPrompts}
-      removeQueuedPrompt={removeQueuedPrompt}
+      queuedPrompts={composerQueue.queuedPrompts}
+      removeQueuedPrompt={(queuedPromptId) => {
+        void composerQueue.removeQueuedPrompt(queuedPromptId).catch(setMutationError);
+      }}
       reviewMenuMode={reviewMenuMode}
       sandboxModeSelectable={fixedSandboxMode === undefined}
       selectedModel={selectedModel}
@@ -441,7 +422,7 @@ export function WorkbenchComposer({
       skillEditorRef={skillEditorRef}
       state={state}
       steerQueuedPrompt={(queuedPrompt) => {
-        void steerQueuedPrompt(queuedPrompt);
+        void composerQueue.sendQueuedPrompt(queuedPrompt, submitPrompt).catch(setMutationError);
       }}
       submitAction={submitAction}
       switchingBranch={branchMutation.switchingBranch}

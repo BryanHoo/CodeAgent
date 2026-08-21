@@ -108,6 +108,9 @@ export function mapCodexProjectStateNotification(
   if (method === "thread/name/updated") {
     return { payload: {}, taskId, type: "task.metadata_changed" };
   }
+  if (method === "thread/queue/changed") {
+    return { payload: {}, taskId, type: "queue.changed" };
+  }
   if (method === "thread/archived" || method === "thread/deleted") {
     return {
       payload: { reason: method === "thread/archived" ? "archived" : "deleted" },

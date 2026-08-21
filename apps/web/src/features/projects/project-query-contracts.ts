@@ -59,25 +59,32 @@ export type CodeAgentSettingsClient = Pick<
 >;
 export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
+  | "addQueuedSubmission"
   | "addProject"
   | "archiveTask"
   | "compactTask"
+  | "deleteQueuedSubmission"
   | "forkTask"
   | "interruptTurn"
   | "importHostAttachment"
+  | "getTaskAttachmentUrl"
   | "listHostFiles"
+  | "listQueuedSubmissions"
   | "openTaskAttachment"
   | "pinTask"
   | "removeProject"
   | "renameProject"
   | "renameTask"
+  | "reorderQueuedSubmissions"
   | "reorderProjects"
   | "startReview"
+  | "startQueuedSubmission"
   | "startTask"
   | "startTurn"
   | "steerTurn"
   | "uploadAttachment"
   | "uploadFeedback"
+  | "updateQueuedSubmission"
 >;
 export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
@@ -108,6 +115,10 @@ export const PROJECT_TASK_SEARCH_PAGE_SIZE = 100;
 export const PROJECT_PINNED_TASKS_KEY = "pinned";
 export const PROJECT_TASK_SEARCH_SOURCE_KEY = "search-source";
 export const TASK_SNAPSHOT_GC_TIME_MS = 30_000;
+
+export function taskQueueQueryKey(projectId: string, taskId: string) {
+  return ["projects", projectId, "tasks", taskId, "queue"] as const;
+}
 
 export const codeAgentClient = new CodeAgentClient();
 

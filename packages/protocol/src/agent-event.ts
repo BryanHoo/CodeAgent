@@ -170,6 +170,11 @@ export const SkillsChangedEventSchema = createEventSchema({
   type: Type.Literal("skills.changed"),
 });
 
+export const QueueChangedEventSchema = createEventSchema({
+  payload: Type.Object({}, { additionalProperties: false }),
+  type: Type.Literal("queue.changed"),
+});
+
 export const CommandOutputDeltaEventSchema = createEventSchema({
   itemId: Type.String({ minLength: 1 }),
   payload: Type.Object({ delta: Type.String() }, { additionalProperties: false }),
@@ -283,6 +288,7 @@ export const AgentEventSchema = Type.Union([
   TaskMetadataChangedEventSchema,
   TaskRemovedEventSchema,
   SkillsChangedEventSchema,
+  QueueChangedEventSchema,
   PendingRequestCreatedEventSchema,
   PendingRequestResolvedEventSchema,
   PendingRequestExpiredEventSchema,

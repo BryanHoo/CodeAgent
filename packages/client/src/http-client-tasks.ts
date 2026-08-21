@@ -1,5 +1,7 @@
 import {
   AgentAttachmentUploadResponseSchema,
+  AddAgentQueuedSubmissionResponseSchema,
+  AgentQueuedSubmissionPageSchema,
   AgentBackgroundTerminalPageSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
@@ -7,22 +9,28 @@ import {
   AgentTaskSnapshotResponseSchema,
   ArchiveAgentTaskResponseSchema,
   CompactAgentTaskResponseSchema,
+  DeleteAgentQueuedSubmissionResponseSchema,
   ForkAgentTaskResponseSchema,
   InterruptAgentTurnResponseSchema,
   OpenAgentTaskAttachmentResponseSchema,
   PinAgentTaskResponseSchema,
   RenameAgentTaskResponseSchema,
   ResolvePendingRequestResponseSchema,
+  ReorderAgentQueuedSubmissionsResponseSchema,
   ReviewAgentTaskResponseSchema,
   StartAgentTaskResponseSchema,
+  StartAgentQueuedSubmissionResponseSchema,
   StartAgentTurnResponseSchema,
   SteerAgentTurnResponseSchema,
   TerminateAgentBackgroundTerminalResponseSchema,
+  UpdateAgentQueuedSubmissionResponseSchema,
   UnsubscribeAgentTaskResponseSchema,
   UploadAgentFeedbackResponseSchema,
   type AgentAttachmentUploadResponse,
+  type AddAgentQueuedSubmissionResponse,
   type AgentBackgroundTerminalPage,
   type AgentPromptInput,
+  type AgentQueuedSubmissionPage,
   type AgentTaskPage,
   type AgentTaskSettings,
   type AgentTaskSettingsResponse,
@@ -30,6 +38,7 @@ import {
   type AgentTurnOptions,
   type ArchiveAgentTaskResponse,
   type CompactAgentTaskResponse,
+  type DeleteAgentQueuedSubmissionResponse,
   type ForkAgentTaskRequest,
   type ForkAgentTaskResponse,
   type HostFileKind,
@@ -40,12 +49,15 @@ import {
   type RenameAgentTaskResponse,
   type ResolvePendingRequestRequest,
   type ResolvePendingRequestResponse,
+  type ReorderAgentQueuedSubmissionsResponse,
   type ReviewAgentTaskRequest,
   type ReviewAgentTaskResponse,
   type StartAgentTaskResponse,
+  type StartAgentQueuedSubmissionResponse,
   type StartAgentTurnResponse,
   type SteerAgentTurnResponse,
   type TerminateAgentBackgroundTerminalResponse,
+  type UpdateAgentQueuedSubmissionResponse,
   type UnsubscribeAgentTaskResponse,
   type UploadAgentFeedbackRequest,
   type UploadAgentFeedbackResponse,
@@ -66,6 +78,94 @@ import {
 import { ProjectHttpClient } from "./http-client-projects.js";
 
 export class TaskHttpClient extends ProjectHttpClient {
+  public async listQueuedSubmissions(
+    projectId: string,
+    taskId: string,
+    input: Readonly<{ cursor?: string; limit?: number }> = {},
+    options: ReadOptions = {},
+  ): Promise<AgentQueuedSubmissionPage> {
+    return this.read(
+      appendQuery(`${taskPath(projectId, taskId)}/queue`, input),
+      AgentQueuedSubmissionPageSchema,
+      options,
+    );
+  }
+
+  public async addQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    input: AgentPromptInput,
+    clientUserMessageId: string,
+    options: MutationOptions = {},
+  ): Promise<AddAgentQueuedSubmissionResponse> {
+    return this.mutation(
+      `${taskPath(projectId, taskId)}/queue`,
+      { clientUserMessageId, input },
+      AddAgentQueuedSubmissionResponseSchema,
+      options,
+    );
+  }
+
+  public async updateQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionId: string,
+    input: AgentPromptInput,
+    options: MutationOptions = {},
+  ): Promise<UpdateAgentQueuedSubmissionResponse> {
+    return this.mutation(
+      `${taskPath(projectId, taskId)}/queue/${encodeURIComponent(queuedSubmissionId)}`,
+      { input },
+      UpdateAgentQueuedSubmissionResponseSchema,
+      options,
+      "PUT",
+    );
+  }
+
+  public async deleteQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionId: string,
+    options: MutationOptions = {},
+  ): Promise<DeleteAgentQueuedSubmissionResponse> {
+    return this.mutation(
+      `${taskPath(projectId, taskId)}/queue/${encodeURIComponent(queuedSubmissionId)}`,
+      {},
+      DeleteAgentQueuedSubmissionResponseSchema,
+      options,
+      "DELETE",
+    );
+  }
+
+  public async reorderQueuedSubmissions(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionIds: readonly string[],
+    options: MutationOptions = {},
+  ): Promise<ReorderAgentQueuedSubmissionsResponse> {
+    return this.mutation(
+      `${taskPath(projectId, taskId)}/queue/reorder`,
+      { queuedSubmissionIds },
+      ReorderAgentQueuedSubmissionsResponseSchema,
+      options,
+      "PUT",
+    );
+  }
+
+  public async startQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionId?: string,
+    options: MutationOptions = {},
+  ): Promise<StartAgentQueuedSubmissionResponse> {
+    return this.mutation(
+      `${taskPath(projectId, taskId)}/queue/start`,
+      { ...(queuedSubmissionId === undefined ? {} : { queuedSubmissionId }) },
+      StartAgentQueuedSubmissionResponseSchema,
+      options,
+    );
+  }
+
   public async listTasks(
     projectId: string,
     options: ListTasksOptions = {},

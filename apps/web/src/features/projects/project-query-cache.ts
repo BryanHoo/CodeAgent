@@ -8,10 +8,18 @@ import {
   PROJECT_TASK_SEARCH_PAGE_SIZE,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   codeAgentClient,
+  taskQueueQueryKey,
   type ProjectTaskInfiniteData,
   type TaskTitleSnapshot,
   type TaskTitleUpdateOptions,
 } from "./project-query-contracts.js";
+
+export function invalidateTaskQueue(queryClient: QueryClient, projectId: string, taskId: string) {
+  return queryClient.invalidateQueries({
+    exact: true,
+    queryKey: taskQueueQueryKey(projectId, taskId),
+  });
+}
 
 export function flattenProjectTaskPages(currentData: ProjectTaskInfiniteData | undefined) {
   const taskById = new Map<string, AgentTask>();

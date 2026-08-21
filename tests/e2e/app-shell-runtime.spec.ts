@@ -1104,6 +1104,54 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect(page.getByRole("button", { name: "停止" })).toBeVisible();
   await expect(input).toHaveAttribute("data-placeholder", "输入后续要求");
 
+  const taskId = page.url().split("/").at(-1) ?? "";
+  const attachmentResponse = await page.request.post("/v1/projects/code-agent/attachments/text", {
+    headers: { "idempotency-key": "external-queue-attachment" },
+    multipart: {
+      attachment: {
+        buffer: Buffer.from("队列附件内容", "utf8"),
+        mimeType: "text/plain",
+        name: "queue-note.txt",
+      },
+    },
+  });
+  expect(attachmentResponse.status()).toBe(201);
+  const attachment = (await attachmentResponse.json()) as { attachment: { id: string } };
+  const externalQueueResponse = await page.request.post(
+    `/v1/projects/code-agent/tasks/${taskId}/queue`,
+    {
+      data: {
+        clientUserMessageId: "external-client-message",
+        input: {
+          attachments: [{ id: attachment.attachment.id }],
+          skills: [],
+          text: "来自其他客户端",
+          type: "prompt",
+        },
+      },
+      headers: { "idempotency-key": "external-queue-add" },
+    },
+  );
+  expect(externalQueueResponse.status()).toBe(201);
+  const externalQueue = (await externalQueueResponse.json()) as {
+    queuedSubmission: { id: string };
+  };
+  await expect(page.getByText("来自其他客户端", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("来自其他客户端", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "编辑排队消息：来自其他客户端" }).click();
+  await expect(page.getByText("queue-note.txt", { exact: true })).toBeVisible();
+  await page.getByRole("button", { exact: true, name: "排队消息" }).click();
+  await expect(input).toHaveAttribute("data-serialized-value", "");
+  const externalDeleteResponse = await page.request.delete(
+    `/v1/projects/code-agent/tasks/${taskId}/queue/${externalQueue.queuedSubmission.id}`,
+    { headers: { "idempotency-key": "external-queue-delete" } },
+  );
+  expect(externalDeleteResponse.status()).toBe(200);
+  await expect(
+    page.getByRole("list", { name: "已排队消息" }).getByText("来自其他客户端", { exact: true }),
+  ).toHaveCount(0);
+
   let steerPayload: unknown;
   await page.route("**/v1/projects/code-agent/tasks/*/turns/*/steer", async (route) => {
     const request = route.request();
@@ -1111,7 +1159,7 @@ test("queues follow-up messages and can steer or cancel them during an active tu
     steerPayload = payload;
     await route.fulfill({ response: await route.fetch() });
   });
-  const queueMessage = page.getByRole("button", { name: "排队消息" });
+  const queueMessage = page.getByRole("button", { exact: true, name: "排队消息" });
   await input.fill("先补充失败测试");
   await expect(queueMessage).toBeVisible();
   await queueMessage.click();
@@ -1130,18 +1178,18 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await steerQueued.hover();
   await expect(page.getByRole("tooltip")).toHaveText("立即作为引导发送");
   await steerQueued.click();
+  await expect(page.getByRole("status", { name: "等待发送" })).toBeVisible();
   await expect
     .poll(() => steerPayload)
     .toEqual({
       input: { attachments: [], skills: [], text: "先补充失败测试（已编辑）", type: "prompt" },
       taskId: expect.stringMatching(/^task-action-\d+$/u),
     });
-  await expect(page.getByRole("status", { name: "等待发送" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "编辑排队消息：先补充失败测试（已编辑）" }),
   ).toHaveCount(0);
   await expect(page.getByRole("status", { name: "等待发送" })).toHaveCount(0);
-  await expect(page.getByText("先补充失败测试（已编辑）", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("先补充失败测试（已编辑）", { exact: true })).toHaveCount(1);
 
   await input.fill("无需继续的消息");
   await queueMessage.click();
@@ -1151,6 +1199,22 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await cancelQueued.click();
   await expect(page.getByText("无需继续的消息", { exact: true })).toHaveCount(0);
 
+  await input.fill("顺序一");
+  await queueMessage.click();
+  await input.fill("顺序二");
+  await queueMessage.click();
+  await page.getByRole("button", { name: "上移排队消息：顺序二" }).click();
+  await expect
+    .poll(async () =>
+      queuedList
+        .getByRole("listitem")
+        .allTextContents()
+        .then((items) => items.map((item) => item.trim())),
+    )
+    .toEqual(["顺序二", "顺序一"]);
+  await page.getByRole("button", { name: "取消排队：顺序二" }).click();
+  await page.getByRole("button", { name: "取消排队：顺序一" }).click();
+
   await input.fill("自动续发消息");
   await queueMessage.click();
   await page.getByRole("button", { name: "停止" }).click();
@@ -1159,7 +1223,7 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect(nextTurn).toHaveAttribute("data-status", "completed");
 });
 
-test("keeps a direct steer above the composer until assistant streaming starts", async ({
+test("keeps a direct steer above the composer until its streamed message appears", async ({
   page,
 }) => {
   await page.unroute("**/v1/**");
@@ -1184,7 +1248,7 @@ test("keeps a direct steer above the composer until assistant streaming starts",
   await expect(page.getByRole("status", { name: "等待发送" })).toBeVisible();
   await expect(page.getByRole("button", { name: "编辑排队消息：直接补充失败测试" })).toHaveCount(0);
   await expect(page.getByRole("status", { name: "等待发送" })).toHaveCount(0);
-  await expect(page.getByText("直接补充失败测试", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("直接补充失败测试", { exact: true })).toHaveCount(1);
 });
 
 test("submits a prompt and streams the completed reply @cross-browser", async ({ page }) => {

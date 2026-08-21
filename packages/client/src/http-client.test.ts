@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PendingRequest } from "@code-agent/protocol";
+import type { AgentPromptInput, PendingRequest } from "@code-agent/protocol";
 
 import {
   buildProjectAttachmentUrl,
@@ -1262,6 +1262,75 @@ describe("CodeAgentClient", () => {
       fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("idempotency-key")),
     ).toEqual(["review-key", "compact-key", "fork-key", "feedback-key"]);
     expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({ lastTurnId: "turn-1" }));
+  });
+
+  it("sends and validates the complete task queue API", async () => {
+    const queuedSubmission = {
+      attachments: [],
+      clientUserMessageId: "client-message-1",
+      id: "queue-1",
+      skills: [],
+      text: "排队处理",
+    };
+    const queuedTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-queued",
+      items: [],
+      startedAt: null,
+      status: "running",
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [queuedSubmission], nextCursor: null }))
+      .mockResolvedValueOnce(jsonResponse({ queuedSubmission }))
+      .mockResolvedValueOnce(
+        jsonResponse({ queuedSubmission: { ...queuedSubmission, text: "更新内容" } }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ status: "reordered" }))
+      .mockResolvedValueOnce(jsonResponse({ taskId: task.id, turn: queuedTurn }))
+      .mockResolvedValueOnce(jsonResponse({ deleted: true }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+    const input: AgentPromptInput = {
+      attachments: [],
+      skills: [],
+      text: "排队处理",
+      type: "prompt",
+    };
+
+    await client.listQueuedSubmissions("code-agent", task.id);
+    await client.addQueuedSubmission("code-agent", task.id, input, "client-message-1", {
+      idempotencyKey: "queue-add-key",
+    });
+    await client.updateQueuedSubmission("code-agent", task.id, "queue-1", input, {
+      idempotencyKey: "queue-update-key",
+    });
+    await client.reorderQueuedSubmissions("code-agent", task.id, ["queue-1"], {
+      idempotencyKey: "queue-reorder-key",
+    });
+    await client.startQueuedSubmission("code-agent", task.id, "queue-1", {
+      idempotencyKey: "queue-start-key",
+    });
+    await client.deleteQueuedSubmission("code-agent", task.id, "queue-1", {
+      idempotencyKey: "queue-delete-key",
+    });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/v1/projects/code-agent/tasks/task-1/queue",
+      "/v1/projects/code-agent/tasks/task-1/queue",
+      "/v1/projects/code-agent/tasks/task-1/queue/queue-1",
+      "/v1/projects/code-agent/tasks/task-1/queue/reorder",
+      "/v1/projects/code-agent/tasks/task-1/queue/start",
+      "/v1/projects/code-agent/tasks/task-1/queue/queue-1",
+    ]);
+    expect(fetchMock.mock.calls.map((call) => call[1]?.method)).toEqual([
+      undefined,
+      "POST",
+      "PUT",
+      "PUT",
+      "POST",
+      "DELETE",
+    ]);
   });
 
   it("sends typed task metadata mutations with idempotency keys", async () => {

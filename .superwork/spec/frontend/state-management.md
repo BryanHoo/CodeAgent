@@ -12,6 +12,8 @@
 - 任意 Client `401` 或 LAN 注销成功后必须立即清空 Query Cache 并卸载 Project Runtime、Composer Draft Provider 与 Router 业务树；Provider 清理必须关闭 WebSocket、释放附件 Blob URL 和内存草稿。刷新后的认证只从 HttpOnly Cookie 重新读取。
 - 瞬时 UI 状态默认保留在最近组件或功能内。
 - HTTP Snapshot 由服务端状态层持有；实时事件按 Task、Turn 和 Item ID 归一化合并。
+- Composer 后续队列以 `projectId + taskId` 作用域的服务端 `thread/queue` Query 为唯一真相源，必须分页读取完整队列，并通过 add/update/delete/reorder/start Mutation 修改；不得使用 `sessionStorage`、浏览器内存队列或 React Effect 自动启动。`queue.changed` 只精确失效对应 Query，使 CLI、其他浏览器与 App Server 的变化统一校准。
+- 活动 Turn 的立即引导仍使用 `turn/steer`，成功后只在 Composer 上方保留本地 loading，不得向 Timeline 插入乐观用户消息；只有同一 Turn 的后续流式 User Item 出现后才能移除 loading，Assistant Delta 不得提前结束该状态。loading 与队列编辑必须保留图片、文件、粘贴文本和 Skill 的受控引用，且按路由作用域隔离异步结果。
 - MCP 清单 Query Key 必须同时包含 `projectId + taskId`，没有当前 Task 时禁用；手动重载成功后以返回页更新同一缓存。Project Runtime 收到 `mcp_server.status_updated` 后只失效对应 `projectId + taskId` 的 MCP Query，通过权威清单补齐工具数、认证和版本元数据；不得再为 `starting` 状态建立轮询。
 - 高扇出 React Provider 必须按只读数据、稳定操作和高频活动状态拆分 Context，消费者只通过专用 Hook 订阅所需边界；每个 Provider value 及派生数组、Map 必须保持引用稳定，Mutation Pending 或单个活动状态变化不得使无关数据/操作消费者重新渲染。
 - Global settings 与 Project 新 Task 默认设置使用 TanStack Query 独立缓存；Task Snapshot 必须直接携带 Server 校验后的完整 Task 设置。

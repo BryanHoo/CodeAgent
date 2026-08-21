@@ -2,6 +2,7 @@
 export {
   type AgentProvider,
   type AgentProviderAttachment,
+  type AgentProviderQueue,
   type AgentRuntimeProvider,
   type AgentTaskUnsubscribeStatus,
   type AgentProviderEvent,
@@ -11,6 +12,7 @@ export {
   type AgentProviderTurnInput,
   type AgentRuntimeDefaultSettings,
   type ListAgentTasksInput,
+  type ListAgentQueuedSubmissionsInput,
   PendingRequestResolutionError,
   type PendingRequestResolutionErrorCode,
   type ResolvePendingRequestInput,
