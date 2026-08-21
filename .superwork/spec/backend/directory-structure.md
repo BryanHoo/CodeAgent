@@ -3,14 +3,15 @@
 ## 包职责
 
 - `src/cli.ts`：唯一公开 CLI 入口，只负责命令解析、配置装配和进程退出码。
-- `packages/server`：Fastify 插件、HTTP/WebSocket、持久化适配和 Database Worker。
-- `packages/provider-codex`：Codex Binary 定位、App Server 子进程、JSONL/RPC 和事件映射。
+- `packages/server`：Fastify 插件、HTTP/WebSocket、SQLite Project 投影和 Database Worker；不得生成 Project 身份或直接实现 Project Mutation。
+- `packages/provider-codex`：Codex Binary 定位、App Server 子进程、JSONL/RPC、Codex 权威 Project Repository 和事件映射。
 - `packages/core`：Provider 接口、领域状态机和用例；不得导入 Fastify、SQLite 或 Codex 实现。
 - `packages/protocol`：Provider 无关的 Schema、类型和 API 版本。
 
 ## 规则
 
 - Fastify 路由只做 Schema 校验、身份与 Project 校验、用例调用和响应映射。
+- Core 分离 `ProjectRepository` 与 `ProjectProjectionStore`：前者由 `provider-codex` 实现并保证所有 Mutation 先写 Codex，后者由 `packages/server` 的 SQLite Adapter 实现且只接受完整 Codex Project 投影。CodeAgent 公共 `Project.id` 必须原样使用 Codex `projectId`，单 `rootPath` 只投影上游 roots 的第一项。
 - `packages/server/src/app.ts` 只装配 Fastify、共享资源、根级 Access Hook、错误处理和领域路由；HTTP/WebSocket 路由按 Access、Runtime、Project、Task、Turn、Event 领域放入 `routes/*-routes.ts` 插件。插件通过显式 `ServerRouteContext` 获取依赖，不自行关闭共享资源，也不引入字符串 Service Locator。
 - `packages/provider-codex/src/agent-provider.ts` 只编排 RPC 与 Provider 生命周期；无状态的 Codex 协议转换放入纯映射模块，Task 运行状态、Pending Request 终态与定时器、Runtime Owner 分别由单一对象维护，禁止在 Provider 中复制同类 Map。
 - Project Git 状态只通过固定的只读端点暴露，不接受浏览器传入的命令或文件路径；默认只读取 Porcelain 文件状态并为每项返回空 `diff`，只有严格 `includeDiff=true` 才读取完整 Diff。优先读取已配置 Project 根目录并同时返回当前分支、当前分支优先的去重本地分支切换候选和本地/远端基础分支候选，远端默认分支可解析时必须排在基础分支首位；分支候选使用有界 TTL 缓存，当前分支仍需每次读取并在分支 Mutation 后主动失效候选缓存。根目录不是 Git 仓库时仅聚合其直属子目录中的 Git 仓库，以子目录名作为变更路径前缀，并返回空分支上下文；根目录和直属子目录均没有 Git 仓库时必须返回 `repositoryMode: "none"` 的稳定空状态，不得作为读取异常。

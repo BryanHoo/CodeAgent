@@ -165,7 +165,7 @@ function realtimeThread(turns = []) {
     id: "task-realtime",
     name: "Realtime Path",
     preview: "Realtime Path",
-    projectId: null,
+    projectId: "code-agent",
     section: null,
     sectionEnteredAt: null,
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
@@ -176,7 +176,7 @@ function realtimeThread(turns = []) {
 
 let parentRealtimeThread = realtimeThread();
 
-function actionThread(id, turns = []) {
+function actionThread(id, turns = [], projectId = "code-agent") {
   return {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
@@ -184,7 +184,7 @@ function actionThread(id, turns = []) {
     id,
     name: "Agent Action",
     preview: "Agent Action",
-    projectId: null,
+    projectId,
     section: null,
     sectionEnteredAt: null,
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
@@ -888,7 +888,7 @@ input.on("line", (line) => {
             id: "task-realtime",
             name: "Realtime Path",
             preview: "Realtime Path",
-            projectId: null,
+            projectId: "code-agent",
             section: null,
             sectionEnteredAt: null,
             status: { type: "active" },
@@ -987,7 +987,7 @@ input.on("line", (line) => {
   if (actionScenario && message.method === "thread/start") {
     const threadId = `task-action-${String(nextActionTask)}`;
     nextActionTask += 1;
-    const thread = actionThread(threadId);
+    const thread = actionThread(threadId, [], message.params?.projectId ?? null);
     actionThreads.set(threadId, thread);
     send({ id: message.id, result: { thread } });
     return;

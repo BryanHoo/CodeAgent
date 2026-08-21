@@ -22,7 +22,9 @@ export {
 export {
   type AgentProviderConnectionRepository,
   type AgentSettingsRepository,
+  type ProjectProjectionStore,
   type ProjectRepository,
+  type ProjectSourceMigration,
   type RegisterProjectInput,
   type TaskRepository,
 } from "./project.js";

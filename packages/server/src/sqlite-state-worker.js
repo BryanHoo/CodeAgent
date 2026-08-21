@@ -4,160 +4,25 @@ import { parentPort, workerData } from "node:worker_threads";
 
 import Database from "better-sqlite3";
 
+import {
+  configureDatabase,
+  ensureGlobalSettingsCompatibility,
+  globalSettingsFromRow,
+  hasTable,
+  initializeProjectSourceMigration,
+  projectDefaultsFromRow,
+  projectFromRow,
+  providerConnectionFromRow,
+  readMigrationVersion,
+  runMigrations,
+  taskSettingsFromRow,
+} from "./sqlite-state-worker-bootstrap.js";
+
 function serializeError(error) {
   return {
     message: error instanceof Error ? error.message : String(error),
     name: error instanceof Error ? error.name : "Error",
   };
-}
-
-function projectFromRow(row) {
-  if (row === undefined) {
-    return undefined;
-  }
-  return {
-    createdAt: row.created_at,
-    id: row.id,
-    name: row.name,
-    rootPath: row.root_path,
-  };
-}
-
-function projectDefaultsFromRow(row) {
-  if (row === undefined) {
-    return undefined;
-  }
-  return {
-    model: row.model,
-    reasoningEffort: row.reasoning_effort,
-    sandboxMode: row.sandbox_mode,
-  };
-}
-
-function taskSettingsFromRow(row) {
-  if (row === undefined) {
-    return undefined;
-  }
-  return {
-    approvalPolicy: row.approval_policy,
-    approvalsReviewer: row.approvals_reviewer,
-    model: row.model,
-    reasoningEffort: row.reasoning_effort,
-    sandboxMode: row.sandbox_mode,
-  };
-}
-
-function globalSettingsFromRow(row) {
-  if (row === undefined) {
-    return undefined;
-  }
-  return {
-    approvalPolicy: row.approval_policy,
-    approvalsReviewer: row.approvals_reviewer,
-    commitMessageModel: row.commit_message_model,
-    commitMessagePrompt: row.commit_message_prompt,
-    defaultOpenAppId: row.default_open_app_id,
-    fastMode: row.fast_mode === 1,
-    followUpBehavior: row.follow_up_behavior,
-    model: row.model,
-    reasoningEffort: row.reasoning_effort,
-    sandboxMode: row.sandbox_mode,
-  };
-}
-
-function providerConnectionFromRow(row) {
-  if (row === undefined) {
-    return undefined;
-  }
-  return {
-    customBaseUrl: row.custom_base_url,
-    customModelsJson: row.custom_models_json,
-    mode: row.mode,
-    updatedAt: row.updated_at,
-  };
-}
-
-function configureDatabase(database) {
-  database.pragma("journal_mode = WAL");
-  database.pragma("foreign_keys = ON");
-  database.pragma("synchronous = NORMAL");
-  database.pragma("busy_timeout = 5000");
-}
-
-function runMigrations(database, migrations) {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version INTEGER PRIMARY KEY,
-      name TEXT NOT NULL,
-      applied_at TEXT NOT NULL
-    ) STRICT;
-  `);
-  const applied = new Set(
-    database
-      .prepare("SELECT version FROM schema_migrations")
-      .all()
-      .map((row) => row.version),
-  );
-  let previousVersion = 0;
-  for (const migration of migrations) {
-    if (
-      !Number.isInteger(migration.version) ||
-      migration.version <= previousVersion ||
-      typeof migration.name !== "string" ||
-      typeof migration.sql !== "string"
-    ) {
-      throw new Error("Invalid SQLite migration definition");
-    }
-    previousVersion = migration.version;
-    if (applied.has(migration.version)) {
-      continue;
-    }
-    // DDL 与版本记录必须同事务提交，失败时数据库仍停留在上一个完整版本。
-    database.transaction(() => {
-      database.exec(migration.sql);
-      database
-        .prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)")
-        .run(migration.version, migration.name, new Date().toISOString());
-    })();
-  }
-}
-
-function hasTable(database, tableName) {
-  return (
-    database
-      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
-      .get(tableName) !== undefined
-  );
-}
-
-function ensureGlobalSettingsCompatibility(database) {
-  if (!hasTable(database, "global_settings")) {
-    return;
-  }
-  const columns = new Set(
-    database
-      .prepare("PRAGMA table_info(global_settings)")
-      .all()
-      .map((column) => column.name),
-  );
-  database.transaction(() => {
-    // 版本切换不能依赖迁移记录推断实际列，准备语句前必须修复持久化契约。
-    if (!columns.has("fast_mode")) {
-      database.exec(`
-        ALTER TABLE global_settings
-          ADD COLUMN fast_mode INTEGER NOT NULL DEFAULT 0
-          CHECK (fast_mode IN (0, 1));
-      `);
-    }
-    if (!columns.has("commit_message_reasoning_effort")) {
-      database.exec(`
-        ALTER TABLE global_settings
-          ADD COLUMN commit_message_reasoning_effort TEXT NOT NULL DEFAULT '';
-        UPDATE global_settings
-        SET commit_message_reasoning_effort = reasoning_effort;
-      `);
-    }
-  })();
 }
 
 function createOperations(database) {
@@ -167,11 +32,26 @@ function createOperations(database) {
           `INSERT OR IGNORE INTO projects (id, name, root_path, created_at, sort_order, kind)
            VALUES (?, ?, ?, ?, 0, 'temporary')`,
         ),
-        insertProject: database.prepare(
-          `INSERT OR IGNORE INTO projects (id, name, root_path, created_at, sort_order, kind)
+        upsertProject: database.prepare(
+          `INSERT INTO projects (id, name, root_path, created_at, sort_order, kind)
            VALUES (?, ?, ?, ?, (
              SELECT COALESCE(MAX(sort_order) + 1, 0) FROM projects WHERE kind = 'user'
-           ), 'user')`,
+           ), 'user')
+           ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name,
+             root_path = excluded.root_path,
+             created_at = excluded.created_at
+           WHERE projects.kind = 'user'`,
+        ),
+        upsertProjectAtOrder: database.prepare(
+          `INSERT INTO projects (id, name, root_path, created_at, sort_order, kind)
+           VALUES (?, ?, ?, ?, ?, 'user')
+           ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name,
+             root_path = excluded.root_path,
+             created_at = excluded.created_at,
+             sort_order = excluded.sort_order
+           WHERE projects.kind = 'user'`,
         ),
         listProjects: database.prepare(
           "SELECT id, name, root_path, created_at FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
@@ -182,12 +62,35 @@ function createOperations(database) {
         readProject: database.prepare(
           "SELECT id, name, root_path, created_at FROM projects WHERE id = ?",
         ),
-        readProjectByRoot: database.prepare(
-          "SELECT id, name, root_path, created_at FROM projects WHERE root_path = ?",
+        readProjectWithOrder: database.prepare(
+          "SELECT id, name, root_path, created_at, sort_order FROM projects WHERE id = ? AND kind = 'user'",
         ),
         removeProject: database.prepare("DELETE FROM projects WHERE id = ? AND kind = 'user'"),
-        renameProject: database.prepare(
-          "UPDATE projects SET name = ? WHERE id = ? AND kind = 'user'",
+        copyProjectDefaults: database.prepare(
+          `INSERT INTO project_defaults
+             (project_id, model, reasoning_effort, updated_at, sandbox_mode)
+           SELECT ?, model, reasoning_effort, updated_at, sandbox_mode
+           FROM project_defaults WHERE project_id = ?
+           ON CONFLICT(project_id) DO UPDATE SET
+             model = excluded.model,
+             reasoning_effort = excluded.reasoning_effort,
+             updated_at = excluded.updated_at,
+             sandbox_mode = excluded.sandbox_mode`,
+        ),
+        copyTaskSettings: database.prepare(
+          `INSERT INTO task_settings
+             (project_id, task_id, approval_policy, model, reasoning_effort, updated_at,
+              sandbox_mode, approvals_reviewer)
+           SELECT ?, task_id, approval_policy, model, reasoning_effort, updated_at,
+                  sandbox_mode, approvals_reviewer
+           FROM task_settings WHERE project_id = ?
+           ON CONFLICT(project_id, task_id) DO UPDATE SET
+             approval_policy = excluded.approval_policy,
+             model = excluded.model,
+             reasoning_effort = excluded.reasoning_effort,
+             updated_at = excluded.updated_at,
+             sandbox_mode = excluded.sandbox_mode,
+             approvals_reviewer = excluded.approvals_reviewer`,
         ),
         writeProjectSortOrder: database.prepare(
           "UPDATE projects SET sort_order = ? WHERE id = ? AND kind = 'user'",
@@ -287,6 +190,63 @@ function createOperations(database) {
     return stateStatements.listProjects.all().map(projectFromRow);
   });
 
+  const replaceProjects = database.transaction((projects) => {
+    const stateStatements = requireStatements();
+    const projectIds = new Set(projects.map((project) => project.id));
+    if (projectIds.size !== projects.length) {
+      throw new Error("Project projection must contain unique project ids");
+    }
+    for (const { id } of stateStatements.listProjectIds.all()) {
+      if (!projectIds.has(id)) {
+        stateStatements.removeProject.run(id);
+      }
+    }
+    projects.forEach((project, sortOrder) => {
+      stateStatements.upsertProjectAtOrder.run(
+        project.id,
+        project.name,
+        project.rootPath,
+        project.createdAt,
+        sortOrder,
+      );
+    });
+    return stateStatements.listProjects.all().map(projectFromRow);
+  });
+
+  const migrateProject = database.transaction((legacyProjectId, project) => {
+    const stateStatements = requireStatements();
+    const legacy = stateStatements.readProjectWithOrder.get(legacyProjectId);
+    const sortOrder = legacy?.sort_order ?? stateStatements.listProjectIds.all().length;
+    stateStatements.upsertProjectAtOrder.run(
+      project.id,
+      project.name,
+      project.rootPath,
+      project.createdAt,
+      sortOrder,
+    );
+    if (legacyProjectId !== project.id && legacy !== undefined) {
+      stateStatements.copyProjectDefaults.run(project.id, legacyProjectId);
+      stateStatements.copyTaskSettings.run(project.id, legacyProjectId);
+      stateStatements.removeProject.run(legacyProjectId);
+    }
+    const stored = projectFromRow(stateStatements.readProject.get(project.id));
+    if (stored === undefined) {
+      throw new Error("Migrated Project projection could not be stored");
+    }
+    return stored;
+  });
+
+  const projectSourceMigrationStatements = hasTable(database, "project_source_migration")
+    ? {
+        complete: database.prepare(
+          "UPDATE project_source_migration SET completed = 1 WHERE id = 1",
+        ),
+        read: database.prepare(
+          "SELECT completed, recover_unassigned FROM project_source_migration WHERE id = 1",
+        ),
+      }
+    : undefined;
+
   return {
     diagnose() {
       database.exec("BEGIN IMMEDIATE");
@@ -312,6 +272,13 @@ function createOperations(database) {
         writable: true,
       };
     },
+    completeProjectSourceMigration() {
+      if (projectSourceMigrationStatements === undefined) {
+        throw new Error("Project source migration state is unavailable");
+      }
+      projectSourceMigrationStatements.complete.run();
+      return null;
+    },
     listProjects() {
       return requireStatements().listProjects.all().map(projectFromRow);
     },
@@ -333,18 +300,44 @@ function createOperations(database) {
     readProject(payload) {
       return projectFromRow(requireStatements().readProject.get(payload.projectId));
     },
-    removeProject(payload) {
-      // 外键级联只清理 CodeAgent 本地关联状态，不执行任何磁盘操作。
+    readProjectSourceMigration() {
+      if (projectSourceMigrationStatements === undefined) {
+        throw new Error("Project source migration state is unavailable");
+      }
+      const row = projectSourceMigrationStatements.read.get();
+      if (row === undefined) {
+        throw new Error("Project source migration state is missing");
+      }
+      return {
+        completed: row.completed === 1,
+        recoverUnassigned: row.recover_unassigned === 1,
+      };
+    },
+    replaceProjects(payload) {
+      return replaceProjects(payload.projects);
+    },
+    upsertProject(payload) {
+      const stateStatements = requireStatements();
+      const project = payload.project;
+      stateStatements.upsertProject.run(
+        project.id,
+        project.name,
+        project.rootPath,
+        project.createdAt,
+      );
+      const stored = projectFromRow(stateStatements.readProject.get(project.id));
+      if (stored === undefined) {
+        throw new Error("Project projection could not be stored");
+      }
+      return stored;
+    },
+    migrateProject(payload) {
+      return migrateProject(payload.legacyProjectId, payload.project);
+    },
+    deleteProject(payload) {
       return requireStatements().removeProject.run(payload.projectId).changes > 0;
     },
-    renameProject(payload) {
-      const stateStatements = requireStatements();
-      if (stateStatements.renameProject.run(payload.name, payload.projectId).changes === 0) {
-        return undefined;
-      }
-      return projectFromRow(stateStatements.readProject.get(payload.projectId));
-    },
-    reorderProjects(payload) {
+    setProjectOrder(payload) {
       return reorderProjects(payload.projectIds);
     },
     readProjectDefaults(payload) {
@@ -360,21 +353,6 @@ function createOperations(database) {
       return taskSettingsFromRow(
         requireStatements().readTaskSettings.get(payload.projectId, payload.taskId),
       );
-    },
-    registerProject(payload) {
-      const stateStatements = requireStatements();
-      const project = payload.project;
-      stateStatements.insertProject.run(
-        project.id,
-        project.name,
-        project.rootPath,
-        project.createdAt,
-      );
-      const stored = projectFromRow(stateStatements.readProjectByRoot.get(project.rootPath));
-      if (stored === undefined) {
-        throw new Error("Project identity conflicts with another root path");
-      }
-      return stored;
     },
     writeProjectDefaults(payload) {
       const settings = payload.settings;
@@ -435,7 +413,14 @@ try {
   mkdirSync(resolve(workerData.databasePath, ".."), { recursive: true });
   database = new Database(workerData.databasePath);
   configureDatabase(database);
-  runMigrations(database, workerData.migrations);
+  const previousMigrationVersion = readMigrationVersion(database);
+  runMigrations(database, workerData.migrations, (version) => {
+    if (version === 15) {
+      // 状态行与 v15 Schema 同事务提交，进程中断不会丢失灾后恢复标记。
+      initializeProjectSourceMigration(database, previousMigrationVersion);
+    }
+  });
+  initializeProjectSourceMigration(database, previousMigrationVersion);
   ensureGlobalSettingsCompatibility(database);
   const operations = createOperations(database);
   parentPort.on("message", (message) => {

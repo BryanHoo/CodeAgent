@@ -329,6 +329,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
           throw error;
         }
         const project = await projectRepository.register({
+          idempotencyKey: request.headers["idempotency-key"],
           name: basename(selectedPath),
           rootPath: selectedPath,
         });

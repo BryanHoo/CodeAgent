@@ -125,8 +125,29 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     name: "project",
     rootPath: "/workspace/project",
   };
+  const projectRepository = {
+    ensureTemporaryProject: vi.fn(),
+    list: vi.fn(() => Promise.resolve([project])),
+    migrateLegacyProjects: vi.fn(() => {
+      lifecycle.push("projects.migrate");
+      return Promise.resolve();
+    }),
+    read: vi.fn(() => Promise.resolve(project)),
+    register: vi.fn(),
+    remove: vi.fn(() => Promise.resolve(false)),
+    rename: vi.fn(() => Promise.resolve(undefined)),
+    reorder: vi.fn(() => Promise.resolve([project])),
+    synchronize: vi.fn(() => {
+      lifecycle.push("projects.synchronize");
+      return Promise.resolve([project]);
+    }),
+  };
   const stateRepository = {
     close: databaseClose,
+    completeProjectSourceMigration: vi.fn(() => {
+      lifecycle.push("projects.migration.complete");
+      return Promise.resolve();
+    }),
     diagnose: vi.fn(() =>
       Promise.resolve({
         busyTimeout: 5_000,
@@ -146,16 +167,20 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         rootPath: "/custom/home/code-agent/temporary-workspace",
       }),
     ),
+    deleteProject: vi.fn(() => Promise.resolve(false)),
     list: vi.fn(() => Promise.resolve([])),
+    migrateProject: vi.fn((_legacyProjectId, project) => Promise.resolve(project)),
     readGlobalSettings: vi.fn(() => Promise.resolve(undefined)),
     readProviderConnection: vi.fn(() => Promise.resolve(undefined)),
     readProjectDefaults: vi.fn(() => Promise.resolve(undefined)),
+    readProjectSourceMigration: vi.fn(() =>
+      Promise.resolve({ completed: true, recoverUnassigned: false }),
+    ),
     readTaskSettings: vi.fn(() => Promise.resolve(undefined)),
     read: vi.fn(() => Promise.resolve(undefined)),
-    register: vi.fn(),
-    remove: vi.fn(() => Promise.resolve(false)),
-    rename: vi.fn(() => Promise.resolve(undefined)),
-    reorder: vi.fn(() => Promise.resolve([])),
+    replaceProjects: vi.fn((projects) => Promise.resolve(projects)),
+    setProjectOrder: vi.fn(() => Promise.resolve([])),
+    upsertProject: vi.fn((project) => Promise.resolve(project)),
     writeGlobalSettings: vi.fn((settings) => Promise.resolve(settings)),
     writeProviderConnection: vi.fn((record) => Promise.resolve(record)),
     writeProjectDefaults: vi.fn((_projectId, settings) => Promise.resolve(settings)),
@@ -170,6 +195,10 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       Promise.resolve({ raw: "codex-cli 0.149.0", version: "0.149.0" }),
     ),
     confirmAppUpdate: vi.fn(() => Promise.resolve(false)),
+    createProjectRepository: vi.fn(() => {
+      lifecycle.push("projects.create");
+      return projectRepository;
+    }),
     createStateRepository: vi.fn(() => Promise.resolve(stateRepository)),
     createRuntimeProvider: vi.fn(() => {
       lifecycle.push("provider.create");
@@ -178,7 +207,10 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     ensureTemporaryWorkspace: vi.fn((path: string) => Promise.resolve(path)),
     generateLanPairingCode: vi.fn(() => "fixed-test-pairing-code"),
     listLanAccessUrls: vi.fn((port: number) => [`http://192.168.1.20:${String(port)}`]),
-    createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
+    createServer: vi.fn(() => {
+      lifecycle.push("server.create");
+      return Promise.resolve({ close: serverClose, listen: serverListen });
+    }),
     locateCodexBinary: vi.fn(() =>
       Promise.resolve({ path: "/fake/codex", source: "explicit" as const }),
     ),
@@ -220,6 +252,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       },
     },
     project,
+    projectRepository,
     stateRepository,
     provider,
     runtimeProvider,
@@ -319,9 +352,14 @@ describe("runCli", () => {
     expect(harness.dependencies.createRuntimeProvider).toHaveBeenCalledWith({
       client: harness.client,
     });
+    expect(harness.dependencies.createProjectRepository).toHaveBeenCalledWith({
+      client: harness.client,
+      projection: harness.stateRepository,
+    });
+    expect(harness.projectRepository.synchronize).toHaveBeenCalledOnce();
     const [serverOptions] = vi.mocked(harness.dependencies.createServer).mock.calls[0] ?? [];
     expect(serverOptions).toMatchObject({
-      projectRepository: harness.stateRepository,
+      projectRepository: harness.projectRepository,
       providerConnectionRepository: harness.stateRepository,
       provider: harness.runtimeProvider,
       settingsRepository: harness.stateRepository,
@@ -349,13 +387,56 @@ describe("runCli", () => {
     expect(harness.close).toHaveBeenCalledOnce();
     expect(harness.serverClose).toHaveBeenCalledOnce();
     expect(harness.lifecycle).toEqual([
+      "projects.create",
+      "projects.synchronize",
       "provider.create",
+      "server.create",
       "server.listen",
       "browser.open",
       "server.close",
       "database.close",
       "runtime.close",
     ]);
+  });
+
+  it("stops startup and cleans resources when Codex project synchronization fails", async () => {
+    const harness = createHarness();
+    harness.projectRepository.synchronize.mockRejectedValue(new Error("project sync failed"));
+
+    await expect(runCli(["start"], harness.options)).resolves.toBe(1);
+
+    expect(harness.dependencies.createServer).not.toHaveBeenCalled();
+    expect(harness.databaseClose).toHaveBeenCalledOnce();
+    expect(harness.close).toHaveBeenCalledOnce();
+    expect(harness.lifecycle).toEqual(["projects.create", "database.close", "runtime.close"]);
+    expect(harness.stderr.join("")).toContain("project sync failed");
+  });
+
+  it("migrates legacy projects before synchronization and only then marks migration complete", async () => {
+    const harness = createHarness();
+    harness.stateRepository.readProjectSourceMigration.mockResolvedValue({
+      completed: false,
+      recoverUnassigned: true,
+    });
+    const controller = new AbortController();
+    const run = runCli(["start"], { ...harness.options, signal: controller.signal });
+
+    await vi.waitFor(() => {
+      expect(harness.dependencies.createServer).toHaveBeenCalledOnce();
+    });
+    expect(harness.projectRepository.migrateLegacyProjects).toHaveBeenCalledWith({
+      recoverUnassigned: true,
+    });
+    expect(harness.lifecycle.slice(0, 5)).toEqual([
+      "projects.create",
+      "projects.migrate",
+      "projects.synchronize",
+      "projects.migration.complete",
+      "provider.create",
+    ]);
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
   });
 
   it("defaults to start when no command is provided", async () => {
@@ -752,7 +833,13 @@ describe("runCli", () => {
 
     expect(harness.databaseClose).toHaveBeenCalledOnce();
     expect(harness.close).toHaveBeenCalledOnce();
-    expect(harness.lifecycle).toEqual(["provider.create", "database.close", "runtime.close"]);
+    expect(harness.lifecycle).toEqual([
+      "projects.create",
+      "projects.synchronize",
+      "provider.create",
+      "database.close",
+      "runtime.close",
+    ]);
     expect(harness.stderr.join("")).toContain("server startup failed");
   });
 

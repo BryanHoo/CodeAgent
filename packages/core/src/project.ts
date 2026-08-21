@@ -8,9 +8,29 @@ import type {
 } from "@code-agent/protocol";
 
 export type RegisterProjectInput = Readonly<{
+  idempotencyKey: string;
   name: string;
   rootPath: string;
 }>;
+
+export type ProjectSourceMigration = Readonly<{
+  completed: boolean;
+  recoverUnassigned: boolean;
+}>;
+
+// Project Projection 只保存 Codex 权威对象的本地可查询视图，不生成或解释项目身份。
+export interface ProjectProjectionStore {
+  completeProjectSourceMigration(): Promise<void>;
+  deleteProject(projectId: string): Promise<boolean>;
+  ensureTemporaryProject(rootPath: string): Promise<Project>;
+  list(): Promise<readonly Project[]>;
+  migrateProject(legacyProjectId: string, project: Project): Promise<Project>;
+  read(projectId: string): Promise<Project | undefined>;
+  readProjectSourceMigration(): Promise<ProjectSourceMigration>;
+  replaceProjects(projects: readonly Project[]): Promise<readonly Project[]>;
+  setProjectOrder(projectIds: readonly string[]): Promise<readonly Project[]>;
+  upsertProject(project: Project): Promise<Project>;
+}
 
 export interface ProjectRepository {
   ensureTemporaryProject(rootPath: string): Promise<Project>;

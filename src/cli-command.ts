@@ -7,10 +7,12 @@ import type {
   AgentRuntimeProvider,
   AgentProviderConnectionRepository,
   AgentSettingsRepository,
+  ProjectProjectionStore,
   ProjectRepository,
 } from "@code-agent/core";
 import {
   checkCodexVersion,
+  CodexProjectRepository,
   createCodexRuntimeProvider,
   locateCodexBinary,
   startCodexAppServer,
@@ -32,6 +34,7 @@ import {
 import packageManifest from "../package.json" with { type: "json" };
 import { createAppUpdateService } from "./app-update.js";
 import { CLI_HELP, parseCommandOptions, type ParsedCommandOptions } from "./cli-command-options.js";
+import { listenOnAvailablePort } from "./cli-server-listen.js";
 import {
   confirmTerminalAppUpdate,
   createStartupAppUpdateOperations,
@@ -60,12 +63,15 @@ interface CliManagedServer {
   listen: (options: { host: string; port: number }) => Promise<string>;
 }
 
-const MAX_TCP_PORT = 65_535;
-
 interface CliManagedStateRepository
-  extends ProjectRepository, AgentSettingsRepository, AgentProviderConnectionRepository {
+  extends ProjectProjectionStore, AgentSettingsRepository, AgentProviderConnectionRepository {
   close: () => Promise<void>;
   diagnose: () => Promise<SqliteDatabaseDiagnostics>;
+}
+
+interface CliManagedProjectRepository extends ProjectRepository {
+  migrateLegacyProjects(options: { recoverUnassigned: boolean }): Promise<void>;
+  synchronize(): ReturnType<ProjectRepository["list"]>;
 }
 
 interface CreateRuntimeProviderInput {
@@ -89,6 +95,10 @@ export interface CliDependencies {
   checkAppUpdate: () => Promise<StartupAppUpdateCheck>;
   checkCodexVersion: (binaryPath: string) => Promise<CodexVersionInfo>;
   confirmAppUpdate: (currentVersion: string, latestVersion: string) => Promise<boolean>;
+  createProjectRepository: (input: {
+    client: CodexRpcClient;
+    projection: ProjectProjectionStore;
+  }) => CliManagedProjectRepository;
   createStateRepository: (databasePath: string) => Promise<CliManagedStateRepository>;
   createRuntimeProvider: (
     input: CreateRuntimeProviderInput,
@@ -121,6 +131,8 @@ const defaultDependencies: CliDependencies = {
   checkAppUpdate: startupAppUpdate.check,
   checkCodexVersion,
   confirmAppUpdate: confirmTerminalAppUpdate,
+  createProjectRepository: ({ client, projection }) =>
+    new CodexProjectRepository(client, projection),
   createStateRepository: (databasePath) => SqliteStateRepository.open(databasePath),
   createRuntimeProvider: createCodexRuntimeProvider,
   createServer: async (input) => {
@@ -163,34 +175,6 @@ function assertSupportedNodeVersion(version: string): void {
   if (!(major > 22 || (major === 22 && minor >= 13))) {
     throw new Error(`需要 Node.js 22.13.0 或更高版本，当前版本为 ${version}`);
   }
-}
-
-function isAddressInUseError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error as NodeJS.ErrnoException).code === "EADDRINUSE"
-  );
-}
-
-async function listenOnAvailablePort(
-  server: CliManagedServer,
-  host: string,
-  initialPort: number,
-): Promise<number> {
-  // 直接尝试监听可避免“先探测、后监听”之间被其他进程抢占端口的竞态。
-  for (let port = initialPort; port <= MAX_TCP_PORT; port += 1) {
-    try {
-      await server.listen({ host, port });
-      return port;
-    } catch (error) {
-      if (!isAddressInUseError(error) || port === MAX_TCP_PORT) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error(`端口 ${String(initialPort)} 到 ${String(MAX_TCP_PORT)} 均不可用`);
 }
 
 function resolveCodexHome(options: ParsedCommandOptions): string {
@@ -370,6 +354,22 @@ async function runStart(
       env,
       ...(options.codexBin ? { binaryPath: options.codexBin } : {}),
     });
+    const projectRepository = dependencies.createProjectRepository({
+      client: runtime.client,
+      projection: stateRepository,
+    });
+    const projectSourceMigration = await stateRepository.readProjectSourceMigration();
+    if (!projectSourceMigration.completed) {
+      // 首次权威同步前先把旧项目和 thread 归属写入 Codex，防止投影替换删除本地历史。
+      await projectRepository.migrateLegacyProjects({
+        recoverUnassigned: projectSourceMigration.recoverUnassigned,
+      });
+    }
+    await projectRepository.synchronize();
+    if (!projectSourceMigration.completed) {
+      // 仅在上游迁移和本地投影都成功后标记完成，失败重启时可依赖幂等键安全重试。
+      await stateRepository.completeProjectSourceMigration();
+    }
     const provider = await dependencies.createRuntimeProvider({
       client: runtime.client,
     });
@@ -380,7 +380,7 @@ async function runStart(
     server = await dependencies.createServer({
       ...(access === undefined ? {} : { access }),
       ...(allowedHosts === undefined ? {} : { allowedHosts }),
-      projectRepository: stateRepository,
+      projectRepository,
       providerConnectionRepository: stateRepository,
       provider,
       installAppUpdate: appUpdateService.install,

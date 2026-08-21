@@ -1,11 +1,13 @@
-import { mkdir, mkdtemp, stat, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
+import type { Project } from "@code-agent/protocol";
 
 import { SqliteStateRepository, type SqliteMigration } from "./sqlite-state-repository.js";
+import { SQLITE_MIGRATIONS } from "./sqlite-state-migrations.js";
 
 type RepositoryTestOptions = Readonly<{
   migrations?: readonly SqliteMigration[];
@@ -14,6 +16,10 @@ type RepositoryTestOptions = Readonly<{
 }>;
 
 const repositories: SqliteStateRepository[] = [];
+
+function createProject(id: string, name: string, rootPath: string): Project {
+  return { createdAt: "2026-08-21T00:00:00.000Z", id, name, rootPath };
+}
 
 async function createWorkspace(): Promise<string> {
   return mkdtemp(join(tmpdir(), "code-agent-sqlite-"));
@@ -42,7 +48,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 13,
+      migrationVersion: 16,
       synchronous: "normal",
       writable: true,
     });
@@ -69,21 +75,6 @@ describe("SqliteStateRepository", () => {
     await expect(reopened.diagnose()).resolves.toMatchObject({ migrationVersion: 1 });
   });
 
-  it("treats duplicate real paths as one project", async () => {
-    const root = await createWorkspace();
-    const projectRoot = join(root, "workspace");
-    const projectAlias = join(root, "workspace-alias");
-    await mkdir(projectRoot);
-    await symlink(projectRoot, projectAlias);
-    const repository = await openRepository(root);
-    const registered = await repository.register({ name: "Project", rootPath: projectRoot });
-
-    const duplicate = await repository.register({ name: "Duplicate", rootPath: projectAlias });
-
-    expect(duplicate.id).toBe(registered.id);
-    await expect(repository.list()).resolves.toHaveLength(1);
-  });
-
   it("persists one hidden temporary project without exposing project mutations", async () => {
     const root = await createWorkspace();
     const temporaryRoot = join(root, "temporary-workspace");
@@ -93,15 +84,174 @@ describe("SqliteStateRepository", () => {
 
     const temporary = await repository.ensureTemporaryProject(temporaryRoot);
     const duplicate = await repository.ensureTemporaryProject(temporaryRoot);
-    const userProject = await repository.register({ name: "User", rootPath: userRoot });
+    const userProject = createProject("codex-user", "User", userRoot);
+    await repository.upsertProject(userProject);
 
     expect(duplicate).toEqual(temporary);
     await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
     await expect(repository.list()).resolves.toEqual([userProject]);
-    await expect(repository.rename(temporary.id, "Visible")).resolves.toBeUndefined();
-    await expect(repository.remove(temporary.id)).resolves.toBe(false);
-    await expect(repository.reorder([userProject.id])).resolves.toEqual([userProject]);
+    await expect(repository.deleteProject(temporary.id)).resolves.toBe(false);
+    await expect(repository.setProjectOrder([userProject.id])).resolves.toEqual([userProject]);
     await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
+  });
+
+  it("atomically projects Codex projects by id while allowing a shared root path", async () => {
+    const root = await createWorkspace();
+    const sharedRoot = join(root, "shared-workspace");
+    const otherRoot = join(root, "other-workspace");
+    const temporaryRoot = join(root, "temporary-workspace");
+    await Promise.all([mkdir(sharedRoot), mkdir(otherRoot), mkdir(temporaryRoot)]);
+    const repository = await openRepository(root);
+    const temporary = await repository.ensureTemporaryProject(temporaryRoot);
+    const first = {
+      createdAt: "2026-08-21T01:00:00.000Z",
+      id: "codex-project-1",
+      name: "First",
+      rootPath: sharedRoot,
+    };
+    const second = {
+      createdAt: "2026-08-21T02:00:00.000Z",
+      id: "codex-project-2",
+      name: "Second",
+      rootPath: sharedRoot,
+    };
+
+    await expect(repository.replaceProjects([first, second])).resolves.toEqual([first, second]);
+    await repository.writeProjectDefaults(first.id, {
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    });
+
+    const updatedFirst = { ...first, name: "Updated First", rootPath: otherRoot };
+    await expect(repository.replaceProjects([second, updatedFirst])).resolves.toEqual([
+      second,
+      updatedFirst,
+    ]);
+    await expect(repository.readProjectDefaults(first.id)).resolves.toMatchObject({
+      model: "gpt-5.6-sol",
+    });
+    await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
+  });
+
+  it("applies incremental Codex project projection mutations", async () => {
+    const root = await createWorkspace();
+    const firstRoot = join(root, "first");
+    const secondRoot = join(root, "second");
+    await Promise.all([mkdir(firstRoot), mkdir(secondRoot)]);
+    const repository = await openRepository(root);
+    const first = {
+      createdAt: "2026-08-21T01:00:00.000Z",
+      id: "codex-project-1",
+      name: "First",
+      rootPath: firstRoot,
+    };
+    const second = {
+      createdAt: "2026-08-21T02:00:00.000Z",
+      id: "codex-project-2",
+      name: "Second",
+      rootPath: secondRoot,
+    };
+
+    await repository.upsertProject(first);
+    await repository.upsertProject(second);
+    await expect(repository.setProjectOrder([second.id, first.id])).resolves.toEqual([
+      second,
+      first,
+    ]);
+    await expect(repository.upsertProject({ ...first, name: "Renamed" })).resolves.toEqual({
+      ...first,
+      name: "Renamed",
+    });
+    await expect(repository.deleteProject(second.id)).resolves.toBe(true);
+    await expect(repository.list()).resolves.toEqual([{ ...first, name: "Renamed" }]);
+  });
+
+  it("moves project settings to the Codex id without losing task history settings", async () => {
+    const root = await createWorkspace();
+    const projectRoot = join(root, "workspace");
+    await mkdir(projectRoot);
+    const repository = await openRepository(root);
+    const legacyProject = createProject("legacy-local-id", "Workspace", projectRoot);
+    const codexProject = { ...legacyProject, id: "codex-project-id" };
+    await repository.upsertProject(legacyProject);
+    await repository.writeProjectDefaults(legacyProject.id, {
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    });
+    await repository.writeTaskSettings(legacyProject.id, "legacy-task", {
+      approvalPolicy: "never",
+      approvalsReviewer: "user",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "danger-full-access",
+    });
+
+    await expect(repository.migrateProject(legacyProject.id, codexProject)).resolves.toEqual(
+      codexProject,
+    );
+    await expect(repository.read(legacyProject.id)).resolves.toBeUndefined();
+    await expect(repository.readProjectDefaults(codexProject.id)).resolves.toMatchObject({
+      model: "gpt-5.6-sol",
+    });
+    await expect(
+      repository.readTaskSettings(codexProject.id, "legacy-task"),
+    ).resolves.toMatchObject({ approvalPolicy: "never" });
+  });
+
+  it("persists the one-time project source migration state", async () => {
+    const root = await createWorkspace();
+    const repository = await openRepository(root);
+
+    await expect(repository.readProjectSourceMigration()).resolves.toEqual({
+      completed: false,
+      recoverUnassigned: false,
+    });
+    await repository.completeProjectSourceMigration();
+    await expect(repository.readProjectSourceMigration()).resolves.toEqual({
+      completed: true,
+      recoverUnassigned: false,
+    });
+  });
+
+  it("enables unassigned thread recovery only when upgrading an existing version 14 database", async () => {
+    const root = await createWorkspace();
+    const version14 = await openRepository(root, {
+      migrations: SQLITE_MIGRATIONS.filter((migration) => migration.version <= 14),
+    });
+    await version14.close();
+    repositories.splice(repositories.indexOf(version14), 1);
+
+    const upgraded = await openRepository(root);
+
+    await expect(upgraded.readProjectSourceMigration()).resolves.toEqual({
+      completed: false,
+      recoverUnassigned: true,
+    });
+  });
+
+  it("reopens recovery after version 15 incorrectly completed without vscode threads", async () => {
+    const root = await createWorkspace();
+    const version14 = await openRepository(root, {
+      migrations: SQLITE_MIGRATIONS.filter((migration) => migration.version <= 14),
+    });
+    await version14.close();
+    repositories.splice(repositories.indexOf(version14), 1);
+
+    const brokenVersion15 = await openRepository(root, {
+      migrations: SQLITE_MIGRATIONS.filter((migration) => migration.version <= 15),
+    });
+    await brokenVersion15.completeProjectSourceMigration();
+    await brokenVersion15.close();
+    repositories.splice(repositories.indexOf(brokenVersion15), 1);
+
+    const repaired = await openRepository(root);
+
+    await expect(repaired.readProjectSourceMigration()).resolves.toEqual({
+      completed: false,
+      recoverUnassigned: true,
+    });
   });
 
   it("persists complete project ordering and appends newly registered projects", async () => {
@@ -111,15 +261,21 @@ describe("SqliteStateRepository", () => {
     const thirdRoot = join(root, "third");
     await Promise.all([mkdir(firstRoot), mkdir(secondRoot), mkdir(thirdRoot)]);
     const repository = await openRepository(root);
-    const first = await repository.register({ name: "First", rootPath: firstRoot });
-    const second = await repository.register({ name: "Second", rootPath: secondRoot });
+    const first = createProject("codex-first", "First", firstRoot);
+    const second = createProject("codex-second", "Second", secondRoot);
+    await repository.upsertProject(first);
+    await repository.upsertProject(second);
 
-    await expect(repository.reorder([second.id, first.id])).resolves.toEqual([second, first]);
+    await expect(repository.setProjectOrder([second.id, first.id])).resolves.toEqual([
+      second,
+      first,
+    ]);
     await repository.close();
     repositories.splice(repositories.indexOf(repository), 1);
 
     const reopened = await openRepository(root);
-    const third = await reopened.register({ name: "Third", rootPath: thirdRoot });
+    const third = createProject("codex-third", "Third", thirdRoot);
+    await reopened.upsertProject(third);
     await expect(reopened.list()).resolves.toEqual([second, first, third]);
   });
 
@@ -129,35 +285,39 @@ describe("SqliteStateRepository", () => {
     const secondRoot = join(root, "second");
     await Promise.all([mkdir(firstRoot), mkdir(secondRoot)]);
     const repository = await openRepository(root);
-    const first = await repository.register({ name: "First", rootPath: firstRoot });
-    const second = await repository.register({ name: "Second", rootPath: secondRoot });
+    const first = createProject("codex-first", "First", firstRoot);
+    const second = createProject("codex-second", "Second", secondRoot);
+    await repository.upsertProject(first);
+    await repository.upsertProject(second);
 
-    await expect(repository.reorder([second.id])).rejects.toThrow(/every project exactly once/u);
-    await expect(repository.reorder([first.id, first.id])).rejects.toThrow(
+    await expect(repository.setProjectOrder([second.id])).rejects.toThrow(
+      /every project exactly once/u,
+    );
+    await expect(repository.setProjectOrder([first.id, first.id])).rejects.toThrow(
       /every project exactly once/u,
     );
     await expect(repository.list()).resolves.toEqual([first, second]);
   });
 
-  it("renames only the project display name and removes only local registration state", async () => {
+  it("updates and removes only the local Codex project projection", async () => {
     const root = await createWorkspace();
     const projectRoot = join(root, "workspace");
     await mkdir(projectRoot);
     const repository = await openRepository(root);
-    const project = await repository.register({ name: "Workspace", rootPath: projectRoot });
+    const project = createProject("codex-workspace", "Workspace", projectRoot);
+    await repository.upsertProject(project);
     await repository.writeProjectDefaults(project.id, {
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "workspace-write",
     });
 
-    const renamed = await repository.rename(project.id, "  工作区别名  ");
+    const renamed = await repository.upsertProject({ ...project, name: "工作区别名" });
 
     expect(renamed).toEqual({ ...project, name: "工作区别名" });
-    expect(renamed?.rootPath).toBe(project.rootPath);
-    await expect(repository.rename("missing", "未找到")).resolves.toBeUndefined();
-    await expect(repository.remove("missing")).resolves.toBe(false);
-    await expect(repository.remove(project.id)).resolves.toBe(true);
+    expect(renamed.rootPath).toBe(project.rootPath);
+    await expect(repository.deleteProject("missing")).resolves.toBe(false);
+    await expect(repository.deleteProject(project.id)).resolves.toBe(true);
     await expect(repository.read(project.id)).resolves.toBeUndefined();
     await expect(repository.readProjectDefaults(project.id)).resolves.toBeUndefined();
     await expect(stat(projectRoot)).resolves.toMatchObject({});
@@ -175,8 +335,10 @@ describe("SqliteStateRepository", () => {
     const secondRoot = join(root, "second");
     await Promise.all([mkdir(firstRoot), mkdir(secondRoot)]);
     const repository = await openRepository(root);
-    const first = await repository.register({ name: "First", rootPath: firstRoot });
-    const second = await repository.register({ name: "Second", rootPath: secondRoot });
+    const first = createProject("codex-first", "First", firstRoot);
+    const second = createProject("codex-second", "Second", secondRoot);
+    await repository.upsertProject(first);
+    await repository.upsertProject(second);
 
     await repository.writeProjectDefaults(first.id, {
       model: "gpt-5.6-sol",
@@ -228,7 +390,8 @@ describe("SqliteStateRepository", () => {
     const projectRoot = join(root, "workspace");
     await mkdir(projectRoot);
     const repository = await openRepository(root);
-    const project = await repository.register({ name: "Workspace", rootPath: projectRoot });
+    const project = createProject("codex-workspace", "Workspace", projectRoot);
+    await repository.upsertProject(project);
     await repository.writeTaskSettings(project.id, "task-1", {
       approvalPolicy: "never",
       approvalsReviewer: "user",

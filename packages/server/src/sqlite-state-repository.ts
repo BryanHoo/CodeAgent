@@ -1,12 +1,12 @@
 import { realpath, stat } from "node:fs/promises";
-import { basename, isAbsolute, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 
 import type {
   AgentProviderConnectionRepository,
   AgentSettingsRepository,
-  ProjectRepository,
-  RegisterProjectInput,
+  ProjectProjectionStore,
+  ProjectSourceMigration,
 } from "@code-agent/core";
 import type {
   AgentProviderConnectionRecord,
@@ -17,19 +17,14 @@ import type {
 } from "@code-agent/protocol";
 
 import {
-  PROVIDER_CONNECTION_MIGRATION,
   parseProviderConnectionRow,
   serializeProviderConnectionRecord,
   type ProviderConnectionRow,
 } from "./provider-connection-persistence.js";
-import { GLOBAL_SETTINGS_MIGRATIONS } from "./global-settings-persistence.js";
-import { createProjectId, deserializeWorkerError } from "./sqlite-state-helpers.js";
+import { deserializeWorkerError } from "./sqlite-state-helpers.js";
+import { SQLITE_MIGRATIONS, type SqliteMigration } from "./sqlite-state-migrations.js";
 
-export type SqliteMigration = Readonly<{
-  name: string;
-  sql: string;
-  version: number;
-}>;
+export type { SqliteMigration } from "./sqlite-state-migrations.js";
 
 export type SqliteDatabaseDiagnostics = Readonly<{
   busyTimeout: number;
@@ -49,147 +44,6 @@ export interface SqliteStateRepositoryOptions {
 }
 
 const DEFAULT_SQLITE_REQUEST_TIMEOUT_MS = 10_000;
-const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
-  {
-    name: "create_local_state",
-    sql: `
-      CREATE TABLE projects (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        root_path TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL
-      ) STRICT;
-
-      CREATE TABLE project_defaults (
-        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
-        model TEXT NOT NULL,
-        reasoning_effort TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      ) STRICT;
-
-      CREATE TABLE task_settings (
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        task_id TEXT NOT NULL,
-        approval_policy TEXT NOT NULL CHECK (approval_policy IN ('untrusted', 'on-request', 'never')),
-        model TEXT NOT NULL,
-        reasoning_effort TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (project_id, task_id)
-      ) STRICT;
-    `,
-    version: 1,
-  },
-  {
-    name: "create_task_metadata",
-    sql: `
-      CREATE TABLE task_metadata (
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        task_id TEXT NOT NULL,
-        pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)),
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (project_id, task_id)
-      ) STRICT;
-    `,
-    version: 2,
-  },
-  {
-    name: "add_sandbox_mode_settings",
-    sql: `
-      ALTER TABLE project_defaults
-        ADD COLUMN sandbox_mode TEXT NOT NULL DEFAULT 'workspace-write'
-        CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access'));
-      ALTER TABLE task_settings
-        ADD COLUMN sandbox_mode TEXT NOT NULL DEFAULT 'workspace-write'
-        CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access'));
-    `,
-    version: 3,
-  },
-  {
-    name: "add_project_sort_order",
-    sql: `
-      ALTER TABLE projects
-        ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
-    `,
-    version: 4,
-  },
-  {
-    name: "add_approvals_reviewer_setting",
-    sql: `
-      ALTER TABLE task_settings
-        ADD COLUMN approvals_reviewer TEXT NOT NULL DEFAULT 'user'
-        CHECK (
-          approvals_reviewer IN ('user', 'auto_review')
-          AND (approvals_reviewer = 'user' OR approval_policy = 'on-request')
-        );
-    `,
-    version: 5,
-  },
-  {
-    name: "create_global_settings",
-    sql: `
-      CREATE TABLE global_settings (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        approval_policy TEXT NOT NULL CHECK (approval_policy IN ('untrusted', 'on-request', 'never')),
-        approvals_reviewer TEXT NOT NULL CHECK (
-          approvals_reviewer IN ('user', 'auto_review')
-          AND (approvals_reviewer = 'user' OR approval_policy = 'on-request')
-        ),
-        model TEXT NOT NULL,
-        reasoning_effort TEXT NOT NULL,
-        sandbox_mode TEXT NOT NULL CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access')),
-        default_open_app_id TEXT CHECK (default_open_app_id IN (
-          'visual-studio-code', 'zed', 'windsurf', 'finder', 'terminal', 'ghostty', 'xcode',
-          'android-studio', 'file-manager', 'gnome-terminal', 'konsole', 'xfce-terminal',
-          'explorer', 'windows-terminal', 'command-prompt'
-        )),
-        updated_at TEXT NOT NULL
-      ) STRICT;
-    `,
-    version: 6,
-  },
-  {
-    name: "add_commit_message_settings",
-    sql: `
-      ALTER TABLE global_settings
-        ADD COLUMN commit_message_model TEXT NOT NULL DEFAULT '';
-      ALTER TABLE global_settings
-        ADD COLUMN commit_message_reasoning_effort TEXT NOT NULL DEFAULT '';
-      ALTER TABLE global_settings
-        ADD COLUMN commit_message_prompt TEXT NOT NULL DEFAULT '';
-
-      -- 现有用户继承原 Agent 模型，升级后无需重新选择即可继续生成提交信息。
-      UPDATE global_settings
-      SET commit_message_model = model,
-          commit_message_reasoning_effort = reasoning_effort;
-    `,
-    version: 7,
-  },
-  {
-    name: "add_follow_up_behavior_setting",
-    sql: `
-      ALTER TABLE global_settings
-        ADD COLUMN follow_up_behavior TEXT NOT NULL DEFAULT 'queue'
-        CHECK (follow_up_behavior IN ('queue', 'steer'));
-    `,
-    version: 8,
-  },
-  {
-    name: "drop_task_metadata",
-    sql: "DROP TABLE task_metadata;",
-    version: 9,
-  },
-  {
-    name: "add_project_kind",
-    sql: `
-      ALTER TABLE projects
-        ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'
-        CHECK (kind IN ('user', 'temporary'));
-    `,
-    version: 10,
-  },
-  PROVIDER_CONNECTION_MIGRATION,
-  ...GLOBAL_SETTINGS_MIGRATIONS,
-];
 
 type WorkerResponse =
   | Readonly<{ error: Readonly<{ message: string; name: string }>; id: number; type: "response" }>
@@ -204,7 +58,7 @@ type PendingRequest = Readonly<{
 }>;
 
 export class SqliteStateRepository
-  implements ProjectRepository, AgentSettingsRepository, AgentProviderConnectionRepository
+  implements ProjectProjectionStore, AgentSettingsRepository, AgentProviderConnectionRepository
 {
   readonly #now: () => Date;
   readonly #pending = new Map<number, PendingRequest>();
@@ -348,41 +202,36 @@ export class SqliteStateRepository
     return this.#call("listProjects");
   }
 
+  public completeProjectSourceMigration(): Promise<void> {
+    return this.#call("completeProjectSourceMigration");
+  }
+
+  public migrateProject(legacyProjectId: string, project: Project): Promise<Project> {
+    return this.#call("migrateProject", { legacyProjectId, project });
+  }
+
   public read(projectId: string): Promise<Project | undefined> {
     return this.#call("readProject", { projectId });
   }
 
-  public remove(projectId: string): Promise<boolean> {
-    return this.#call("removeProject", { projectId });
+  public readProjectSourceMigration(): Promise<ProjectSourceMigration> {
+    return this.#call("readProjectSourceMigration");
   }
 
-  public rename(projectId: string, name: string): Promise<Project | undefined> {
-    const normalizedName = name.trim();
-    if (normalizedName.length === 0) {
-      throw new Error("Project name must not be empty");
-    }
-    return this.#call("renameProject", { name: normalizedName, projectId });
+  public replaceProjects(projects: readonly Project[]): Promise<readonly Project[]> {
+    return this.#call("replaceProjects", { projects });
   }
 
-  public reorder(projectIds: readonly string[]): Promise<readonly Project[]> {
-    return this.#call("reorderProjects", { projectIds });
+  public upsertProject(project: Project): Promise<Project> {
+    return this.#call("upsertProject", { project });
   }
 
-  public async register(input: RegisterProjectInput): Promise<Project> {
-    const rootPath = await realpath(resolve(input.rootPath));
-    if (!(await stat(rootPath)).isDirectory()) {
-      throw new Error(`Project path is not a directory: ${rootPath}`);
-    }
-    // 文件系统根目录没有 basename，使用规范化路径保证 Project 名称始终非空。
-    const name = input.name.trim() || basename(rootPath) || rootPath;
-    return this.#call("registerProject", {
-      project: {
-        createdAt: this.#now().toISOString(),
-        id: createProjectId(name, rootPath),
-        name,
-        rootPath,
-      },
-    });
+  public deleteProject(projectId: string): Promise<boolean> {
+    return this.#call("deleteProject", { projectId });
+  }
+
+  public setProjectOrder(projectIds: readonly string[]): Promise<readonly Project[]> {
+    return this.#call("setProjectOrder", { projectIds });
   }
 
   public readProjectDefaults(projectId: string): Promise<AgentProjectDefaults | undefined> {

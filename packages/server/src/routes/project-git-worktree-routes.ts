@@ -124,6 +124,7 @@ export function registerProjectGitWorktreeRoutes(
             );
             // 每个 worktree 形成独立 Project，避免当前 Task Runtime 被静默换目录。
             const project = await projectRepository.register({
+              idempotencyKey: request.headers["idempotency-key"],
               name: basename(worktree.path),
               rootPath: worktree.path,
             });
@@ -181,6 +182,7 @@ export function registerProjectGitWorktreeRoutes(
               request.body.path,
             );
             const project = await projectRepository.register({
+              idempotencyKey: request.headers["idempotency-key"],
               name: basename(worktree.path),
               rootPath: worktree.path,
             });

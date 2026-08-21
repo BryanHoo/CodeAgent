@@ -176,7 +176,7 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
     modelProvider: "openai",
     name: null,
     preview: "实现真实 Task 历史\n更多内容",
-    projectId: null,
+    projectId: project.id,
     section: null,
     sectionEnteredAt: null,
     sessionId: "native-session",
@@ -318,6 +318,9 @@ describe("CodexAgentProvider", () => {
     const invalidRpc = new FakeRpcClient([
       { data: [nativeThread({ projectId: 42 })], nextCursor: null },
     ]);
+    const unassignedRpc = new FakeRpcClient([
+      { data: [nativeThread({ projectId: null })], nextCursor: null },
+    ]);
 
     await expect(
       createCodexAgentProvider({ client: missingRpc, project }).listTasks(),
@@ -325,6 +328,9 @@ describe("CodexAgentProvider", () => {
     await expect(
       createCodexAgentProvider({ client: invalidRpc, project }).listTasks(),
     ).rejects.toThrow("Codex thread projectId must be a string or null");
+    await expect(
+      createCodexAgentProvider({ client: unassignedRpc, project }).listTasks(),
+    ).rejects.toThrow("Codex thread does not belong to the active project");
   });
 
   it("publishes plan updates and restores the latest plan in task snapshots", async () => {
@@ -841,12 +847,59 @@ describe("CodexAgentProvider", () => {
     expect(rpc.calls).toEqual([
       {
         method: "thread/start",
-        params: { cwd: project.rootPath, ephemeral: true, historyMode: "paginated" },
+        params: {
+          cwd: project.rootPath,
+          ephemeral: true,
+          historyMode: "paginated",
+          projectId: project.id,
+        },
       },
       {
         method: "thread/list",
         params: {
-          cwd: project.rootPath,
+          projectId: project.id,
+          sortDirection: "desc",
+          sortKey: "updated_at",
+        },
+      },
+    ]);
+  });
+
+  it("keeps the temporary project on the unassigned ephemeral path", async () => {
+    const temporaryProject = {
+      ...project,
+      id: "temporary",
+      name: "Temporary",
+      rootPath: "/workspace/temporary",
+    };
+    const rpc = new FakeRpcClient([
+      {
+        thread: nativeThread({
+          cwd: temporaryProject.rootPath,
+          ephemeral: true,
+          projectId: null,
+        }),
+      },
+      { data: [], nextCursor: null },
+    ]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(temporaryProject);
+
+    await provider.startTask({ ephemeral: true });
+    await provider.listTasks();
+
+    expect(rpc.calls).toEqual([
+      {
+        method: "thread/start",
+        params: {
+          cwd: temporaryProject.rootPath,
+          ephemeral: true,
+          historyMode: "paginated",
+        },
+      },
+      {
+        method: "thread/list",
+        params: {
+          cwd: temporaryProject.rootPath,
           sortDirection: "desc",
           sortKey: "updated_at",
         },
@@ -891,10 +944,22 @@ describe("CodexAgentProvider", () => {
     const rpc = new FakeRpcClient([
       { data: [nativeThread()], nextCursor: null },
       {
-        data: [nativeThread({ cwd: otherProject.rootPath, id: "task-2" })],
+        data: [
+          nativeThread({
+            cwd: otherProject.rootPath,
+            id: "task-2",
+            projectId: otherProject.id,
+          }),
+        ],
         nextCursor: null,
       },
-      { thread: nativeThread({ cwd: otherProject.rootPath, id: "task-3" }) },
+      {
+        thread: nativeThread({
+          cwd: otherProject.rootPath,
+          id: "task-3",
+          projectId: otherProject.id,
+        }),
+      },
     ]);
     const runtime = createCodexRuntimeProvider({ client: rpc });
     const projectProvider = runtime.forProject(project);
@@ -917,7 +982,7 @@ describe("CodexAgentProvider", () => {
       {
         method: "thread/list",
         params: {
-          cwd: project.rootPath,
+          projectId: project.id,
           sortDirection: "desc",
           sortKey: "updated_at",
         },
@@ -925,14 +990,18 @@ describe("CodexAgentProvider", () => {
       {
         method: "thread/list",
         params: {
-          cwd: otherProject.rootPath,
+          projectId: otherProject.id,
           sortDirection: "desc",
           sortKey: "updated_at",
         },
       },
       {
         method: "thread/start",
-        params: { cwd: otherProject.rootPath, historyMode: "paginated" },
+        params: {
+          cwd: otherProject.rootPath,
+          historyMode: "paginated",
+          projectId: otherProject.id,
+        },
       },
     ]);
     await expect(projectProvider.readTask("task-2")).resolves.toBeUndefined();
@@ -2678,7 +2747,11 @@ describe("CodexAgentProvider", () => {
       },
       {
         method: "thread/start",
-        params: { cwd: project.rootPath, historyMode: "paginated" },
+        params: {
+          cwd: project.rootPath,
+          historyMode: "paginated",
+          projectId: project.id,
+        },
       },
       {
         method: "turn/start",
@@ -2906,7 +2979,11 @@ describe("CodexAgentProvider", () => {
     expect(rpc.calls).toEqual([
       {
         method: "thread/start",
-        params: { cwd: project.rootPath, historyMode: "paginated" },
+        params: {
+          cwd: project.rootPath,
+          historyMode: "paginated",
+          projectId: project.id,
+        },
       },
       {
         method: "mcpServerStatus/list",
@@ -3206,7 +3283,11 @@ describe("CodexAgentProvider", () => {
     expect(rpc.calls).toEqual([
       {
         method: "thread/start",
-        params: { cwd: "/workspace/CodeAgent", historyMode: "paginated" },
+        params: {
+          cwd: "/workspace/CodeAgent",
+          historyMode: "paginated",
+          projectId: project.id,
+        },
       },
       {
         method: "turn/start",
@@ -4512,7 +4593,13 @@ describe("CodexAgentProvider", () => {
             () => "resolved",
             (error: unknown) => error,
           );
-        return { thread: nativeThread({ cwd: "/workspace/other", id: "task-foreign" }) };
+        return {
+          thread: nativeThread({
+            cwd: project.rootPath,
+            id: "task-foreign",
+            projectId: "foreign-project",
+          }),
+        };
       },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
@@ -4750,8 +4837,8 @@ describe("CodexAgentProvider", () => {
         method: "thread/list",
         params: {
           cursor: "cursor",
-          cwd: "/workspace/CodeAgent",
           limit: 25,
+          projectId: project.id,
           sectionId: PINNED_THREAD_SECTION.id,
           sortDirection: "desc",
           sortKey: "updated_at",
@@ -4838,7 +4925,10 @@ describe("CodexAgentProvider", () => {
 
   it.each([
     ["another task", nativeThread({ id: "task-2", section: PINNED_THREAD_SECTION })],
-    ["another project", nativeThread({ cwd: "/workspace/Other", section: PINNED_THREAD_SECTION })],
+    [
+      "another project",
+      nativeThread({ projectId: "other-project", section: PINNED_THREAD_SECTION }),
+    ],
     ["another pinned state", nativeThread({ section: null })],
   ])("rejects pinned section state read for %s", async (_case, thread) => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }, {}, { thread }]);
@@ -5327,8 +5417,10 @@ describe("CodexAgentProvider", () => {
     expect(failedTool).toMatchObject({ output: { error: "MCP 服务不可用" } });
   });
 
-  it("returns undefined for a thread that belongs to another project", async () => {
-    const rpc = new FakeRpcClient([{ thread: nativeThread({ cwd: "/workspace/Other" }) }]);
+  it("returns undefined for another project id even when the thread cwd matches", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ cwd: project.rootPath, projectId: "other-project" }) },
+    ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
 
     await expect(provider.readTask("task-1")).resolves.toBeUndefined();

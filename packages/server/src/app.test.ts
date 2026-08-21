@@ -5,6 +5,7 @@ import {
   type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
   type AgentRuntimeProvider,
+  type RegisterProjectInput,
 } from "@code-agent/core";
 import type {
   AgentBackgroundTerminalPage,
@@ -506,7 +507,10 @@ function createServerOptions(
               : undefined,
         ),
       ),
-      register: vi.fn(() => Promise.resolve(project)),
+      register: vi.fn((input: RegisterProjectInput) => {
+        expect(input.idempotencyKey).toBe("add-project");
+        return Promise.resolve(project);
+      }),
       remove: vi.fn((projectId: string) => {
         const projectIndex = orderedProjects.findIndex((item) => item.id === projectId);
         if (projectIndex < 0) {
@@ -1452,7 +1456,11 @@ describe("CodeAgent Server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ project: selectedProject });
     expect(resolveProjectDirectory).toHaveBeenCalledWith(selectedPath);
-    expect(register).toHaveBeenCalledWith({ name: "CodeAgent", rootPath: selectedPath });
+    expect(register).toHaveBeenCalledWith({
+      idempotencyKey: "add-project",
+      name: "CodeAgent",
+      rootPath: selectedPath,
+    });
   });
 
   it("browses supported host files and imports a selected file idempotently", async () => {

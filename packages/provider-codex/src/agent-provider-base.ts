@@ -4,15 +4,16 @@ import type {
   AgentProviderEventListener,
   AgentProviderTaskSnapshot,
 } from "@code-agent/core";
-import type {
-  AgentCapabilities,
-  AgentMessageAttachment,
-  AgentMcpServerPage,
-  AgentModelPage,
-  AgentSandboxMode,
-  AgentSkillPage,
-  AgentTask,
-  Project,
+import {
+  TEMPORARY_TASK_SCOPE_ID,
+  type AgentCapabilities,
+  type AgentMessageAttachment,
+  type AgentMcpServerPage,
+  type AgentModelPage,
+  type AgentSandboxMode,
+  type AgentSkillPage,
+  type AgentTask,
+  type Project,
 } from "@code-agent/protocol";
 import {
   RpcResponseError,
@@ -100,6 +101,16 @@ export async function isProjectThread(
   thread: Record<string, unknown>,
   project: Project,
 ): Promise<boolean> {
+  const nativeProjectId = thread["projectId"];
+  if (nativeProjectId !== null && typeof nativeProjectId !== "string") {
+    throw new CodexProtocolMappingError("Codex thread projectId must be a string or null");
+  }
+  if (project.id !== TEMPORARY_TASK_SCOPE_ID) {
+    return nativeProjectId === project.id;
+  }
+  if (nativeProjectId !== null) {
+    return false;
+  }
   const cwd = expectString(thread["cwd"], "Codex thread cwd");
   return isSameCanonicalPath(cwd, project.rootPath);
 }
@@ -159,10 +170,6 @@ export async function mapAgentTask(
   project: Project,
 ): Promise<AgentTask> {
   await assertProjectThread(thread, project);
-  // Codex 0.149.0 固定返回可空原生 Project 归属，但该字段不越过 Provider 边界。
-  if (thread["projectId"] !== null && typeof thread["projectId"] !== "string") {
-    throw new CodexProtocolMappingError("Codex thread projectId must be a string or null");
-  }
   return {
     id: expectString(thread["id"], "Codex thread id"),
     pinned: isPinnedThreadSection(thread["section"]),
