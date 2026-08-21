@@ -382,6 +382,7 @@ export const AgentTaskSnapshotSchema = Type.Object(
     status: Type.Union([Type.Literal("idle"), Type.Literal("running"), Type.Literal("failed")]),
     title: Type.String({ minLength: 1 }),
     turns: Type.Array(AgentTurnSchema),
+    turnsNextCursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     updatedAt: DateTimeSchema,
   },
   { additionalProperties: false },

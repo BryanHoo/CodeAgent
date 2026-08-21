@@ -14,7 +14,7 @@
 - 用户临时 Task 使用固定 Protocol scope 和 `/v1/temporary/**` 公共路径；Client、Server 与 Web 不得暴露内部 Project ID、名称或 `${CODEX_HOME}/code-agent/temporary-workspace`。其 Codex Thread 必须持久化并完整遵循普通 `AgentTaskSettings`，审批、Skill、MCP、后台终端及流式消息中的源码预览、图片预览和宿主系统文件打开不得被临时作用域额外限制；Sandbox 固定为 `danger-full-access`，Web 不显示选择器，Server 必须覆盖其他输入值。直接 `/v1/projects/temporary/**` 访问以及 Project 文件树、文件搜索、Git、目录打开、Project defaults 和其他 Project Mutation 必须被拒绝或不发起。
 - 应用信息和更新必须使用严格 `AppInfoResponse`、`InstallAppUpdateRequest` 与 `InstallAppUpdateResponse` Schema；Client 必须校验 CodeAgent/Codex/current/latest/status 和可空更新日志字段。仅在有可用更新时读取对应 Git tag 的有界 `CHANGELOG.md` 版本段落，日志读取失败不得掩盖更新状态。更新请求只接受目标 SemVer 并携带 `Idempotency-Key`，Server 必须区分无可用更新、检查失败与安装失败，Web 不得根据版本字符串自行执行包管理命令。
 - 代码审查请求使用携带严格 `AgentReviewTarget` 的 `AgentReviewItem` 进入 Snapshot 和实时事件，禁止用普通用户消息或 Provider 原生 Prompt 表达审查模式。
-- Codex `review/start` 必须通过 `thread/started.thread.parentThreadId` 将独立 reviewer 子 Thread 关联到父 Task，并将外层审查 Turn 与 worker Turn 投影成同一个用户可见 Turn：只保留一个结构化审查请求，隐藏 worker 的重复 Prompt，按原顺序保留 worker 的 commentary、工具和最终回复；仅在 worker 已交付最终回复时抑制外层重复结果。worker 终态只清理其待处理请求，外层 `exitedReviewMode` 与 `turn/completed` 才结束审查运行态和处理计时；历史 Snapshot 必须读取 `subAgentReview` 子 Thread，并与实时事件生成相同投影。
+- Codex `review/start` 必须通过 `thread/started.thread.parentThreadId` 将独立 reviewer 子 Thread 关联到父 Task，并将外层审查 Turn 与 worker Turn 投影成同一个用户可见 Turn：只保留一个结构化审查请求，隐藏 worker 的重复 Prompt，按原顺序保留 worker 的 commentary、工具和最终回复；仅在 worker 已交付最终回复时抑制外层重复结果。worker 终态只清理其待处理请求，外层 `exitedReviewMode` 与 `turn/completed` 才结束审查运行态和处理计时；历史 Snapshot 必须按同一 Provider 游标读取 `subAgentReview` 子 Thread，并与实时事件生成相同投影。
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
 - Project 目录浏览必须使用严格的 `ProjectDirectoryQuery` 与 `ProjectDirectoryListing` Schema，返回规范化的当前绝对路径、可空父路径和直接子目录；查询使用可选严格布尔字段 `includeHidden`，Client 只有在显式启用时编码 `includeHidden=true`，缺省请求必须保留 Server 的隐藏目录过滤行为。路径契约必须覆盖 POSIX、Windows Drive 与 UNC 绝对路径，并拒绝 NUL 和换行控制字符。Project 注册只接受显式 `AddProjectRequest.rootPath`，Client、Server 与 Web 不得保留原生目录选择器或空请求体分支。
 - Project 重命名只允许更新本地 `projects.name` 展示名，必须保持 `id`、`rootPath`、`createdAt` 和磁盘目录不变；Project 删除只移除 CodeAgent 注册及级联的本地设置/元数据，并释放对应 Web/Server Runtime，不得删除磁盘文件或归档 Provider Task。两种操作均使用独立严格 Mutation Schema 和 `Idempotency-Key`。
@@ -33,6 +33,7 @@
 - Provider 只发布不含 `sessionId`、`sequence`、`timestamp` 和 `version` 的统一事件；Server Event Stream 统一分配这些传输字段。结构化 Item 的开始与完成分别使用 `item.started` 和 `item.completed`，并携带同一统一 Item 载荷供客户端按 ID 替换。`AgentActivityItem.transient` 表示只在活动阶段可见的过程状态，实时开始、完成与历史 Snapshot 必须保留同一标记，消费者不得把其终态恢复为持久历史结果。
 - Project 级 Provider 只发布已通过 Project 归属验证的 Task 事件，未知或其他目录的 `threadId` 不得进入 Event Stream。
 - Task Snapshot HTTP 响应必须同时返回同一 Event Stream 的 `{ sessionId, sequence }` checkpoint，Client 不得猜测恢复序号。
+- Task Snapshot 必须携带严格的 `turnsNextCursor: string | null`；`GET /v1/projects/:projectId/tasks/:taskId` 只接受最长 `8,192` 字符的可选 `cursor`，Server 原样转交 Provider，Client 必须进行 URL 编码并继续执行统一响应 Schema 校验。Provider 原生 Cursor 不得进入 Protocol、HTTP 或 Web 状态。
 - WebSocket 传输协议使用版本 3：控制帧使用 `connection.ready` 和 `resync.required`，事件帧使用非空 `events.batch` 并按原始 `sequence` 顺序携带最多 `64` 个版本 2 `AgentEvent`；恢复原因只使用 Protocol 定义的判别值，不再发送逐事件 Frame。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。

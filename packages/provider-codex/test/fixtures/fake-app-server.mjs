@@ -143,6 +143,7 @@ function realtimeThread(turns = []) {
   return {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
+    historyMode: "paginated",
     id: "task-realtime",
     name: "Realtime Path",
     preview: "Realtime Path",
@@ -161,6 +162,7 @@ function actionThread(id, turns = []) {
   return {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
+    historyMode: "paginated",
     id,
     name: "Agent Action",
     preview: "Agent Action",
@@ -887,6 +889,57 @@ input.on("line", (line) => {
     });
     scheduleRealtimeEvents();
     return;
+  }
+
+  if ((realtimeScenario || actionScenario) && message.method === "thread/turns/list") {
+    const threadId = message.params?.threadId;
+    const thread =
+      threadId === parentRealtimeThread.id
+        ? parentRealtimeThread
+        : threadId === subagentThread.id
+          ? subagentThread
+          : actionThreads.get(threadId);
+    if (thread !== undefined) {
+      const itemsView = message.params?.itemsView;
+      send({
+        id: message.id,
+        result: {
+          backwardsCursor: null,
+          data: [...thread.turns]
+            .reverse()
+            .slice(0, message.params?.limit ?? 10)
+            .map((turn) => ({
+              ...turn,
+              items: itemsView === "notLoaded" ? [] : turn.items,
+              itemsView,
+            })),
+          nextCursor: null,
+        },
+      });
+      return;
+    }
+  }
+
+  if ((realtimeScenario || actionScenario) && message.method === "thread/items/list") {
+    const threadId = message.params?.threadId;
+    const thread =
+      threadId === parentRealtimeThread.id
+        ? parentRealtimeThread
+        : threadId === subagentThread.id
+          ? subagentThread
+          : actionThreads.get(threadId);
+    const turn = thread?.turns.find((candidate) => candidate.id === message.params?.turnId);
+    if (turn !== undefined) {
+      send({
+        id: message.id,
+        result: {
+          backwardsCursor: null,
+          data: turn.items.map((item) => ({ item, turnId: turn.id })),
+          nextCursor: null,
+        },
+      });
+      return;
+    }
   }
 
   if (

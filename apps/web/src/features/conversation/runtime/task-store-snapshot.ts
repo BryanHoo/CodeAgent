@@ -18,12 +18,13 @@ export function reconstructSnapshot(state: TaskStoreState): ReconstructedTaskSna
       // 兼容快照遵守 HTTP Schema，只重建仍可操作的 pending 请求。
       return request?.status === "pending" ? [request] : [];
     }),
+    turnsNextCursor: state.turnsNextCursor,
     turns: state.turnIds.flatMap((turnId) => {
       const turn = state.turnsById[turnId];
       if (turn === undefined) {
         return [];
       }
-      const items = (state.itemIdsByTurnId[turnId] ?? []).flatMap((itemId) => {
+      const items = (state.itemKeysByTurnId[turnId] ?? []).flatMap((itemId) => {
         const item = readTaskItem(state, itemId);
         return item === undefined ? [] : [item];
       });
@@ -131,20 +132,66 @@ export function reconcileSnapshot(
     return response;
   }
   const currentTurnsById = new Map(currentSnapshot.turns.map((turn) => [turn.id, turn]));
+  const snapshotTurnIds = new Set(response.snapshot.turns.map((turn) => turn.id));
+  const overlappingIndexes = currentSnapshot.turns.flatMap((turn, index) =>
+    snapshotTurnIds.has(turn.id) ? [index] : [],
+  );
+  const firstOverlap = overlappingIndexes.at(0);
+  const lastOverlap = overlappingIndexes.at(-1);
+  const preservesPartialHistory =
+    response.snapshot.turnsNextCursor !== null &&
+    firstOverlap !== undefined &&
+    lastOverlap !== undefined;
+  const retainedOlderTurns = preservesPartialHistory
+    ? currentSnapshot.turns.slice(0, firstOverlap).filter((turn) => !snapshotTurnIds.has(turn.id))
+    : [];
+  const retainedNewerTurns = preservesPartialHistory
+    ? currentSnapshot.turns.slice(lastOverlap + 1).filter((turn) => !snapshotTurnIds.has(turn.id))
+    : [];
   return {
     ...response,
     snapshot: {
       ...response.snapshot,
-      // Snapshot 缺失整个 Turn 表示权威历史已移除；只在仍存在的 Turn 内做非破坏性 Item 合并。
-      turns: response.snapshot.turns.map((snapshotTurn) => {
-        const currentTurn = currentTurnsById.get(snapshotTurn.id);
-        return currentTurn === undefined
-          ? snapshotTurn
-          : {
-              ...snapshotTurn,
-              items: retainSnapshotTurnItems(currentTurn, snapshotTurn),
-            };
-      }),
+      turns: [
+        ...retainedOlderTurns,
+        ...response.snapshot.turns.map((snapshotTurn) => {
+          const currentTurn = currentTurnsById.get(snapshotTurn.id);
+          return currentTurn === undefined
+            ? snapshotTurn
+            : {
+                ...snapshotTurn,
+                items: retainSnapshotTurnItems(currentTurn, snapshotTurn),
+              };
+        }),
+        ...retainedNewerTurns,
+      ],
+      turnsNextCursor:
+        retainedOlderTurns.length > 0
+          ? currentSnapshot.turnsNextCursor
+          : response.snapshot.turnsNextCursor,
+    },
+  };
+}
+
+export function mergeOlderHistoryPage(
+  state: TaskStoreState,
+  response: TaskStoreHydrationResponse,
+): TaskStoreHydrationResponse {
+  const currentSnapshot = reconstructSnapshot(state);
+  if (currentSnapshot === undefined) {
+    return response;
+  }
+  const currentTurnIds = new Set(currentSnapshot.turns.map((turn) => turn.id));
+  return {
+    checkpoint: state.checkpoint ?? response.checkpoint,
+    snapshot: {
+      ...currentSnapshot,
+      // Codex Turn Cursor 不重叠；仍按 ID 去重，防止重复响应污染时间线。
+      turns: [
+        ...response.snapshot.turns.filter((turn) => !currentTurnIds.has(turn.id)),
+        ...currentSnapshot.turns,
+      ],
+      turnsNextCursor: response.snapshot.turnsNextCursor,
     },
   };
 }

@@ -137,6 +137,7 @@ const snapshot = {
   pendingRequests: [],
   status: "idle" as const,
   turns: [],
+  turnsNextCursor: null,
 };
 
 const pendingRequest = {
@@ -230,9 +231,12 @@ function createProvider() {
       nextCursor: null,
     }),
   );
-  const readTask = vi.fn<(taskId: string) => Promise<AgentProviderTaskSnapshot | undefined>>(
-    (taskId) => Promise.resolve(taskId === task.id ? snapshot : undefined),
-  );
+  const readTask = vi.fn<
+    (
+      taskId: string,
+      input?: Readonly<{ cursor?: string }>,
+    ) => Promise<AgentProviderTaskSnapshot | undefined>
+  >((taskId) => Promise.resolve(taskId === task.id ? snapshot : undefined));
   const readTaskAttachment = vi.fn((taskId: string, attachmentId: string) =>
     Promise.resolve(
       taskId === task.id && attachmentId === "history/image-1"
@@ -2995,10 +2999,10 @@ describe("CodeAgent Server", () => {
   });
 
   it("reads a structured task snapshot", async () => {
-    const { app } = await createHarness();
+    const { app, readTask } = await createHarness();
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/tasks/task-1",
+      url: "/v1/projects/code-agent/tasks/task-1?cursor=older%2Fpage",
     });
     const body = response.json<{
       checkpoint: { sequence: number; sessionId: unknown };
@@ -3012,6 +3016,19 @@ describe("CodeAgent Server", () => {
       ...snapshot,
       settings: { ...turnOptions, sandboxMode: "workspace-write" },
     });
+    expect(readTask).toHaveBeenCalledWith("task-1", { cursor: "older/page" });
+  });
+
+  it("rejects an empty task snapshot cursor", async () => {
+    const { app, readTask } = await createHarness();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1?cursor=",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(readTask).not.toHaveBeenCalled();
   });
 
   it("deduplicates concurrent model catalog reads and reuses the cached catalog", async () => {

@@ -133,9 +133,12 @@ export function isThreadNotMaterializedError(error: unknown): boolean {
   return (
     error instanceof RpcResponseError &&
     error.code === -32600 &&
-    error.message.includes(
+    (error.message.includes(
       "is not materialized yet; includeTurns is unavailable before first user message",
-    )
+    ) ||
+      error.message.includes(
+        "is not materialized yet; thread/turns/list is unavailable before first user message",
+      ))
   );
 }
 
@@ -147,6 +150,7 @@ export function createUnmaterializedTaskSnapshot(task: AgentTask): AgentProvider
     pendingRequests: [],
     status: "idle",
     turns: [],
+    turnsNextCursor: null,
   };
 }
 

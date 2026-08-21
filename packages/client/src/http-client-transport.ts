@@ -60,6 +60,8 @@ export type ReadOptions = Readonly<{
   signal?: AbortSignal;
 }>;
 
+export type ReadTaskOptions = ReadOptions & Readonly<{ cursor?: string }>;
+
 export type AgentAttachmentUploadInput = Readonly<{
   content: Blob;
   kind: AgentAttachmentKind;

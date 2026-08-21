@@ -118,6 +118,12 @@ export const TaskPageQuerySchema = {
   type: "object",
 } as const;
 
+export const TaskSnapshotQuerySchema = {
+  additionalProperties: false,
+  properties: { cursor: { maxLength: 8_192, minLength: 1, type: "string" } },
+  type: "object",
+} as const;
+
 export const QueuePageQuerySchema = {
   additionalProperties: false,
   properties: {

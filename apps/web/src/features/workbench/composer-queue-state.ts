@@ -102,15 +102,15 @@ export function getTurnUserMessageIds(
 }
 
 export function getTaskStoreUserMessageIds(
-  state: Pick<TaskStoreState, "getItem" | "itemIdsByTurnId">,
+  state: Pick<TaskStoreState, "getItemByKey" | "itemKeysByTurnId">,
   turnId: string | undefined,
 ): readonly string[] {
   if (turnId === undefined) {
     return [];
   }
   return getUserMessageIds(
-    (state.itemIdsByTurnId[turnId] ?? []).flatMap((itemId) => {
-      const item = state.getItem(itemId);
+    (state.itemKeysByTurnId[turnId] ?? []).flatMap((itemId) => {
+      const item = state.getItemByKey(itemId);
       return item === undefined ? [] : [item];
     }),
   );

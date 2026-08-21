@@ -74,6 +74,7 @@ import {
   type MutationOptions,
   type PendingRequestResolution,
   type ReadOptions,
+  type ReadTaskOptions,
 } from "./http-client-transport.js";
 import { ProjectHttpClient } from "./http-client-projects.js";
 
@@ -178,9 +179,14 @@ export class TaskHttpClient extends ProjectHttpClient {
   public async readTask(
     projectId: string,
     taskId: string,
-    options: ReadOptions = {},
+    options: ReadTaskOptions = {},
   ): Promise<AgentTaskSnapshotResponse> {
-    return this.read(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema, options);
+    const { cursor, ...readOptions } = options;
+    return this.read(
+      appendQuery(taskPath(projectId, taskId), { cursor }),
+      AgentTaskSnapshotResponseSchema,
+      readOptions,
+    );
   }
 
   public getTaskAttachmentUrl(projectId: string, taskId: string, attachmentId: string): string {

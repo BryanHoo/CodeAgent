@@ -25,6 +25,7 @@ import {
   ProjectTaskParamsSchema,
   ProjectTaskTerminalParamsSchema,
   TaskPageQuerySchema,
+  TaskSnapshotQuerySchema,
 } from "./schemas.js";
 
 import { registerTaskActionRoutes } from "./task-action-routes.js";
@@ -82,11 +83,15 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
     },
   );
 
-  app.get<{ Params: { projectId: string; taskId: string } }>(
+  app.get<{
+    Params: { projectId: string; taskId: string };
+    Querystring: { cursor?: string };
+  }>(
     "/v1/projects/:projectId/tasks/:taskId",
     {
       schema: {
         params: ProjectTaskParamsSchema,
+        querystring: TaskSnapshotQuerySchema,
         response: { 200: AgentTaskSnapshotResponseSchema, 404: ErrorResponseSchema },
       },
     },
@@ -95,7 +100,9 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       if (context === undefined) {
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
-      const task = await context.provider.readTask(request.params.taskId);
+      const task = await context.provider.readTask(request.params.taskId, {
+        ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
+      });
       if (task?.projectId !== context.project.id) {
         return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
       }

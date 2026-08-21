@@ -2,6 +2,7 @@ import { createStore } from "zustand/vanilla";
 
 import {
   normalizeSnapshot,
+  createTaskItemKey,
   updateCommandOutputBudget,
   type TaskItemStore,
   type TaskStore,
@@ -10,8 +11,12 @@ import {
   type TaskStoreState,
 } from "./task-store-core.js";
 
-import { applyAcceptedEvent, getTouchedCommandOutputItemIds } from "./task-store-events.js";
-import { reconcileSnapshot, reconstructSnapshot } from "./task-store-snapshot.js";
+import { applyAcceptedEvent, getTouchedCommandOutputItemKeys } from "./task-store-events.js";
+import {
+  mergeOlderHistoryPage,
+  reconcileSnapshot,
+  reconstructSnapshot,
+} from "./task-store-snapshot.js";
 
 export function createTaskStore(
   identity: TaskStoreIdentity,
@@ -21,19 +26,19 @@ export function createTaskStore(
     initialResponse === undefined
       ? {
           checkpoint: null,
-          commandOutputAccessByItemId: new Map<string, number>(),
+          commandOutputAccessByItemKey: new Map<string, number>(),
           commandOutputAccessSequence: 0,
-          commandOutputBytesByItemId: new Map<string, number>(),
+          commandOutputBytesByItemKey: new Map<string, number>(),
           commandOutputBytes: 0,
-          itemIdsByTurnId: {},
-          itemStoresById: new Map<string, TaskItemStore>(),
+          itemKeysByTurnId: {},
+          itemStoresByKey: new Map<string, TaskItemStore>(),
           itemStructureRevision: 0,
-          itemTurnIdsById: {},
           notices: [],
           pendingRequestIds: [],
           pendingRequestsById: {},
           snapshotMetadata: null,
           turnIds: [],
+          turnsNextCursor: null,
           turnDiffsById: {},
           turnsById: {},
         }
@@ -71,7 +76,7 @@ export function createTaskStore(
             ...nextState,
             ...applyAcceptedEvent(nextState, event, changedItemStores),
           };
-          const touchedCommandOutputItemIds = getTouchedCommandOutputItemIds(
+          const touchedCommandOutputItemIds = getTouchedCommandOutputItemKeys(
             previousState,
             nextState,
             event,
@@ -82,8 +87,8 @@ export function createTaskStore(
               ...updateCommandOutputBudget({
                 previousBudget: previousState,
                 changedItemStores,
-                sourceItemStoresById: nextState.itemStoresById,
-                touchedItemIds: touchedCommandOutputItemIds,
+                sourceItemStoresByKey: nextState.itemStoresByKey,
+                touchedItemKeys: touchedCommandOutputItemIds,
               }),
             };
           }
@@ -113,6 +118,22 @@ export function createTaskStore(
       }));
     },
     projectId: identity.projectId,
+    prependHistory(response) {
+      if (
+        response.snapshot.projectId !== identity.projectId ||
+        response.snapshot.id !== identity.taskId
+      ) {
+        throw new Error("Task store identity does not match the history page");
+      }
+      set((state) => ({
+        ...state,
+        ...normalizeSnapshot(mergeOlderHistoryPage(state, response)),
+        checkpoint: state.checkpoint ?? response.checkpoint,
+        itemStructureRevision: state.itemStructureRevision + 1,
+        notices: state.notices,
+        turnDiffsById: state.turnDiffsById,
+      }));
+    },
     reconcile(response) {
       if (
         response.snapshot.projectId !== identity.projectId ||
@@ -128,7 +149,9 @@ export function createTaskStore(
         error: null,
       }));
     },
-    getItem: (itemId) => get().itemStoresById.get(itemId)?.read(),
+    getItem: (itemId, turnId) =>
+      get().itemStoresByKey.get(createTaskItemKey(turnId, itemId))?.read(),
+    getItemByKey: (itemKey) => get().itemStoresByKey.get(itemKey)?.read(),
     reconstructSnapshot: () => reconstructSnapshot(get()),
     setConnectionState(connectionState) {
       set({ connectionState });

@@ -188,12 +188,16 @@ function ActiveTaskTimeline({
       ) : null}
       <TaskStoreTimeline
         connected={runtime.connectionState === "connected"}
+        hasOlderHistory={runtime.hasOlderHistory}
+        isLoadingOlderHistory={runtime.isLoadingOlderHistory}
+        olderHistoryError={runtime.olderHistoryError}
         {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
         {...(onForkTask === undefined ? {} : { onForkTask })}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={onResolvePendingRequest}
+        onLoadOlderHistory={runtime.loadOlderHistory}
         {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
         store={runtime.store}
         {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}

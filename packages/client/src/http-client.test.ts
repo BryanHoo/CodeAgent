@@ -390,6 +390,32 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("builds a paginated task snapshot request", async () => {
+    const response = {
+      checkpoint: { sequence: 0, sessionId: "runtime-1" },
+      snapshot: {
+        ...task,
+        contextUsage: null,
+        pendingRequests: [],
+        plan: null,
+        settings: taskSettings,
+        status: "idle" as const,
+        turns: [],
+        turnsNextCursor: null,
+      },
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(response));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.readTask("project one", "task-1", { cursor: "older/page" }),
+    ).resolves.toEqual(response);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/tasks/task-1?cursor=older%2Fpage",
+    );
+  });
+
   it("uses the public temporary scope without exposing an internal Project route", async () => {
     const temporaryTask = { ...task, projectId: "temporary" };
     const fetchMock = vi.fn<typeof fetch>();
@@ -940,6 +966,7 @@ describe("CodeAgentClient", () => {
             settings: taskSettings,
             status: "idle",
             turns: [],
+            turnsNextCursor: null,
           },
         }),
       );

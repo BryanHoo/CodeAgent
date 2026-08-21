@@ -63,6 +63,7 @@ const snapshot: RuntimeTaskSnapshot = {
       status: "running",
     },
   ],
+  turnsNextCursor: null,
   updatedAt: "2026-07-27T00:01:00.000Z",
 };
 

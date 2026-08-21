@@ -53,8 +53,16 @@ const snapshot: RuntimeTaskSnapshot = {
   status: "idle",
   title: "Markdown 渲染",
   turns: [completedTurn],
+  turnsNextCursor: null,
   updatedAt: "2026-07-24T00:01:00.000Z",
 };
+
+const unpaginatedRuntime = {
+  hasOlderHistory: false,
+  isLoadingOlderHistory: false,
+  loadOlderHistory: () => Promise.resolve(),
+  olderHistoryError: null,
+} as const;
 
 describe("temporary task timeline", () => {
   it("renders a fixed scope name without a Project selector", () => {
@@ -105,6 +113,37 @@ describe("FileChangeButton", () => {
 });
 
 describe("TaskTimeline", () => {
+  it("renders the older history action for a paginated task", () => {
+    const paginatedSnapshot = { ...snapshot, turnsNextCursor: "older-page" };
+    const store = createTaskStore(
+      { projectId: snapshot.projectId, taskId: snapshot.id },
+      {
+        checkpoint: { sequence: 0, sessionId: "test-session" },
+        snapshot: paginatedSnapshot,
+      },
+    );
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        projectId={snapshot.projectId}
+        runtime={{
+          ...unpaginatedRuntime,
+          connectionState: "connected",
+          error: null,
+          hasOlderHistory: true,
+          isLoadingOlderHistory: false,
+          isPending: false,
+          loadOlderHistory: vi.fn(),
+          olderHistoryError: null,
+          snapshot: paginatedSnapshot,
+          store,
+        }}
+        taskId={snapshot.id}
+      />,
+    );
+
+    expect(markup).toContain("加载更早记录");
+  });
+
   it("renders automatic approval review results in the assistant timeline", () => {
     const approvalReviewSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -318,6 +357,7 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...unpaginatedRuntime,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -375,6 +415,7 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...unpaginatedRuntime,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -436,6 +477,7 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...unpaginatedRuntime,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -536,6 +578,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...unpaginatedRuntime,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -572,6 +615,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={startingSnapshot.projectId}
         runtime={{
+          ...unpaginatedRuntime,
           connectionState: "connecting",
           error: null,
           isPending: true,
@@ -607,6 +651,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={longSnapshot.projectId}
         runtime={{
+          ...unpaginatedRuntime,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -653,6 +698,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...unpaginatedRuntime,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -799,6 +845,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...unpaginatedRuntime,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -982,6 +1029,7 @@ describe("TaskSnapshotTimeline", () => {
         <TaskTimeline
           projectId={runningSnapshot.projectId}
           runtime={{
+            ...unpaginatedRuntime,
             connectionState: "connected",
             error: null,
             isPending: false,

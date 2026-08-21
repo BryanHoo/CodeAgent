@@ -114,6 +114,7 @@ const snapshot = {
       status: "failed" as const,
     },
   ],
+  turnsNextCursor: null,
 };
 
 const snapshotResponse = {

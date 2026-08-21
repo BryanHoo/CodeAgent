@@ -24,7 +24,10 @@ const retainedCommandOutputMarkerBytes = textEncoder.encode(
 
 export type NormalizedAgentTurn = Omit<AgentTurn, "items">;
 export type TaskNotice = Extract<AgentEvent, { type: "task.notice" }>;
-export type TaskSnapshotMetadata = Omit<AgentTaskSnapshot, "pendingRequests" | "turns">;
+export type TaskSnapshotMetadata = Omit<
+  AgentTaskSnapshot,
+  "pendingRequests" | "turns" | "turnsNextCursor"
+>;
 export type ReconstructedTaskSnapshot = Omit<AgentTaskSnapshot, "pendingRequests"> &
   Readonly<{ pendingRequests: readonly PendingRequest[] }>;
 export type TaskStoreHydrationResponse = Readonly<{
@@ -40,21 +43,22 @@ export interface TaskStoreIdentity {
 export interface TaskStoreState {
   applyEvents: (events: readonly AgentEvent[]) => void;
   checkpoint: EventCheckpoint | null;
-  commandOutputAccessByItemId: Map<string, number>;
+  commandOutputAccessByItemKey: Map<string, number>;
   commandOutputAccessSequence: number;
-  commandOutputBytesByItemId: Map<string, number>;
+  commandOutputBytesByItemKey: Map<string, number>;
   commandOutputBytes: number;
   connectionState: AgentEventConnectionState;
   error: Error | null;
   hydrate: (response: TaskStoreHydrationResponse) => void;
-  itemIdsByTurnId: Readonly<Record<string, readonly string[]>>;
-  itemStoresById: Map<string, TaskItemStore>;
+  itemKeysByTurnId: Readonly<Record<string, readonly string[]>>;
+  itemStoresByKey: Map<string, TaskItemStore>;
   itemStructureRevision: number;
-  itemTurnIdsById: Readonly<Record<string, string>>;
-  getItem: (itemId: string) => AgentItem | undefined;
+  getItem: (itemId: string, turnId: string) => AgentItem | undefined;
+  getItemByKey: (itemKey: string) => AgentItem | undefined;
   notices: readonly TaskNotice[];
   pendingRequestIds: readonly string[];
   pendingRequestsById: Readonly<Record<string, PendingRequest>>;
+  prependHistory: (response: TaskStoreHydrationResponse) => void;
   projectId: string;
   reconcile: (response: TaskStoreHydrationResponse) => void;
   reconstructSnapshot: () => ReconstructedTaskSnapshot | undefined;
@@ -63,6 +67,7 @@ export interface TaskStoreState {
   snapshotMetadata: TaskSnapshotMetadata | null;
   taskId: string;
   turnIds: readonly string[];
+  turnsNextCursor: string | null;
   turnsById: Readonly<Record<string, NormalizedAgentTurn>>;
   turnDiffsById: Readonly<Record<string, string>>;
 }
@@ -236,19 +241,19 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
 type NormalizedTaskData = Pick<
   TaskStoreState,
   | "checkpoint"
-  | "commandOutputAccessByItemId"
+  | "commandOutputAccessByItemKey"
   | "commandOutputAccessSequence"
-  | "commandOutputBytesByItemId"
+  | "commandOutputBytesByItemKey"
   | "commandOutputBytes"
-  | "itemIdsByTurnId"
-  | "itemStoresById"
+  | "itemKeysByTurnId"
+  | "itemStoresByKey"
   | "itemStructureRevision"
-  | "itemTurnIdsById"
   | "notices"
   | "pendingRequestIds"
   | "pendingRequestsById"
   | "snapshotMetadata"
   | "turnIds"
+  | "turnsNextCursor"
   | "turnDiffsById"
   | "turnsById"
 >;
@@ -293,30 +298,29 @@ export function retainPendingRequest(
   };
 }
 
-export function readTaskItem(state: TaskStoreState, itemId: string): AgentItem | undefined {
-  return state.itemStoresById.get(itemId)?.read();
+export function createTaskItemKey(turnId: string, itemId: string): string {
+  return JSON.stringify([turnId, itemId]);
+}
+
+export function readTaskItem(state: TaskStoreState, itemKey: string): AgentItem | undefined {
+  return state.itemStoresByKey.get(itemKey)?.read();
 }
 
 export function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTaskData {
-  const { pendingRequests, turns, ...snapshotMetadata } = response.snapshot;
+  const { pendingRequests, turns, turnsNextCursor, ...snapshotMetadata } = response.snapshot;
   const turnIds: string[] = [];
   const turnsById: Record<string, NormalizedAgentTurn> = {};
-  const itemIdsByTurnId: Record<string, readonly string[]> = {};
-  const itemTurnIdsById: Record<string, string> = {};
-  const itemStoresById = new Map<string, TaskItemStore>();
+  const itemKeysByTurnId: Record<string, readonly string[]> = {};
+  const itemStoresByKey = new Map<string, TaskItemStore>();
 
   for (const turn of turns) {
     const { items, ...normalizedTurn } = turn;
     turnIds.push(turn.id);
     turnsById[turn.id] = normalizedTurn;
-    itemIdsByTurnId[turn.id] = items.map((item) => item.id);
+    itemKeysByTurnId[turn.id] = items.map((item) => createTaskItemKey(turn.id, item.id));
     for (const item of items) {
-      const existingTurnId = itemTurnIdsById[item.id];
-      if (existingTurnId !== undefined && existingTurnId !== turn.id) {
-        throw new Error(`Agent item ${item.id} is shared by multiple turns`);
-      }
-      itemTurnIdsById[item.id] = turn.id;
-      itemStoresById.set(item.id, createTaskItemStore(item));
+      const itemKey = createTaskItemKey(turn.id, item.id);
+      itemStoresByKey.set(itemKey, createTaskItemStore(item));
     }
   }
 
@@ -330,26 +334,26 @@ export function normalizeSnapshot(response: TaskStoreHydrationResponse): Normali
 
   const boundedCommandOutputs = updateCommandOutputBudget({
     previousBudget: {
-      commandOutputAccessByItemId: new Map<string, number>(),
+      commandOutputAccessByItemKey: new Map<string, number>(),
       commandOutputAccessSequence: 0,
       commandOutputBytes: 0,
-      commandOutputBytesByItemId: new Map<string, number>(),
+      commandOutputBytesByItemKey: new Map<string, number>(),
     },
-    sourceItemStoresById: itemStoresById,
-    touchedItemIds: [...itemStoresById.keys()],
+    sourceItemStoresByKey: itemStoresByKey,
+    touchedItemKeys: [...itemStoresByKey.keys()],
   });
 
   return {
     checkpoint: response.checkpoint,
     ...boundedCommandOutputs,
-    itemIdsByTurnId,
-    itemStoresById,
+    itemKeysByTurnId,
+    itemStoresByKey,
     itemStructureRevision: 0,
-    itemTurnIdsById,
     notices: [],
     ...pendingRequestState,
     snapshotMetadata,
     turnIds,
+    turnsNextCursor,
     turnDiffsById: {},
     turnsById,
   };
@@ -357,89 +361,89 @@ export function normalizeSnapshot(response: TaskStoreHydrationResponse): Normali
 
 type CommandOutputBudgetState = Pick<
   TaskStoreState,
-  | "commandOutputAccessByItemId"
+  | "commandOutputAccessByItemKey"
   | "commandOutputAccessSequence"
   | "commandOutputBytes"
-  | "commandOutputBytesByItemId"
+  | "commandOutputBytesByItemKey"
 >;
 
 type CommandOutputBudgetInput = Readonly<{
   previousBudget: Pick<
     TaskStoreState,
-    | "commandOutputAccessByItemId"
+    | "commandOutputAccessByItemKey"
     | "commandOutputAccessSequence"
     | "commandOutputBytes"
-    | "commandOutputBytesByItemId"
+    | "commandOutputBytesByItemKey"
   >;
   changedItemStores?: Set<TaskItemStore>;
-  sourceItemStoresById: ReadonlyMap<string, TaskItemStore>;
-  touchedItemIds: readonly string[];
+  sourceItemStoresByKey: ReadonlyMap<string, TaskItemStore>;
+  touchedItemKeys: readonly string[];
 }>;
 
 export function updateCommandOutputBudget(
   input: CommandOutputBudgetInput,
 ): CommandOutputBudgetState {
-  const commandOutputAccessByItemId = input.previousBudget.commandOutputAccessByItemId;
-  const commandOutputBytesByItemId = input.previousBudget.commandOutputBytesByItemId;
+  const commandOutputAccessByItemKey = input.previousBudget.commandOutputAccessByItemKey;
+  const commandOutputBytesByItemKey = input.previousBudget.commandOutputBytesByItemKey;
   let commandOutputAccessSequence = input.previousBudget.commandOutputAccessSequence;
   let commandOutputBytes = input.previousBudget.commandOutputBytes;
 
-  for (const itemId of new Set(input.touchedItemIds)) {
-    const previousOutputBytes = commandOutputBytesByItemId.get(itemId) ?? 0;
-    const itemStore = input.sourceItemStoresById.get(itemId);
+  for (const itemKey of new Set(input.touchedItemKeys)) {
+    const previousOutputBytes = commandOutputBytesByItemKey.get(itemKey) ?? 0;
+    const itemStore = input.sourceItemStoresByKey.get(itemKey);
     const commandOutput = itemStore?.readCommandOutput();
     if (!commandOutput?.hasOutput) {
-      commandOutputAccessByItemId.delete(itemId);
-      commandOutputBytesByItemId.delete(itemId);
+      commandOutputAccessByItemKey.delete(itemKey);
+      commandOutputBytesByItemKey.delete(itemKey);
       commandOutputBytes -= previousOutputBytes;
       continue;
     }
 
     commandOutputAccessSequence += 1;
-    commandOutputAccessByItemId.set(itemId, commandOutputAccessSequence);
-    commandOutputBytesByItemId.set(itemId, commandOutput.outputBytes);
+    commandOutputAccessByItemKey.set(itemKey, commandOutputAccessSequence);
+    commandOutputBytesByItemKey.set(itemKey, commandOutput.outputBytes);
     commandOutputBytes += commandOutput.outputBytes - previousOutputBytes;
   }
 
   if (commandOutputBytes <= MAX_TASK_COMMAND_OUTPUT_BYTES) {
     return {
-      commandOutputAccessByItemId,
+      commandOutputAccessByItemKey,
       commandOutputAccessSequence,
       commandOutputBytes,
-      commandOutputBytesByItemId,
+      commandOutputBytesByItemKey,
     };
   }
 
   // 仅在任务预算溢出时遍历 LRU 索引，流式热路径无需扫描全部 Timeline Item。
-  const leastRecentlyUsedItemIds = [...commandOutputAccessByItemId.keys()].toSorted(
-    (leftItemId, rightItemId) =>
-      (commandOutputAccessByItemId.get(leftItemId) ?? 0) -
-      (commandOutputAccessByItemId.get(rightItemId) ?? 0),
+  const leastRecentlyUsedItemKeys = [...commandOutputAccessByItemKey.keys()].toSorted(
+    (leftItemKey, rightItemKey) =>
+      (commandOutputAccessByItemKey.get(leftItemKey) ?? 0) -
+      (commandOutputAccessByItemKey.get(rightItemKey) ?? 0),
   );
-  for (const itemId of leastRecentlyUsedItemIds) {
+  for (const itemKey of leastRecentlyUsedItemKeys) {
     if (commandOutputBytes <= MAX_TASK_COMMAND_OUTPUT_BYTES) {
       break;
     }
-    const itemStore = input.sourceItemStoresById.get(itemId);
+    const itemStore = input.sourceItemStoresByKey.get(itemKey);
     const item = itemStore?.peek();
     if (itemStore === undefined || item?.type !== "command") {
       continue;
     }
-    const previousOutputBytes = commandOutputBytesByItemId.get(itemId) ?? 0;
+    const previousOutputBytes = commandOutputBytesByItemKey.get(itemKey) ?? 0;
     itemStore.replace({
       ...item,
       output: RETAINED_COMMAND_OUTPUT_MARKER,
       outputTruncated: true,
     });
     input.changedItemStores?.add(itemStore);
-    commandOutputBytesByItemId.set(itemId, retainedCommandOutputMarkerBytes);
+    commandOutputBytesByItemKey.set(itemKey, retainedCommandOutputMarkerBytes);
     commandOutputBytes -= previousOutputBytes - retainedCommandOutputMarkerBytes;
   }
 
   return {
-    commandOutputAccessByItemId,
+    commandOutputAccessByItemKey,
     commandOutputAccessSequence,
     commandOutputBytes,
-    commandOutputBytesByItemId,
+    commandOutputBytesByItemKey,
   };
 }

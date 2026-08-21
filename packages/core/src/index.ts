@@ -13,6 +13,7 @@ export {
   type AgentRuntimeDefaultSettings,
   type ListAgentTasksInput,
   type ListAgentQueuedSubmissionsInput,
+  type ReadAgentTaskInput,
   PendingRequestResolutionError,
   type PendingRequestResolutionErrorCode,
   type ResolvePendingRequestInput,

@@ -71,6 +71,10 @@ export type StartAgentTaskOptions = Readonly<{
   ephemeral?: boolean;
 }>;
 
+export type ReadAgentTaskInput = Readonly<{
+  cursor?: string;
+}>;
+
 export type AgentProviderTurnInput = Readonly<{
   files: readonly Readonly<{
     mediaType: string;
@@ -149,7 +153,10 @@ export interface AgentProvider {
   pinTask(taskId: string, pinned: boolean): Promise<AgentTask>;
   readSandboxMode(): Promise<AgentSandboxMode>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
-  readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined>;
+  readTask(
+    taskId: string,
+    input?: ReadAgentTaskInput,
+  ): Promise<AgentProviderTaskSnapshot | undefined>;
   // 附件二进制只通过已验证的 Task 作用域读取，不进入统一 Snapshot。
   readTaskAttachment(
     taskId: string,

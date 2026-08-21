@@ -1078,6 +1078,7 @@ test("starts code review from a new chat with one fixed review message", async (
             settings: taskSnapshot.settings,
             status: "running",
             turns: [reviewTurn],
+            turnsNextCursor: null,
           },
         },
       });
@@ -2475,6 +2476,7 @@ test("stores composer drafts independently between task routes", async ({ page }
           settings: taskSnapshot.settings,
           status: "idle",
           turns: [],
+          turnsNextCursor: null,
         },
       },
     });
@@ -2527,6 +2529,7 @@ test("keeps the composer input mounted when switching task routes", async ({ pag
           settings: taskSnapshot.settings,
           status: "idle",
           turns: [],
+          turnsNextCursor: null,
         },
       },
     });

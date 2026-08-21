@@ -3,6 +3,7 @@ import type { AgentEvent, AgentItem } from "@code-agent/protocol";
 import {
   MAX_RETAINED_TASK_NOTICES,
   PENDING_COMMAND_LABEL,
+  createTaskItemKey,
   createTaskItemStore,
   readTaskItem,
   retainPendingRequest,
@@ -10,24 +11,25 @@ import {
   type TaskStoreState,
 } from "./task-store-core.js";
 import { mergeRealtimeExpandedSkill } from "./task-store-skill.js";
-export function getTouchedCommandOutputItemIds(
+export function getTouchedCommandOutputItemKeys(
   previousState: TaskStoreState,
   nextState: TaskStoreState,
   event: AgentEvent,
 ): readonly string[] | undefined {
   if (event.type === "command.output_delta") {
-    return [event.itemId];
+    return [createTaskItemKey(event.turnId, event.itemId)];
   }
   if (event.type === "item.started" || event.type === "item.completed") {
+    const itemKey = createTaskItemKey(event.turnId, event.itemId);
     return event.payload.item.type === "command" ||
-      previousState.commandOutputBytesByItemId.has(event.itemId)
-      ? [event.itemId]
+      previousState.commandOutputBytesByItemKey.has(itemKey)
+      ? [itemKey]
       : undefined;
   }
   if (event.type === "turn.started" || event.type === "turn.completed") {
     return [
-      ...(previousState.itemIdsByTurnId[event.turnId] ?? []),
-      ...(nextState.itemIdsByTurnId[event.turnId] ?? []),
+      ...(previousState.itemKeysByTurnId[event.turnId] ?? []),
+      ...(nextState.itemKeysByTurnId[event.turnId] ?? []),
     ];
   }
   return undefined;
@@ -74,39 +76,29 @@ function replaceTurnItems(
   turnId: string,
   items: readonly AgentItem[],
   changedItemStores: Set<TaskItemStore>,
-): Pick<TaskStoreState, "itemIdsByTurnId" | "itemTurnIdsById"> {
-  const previousItemIds = state.itemIdsByTurnId[turnId] ?? [];
-  const nextItemIds = new Set(items.map((item) => item.id));
-  for (const item of items) {
-    const existingTurnId = state.itemTurnIdsById[item.id];
-    if (existingTurnId !== undefined && existingTurnId !== turnId) {
-      throw new Error(`Agent item ${item.id} is shared by multiple turns`);
-    }
-  }
-  // 反向索引是 Store 内部可变容器；只更新目标 Turn，避免终态扫描完整历史。
-  const itemTurnIdsById = state.itemTurnIdsById as Record<string, string>;
+): Pick<TaskStoreState, "itemKeysByTurnId"> {
+  const previousItemIds = state.itemKeysByTurnId[turnId] ?? [];
+  const nextItemIds = new Set(items.map((item) => createTaskItemKey(turnId, item.id)));
   for (const itemId of previousItemIds) {
-    Reflect.deleteProperty(itemTurnIdsById, itemId);
     if (!nextItemIds.has(itemId)) {
-      state.itemStoresById.delete(itemId);
+      state.itemStoresByKey.delete(itemId);
     }
   }
   for (const item of items) {
-    itemTurnIdsById[item.id] = turnId;
-    const itemStore = state.itemStoresById.get(item.id);
+    const itemKey = createTaskItemKey(turnId, item.id);
+    const itemStore = state.itemStoresByKey.get(itemKey);
     if (itemStore === undefined) {
-      state.itemStoresById.set(item.id, createTaskItemStore(item));
+      state.itemStoresByKey.set(itemKey, createTaskItemStore(item));
     } else {
       itemStore.replace(item);
       changedItemStores.add(itemStore);
     }
   }
   return {
-    itemIdsByTurnId: {
-      ...state.itemIdsByTurnId,
-      [turnId]: items.map((item) => item.id),
+    itemKeysByTurnId: {
+      ...state.itemKeysByTurnId,
+      [turnId]: [...nextItemIds],
     },
-    itemTurnIdsById,
   };
 }
 function mergeTerminalTurnItems(
@@ -120,8 +112,8 @@ function mergeTerminalTurnItems(
   );
   const currentItems: AgentItem[] = [];
   const seenCurrentItemIds = new Set<string>();
-  for (const itemId of state.itemIdsByTurnId[turnId] ?? []) {
-    const currentItem = readTaskItem(state, itemId);
+  for (const itemKey of state.itemKeysByTurnId[turnId] ?? []) {
+    const currentItem = readTaskItem(state, itemKey);
     if (currentItem === undefined) {
       continue;
     }
@@ -204,10 +196,8 @@ export function applyAcceptedEvent(
         currentTurn.status === "running" && currentTurn.error !== null
           ? { ...state.turnsById, [event.turnId]: { ...currentTurn, error: null } }
           : state.turnsById;
-      const currentItemStore = state.itemStoresById.get(event.itemId);
-      if (currentItemStore !== undefined && state.itemTurnIdsById[event.itemId] !== event.turnId) {
-        throw new Error(`Agent item ${event.itemId} belongs to another turn`);
-      }
+      const itemKey = createTaskItemKey(event.turnId, event.itemId);
+      const currentItemStore = state.itemStoresByKey.get(itemKey);
       if (currentItemStore !== undefined) {
         if (currentItemStore.appendDelta(event)) {
           changedItemStores.add(currentItemStore);
@@ -224,23 +214,23 @@ export function applyAcceptedEvent(
       }
       const createdItemStore = createTaskItemStore(createdItem);
       createdItemStore.appendDelta(event);
-      state.itemStoresById.set(event.itemId, createdItemStore);
+      state.itemStoresByKey.set(itemKey, createdItemStore);
       changedItemStores.add(createdItemStore);
       return {
         checkpoint,
-        itemIdsByTurnId: {
-          ...state.itemIdsByTurnId,
-          [event.turnId]: [...(state.itemIdsByTurnId[event.turnId] ?? []), event.itemId],
+        itemKeysByTurnId: {
+          ...state.itemKeysByTurnId,
+          [event.turnId]: [...(state.itemKeysByTurnId[event.turnId] ?? []), itemKey],
         },
         itemStructureRevision: state.itemStructureRevision + 1,
-        itemTurnIdsById: { ...state.itemTurnIdsById, [event.itemId]: event.turnId },
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
         turnsById,
       };
     }
     case "tool.progress": {
-      const currentItemStore = state.itemStoresById.get(event.itemId);
-      if (currentItemStore === undefined || state.itemTurnIdsById[event.itemId] !== event.turnId) {
+      const itemKey = createTaskItemKey(event.turnId, event.itemId);
+      const currentItemStore = state.itemStoresByKey.get(itemKey);
+      if (currentItemStore === undefined) {
         return {
           checkpoint,
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
@@ -258,11 +248,9 @@ export function applyAcceptedEvent(
       };
     }
     case "file_change.updated": {
-      const currentItemStore = state.itemStoresById.get(event.itemId);
+      const itemKey = createTaskItemKey(event.turnId, event.itemId);
+      const currentItemStore = state.itemStoresByKey.get(itemKey);
       if (currentItemStore !== undefined) {
-        if (state.itemTurnIdsById[event.itemId] !== event.turnId) {
-          throw new Error(`Agent item ${event.itemId} belongs to another turn`);
-        }
         const currentItem = currentItemStore.read();
         if (currentItem.type !== "file_change") {
           return { checkpoint };
@@ -287,16 +275,15 @@ export function applyAcceptedEvent(
         status: "running",
         type: "file_change",
       });
-      state.itemStoresById.set(event.itemId, createdItemStore);
+      state.itemStoresByKey.set(itemKey, createdItemStore);
       changedItemStores.add(createdItemStore);
       return {
         checkpoint,
-        itemIdsByTurnId: {
-          ...state.itemIdsByTurnId,
-          [event.turnId]: [...(state.itemIdsByTurnId[event.turnId] ?? []), event.itemId],
+        itemKeysByTurnId: {
+          ...state.itemKeysByTurnId,
+          [event.turnId]: [...(state.itemKeysByTurnId[event.turnId] ?? []), itemKey],
         },
         itemStructureRevision: state.itemStructureRevision + 1,
-        itemTurnIdsById: { ...state.itemTurnIdsById, [event.itemId]: event.turnId },
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
       };
     }
@@ -346,15 +333,13 @@ export function applyAcceptedEvent(
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
         };
       }
-      const currentItemStore = state.itemStoresById.get(event.itemId);
+      const itemKey = createTaskItemKey(event.turnId, event.itemId);
+      const currentItemStore = state.itemStoresByKey.get(itemKey);
       const itemAlreadyExists = currentItemStore !== undefined;
-      if (itemAlreadyExists && state.itemTurnIdsById[event.itemId] !== event.turnId) {
-        throw new Error(`Agent item ${event.itemId} belongs to another turn`);
-      }
-      const currentItemIds = state.itemIdsByTurnId[event.turnId] ?? [];
+      const currentItemIds = state.itemKeysByTurnId[event.turnId] ?? [];
       const previousItemId = currentItemIds.at(-1);
       const previousItemStore =
-        previousItemId === undefined ? undefined : state.itemStoresById.get(previousItemId);
+        previousItemId === undefined ? undefined : state.itemStoresByKey.get(previousItemId);
       const mergedExpandedSkill = mergeRealtimeExpandedSkill(
         previousItemStore?.read(),
         event.payload.item,
@@ -369,42 +354,35 @@ export function applyAcceptedEvent(
         };
       }
       const submittedUserItemId = `submitted-user-${event.turnId}`;
+      const submittedUserItemKey = createTaskItemKey(event.turnId, submittedUserItemId);
       const replacesSubmittedUserItem =
         event.payload.item.type === "message" &&
         event.payload.item.role === "user" &&
-        currentItemIds.includes(submittedUserItemId);
+        currentItemIds.includes(submittedUserItemKey);
       const nextItemIds = replacesSubmittedUserItem
         ? currentItemIds
-            .filter((itemId) => itemId !== submittedUserItemId)
-            .concat(itemAlreadyExists ? [] : event.itemId)
+            .filter((candidateKey) => candidateKey !== submittedUserItemKey)
+            .concat(itemAlreadyExists ? [] : itemKey)
         : itemAlreadyExists
           ? currentItemIds
-          : [...currentItemIds, event.itemId];
+          : [...currentItemIds, itemKey];
       // Provider 用户项到达后原子移除提交占位，避免同一输入重复展示。
       if (replacesSubmittedUserItem) {
-        state.itemStoresById.delete(submittedUserItemId);
+        state.itemStoresByKey.delete(submittedUserItemKey);
       }
-      const retainedItemTurnIds = replacesSubmittedUserItem
-        ? Object.fromEntries(
-            Object.entries(state.itemTurnIdsById).filter(
-              ([itemId]) => itemId !== submittedUserItemId,
-            ),
-          )
-        : state.itemTurnIdsById;
       if (currentItemStore === undefined) {
-        state.itemStoresById.set(event.itemId, createTaskItemStore(event.payload.item));
+        state.itemStoresByKey.set(itemKey, createTaskItemStore(event.payload.item));
       } else {
         currentItemStore.replace(event.payload.item);
         changedItemStores.add(currentItemStore);
       }
       return {
         checkpoint,
-        itemIdsByTurnId:
+        itemKeysByTurnId:
           nextItemIds === currentItemIds
-            ? state.itemIdsByTurnId
-            : { ...state.itemIdsByTurnId, [event.turnId]: nextItemIds },
+            ? state.itemKeysByTurnId
+            : { ...state.itemKeysByTurnId, [event.turnId]: nextItemIds },
         itemStructureRevision: state.itemStructureRevision + 1,
-        itemTurnIdsById: { ...retainedItemTurnIds, [event.itemId]: event.turnId },
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
       };
     }

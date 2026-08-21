@@ -533,6 +533,7 @@ export const taskSnapshot = {
       status: "completed",
     },
   ],
+  turnsNextCursor: null,
 };
 
 export const taskSnapshotResponse = {
@@ -869,6 +870,7 @@ export async function mockAppShellApi(
           settings: taskSettings.get(`temporary:${taskId}`) ?? taskSnapshot.settings,
           status: "idle",
           turns: temporaryTurns.get(taskId) ?? [],
+          turnsNextCursor: null,
         },
       };
     } else if (url.pathname === "/v1/temporary/skills") {

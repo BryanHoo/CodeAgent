@@ -4,6 +4,7 @@ import type {
   AgentProviderEventSubscriptionOptions,
   AgentProviderTaskSnapshot,
   AgentTaskUnsubscribeStatus,
+  ReadAgentTaskInput,
   ResolvePendingRequestInput,
 } from "@code-agent/core";
 import type { PendingRequest } from "@code-agent/protocol";
@@ -26,22 +27,32 @@ import {
   isThreadNotMaterializedError,
   mapAgentTask,
 } from "./agent-provider-base.js";
+import {
+  decodeTaskTurnCursor,
+  encodeTaskTurnCursor,
+  readNativeTaskTurnPage,
+  readThreadHistoryMode,
+} from "./task-history-pagination.js";
 
 export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
-  public async readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined> {
+  public async readTask(
+    taskId: string,
+    input: ReadAgentTaskInput = {},
+  ): Promise<AgentProviderTaskSnapshot | undefined> {
     this.runtime.pendingTaskReads.set(taskId, (this.runtime.pendingTaskReads.get(taskId) ?? 0) + 1);
     let projectOwnershipVerified = false;
     try {
+      const cursor = decodeTaskTurnCursor(input);
       let nativeResponse: unknown;
       try {
         nativeResponse = await this.client.request("thread/read", {
-          includeTurns: true,
+          includeTurns: false,
           threadId: taskId,
         });
       } catch (error) {
         const unmaterializedTask = this.runtime.unmaterializedTasks.get(taskId);
         if (unmaterializedTask !== undefined && isThreadNotMaterializedError(error)) {
-          // Codex 在首条用户消息前不允许 includeTurns，返回已知新 Task 的空快照供首轮校验。
+          // 首条用户消息落盘前仍返回本地已知的新 Task，避免首屏读取竞态。
           projectOwnershipVerified = true;
           this.promotePendingServerRequests(taskId);
           return createUnmaterializedTaskSnapshot(unmaterializedTask);
@@ -61,14 +72,35 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
       // Project 归属确认后才提升读取期间暂存的 Server Request。
       this.promotePendingServerRequests(taskId);
       const task = await mapAgentTask(thread, this.project);
-      if (!Array.isArray(thread["turns"])) {
-        throw new CodexProtocolMappingError("thread/read turns must be an array");
+      let nativePage: Awaited<ReturnType<typeof readNativeTaskTurnPage>>;
+      try {
+        nativePage = await readNativeTaskTurnPage(
+          this.client,
+          taskId,
+          readThreadHistoryMode(thread),
+          cursor.turnCursor,
+        );
+      } catch (error) {
+        const unmaterializedTask = this.runtime.unmaterializedTasks.get(taskId);
+        if (
+          cursor.turnCursor === undefined &&
+          unmaterializedTask !== undefined &&
+          isThreadNotMaterializedError(error)
+        ) {
+          // Codex 首条消息前允许读取元数据，但分页历史尚不可用。
+          return createUnmaterializedTaskSnapshot(unmaterializedTask);
+        }
+        throw error;
       }
-      const nativeTurns = await this.readReviewWorkerTurns(taskId, thread["turns"]);
+      const reviewPage = await this.readReviewWorkerTurns(
+        taskId,
+        nativePage.turns,
+        cursor.reviewOffset,
+      );
       const transcriptSkillsByTurnId = await readCodexTranscriptTurnSkills(taskId);
       // Store 为未变化的来源复用随机授权 ID，重复读取不能使已交付的 Snapshot 图片失效。
       const turns = mapAgentTurns(
-        nativeTurns,
+        reviewPage.turns,
         (part, imageIndex) => this.mapMessageImage(taskId, part, imageIndex),
         (input, textIndex) => this.mapMessageText(taskId, input, textIndex),
       ).map((turn) => attachTranscriptSkills(turn, transcriptSkillsByTurnId.get(turn.id) ?? []));
@@ -97,6 +129,10 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
         pendingRequests: this.pendingLifecycle.pendingForTask(taskId),
         status,
         turns,
+        turnsNextCursor: encodeTaskTurnCursor(
+          nativePage.nextTurnCursor,
+          cursor.reviewOffset + reviewPage.reviewCount,
+        ),
       };
       return snapshot;
     } finally {
@@ -107,7 +143,8 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
   protected async readReviewWorkerTurns(
     taskId: string,
     parentTurns: readonly unknown[],
-  ): Promise<unknown[]> {
+    reviewOffset: number,
+  ): Promise<Readonly<{ reviewCount: number; turns: unknown[] }>> {
     const reviewTurnIndexes = parentTurns.flatMap((turn, turnIndex) => {
       const nativeTurn = expectRecord(turn, "Codex turn");
       const items = nativeTurn["items"];
@@ -117,30 +154,58 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
         : [];
     });
     if (reviewTurnIndexes.length === 0) {
-      return [...parentTurns];
+      return { reviewCount: 0, turns: [...parentTurns] };
     }
 
-    const listResponse = expectRecord(
-      await this.client.request("thread/list", {
-        limit: 100,
-        parentThreadId: taskId,
-        sortDirection: "asc",
-        sortKey: "created_at",
-        sourceKinds: ["subAgentReview"],
-      }),
-      "review worker thread/list response",
-    );
-    if (!Array.isArray(listResponse["data"])) {
-      throw new CodexProtocolMappingError("review worker thread/list data must be an array");
+    const workerThreads: unknown[] = [];
+    const seenCursors = new Set<string>();
+    let listCursor: string | undefined;
+    do {
+      const listResponse = expectRecord(
+        await this.client.request("thread/list", {
+          ...(listCursor === undefined ? {} : { cursor: listCursor }),
+          limit: 100,
+          parentThreadId: taskId,
+          sortDirection: "asc",
+          sortKey: "created_at",
+          sourceKinds: ["subAgentReview"],
+        }),
+        "review worker thread/list response",
+      );
+      if (!Array.isArray(listResponse["data"])) {
+        throw new CodexProtocolMappingError("review worker thread/list data must be an array");
+      }
+      workerThreads.push(...listResponse["data"].map((value: unknown) => value));
+      const nextCursor = listResponse["nextCursor"];
+      if (nextCursor === null) {
+        listCursor = undefined;
+      } else {
+        const next = expectString(nextCursor, "review worker thread/list next cursor");
+        if (next === listCursor || seenCursors.has(next)) {
+          throw new CodexProtocolMappingError(
+            "review worker thread/list returned a repeated cursor",
+          );
+        }
+        seenCursors.add(next);
+        listCursor = next;
+      }
+    } while (listCursor !== undefined);
+
+    const workerEnd = Math.max(0, workerThreads.length - reviewOffset);
+    const workerStart = Math.max(0, workerEnd - reviewTurnIndexes.length);
+    const selectedWorkerThreads = workerThreads.slice(workerStart, workerEnd);
+
+    if (selectedWorkerThreads.length > reviewTurnIndexes.length) {
+      throw new CodexProtocolMappingError("review worker pagination is inconsistent");
     }
 
     const workerTurnGroups: unknown[][] = [];
-    for (const workerThreadValue of listResponse["data"].slice(0, reviewTurnIndexes.length)) {
+    for (const workerThreadValue of selectedWorkerThreads) {
       const workerThread = expectRecord(workerThreadValue, "Codex review worker thread");
       const workerTaskId = expectString(workerThread["id"], "Codex review worker thread id");
       const workerResponse = expectRecord(
         await this.client.request("thread/read", {
-          includeTurns: true,
+          includeTurns: false,
           threadId: workerTaskId,
         }),
         "review worker thread/read response",
@@ -149,10 +214,12 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
         workerResponse["thread"],
         "Codex loaded review worker thread",
       );
-      if (!Array.isArray(loadedWorkerThread["turns"])) {
-        throw new CodexProtocolMappingError("review worker thread/read turns must be an array");
-      }
-      const workerTurns = loadedWorkerThread["turns"] as unknown[];
+      const workerPage = await readNativeTaskTurnPage(
+        this.client,
+        workerTaskId,
+        readThreadHistoryMode(loadedWorkerThread),
+      );
+      const workerTurns = workerPage.turns;
       this.runtime.reviewWorkerParentTaskIds.set(workerTaskId, taskId);
       this.runtime.reviewWorkerTaskIds.set(taskId, workerTaskId);
       const runningWorkerTurn = workerTurns.findLast((turn) => {
@@ -180,7 +247,7 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
         workerIndex += 1;
       }
     }
-    return turns;
+    return { reviewCount: reviewTurnIndexes.length, turns };
   }
 
   public async readTaskAttachment(

@@ -22,5 +22,6 @@ export {
   type MutationOptions,
   type PendingRequestResolution,
   type ReadOptions,
+  type ReadTaskOptions,
   type UnauthorizedListener,
 } from "./http-client.js";

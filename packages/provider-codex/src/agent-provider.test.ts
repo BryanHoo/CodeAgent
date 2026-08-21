@@ -28,6 +28,7 @@ class FakeRpcClient {
   readonly #notificationListeners = new Set<
     (notification: { method: string; params: unknown }) => void
   >();
+  readonly #threadTurns = new Map<string, unknown[]>();
   readonly #serverRequestListeners = new Set<
     (request: { id: RpcRequestId; method: string; params: unknown }) => void
   >();
@@ -44,8 +45,42 @@ class FakeRpcClient {
 
   public request(method: string, params?: unknown): Promise<unknown> {
     this.calls.push({ method, params });
+    const requestParams =
+      params !== null && typeof params === "object" ? (params as Record<string, unknown>) : {};
+    const queuedResponse = this.#responses[0];
+    if (method === "thread/turns/list") {
+      const explicitPage =
+        queuedResponse !== null &&
+        typeof queuedResponse === "object" &&
+        "backwardsCursor" in queuedResponse;
+      const threadId = requestParams["threadId"];
+      if (!explicitPage && typeof threadId === "string" && this.#threadTurns.has(threadId)) {
+        const turns = this.#threadTurns.get(threadId) ?? [];
+        return Promise.resolve({
+          backwardsCursor: null,
+          data: [...turns].reverse(),
+          nextCursor: null,
+        });
+      }
+    }
     const response = this.#responses.shift();
     const resolved = typeof response === "function" ? (response as () => unknown)() : response;
+    if (
+      method === "thread/read" &&
+      requestParams["includeTurns"] === false &&
+      resolved !== null &&
+      typeof resolved === "object" &&
+      "thread" in resolved
+    ) {
+      const result = resolved;
+      if (result.thread !== null && typeof result.thread === "object") {
+        const thread = result.thread as Record<string, unknown>;
+        if (typeof thread["id"] === "string" && Array.isArray(thread["turns"])) {
+          this.#threadTurns.set(thread["id"], thread["turns"]);
+          return Promise.resolve({ ...result, thread: { ...thread, turns: [] } });
+        }
+      }
+    }
     return resolved instanceof Error ? Promise.reject(resolved) : Promise.resolve(resolved);
   }
 
@@ -136,6 +171,7 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     ephemeral: false,
+    historyMode: "legacy",
     id: "task-1",
     modelProvider: "openai",
     name: null,
@@ -153,6 +189,128 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("reads only the newest bounded task turn page", async () => {
+    const turn = {
+      completedAt: 1_753_232_400,
+      error: null,
+      id: "turn-newest",
+      items: [{ delivery: null, id: "message-1", text: "最新回复", type: "agentMessage" }],
+      itemsView: "full",
+      startedAt: 1_753_228_800,
+      status: "completed",
+    };
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ name: "分页历史", turns: [] }) },
+      { backwardsCursor: "newer", data: [turn], nextCursor: "older-turns" },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const result = await provider.readTask("task-1");
+    expect(result).toMatchObject({ turns: [{ id: "turn-newest" }] });
+    expect(typeof result?.turnsNextCursor).toBe("string");
+    expect(rpc.calls).toEqual([
+      {
+        method: "thread/read",
+        params: { includeTurns: false, threadId: "task-1" },
+      },
+      {
+        method: "thread/turns/list",
+        params: {
+          itemsView: "full",
+          limit: 10,
+          sortDirection: "desc",
+          threadId: "task-1",
+        },
+      },
+    ]);
+  });
+
+  it("hydrates paginated turn items and continues from the provider cursor", async () => {
+    const nativeTurn = (id: string) => ({
+      completedAt: 1_753_232_400,
+      error: null,
+      id,
+      items: [],
+      itemsView: "notLoaded",
+      startedAt: 1_753_228_800,
+      status: "completed",
+    });
+    const itemPage = (turnId: string, text: string) => ({
+      backwardsCursor: null,
+      data: [
+        {
+          item: { delivery: null, id: `${turnId}-message`, text, type: "agentMessage" },
+          turnId,
+        },
+      ],
+      nextCursor: null,
+    });
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ historyMode: "paginated", turns: undefined }) },
+      { backwardsCursor: "newer", data: [nativeTurn("turn-new")], nextCursor: "older" },
+      itemPage("turn-new", "最新回复"),
+      { thread: nativeThread({ historyMode: "paginated", turns: undefined }) },
+      { backwardsCursor: "anchor", data: [nativeTurn("turn-old")], nextCursor: null },
+      itemPage("turn-old", "更早回复"),
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const newest = await provider.readTask("task-1");
+    const cursor = newest?.turnsNextCursor;
+    expect(cursor).toEqual(expect.any(String));
+    if (cursor === null || cursor === undefined) {
+      throw new Error("Expected a task turn cursor");
+    }
+    await expect(provider.readTask("task-1", { cursor })).resolves.toMatchObject({
+      turns: [
+        {
+          id: "turn-old",
+          items: [{ id: "turn-old-message", text: "更早回复" }],
+        },
+      ],
+      turnsNextCursor: null,
+    });
+    expect(rpc.calls.filter(({ method }) => method === "thread/items/list")).toEqual([
+      {
+        method: "thread/items/list",
+        params: {
+          limit: 100,
+          sortDirection: "asc",
+          threadId: "task-1",
+          turnId: "turn-new",
+        },
+      },
+      {
+        method: "thread/items/list",
+        params: {
+          limit: 100,
+          sortDirection: "asc",
+          threadId: "task-1",
+          turnId: "turn-old",
+        },
+      },
+    ]);
+  });
+
+  it("rejects a repeated task turn cursor", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ turns: undefined }) },
+      { backwardsCursor: null, data: [], nextCursor: "older" },
+      { thread: nativeThread({ turns: undefined }) },
+      { backwardsCursor: null, data: [], nextCursor: "older" },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const firstPage = await provider.readTask("task-1");
+    const cursor = firstPage?.turnsNextCursor;
+    if (cursor === null || cursor === undefined) {
+      throw new Error("Expected a task turn cursor");
+    }
+
+    await expect(provider.readTask("task-1", { cursor })).rejects.toThrow(
+      "thread/turns/list returned a repeated cursor",
+    );
+  });
+
   it("requires the 0.149.0 nullable native project assignment", async () => {
     const missingRpc = new FakeRpcClient([
       { data: [nativeThread({ projectId: undefined })], nextCursor: null },
@@ -509,7 +667,7 @@ describe("CodexAgentProvider", () => {
       ],
     });
     await expect(provider.terminateBackgroundTerminal("task-1", "terminal-1")).resolves.toBe(true);
-    expect(rpc.calls.slice(1)).toEqual([
+    expect(rpc.calls.slice(2)).toEqual([
       {
         method: "thread/backgroundTerminals/list",
         params: { limit: 100, threadId: "task-1" },
@@ -534,7 +692,7 @@ describe("CodexAgentProvider", () => {
     await provider.readTask("task-1");
 
     await expect(provider.listBackgroundTerminals("task-1")).resolves.toEqual({ data: [] });
-    expect(rpc.calls.slice(1)).toEqual([
+    expect(rpc.calls.slice(2)).toEqual([
       {
         method: "thread/backgroundTerminals/list",
         params: { limit: 100, threadId: "task-1" },
@@ -554,7 +712,7 @@ describe("CodexAgentProvider", () => {
     await expect(provider.unsubscribeTask("task-1")).resolves.toBe("unsubscribed");
     await expect(provider.unsubscribeTask("task-1")).resolves.toBe("notLoaded");
 
-    expect(rpc.calls.slice(1)).toEqual([
+    expect(rpc.calls.slice(2)).toEqual([
       {
         method: "thread/backgroundTerminals/list",
         params: { limit: 100, threadId: "task-1" },
@@ -681,7 +839,10 @@ describe("CodexAgentProvider", () => {
     await expect(provider.startTask({ ephemeral: true })).resolves.toMatchObject({ id: "task-1" });
     await expect(provider.listTasks()).resolves.toEqual({ data: [], nextCursor: null });
     expect(rpc.calls).toEqual([
-      { method: "thread/start", params: { cwd: project.rootPath, ephemeral: true } },
+      {
+        method: "thread/start",
+        params: { cwd: project.rootPath, ephemeral: true, historyMode: "paginated" },
+      },
       {
         method: "thread/list",
         params: {
@@ -769,7 +930,10 @@ describe("CodexAgentProvider", () => {
           sortKey: "updated_at",
         },
       },
-      { method: "thread/start", params: { cwd: otherProject.rootPath } },
+      {
+        method: "thread/start",
+        params: { cwd: otherProject.rootPath, historyMode: "paginated" },
+      },
     ]);
     await expect(projectProvider.readTask("task-2")).resolves.toBeUndefined();
     expect(rpc.calls).toHaveLength(3);
@@ -815,7 +979,16 @@ describe("CodexAgentProvider", () => {
     await expect(provider.listBackgroundTerminals("task-1")).resolves.toEqual({ data: [] });
 
     expect(rpc.calls).toEqual([
-      { method: "thread/read", params: { includeTurns: true, threadId: "task-1" } },
+      { method: "thread/read", params: { includeTurns: false, threadId: "task-1" } },
+      {
+        method: "thread/turns/list",
+        params: {
+          itemsView: "full",
+          limit: 10,
+          sortDirection: "desc",
+          threadId: "task-1",
+        },
+      },
       {
         method: "thread/backgroundTerminals/list",
         params: { limit: 100, threadId: "task-1" },
@@ -1026,10 +1199,19 @@ describe("CodexAgentProvider", () => {
 
     await expect(provider.renameTask("task-1", "释放后重命名")).resolves.toBeUndefined();
 
-    expect(rpc.calls.slice(-2)).toEqual([
+    expect(rpc.calls.slice(-3)).toEqual([
       {
         method: "thread/read",
-        params: { includeTurns: true, threadId: "task-1" },
+        params: { includeTurns: false, threadId: "task-1" },
+      },
+      {
+        method: "thread/turns/list",
+        params: {
+          itemsView: "full",
+          limit: 10,
+          sortDirection: "desc",
+          threadId: "task-1",
+        },
       },
       {
         method: "thread/name/set",
@@ -1075,14 +1257,15 @@ describe("CodexAgentProvider", () => {
 
     expect(rpc.calls.map(({ method }) => method)).toEqual([
       "thread/read",
+      "thread/turns/list",
       "thread/resume",
       "turn/start",
     ]);
-    expect(rpc.calls[1]).toEqual({
+    expect(rpc.calls[2]).toEqual({
       method: "thread/resume",
       params: { threadId: "task-1" },
     });
-    expect(rpc.calls[2]).toMatchObject({
+    expect(rpc.calls[3]).toMatchObject({
       method: "turn/start",
       params: {
         collaborationMode: {
@@ -1337,7 +1520,11 @@ describe("CodexAgentProvider", () => {
     await Promise.resolve();
 
     // 两个续写请求必须等待同一个恢复操作，避免重复加载同一 Thread。
-    expect(rpc.calls.map(({ method }) => method)).toEqual(["thread/read", "thread/resume"]);
+    expect(rpc.calls.map(({ method }) => method)).toEqual([
+      "thread/read",
+      "thread/turns/list",
+      "thread/resume",
+    ]);
     resolveResume({ thread: nativeThread() });
     await expect(Promise.all([firstTurn, secondTurn])).resolves.toMatchObject([
       { id: "turn-concurrent-1" },
@@ -2315,7 +2502,10 @@ describe("CodexAgentProvider", () => {
         method: "skills/list",
         params: { cwds: [project.rootPath], forceReload: false },
       },
-      { method: "thread/start", params: { cwd: project.rootPath } },
+      {
+        method: "thread/start",
+        params: { cwd: project.rootPath, historyMode: "paginated" },
+      },
       {
         method: "turn/start",
         params: {
@@ -2540,7 +2730,10 @@ describe("CodexAgentProvider", () => {
       ],
     });
     expect(rpc.calls).toEqual([
-      { method: "thread/start", params: { cwd: project.rootPath } },
+      {
+        method: "thread/start",
+        params: { cwd: project.rootPath, historyMode: "paginated" },
+      },
       {
         method: "mcpServerStatus/list",
         params: { detail: "toolsAndAuthOnly", threadId: "task-1" },
@@ -2565,6 +2758,7 @@ describe("CodexAgentProvider", () => {
 
     expect(rpc.calls.map(({ method }) => method)).toEqual([
       "thread/read",
+      "thread/turns/list",
       "thread/resume",
       "mcpServerStatus/list",
     ]);
@@ -2584,6 +2778,7 @@ describe("CodexAgentProvider", () => {
 
     expect(rpc.calls.map(({ method }) => method)).toEqual([
       "thread/read",
+      "thread/turns/list",
       "thread/resume",
       "config/mcpServer/reload",
       "mcpServerStatus/list",
@@ -2835,7 +3030,10 @@ describe("CodexAgentProvider", () => {
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
 
     expect(rpc.calls).toEqual([
-      { method: "thread/start", params: { cwd: "/workspace/CodeAgent" } },
+      {
+        method: "thread/start",
+        params: { cwd: "/workspace/CodeAgent", historyMode: "paginated" },
+      },
       {
         method: "turn/start",
         params: {
@@ -3406,7 +3604,16 @@ describe("CodexAgentProvider", () => {
     });
     await expect(provider.interruptTurn("task-1", "review-outer-turn")).resolves.toBeUndefined();
     expect(rpc.calls).toEqual([
-      { method: "thread/read", params: { includeTurns: true, threadId: "task-1" } },
+      { method: "thread/read", params: { includeTurns: false, threadId: "task-1" } },
+      {
+        method: "thread/turns/list",
+        params: {
+          itemsView: "full",
+          limit: 10,
+          sortDirection: "desc",
+          threadId: "task-1",
+        },
+      },
       {
         method: "thread/list",
         params: {
@@ -3419,7 +3626,16 @@ describe("CodexAgentProvider", () => {
       },
       {
         method: "thread/read",
-        params: { includeTurns: true, threadId: "reviewer-thread" },
+        params: { includeTurns: false, threadId: "reviewer-thread" },
+      },
+      {
+        method: "thread/turns/list",
+        params: {
+          itemsView: "full",
+          limit: 10,
+          sortDirection: "desc",
+          threadId: "reviewer-thread",
+        },
       },
       {
         method: "turn/interrupt",
@@ -4181,14 +4397,17 @@ describe("CodexAgentProvider", () => {
           threadId: "task-1",
           turnId: "turn-1",
         });
-        return { thread: nativeThread({ turns: null }) };
+        return { thread: nativeThread({ turns: [] }) };
       },
+      { backwardsCursor: null, data: null, nextCursor: null },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
     const events: AgentProviderEvent[] = [];
     provider.subscribeEvents((event) => events.push(event));
 
-    await expect(provider.readTask("task-1")).rejects.toThrow("thread/read turns must be an array");
+    await expect(provider.readTask("task-1")).rejects.toThrow(
+      "thread/turns/list data must be an array",
+    );
     await expect(
       provider.resolvePendingRequest({
         itemId: "file-during-invalid-read",
@@ -4551,7 +4770,7 @@ describe("CodexAgentProvider", () => {
 
     expect(rpc.calls[0]).toEqual({
       method: "thread/read",
-      params: { includeTurns: true, threadId: "task-1" },
+      params: { includeTurns: false, threadId: "task-1" },
     });
     expect(snapshot).toMatchObject({
       id: "task-1",
@@ -4976,6 +5195,63 @@ describe("CodexAgentProvider", () => {
       status: "idle",
       turns: [],
     });
+  });
+
+  it("reads a newly started task when paginated turns are not materialized", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      { thread: nativeThread({ historyMode: "paginated", turns: undefined }) },
+      new RpcResponseError({
+        code: -32600,
+        data: null,
+        message:
+          "thread task-1 is not materialized yet; thread/turns/list is unavailable before first user message",
+      }),
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await provider.startTask();
+
+    await expect(provider.readTask("task-1")).resolves.toMatchObject({
+      contextUsage: null,
+      id: "task-1",
+      pendingRequests: [],
+      projectId: project.id,
+      status: "idle",
+      turns: [],
+      turnsNextCursor: null,
+    });
+    expect(rpc.calls.slice(-2)).toEqual([
+      {
+        method: "thread/read",
+        params: { includeTurns: false, threadId: "task-1" },
+      },
+      {
+        method: "thread/turns/list",
+        params: {
+          itemsView: "notLoaded",
+          limit: 10,
+          sortDirection: "desc",
+          threadId: "task-1",
+        },
+      },
+    ]);
+  });
+
+  it("preserves paginated materialization failures for tasks not started locally", async () => {
+    const error = new RpcResponseError({
+      code: -32600,
+      data: null,
+      message:
+        "thread task-1 is not materialized yet; thread/turns/list is unavailable before first user message",
+    });
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ historyMode: "paginated", turns: undefined }) },
+      error,
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.readTask("task-1")).rejects.toBe(error);
   });
 
   it("preserves unrelated RPC failures when reading a thread", async () => {

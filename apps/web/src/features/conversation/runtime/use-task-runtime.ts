@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 
 import { taskSnapshotQueryOptions } from "../../projects/project-queries.js";
@@ -17,7 +17,11 @@ const emptyTaskStore = createTaskStore({ projectId: "", taskId: "" });
 export type TaskRuntimeView = Readonly<{
   connectionState: "closed" | "connected" | "connecting" | "reconnecting";
   error: Error | null;
+  hasOlderHistory: boolean;
+  isLoadingOlderHistory: boolean;
   isPending: boolean;
+  loadOlderHistory: () => Promise<void>;
+  olderHistoryError: Error | null;
   snapshot: ReconstructedTaskSnapshot | undefined;
   store: TaskStore | undefined;
 }>;
@@ -38,6 +42,9 @@ export function useTaskRuntime(
     enabled: taskId !== undefined,
   });
   const [store, setStore] = useState<TaskStore>();
+  const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
+  const [olderHistoryError, setOlderHistoryError] = useState<Error | null>(null);
+  const olderHistoryRequestRef = useRef<object | null>(null);
   const subscribedStore = store ?? emptyTaskStore;
   const connectionState = useStore(subscribedStore, (state) => state.connectionState);
   const runtimeError = useStore(subscribedStore, (state) => state.error);
@@ -51,6 +58,13 @@ export function useTaskRuntime(
   const taskPlan = useStore(subscribedStore, (state) => state.snapshotMetadata?.plan);
   const taskPinned = useStore(subscribedStore, (state) => state.snapshotMetadata?.pinned);
   const itemStructureRevision = useStore(subscribedStore, (state) => state.itemStructureRevision);
+  const turnsNextCursor = useStore(subscribedStore, (state) => state.turnsNextCursor);
+
+  useEffect(() => {
+    olderHistoryRequestRef.current = null;
+    setIsLoadingOlderHistory(false);
+    setOlderHistoryError(null);
+  }, [projectId, taskId]);
 
   useEffect(() => {
     if (taskId === undefined) {
@@ -87,6 +101,32 @@ export function useTaskRuntime(
 
   const activeRuntime =
     store === undefined ? undefined : selectActiveTaskStore(store, projectId, taskId);
+  const loadOlderHistory = useCallback(async () => {
+    if (activeRuntime === undefined || taskId === undefined || turnsNextCursor === null) {
+      return;
+    }
+    if (olderHistoryRequestRef.current !== null) {
+      return;
+    }
+    const requestToken = {};
+    olderHistoryRequestRef.current = requestToken;
+    setIsLoadingOlderHistory(true);
+    setOlderHistoryError(null);
+    try {
+      const response = await client.readTask(projectId, taskId, { cursor: turnsNextCursor });
+      // 分页失败不覆盖实时 Store；成功页通过统一身份校验后再前插。
+      activeRuntime.getState().prependHistory(response);
+    } catch (error) {
+      if (olderHistoryRequestRef.current === requestToken) {
+        setOlderHistoryError(error instanceof Error ? error : new Error(String(error)));
+      }
+    } finally {
+      if (olderHistoryRequestRef.current === requestToken) {
+        olderHistoryRequestRef.current = null;
+        setIsLoadingOlderHistory(false);
+      }
+    }
+  }, [activeRuntime, client, projectId, taskId, turnsNextCursor]);
   const hasHydratedSnapshot = activeRuntime?.getState().snapshotMetadata !== null;
   const error =
     activeRuntime === undefined || !hasHydratedSnapshot
@@ -122,11 +162,25 @@ export function useTaskRuntime(
     () => ({
       connectionState: activeRuntime === undefined ? "connecting" : connectionState,
       error,
+      hasOlderHistory: turnsNextCursor !== null,
+      isLoadingOlderHistory,
       isPending: isRuntimePending,
+      loadOlderHistory,
+      olderHistoryError,
       snapshot,
       store: activeRuntime,
     }),
-    [activeRuntime, connectionState, error, isRuntimePending, snapshot],
+    [
+      activeRuntime,
+      connectionState,
+      error,
+      isLoadingOlderHistory,
+      isRuntimePending,
+      loadOlderHistory,
+      olderHistoryError,
+      snapshot,
+      turnsNextCursor,
+    ],
   );
 }
 

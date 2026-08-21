@@ -1104,6 +1104,7 @@ describe("project protocol", () => {
           status: "completed",
         },
       ],
+      turnsNextCursor: null,
       updatedAt: "2026-07-23T00:01:00.000Z",
     };
 

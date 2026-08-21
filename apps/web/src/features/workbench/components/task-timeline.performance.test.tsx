@@ -42,6 +42,7 @@ function createLongHistory(): RuntimeTaskSnapshot {
       startedAt: timestamp,
       status: "completed" as const,
     })),
+    turnsNextCursor: null,
     updatedAt: timestamp,
   };
 }
@@ -66,7 +67,11 @@ describe("TaskTimeline performance", () => {
           runtime={{
             connectionState: "connected",
             error: null,
+            hasOlderHistory: false,
+            isLoadingOlderHistory: false,
             isPending: false,
+            loadOlderHistory: () => Promise.resolve(),
+            olderHistoryError: null,
             snapshot,
             store,
           }}
@@ -79,7 +84,7 @@ describe("TaskTimeline performance", () => {
     const state = store.getState();
     const mountedTurns = markup.match(/aria-label="Turn /gu)?.length ?? 0;
     // 规模断言限制算法和 DOM 复杂度，墙钟阈值只负责捕获明显性能回退。
-    expect(state.itemStoresById.size).toBe(performanceBudgets.longHistory.items);
+    expect(state.itemStoresByKey.size).toBe(performanceBudgets.longHistory.items);
     expect(state.turnIds).toHaveLength(
       performanceBudgets.longHistory.items / performanceBudgets.longHistory.itemsPerTurn,
     );

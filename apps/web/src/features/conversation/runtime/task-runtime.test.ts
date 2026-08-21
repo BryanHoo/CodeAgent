@@ -20,6 +20,7 @@ const snapshot: AgentTaskSnapshotResponse["snapshot"] = {
   status: "running",
   title: "实时链路",
   turns: [],
+  turnsNextCursor: null,
   updatedAt: "2026-07-23T00:00:00.000Z",
 };
 

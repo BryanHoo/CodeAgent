@@ -56,6 +56,7 @@ function createSnapshotResponse(
       status,
       title: options.title ?? taskId,
       turns: status === "running" ? [createTurn(taskId)] : [],
+      turnsNextCursor: null,
       updatedAt: "2026-07-28T00:00:00.000Z",
     },
   };
@@ -660,7 +661,7 @@ describe("project runtime manager", () => {
 
     const detach = manager.attachTaskStore(response, store, vi.fn());
 
-    expect(store.getState().getItem("tool-read-file")).toMatchObject({
+    expect(store.getState().getItem("tool-read-file", "turn-task-1")).toMatchObject({
       name: "read_file",
       status: "completed",
     });
@@ -710,7 +711,7 @@ describe("project runtime manager", () => {
       );
 
       expect(secondStore.getState().checkpoint?.sequence).toBe(3);
-      expect(secondStore.getState().getItem("message-task-2")).toMatchObject({
+      expect(secondStore.getState().getItem("message-task-2", "turn-task-2")).toMatchObject({
         text: "环绕后继续输出",
       });
       expect(retainedHistory.floorSequence).toBe(1);
@@ -800,7 +801,7 @@ describe("project runtime manager", () => {
     harness.emit(createFileChangeCompletedEvent("task-1", 9));
 
     expect(store.getState().connectionState).toBe("connected");
-    expect(store.getState().getItem("file-change-task-1")).toBeDefined();
+    expect(store.getState().getItem("file-change-task-1", "turn-task-1")).toBeDefined();
     expect(store.getState().checkpoint?.sequence).toBe(9);
 
     detach();

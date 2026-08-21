@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createTaskStore,
+  createTaskItemKey,
   createTaskStoreRegistry,
   estimateTaskStoreRetainedBytes,
   MAX_RETAINED_TERMINAL_REQUESTS,
@@ -10,6 +11,15 @@ import {
 } from "./task-store.js";
 
 const timestamp = "2026-07-28T00:00:00.000Z";
+const runningItemKey = (itemId: string) => createTaskItemKey("turn-running", itemId);
+
+function readTurnItemIds(
+  store: ReturnType<typeof createTaskStore>,
+  turnId: string,
+): readonly (string | undefined)[] {
+  const state = store.getState();
+  return (state.itemKeysByTurnId[turnId] ?? []).map((itemKey) => state.getItemByKey(itemKey)?.id);
+}
 
 function createResponse(
   overrides: Partial<AgentTaskSnapshotResponse["snapshot"]> = {},
@@ -64,6 +74,7 @@ function createResponse(
           status: "running",
         },
       ],
+      turnsNextCursor: null,
       updatedAt: timestamp,
       ...overrides,
     },
@@ -103,6 +114,61 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
 }
 
 describe("task store", () => {
+  it("prepends older turn pages and preserves them during partial snapshot recovery", () => {
+    const olderTurn = {
+      completedAt: timestamp,
+      error: null,
+      id: "turn-older",
+      items: [
+        {
+          id: "shared-page-item",
+          role: "assistant" as const,
+          text: "更早",
+          type: "message" as const,
+        },
+      ],
+      startedAt: timestamp,
+      status: "completed" as const,
+    };
+    const newestTurn = {
+      completedAt: timestamp,
+      error: null,
+      id: "turn-newest",
+      items: [
+        {
+          id: "shared-page-item",
+          role: "assistant" as const,
+          text: "最新",
+          type: "message" as const,
+        },
+      ],
+      startedAt: timestamp,
+      status: "completed" as const,
+    };
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turns: [newestTurn], turnsNextCursor: "older-page" }),
+    );
+
+    store.getState().prependHistory(createResponse({ turns: [olderTurn], turnsNextCursor: null }));
+
+    expect(store.getState().reconstructSnapshot()).toMatchObject({
+      turns: [
+        { id: "turn-older", items: [{ id: "shared-page-item", text: "更早" }] },
+        { id: "turn-newest", items: [{ id: "shared-page-item", text: "最新" }] },
+      ],
+      turnsNextCursor: null,
+    });
+
+    store
+      .getState()
+      .reconcile(createResponse({ turns: [newestTurn], turnsNextCursor: "older-page" }));
+    expect(store.getState().reconstructSnapshot()).toMatchObject({
+      turns: [{ id: "turn-older" }, { id: "turn-newest" }],
+      turnsNextCursor: null,
+    });
+  });
+
   it("applies native thread status updates to snapshot metadata", () => {
     const store = createTaskStore(
       { projectId: "project-1", taskId: "task-1" },
@@ -193,21 +259,23 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().getItem("plan-1")).toMatchObject({ text: "## 计划" });
-    expect(store.getState().getItem("reasoning-1")).toMatchObject({
+    expect(store.getState().getItem("plan-1", "turn-running")).toMatchObject({ text: "## 计划" });
+    expect(store.getState().getItem("reasoning-1", "turn-running")).toMatchObject({
       content: "raw",
       summary: "核对协议\n\n检查界面",
     });
-    expect(store.getState().getItem("mcp-1")).toMatchObject({ progress: "正在读取资源" });
-    expect(store.getState().getItem("patch-1")).toMatchObject({
+    expect(store.getState().getItem("mcp-1", "turn-running")).toMatchObject({
+      progress: "正在读取资源",
+    });
+    expect(store.getState().getItem("patch-1", "turn-running")).toMatchObject({
       changes: [{ path: "src/app.ts" }],
       status: "running",
     });
     expect(store.getState().turnDiffsById["turn-running"]).toBe("latest diff");
 
-    const terminalItems = (store.getState().itemIdsByTurnId["turn-running"] ?? []).flatMap(
+    const terminalItems = (store.getState().itemKeysByTurnId["turn-running"] ?? []).flatMap(
       (itemId) => {
-        const item = store.getState().getItem(itemId);
+        const item = store.getState().getItemByKey(itemId);
         return item === undefined ? [] : [item];
       },
     );
@@ -248,7 +316,7 @@ describe("task store", () => {
         ],
       }),
     );
-    const itemStore = store.getState().itemStoresById.get("reasoning-1");
+    const itemStore = store.getState().itemStoresByKey.get(runningItemKey("reasoning-1"));
     if (itemStore === undefined) {
       throw new Error("Expected reasoning item store");
     }
@@ -265,7 +333,7 @@ describe("task store", () => {
     ]);
 
     expect(readSpy).not.toHaveBeenCalled();
-    expect(store.getState().getItem("reasoning-1")).toMatchObject({
+    expect(store.getState().getItem("reasoning-1", "turn-running")).toMatchObject({
       summary: "既有摘要\n\n新增分段",
     });
   });
@@ -291,7 +359,7 @@ describe("task store", () => {
         })),
       }),
     );
-    const keys = vi.spyOn(store.getState().itemStoresById, "keys").mockImplementation(() => {
+    const keys = vi.spyOn(store.getState().itemStoresByKey, "keys").mockImplementation(() => {
       throw new Error("turn completion must not scan all item stores");
     });
 
@@ -320,7 +388,7 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().getItem("message-99")).toMatchObject({ text: "完成" });
+    expect(store.getState().getItem("message-99", "turn-99")).toMatchObject({ text: "完成" });
     expect(keys).not.toHaveBeenCalled();
   });
 
@@ -417,8 +485,8 @@ describe("task store", () => {
 
   it("replaces the latest plan without rebuilding timeline item state", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
-    const previousItemIdsByTurnId = store.getState().itemIdsByTurnId;
-    const previousItemStoresById = store.getState().itemStoresById;
+    const previousItemIdsByTurnId = store.getState().itemKeysByTurnId;
+    const previousItemStoresById = store.getState().itemStoresByKey;
 
     store.getState().applyEvents([
       {
@@ -461,8 +529,8 @@ describe("task store", () => {
         { status: "in_progress", text: "接入界面" },
       ],
     });
-    expect(store.getState().itemIdsByTurnId).toBe(previousItemIdsByTurnId);
-    expect(store.getState().itemStoresById).toBe(previousItemStoresById);
+    expect(store.getState().itemKeysByTurnId).toBe(previousItemIdsByTurnId);
+    expect(store.getState().itemStoresByKey).toBe(previousItemStoresById);
     expect(store.getState().checkpoint?.sequence).toBe(12);
   });
 
@@ -476,8 +544,8 @@ describe("task store", () => {
 
     expect(state.turnIds).toEqual(["turn-completed", "turn-running"]);
     expect(state.turnsById["turn-running"]).not.toHaveProperty("items");
-    expect(state.itemIdsByTurnId["turn-running"]).toEqual(["message-running"]);
-    expect(state.getItem("message-running")).toMatchObject({ text: "开始" });
+    expect(readTurnItemIds(store, "turn-running")).toEqual(["message-running"]);
+    expect(state.getItem("message-running", "turn-running")).toMatchObject({ text: "开始" });
     expect(state.pendingRequestIds).toEqual(["request-1"]);
     expect(state.pendingRequestsById["request-1"]).toBe(pendingRequest);
     expect(state.reconstructSnapshot()).toEqual(response.snapshot);
@@ -500,7 +568,7 @@ describe("task store", () => {
 
     expect(store.getState().turnIds).toEqual(["turn-completed"]);
     expect(store.getState().turnsById["turn-running"]).toBeUndefined();
-    expect(store.getState().getItem("message-running")).toBeUndefined();
+    expect(store.getState().getItem("message-running", "turn-running")).toBeUndefined();
   });
 
   it("invalidates reconstructed snapshots when reconcile removes an optimistic running turn", () => {
@@ -571,15 +639,15 @@ describe("task store", () => {
       }),
     );
 
-    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+    expect(readTurnItemIds(store, "turn-running")).toEqual([
       "realtime-user-id",
       "realtime-assistant-id",
     ]);
-    expect(store.getState().getItem("realtime-user-id")).toMatchObject({
+    expect(store.getState().getItem("realtime-user-id", "turn-running")).toMatchObject({
       skills: [{ name: "superwork:superwork-start" }],
     });
-    expect(store.getState().getItem("item-1")).toBeUndefined();
-    expect(store.getState().getItem("item-2")).toBeUndefined();
+    expect(store.getState().getItem("item-1", "turn-running")).toBeUndefined();
+    expect(store.getState().getItem("item-2", "turn-running")).toBeUndefined();
 
     store.getState().applyEvents([
       {
@@ -591,7 +659,7 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().getItem("realtime-assistant-id")).toMatchObject({
+    expect(store.getState().getItem("realtime-assistant-id", "turn-running")).toMatchObject({
       text: "正在处理完成",
     });
   });
@@ -659,7 +727,7 @@ describe("task store", () => {
       }),
     );
 
-    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+    expect(readTurnItemIds(store, "turn-running")).toEqual([
       "realtime-commentary-first",
       "realtime-commentary-omitted",
       "realtime-commentary-last",
@@ -676,7 +744,7 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().getItem("realtime-commentary-last")).toMatchObject({
+    expect(store.getState().getItem("realtime-commentary-last", "turn-running")).toMatchObject({
       text: "再运行检查完成，全部通过",
     });
   });
@@ -756,7 +824,7 @@ describe("task store", () => {
       }),
     );
 
-    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+    expect(readTurnItemIds(store, "turn-running")).toEqual([
       "realtime-empty",
       "realtime-duplicate-first",
       "realtime-duplicate-last",
@@ -777,10 +845,10 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().getItem("realtime-duplicate-last")).toMatchObject({
+    expect(store.getState().getItem("realtime-duplicate-last", "turn-running")).toMatchObject({
       text: "重复内容，实时继续",
     });
-    expect(store.getState().getItem("snapshot-duplicate")).toMatchObject({
+    expect(store.getState().getItem("snapshot-duplicate", "turn-running")).toMatchObject({
       text: "重复内容已完成",
     });
   });
@@ -851,15 +919,15 @@ describe("task store", () => {
       }),
     );
 
-    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+    expect(readTurnItemIds(store, "turn-running")).toEqual([
       "realtime-user-initial",
       "realtime-user-steer-first",
       "realtime-user-steer-last",
     ]);
-    expect(store.getState().getItem("realtime-user-steer-first")).toMatchObject({
+    expect(store.getState().getItem("realtime-user-steer-first", "turn-running")).toMatchObject({
       skills: [{ name: "steer-first-skill" }],
     });
-    expect(store.getState().getItem("realtime-user-steer-last")).toMatchObject({
+    expect(store.getState().getItem("realtime-user-steer-last", "turn-running")).toMatchObject({
       skills: [{ name: "steer-last-skill" }],
       text: "补充测试覆盖",
     });
@@ -868,12 +936,16 @@ describe("task store", () => {
   it("updates one existing delta without replacing structural references", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const previousState = store.getState();
-    const previousItemStoresById = previousState.itemStoresById;
+    const previousItemStoresById = previousState.itemStoresByKey;
     const previousCompletedTurn = previousState.turnsById["turn-completed"];
     const previousRunningTurn = previousState.turnsById["turn-running"];
-    const previousCompletedItemStore = previousState.itemStoresById.get("message-completed");
-    const previousRunningItemStore = previousState.itemStoresById.get("message-running");
-    const previousRunningItemIds = previousState.itemIdsByTurnId["turn-running"];
+    const previousCompletedItemStore = previousState.itemStoresByKey.get(
+      createTaskItemKey("turn-completed", "message-completed"),
+    );
+    const previousRunningItemStore = previousState.itemStoresByKey.get(
+      runningItemKey("message-running"),
+    );
+    const previousRunningItemIds = previousState.itemKeysByTurnId["turn-running"];
     const previousStructureRevision = previousState.itemStructureRevision;
     const completedItemListener = vi.fn();
     const runningItemListener = vi.fn();
@@ -904,12 +976,16 @@ describe("task store", () => {
 
     expect(nextState.turnsById["turn-completed"]).toBe(previousCompletedTurn);
     expect(nextState.turnsById["turn-running"]).toBe(previousRunningTurn);
-    expect(nextState.itemStoresById).toBe(previousItemStoresById);
-    expect(nextState.itemStoresById.get("message-completed")).toBe(previousCompletedItemStore);
-    expect(nextState.itemIdsByTurnId["turn-running"]).toBe(previousRunningItemIds);
+    expect(nextState.itemStoresByKey).toBe(previousItemStoresById);
+    expect(
+      nextState.itemStoresByKey.get(createTaskItemKey("turn-completed", "message-completed")),
+    ).toBe(previousCompletedItemStore);
+    expect(nextState.itemKeysByTurnId["turn-running"]).toBe(previousRunningItemIds);
     expect(nextState.itemStructureRevision).toBe(previousStructureRevision);
     expect(runningItemReadSpy).not.toHaveBeenCalled();
-    expect(nextState.getItem("message-running")).toMatchObject({ text: "开始继续输出" });
+    expect(nextState.getItem("message-running", "turn-running")).toMatchObject({
+      text: "开始继续输出",
+    });
     expect(completedItemListener).not.toHaveBeenCalled();
     expect(runningItemListener).toHaveBeenCalledOnce();
     unsubscribeCompleted?.();
@@ -917,7 +993,7 @@ describe("task store", () => {
     runningItemReadSpy?.mockRestore();
   });
 
-  it("rejects item identifiers reused by another turn", () => {
+  it("stores item identifiers reused by another turn independently", () => {
     const duplicateItemResponse = createResponse({
       turns: [
         {
@@ -939,9 +1015,26 @@ describe("task store", () => {
       ],
     });
 
-    expect(() =>
-      createTaskStore({ projectId: "project-1", taskId: "task-1" }, duplicateItemResponse),
-    ).toThrow(/multiple turns/);
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      duplicateItemResponse,
+    );
+
+    expect(
+      store
+        .getState()
+        .reconstructSnapshot()
+        ?.turns.map((turn) => ({
+          id: turn.id,
+          items: turn.items.map((item) => ({
+            id: item.id,
+            text: item.type === "message" ? item.text : "",
+          })),
+        })),
+    ).toEqual([
+      { id: "turn-first", items: [{ id: "shared-item", text: "一" }] },
+      { id: "turn-second", items: [{ id: "shared-item", text: "二" }] },
+    ]);
   });
 
   it("creates delta items and keeps command output UTF-8 safe within both bounds", () => {
@@ -966,8 +1059,8 @@ describe("task store", () => {
     ]);
 
     const state = store.getState();
-    const commandItem = state.getItem("command-new");
-    expect(state.getItem("reasoning-new")).toMatchObject({ summary: "摘要" });
+    const commandItem = state.getItem("command-new", "turn-running");
+    expect(state.getItem("reasoning-new", "turn-running")).toMatchObject({ summary: "摘要" });
     expect(commandItem).toMatchObject({ outputTruncated: true, type: "command" });
     if (commandItem?.type !== "command") {
       throw new Error("Expected normalized command item");
@@ -1007,9 +1100,15 @@ describe("task store", () => {
 
     const state = store.getState();
     expect(state.commandOutputBytes).toBeLessThanOrEqual(MAX_TASK_COMMAND_OUTPUT_BYTES);
-    expect(state.getItem("command-0")).toMatchObject({ outputTruncated: true });
-    expect(state.getItem("command-8")).toMatchObject({ output: commandOutput });
-    expect(state.itemStoresById.get("command-8")?.peek()).not.toHaveProperty("output");
+    expect(state.getItem("command-0", "turn-command-history")).toMatchObject({
+      outputTruncated: true,
+    });
+    expect(state.getItem("command-8", "turn-command-history")).toMatchObject({
+      output: commandOutput,
+    });
+    expect(
+      state.itemStoresByKey.get(createTaskItemKey("turn-command-history", "command-8"))?.peek(),
+    ).not.toHaveProperty("output");
   });
 
   it("only scans and encodes the appended command output chunk", () => {
@@ -1049,13 +1148,13 @@ describe("task store", () => {
       }),
     );
     const encodeSpy = vi.spyOn(TextEncoder.prototype, "encode");
-    const activeItemStore = store.getState().itemStoresById.get("command-active");
+    const activeItemStore = store.getState().itemStoresByKey.get(runningItemKey("command-active"));
     if (activeItemStore === undefined) {
       throw new Error("Expected active command item store");
     }
     const readSpy = vi.spyOn(activeItemStore, "read");
-    const previousCommandAccess = store.getState().commandOutputAccessByItemId;
-    const previousCommandBytes = store.getState().commandOutputBytesByItemId;
+    const previousCommandAccess = store.getState().commandOutputAccessByItemKey;
+    const previousCommandBytes = store.getState().commandOutputBytesByItemKey;
 
     store.getState().applyEvents([
       {
@@ -1070,9 +1169,9 @@ describe("task store", () => {
     try {
       expect(encodeSpy.mock.calls.map(([value]) => value)).toEqual(["-delta"]);
       expect(readSpy).not.toHaveBeenCalled();
-      expect(store.getState().commandOutputAccessByItemId).toBe(previousCommandAccess);
-      expect(store.getState().commandOutputBytesByItemId).toBe(previousCommandBytes);
-      expect(store.getState().getItem("command-active")).toMatchObject({
+      expect(store.getState().commandOutputAccessByItemKey).toBe(previousCommandAccess);
+      expect(store.getState().commandOutputBytesByItemKey).toBe(previousCommandBytes);
+      expect(store.getState().getItem("command-active", "turn-running")).toMatchObject({
         output: "active-delta",
       });
     } finally {
@@ -1239,7 +1338,7 @@ describe("task store", () => {
       error: null,
       status: "running",
     });
-    expect(store.getState().getItem("message-running")).toMatchObject({
+    expect(store.getState().getItem("message-running", "turn-running")).toMatchObject({
       text: "开始，连接恢复后继续输出",
     });
   });
@@ -1422,14 +1521,14 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+    expect(readTurnItemIds(store, "turn-running")).toEqual([
       "provider-user-item",
       "message-running",
       "activity-running",
       "message-completed",
       "tool-read-file",
     ]);
-    expect(store.getState().getItem(submittedUserItemId)).toBeUndefined();
+    expect(store.getState().getItem(submittedUserItemId, "turn-running")).toBeUndefined();
   });
 
   it("replaces a submitted user placeholder when the provider item starts", () => {
@@ -1474,8 +1573,8 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual(["provider-user-item"]);
-    expect(store.getState().getItem(submittedUserItemId)).toBeUndefined();
+    expect(readTurnItemIds(store, "turn-running")).toEqual(["provider-user-item"]);
+    expect(store.getState().getItem(submittedUserItemId, "turn-running")).toBeUndefined();
   });
 
   it("merges a realtime expanded skill into the provider user message", () => {
@@ -1538,12 +1637,12 @@ describe("task store", () => {
       },
     ]);
 
-    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual(["provider-user-item"]);
-    expect(store.getState().getItem("provider-user-item")).toMatchObject({
+    expect(readTurnItemIds(store, "turn-running")).toEqual(["provider-user-item"]);
+    expect(store.getState().getItem("provider-user-item", "turn-running")).toMatchObject({
       skills: [{ name: "superwork:superwork-init" }],
       text: "继续执行检查",
     });
-    expect(store.getState().getItem("provider-skill-item")).toBeUndefined();
+    expect(store.getState().getItem("provider-skill-item", "turn-running")).toBeUndefined();
   });
 
   it("tracks usage and pending request lifecycle without reordering requests", () => {
@@ -1678,7 +1777,9 @@ describe("task store", () => {
 
     store.getState().applyEvents([validEvent, validEvent, wrongTaskEvent, wrongSessionEvent]);
 
-    expect(store.getState().getItem("message-running")).toMatchObject({ text: "开始一次" });
+    expect(store.getState().getItem("message-running", "turn-running")).toMatchObject({
+      text: "开始一次",
+    });
     expect(store.getState().checkpoint?.sequence).toBe(11);
     expect(() => {
       store.getState().hydrate(createResponse({ id: "task-other" }));

@@ -28,8 +28,8 @@ import {
 import { MessageMetadata, getMessageTimestamp } from "./task-timeline-status.js";
 
 export type StoredTurnTimelineGroup =
-  | Readonly<{ itemId: string; type: "user" }>
-  | Readonly<{ itemIds: readonly string[]; key: string; type: "assistant" }>;
+  | Readonly<{ itemKey: string; type: "user" }>
+  | Readonly<{ itemKeys: readonly string[]; key: string; type: "assistant" }>;
 
 export function LiveFileChanges({
   changes,
@@ -85,13 +85,13 @@ function StoredLiveFileChangesValue({
 
 export function StoredLiveFileChanges({
   diff,
-  itemIds,
+  itemKeys,
   store,
-}: Readonly<{ diff: string; itemIds: readonly string[]; store: TaskStore }>) {
+}: Readonly<{ diff: string; itemKeys: readonly string[]; store: TaskStore }>) {
   const latestFileChangeStore = useStore(store, (state) => {
     // 实时事件会原位更新 Item Store；选择最新文件操作并单独订阅，避免整段 Timeline 重渲染。
-    for (let index = itemIds.length - 1; index >= 0; index -= 1) {
-      const itemStore = state.itemStoresById.get(itemIds[index] ?? "");
+    for (let index = itemKeys.length - 1; index >= 0; index -= 1) {
+      const itemStore = state.itemStoresByKey.get(itemKeys[index] ?? "");
       if (itemStore?.peek().type === "file_change") {
         return itemStore;
       }
@@ -107,29 +107,29 @@ export function StoredLiveFileChanges({
 }
 
 export function groupStoredTurnTimelineItems(
-  itemIds: readonly string[],
-  itemStoresById: ReadonlyMap<string, TaskItemStore>,
+  itemKeys: readonly string[],
+  itemStoresByKey: ReadonlyMap<string, TaskItemStore>,
 ): StoredTurnTimelineGroup[] {
   const groups: StoredTurnTimelineGroup[] = [];
-  let assistantItemIds: string[] = [];
+  let assistantItemKeys: string[] = [];
 
   const flushAssistantItems = () => {
-    const firstAssistantItemId = assistantItemIds[0];
-    if (firstAssistantItemId === undefined) {
+    const firstAssistantItemKey = assistantItemKeys[0];
+    if (firstAssistantItemKey === undefined) {
       return;
     }
-    groups.push({ itemIds: assistantItemIds, key: firstAssistantItemId, type: "assistant" });
-    assistantItemIds = [];
+    groups.push({ itemKeys: assistantItemKeys, key: firstAssistantItemKey, type: "assistant" });
+    assistantItemKeys = [];
   };
 
-  for (const itemId of itemIds) {
-    const item = itemStoresById.get(itemId)?.peek();
+  for (const itemKey of itemKeys) {
+    const item = itemStoresByKey.get(itemKey)?.peek();
     if (item?.type === "review" || (item?.type === "message" && item.role === "user")) {
       flushAssistantItems();
-      groups.push({ itemId, type: "user" });
+      groups.push({ itemKey, type: "user" });
       continue;
     }
-    assistantItemIds.push(itemId);
+    assistantItemKeys.push(itemKey);
   }
   flushAssistantItems();
   return groups;
@@ -187,7 +187,7 @@ export function StoredTimelineItemContentValue({
 
 export function StoredTimelineItemContent({
   isLastTurnItem,
-  itemId,
+  itemKey,
   onBuildPlan,
   onOpenFileDiff,
   onOpenSourceFile,
@@ -197,7 +197,7 @@ export function StoredTimelineItemContent({
   turnStatus,
 }: Readonly<{
   isLastTurnItem: boolean;
-  itemId: string;
+  itemKey: string;
   onBuildPlan?: BuildPlanAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
@@ -206,7 +206,7 @@ export function StoredTimelineItemContent({
   taskId: string;
   turnStatus: AgentTurn["status"];
 }>) {
-  const itemStore = useStore(store, (state) => state.itemStoresById.get(itemId));
+  const itemStore = useStore(store, (state) => state.itemStoresByKey.get(itemKey));
   return itemStore === undefined ? null : (
     <StoredTimelineItemContentValue
       isLastTurnItem={isLastTurnItem}
@@ -267,7 +267,7 @@ export function StoredUserMessageValue({
 }
 
 export function StoredUserMessage({
-  itemId,
+  itemKey,
   latestSnapshotTimestamp,
   onOpenFileDiff,
   onOpenSourceFile,
@@ -276,7 +276,7 @@ export function StoredUserMessage({
   taskId,
   turn,
 }: Readonly<{
-  itemId: string;
+  itemKey: string;
   latestSnapshotTimestamp: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
@@ -285,7 +285,7 @@ export function StoredUserMessage({
   taskId: string;
   turn: NormalizedAgentTurn;
 }>) {
-  const itemStore = useStore(store, (state) => state.itemStoresById.get(itemId));
+  const itemStore = useStore(store, (state) => state.itemStoresByKey.get(itemKey));
   return itemStore === undefined ? null : (
     <StoredUserMessageValue
       itemStore={itemStore}
@@ -300,12 +300,12 @@ export function StoredUserMessage({
 }
 
 export function StoredRunningReplyStatus({
-  itemIds,
+  itemKeys,
   store,
-}: Readonly<{ itemIds: readonly string[]; store: TaskStore }>) {
+}: Readonly<{ itemKeys: readonly string[]; store: TaskStore }>) {
   const operationKey = useStore(store, (state) => {
-    const indexedItems = itemIds.flatMap((itemId, itemIndex) => {
-      const item = state.itemStoresById.get(itemId)?.peek();
+    const indexedItems = itemKeys.flatMap((itemKey, itemIndex) => {
+      const item = state.itemStoresByKey.get(itemKey)?.peek();
       return item === undefined ? [] : [{ item, itemIndex }];
     });
     const operation = resolveRunningOperation(indexedItems);

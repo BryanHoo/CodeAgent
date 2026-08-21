@@ -6,7 +6,7 @@ import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol
 import { describe, expect, it, vi } from "vitest";
 
 import performanceBudgets from "../../../../../../tests/performance-budgets.json" with { type: "json" };
-import { createTaskStore } from "./task-store.js";
+import { createTaskItemKey, createTaskStore } from "./task-store.js";
 
 const timestamp = "2026-08-02T00:00:00.000Z";
 
@@ -46,6 +46,7 @@ function createResponse(taskId = "task-performance"): AgentTaskSnapshotResponse 
           status: "running",
         },
       ],
+      turnsNextCursor: null,
       updatedAt: timestamp,
     },
   };
@@ -123,7 +124,7 @@ function exerciseStoreLifecycle(iteration: number, deltaCount: number): void {
     createResponse(taskId),
   );
   store.getState().applyEvents(createDeltaEvents(taskId, deltaCount));
-  expect(store.getState().getItem("message-performance")).toMatchObject({
+  expect(store.getState().getItem("message-performance", "turn-performance")).toMatchObject({
     text: "x".repeat(deltaCount),
   });
 }
@@ -172,7 +173,9 @@ describe("TaskStore performance", () => {
       { projectId: "project-performance", taskId: response.snapshot.id },
       response,
     );
-    const itemStore = store.getState().itemStoresById.get("message-performance");
+    const itemStore = store
+      .getState()
+      .itemStoresByKey.get(createTaskItemKey("turn-performance", "message-performance"));
     if (itemStore === undefined) {
       throw new Error("Expected the performance message item store");
     }
@@ -186,7 +189,7 @@ describe("TaskStore performance", () => {
     unsubscribe();
 
     expect(listener).toHaveBeenCalledOnce();
-    expect(store.getState().getItem("message-performance")).toMatchObject({
+    expect(store.getState().getItem("message-performance", "turn-performance")).toMatchObject({
       text: "x".repeat(performanceBudgets.delta.clientEvents),
     });
     expect(durationMs).toBeLessThan(performanceBudgets.delta.maxClientReplayMs);
@@ -224,7 +227,9 @@ describe("TaskStore performance", () => {
       { projectId: commandResponse.snapshot.projectId, taskId: commandResponse.snapshot.id },
       commandResponse,
     );
-    const itemStore = store.getState().itemStoresById.get("command-performance");
+    const itemStore = store
+      .getState()
+      .itemStoresByKey.get(createTaskItemKey("turn-performance", "command-performance"));
     if (itemStore === undefined) {
       throw new Error("Expected the performance command item store");
     }

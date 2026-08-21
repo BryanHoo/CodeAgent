@@ -55,6 +55,7 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderQueue {
     const response = expectRecord(
       await this.client.request("thread/start", {
         cwd: this.project.rootPath,
+        historyMode: "paginated",
         ...(options.ephemeral === true ? { ephemeral: true } : {}),
       }),
       "thread/start response",

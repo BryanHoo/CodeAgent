@@ -8,6 +8,7 @@ import type {
   AgentProviderTurnInput,
   AgentTaskUnsubscribeStatus,
   ListAgentTasksInput,
+  ReadAgentTaskInput,
   ResolvePendingRequestInput,
   StartAgentTaskOptions,
 } from "@code-agent/core";
@@ -140,12 +141,15 @@ export class CodexRuntimeProjectProvider implements AgentProvider {
     return page;
   }
 
-  public async readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined> {
+  public async readTask(
+    taskId: string,
+    input?: ReadAgentTaskInput,
+  ): Promise<AgentProviderTaskSnapshot | undefined> {
     if (!this.#runtime.beginTaskRead(this.#project, taskId)) {
       return undefined;
     }
     try {
-      const snapshot = await this.#delegate.readTask(taskId);
+      const snapshot = await this.#delegate.readTask(taskId, input);
       if (snapshot === undefined) {
         this.#runtime.releaseProvisionalTask(this.#project, taskId);
       } else {

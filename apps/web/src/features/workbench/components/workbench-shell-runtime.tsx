@@ -251,6 +251,7 @@ export function useWorkbenchShellRuntime({
               settings: taskLaunchState.settings,
               status: "running",
               turns: [taskLaunchState.turn],
+              turnsNextCursor: null,
             },
             taskLaunchState.turn,
             { ...taskLaunchState.input, messageAttachments: taskLaunchState.messageAttachments },

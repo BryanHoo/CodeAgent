@@ -384,6 +384,7 @@ describe("Agent Event v2 protocol", () => {
         status: "idle",
         title: "实时链路",
         turns: [],
+        turnsNextCursor: "older-turns",
         updatedAt: "2026-07-23T00:00:00.000Z",
       },
     };

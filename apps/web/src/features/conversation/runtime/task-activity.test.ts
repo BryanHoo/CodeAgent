@@ -33,6 +33,7 @@ function createSnapshot(
     status,
     title: taskId,
     turns: [],
+    turnsNextCursor: null,
     updatedAt: "2026-07-27T00:00:00.000Z",
   };
 }

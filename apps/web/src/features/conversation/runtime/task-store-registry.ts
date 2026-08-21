@@ -118,11 +118,10 @@ export function estimateTaskStoreRetainedBytes(store: TaskStore): number {
   const state = store.getState();
   return estimateRetainedBytes({
     checkpoint: state.checkpoint,
-    commandOutputAccessByItemId: [...state.commandOutputAccessByItemId],
-    commandOutputBytesByItemId: [...state.commandOutputBytesByItemId],
-    itemIdsByTurnId: state.itemIdsByTurnId,
-    itemTurnIdsById: state.itemTurnIdsById,
-    items: [...state.itemStoresById.values()].map((itemStore) => itemStore.read()),
+    commandOutputAccessByItemKey: [...state.commandOutputAccessByItemKey],
+    commandOutputBytesByItemKey: [...state.commandOutputBytesByItemKey],
+    itemKeysByTurnId: state.itemKeysByTurnId,
+    items: [...state.itemStoresByKey.values()].map((itemStore) => itemStore.read()),
     notices: state.notices,
     pendingRequestIds: state.pendingRequestIds,
     pendingRequestsById: state.pendingRequestsById,
