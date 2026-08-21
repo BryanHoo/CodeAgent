@@ -15,6 +15,7 @@ import {
   ProjectActionMenu,
   ProjectActions,
   ProjectPickerButton,
+  ProductBrand,
   SidebarSettingsButton,
   TaskStatusIndicator,
   getTaskRoute,
@@ -23,6 +24,16 @@ import {
 import { ProjectRemoveDialog } from "./project-remove-dialog.js";
 import { ProjectRenameDialog } from "./project-rename-dialog.js";
 import { TemporaryTasksHeading } from "./project-sidebar-task-list.js";
+
+describe("ProductBrand", () => {
+  it("renders the complete brand logo asset", () => {
+    const markup = renderToStaticMarkup(<ProductBrand />);
+
+    expect(markup).toContain('src="/brand/codeagent-logo.svg"');
+    expect(markup).toContain('alt="CodeAgent"');
+    expect(markup).not.toContain(">CA<");
+  });
+});
 
 describe("Project task pagination", () => {
   it("offers a new task icon beside temporary tasks", () => {

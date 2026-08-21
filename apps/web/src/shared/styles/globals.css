@@ -98,13 +98,6 @@
   color-scheme: dark;
 }
 
-.access-gate-mark {
-  width: 0.25rem;
-  height: 1.5rem;
-  border-radius: 2px;
-  background: var(--ui-color-accent);
-}
-
 .access-code-input {
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;

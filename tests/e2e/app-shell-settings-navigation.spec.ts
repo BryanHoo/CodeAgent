@@ -883,8 +883,7 @@ test("aligns the center toolbar with sidebar controls and inspector tabs", async
   const mainHeader = page.getByRole("main", { name: "任务时间线" }).locator(":scope > header");
   const leftTitle = page
     .getByRole("complementary", { name: "项目侧栏" })
-    .getByText("CodeAgent", { exact: true })
-    .first();
+    .getByRole("img", { name: "CodeAgent" });
   const centerTitle = page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 });
   const rightTab = page
     .getByRole("complementary", { name: "运行环境" })

@@ -7,6 +7,7 @@
 ## Rules
 
 - `src/main.tsx` 只创建 React Root 并装配应用级 Provider。
+- 产品入口统一引用 `public/brand/codeagent-logo.svg`，独立图标使用 `public/brand/codeagent-mark.svg`，浏览器图标使用 `public/favicon.svg`；不得重新内联或绘制临时品牌标识。
 - `src/App.tsx` 只承担应用外壳和顶层导航结构。
 - `src/app/routes` 只定义业务页面与路由级状态，不提供登录页面或认证回调路由。
 - Project、Task 与临时路由只保留路径匹配和参数映射，并复用单一 React Suspense 边界动态加载 `WorkbenchShell`；不得为各路径重复创建微型懒加载路由模块。工作台内常用 UI 进入同一静态闭包，Markdown、Patch Diff Viewer、Shiki Engine 和语言 Grammar 继续由内容级边界按需加载。

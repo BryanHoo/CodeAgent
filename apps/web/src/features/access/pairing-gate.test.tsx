@@ -18,7 +18,9 @@ describe("PairingGate", () => {
       />,
     );
 
-    expect(markup).toContain("CodeAgent");
+    expect(markup).toContain('src="/brand/codeagent-logo.svg"');
+    expect(markup).toContain('alt="CodeAgent"');
+    expect(markup).not.toContain("access-gate-mark");
     expect(markup).toContain('autoComplete="current-password"');
     expect(markup).toContain('aria-label="访问密码"');
     expect(markup).toContain('data-variant="embedded"');

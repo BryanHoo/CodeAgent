@@ -33,12 +33,15 @@ export function PairingGate({
   return (
     <main className="access-gate grid h-full min-h-0 place-items-center overflow-y-auto bg-window px-5 py-10 text-foreground">
       <section aria-labelledby="access-gate-title" className="w-full max-w-sm">
-        <div className="mb-8 flex items-center gap-3">
-          <span className="access-gate-mark" aria-hidden="true" />
-          <h1 className="text-title font-semibold" id="access-gate-title">
-            CodeAgent
-          </h1>
-        </div>
+        <h1 className="mb-8" id="access-gate-title">
+          <img
+            alt="CodeAgent"
+            className="h-10 w-auto"
+            height="40"
+            src="/brand/codeagent-logo.svg"
+            width="165"
+          />
+        </h1>
 
         {loading ? (
           <p className="text-body-small text-muted-foreground" role="status">

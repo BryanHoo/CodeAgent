@@ -232,67 +232,52 @@ test("preserves the original sidebar control typography and dimensions", async (
   await expect(sidebar.getByRole("textbox", { name: "搜索任务" })).toHaveCSS("height", "36px");
 });
 
-test("keeps the original sidebar logo and provides it as favicon", async ({ page }) => {
+test("uses the brand logo across the sidebar and favicon", async ({ page }) => {
   await page.goto("/p/code-agent");
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
-  const productBrand = sidebar.getByText("CodeAgent", { exact: true }).first().locator("..");
-  const brandMark = productBrand.getByText("CA", { exact: true });
+  const productBrand = sidebar.getByRole("img", { name: "CodeAgent" });
 
-  await expect(brandMark).toBeVisible();
-  await expect(brandMark).toHaveClass(/bg-foreground/);
-  await expect(productBrand.locator('img[src="/favicon.svg"]')).toHaveCount(0);
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg?v=2");
+  await expect(productBrand).toBeVisible();
+  await expect(productBrand).toHaveAttribute("src", "/brand/codeagent-logo.svg");
+  await expect(sidebar.getByText("CA", { exact: true })).toHaveCount(0);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg?v=3");
 
   expect(
-    await brandMark.evaluate((element) => {
+    await productBrand.evaluate((element) => {
       const style = getComputedStyle(element);
       return {
-        borderRadius: style.borderRadius,
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
         height: style.height,
         width: style.width,
       };
     }),
   ).toEqual({
-    borderRadius: "6px",
-    fontSize: "10px",
-    fontWeight: "700",
     height: "28px",
-    width: "28px",
+    width: "115.5px",
   });
 
-  const faviconResponse = await page.request.get("/favicon.svg?v=2");
+  const faviconResponse = await page.request.get("/favicon.svg?v=3");
   expect(faviconResponse.ok()).toBe(true);
   const favicon = await faviconResponse.text();
   const faviconDefinition = await page.evaluate((source) => {
     const document = new DOMParser().parseFromString(source, "image/svg+xml");
     const root = document.documentElement;
-    const rectangle = document.querySelector("rect");
-    const text = document.querySelector("text");
+    const background = document.querySelector(".mark-background");
     return {
-      fontSize: text?.getAttribute("font-size"),
-      fontWeight: text?.getAttribute("font-weight"),
-      height: rectangle?.getAttribute("height"),
-      label: text?.textContent,
-      radius: rectangle?.getAttribute("rx"),
-      styles: document.querySelector("style")?.textContent,
+      height: background?.getAttribute("height"),
+      radius: background?.getAttribute("rx"),
+      symbolCount: document.querySelectorAll(".mark-symbol").length,
       viewBox: root.getAttribute("viewBox"),
-      width: rectangle?.getAttribute("width"),
+      width: background?.getAttribute("width"),
     };
   }, favicon);
-  expect(faviconDefinition).toMatchObject({
-    fontSize: "10",
-    fontWeight: "700",
-    height: "28",
-    label: "CA",
-    radius: "6",
-    viewBox: "0 0 28 28",
-    width: "28",
+  expect(faviconDefinition).toEqual({
+    height: "64",
+    radius: "14",
+    symbolCount: 3,
+    viewBox: "0 0 64 64",
+    width: "64",
   });
-  expect(faviconDefinition.styles).toContain('"Geist", "Inter", -apple-system');
-  expect(faviconDefinition.styles).toContain("@media (prefers-color-scheme: dark)");
 });
 
 test("adds a folder through the Web project directory picker", async ({ page }) => {

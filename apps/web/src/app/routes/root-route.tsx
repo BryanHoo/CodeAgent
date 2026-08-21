@@ -48,11 +48,14 @@ function RootLayout() {
 
 export function BrandLink() {
   return (
-    <Link className="inline-flex items-center gap-2 font-semibold text-foreground" to="/">
-      <span className="grid size-7 place-items-center rounded-control bg-foreground text-label font-bold text-raised shadow-sm">
-        CA
-      </span>
-      <span>CodeAgent</span>
+    <Link className="inline-flex items-center" to="/">
+      <img
+        alt="CodeAgent"
+        className="h-7 w-auto"
+        height="28"
+        src="/brand/codeagent-logo.svg"
+        width="116"
+      />
     </Link>
   );
 }

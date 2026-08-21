@@ -314,15 +314,7 @@ export function ProjectSidebar({
     >
       <div className="flex h-workbench-header items-center gap-2 px-3">
         {/* 品牌标识只承担展示职责，新聊天由下方的显式入口创建。 */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 text-body-small font-semibold text-foreground">
-          <span
-            aria-hidden="true"
-            className="grid size-7 shrink-0 place-items-center rounded-control bg-foreground text-caption font-bold text-raised shadow-sm"
-          >
-            CA
-          </span>
-          <span className="truncate">CodeAgent</span>
-        </div>
+        <ProductBrand />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -442,5 +434,19 @@ export function ProjectSidebar({
         />
       </div>
     </aside>
+  );
+}
+
+export function ProductBrand() {
+  return (
+    <div className="flex min-w-0 flex-1 items-center">
+      <img
+        alt="CodeAgent"
+        className="h-7 w-auto max-w-full"
+        height="28"
+        src="/brand/codeagent-logo.svg"
+        width="116"
+      />
+    </div>
   );
 }
