@@ -179,14 +179,12 @@ export function parseGlobalSettingsRequest(requestBody: string | null) {
   const value = parseRequestRecord(requestBody);
   const commitMessageModel = value["commitMessageModel"];
   const commitMessagePrompt = value["commitMessagePrompt"];
-  const commitMessageReasoningEffort = value["commitMessageReasoningEffort"];
   const defaultOpenAppId = value["defaultOpenAppId"];
   const fastMode = value["fastMode"];
   const followUpBehavior = value["followUpBehavior"];
   if (
     typeof commitMessageModel !== "string" ||
     typeof commitMessagePrompt !== "string" ||
-    typeof commitMessageReasoningEffort !== "string" ||
     typeof fastMode !== "boolean" ||
     (followUpBehavior !== "queue" && followUpBehavior !== "steer") ||
     (defaultOpenAppId !== null && typeof defaultOpenAppId !== "string")
@@ -199,7 +197,6 @@ export function parseGlobalSettingsRequest(requestBody: string | null) {
     ...settings,
     commitMessageModel,
     commitMessagePrompt,
-    commitMessageReasoningEffort,
     defaultOpenAppId,
     fastMode,
     followUpBehavior: normalizedFollowUpBehavior,
@@ -562,7 +559,6 @@ export async function mockAppShellApi(
     approvalsReviewer: "user",
     commitMessageModel: "gpt-5.6-sol",
     commitMessagePrompt: "",
-    commitMessageReasoningEffort: "high",
     defaultOpenAppId: "zed" as string | null,
     fastMode: false,
     followUpBehavior: "queue" as "queue" | "steer",

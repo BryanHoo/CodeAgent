@@ -1,4 +1,9 @@
-import type { AgentGlobalSettings, AgentModel, AgentProjectDefaults } from "@code-agent/protocol";
+import {
+  DEFAULT_COMMIT_MESSAGE_MODEL,
+  type AgentGlobalSettings,
+  type AgentModel,
+  type AgentProjectDefaults,
+} from "@code-agent/protocol";
 
 import { readThemePreference, type ThemePreference } from "../theme-preference.js";
 
@@ -40,9 +45,8 @@ export function createFallbackSettings(models: readonly AgentModel[]): AgentGlob
   return {
     approvalPolicy: "on-request",
     approvalsReviewer: "user",
-    commitMessageModel: model?.id ?? "",
+    commitMessageModel: DEFAULT_COMMIT_MESSAGE_MODEL,
     commitMessagePrompt: "",
-    commitMessageReasoningEffort: model?.defaultReasoningEffort ?? "",
     defaultOpenAppId: null,
     fastMode: false,
     followUpBehavior: "queue",

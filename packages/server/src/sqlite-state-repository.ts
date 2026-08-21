@@ -22,7 +22,7 @@ import {
   serializeProviderConnectionRecord,
   type ProviderConnectionRow,
 } from "./provider-connection-persistence.js";
-import { FAST_MODE_SETTING_MIGRATION } from "./global-settings-persistence.js";
+import { GLOBAL_SETTINGS_MIGRATIONS } from "./global-settings-persistence.js";
 import { createProjectId, deserializeWorkerError } from "./sqlite-state-helpers.js";
 
 export type SqliteMigration = Readonly<{
@@ -188,7 +188,7 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     version: 10,
   },
   PROVIDER_CONNECTION_MIGRATION,
-  FAST_MODE_SETTING_MIGRATION,
+  ...GLOBAL_SETTINGS_MIGRATIONS,
 ];
 
 type WorkerResponse =

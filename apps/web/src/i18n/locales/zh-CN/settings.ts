@@ -66,7 +66,6 @@ export const settings = {
     approvalPolicy: "审批",
     commitMessagePrompt: "提交提示词",
     commitModel: "提交模型",
-    commitReasoningEffort: "提交思考量",
     defaultOpenWith: "默认打开方式",
     fastMode: "快速模式",
     followUpMessages: "跟进消息",

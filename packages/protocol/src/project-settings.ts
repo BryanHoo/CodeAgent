@@ -2,6 +2,8 @@ import { Type, type Static } from "@sinclair/typebox";
 
 import { ProjectOpenAppIdSchema } from "./project-files.js";
 
+export const DEFAULT_COMMIT_MESSAGE_MODEL = "gpt-5.6-luna";
+
 export const AgentApprovalPolicySchema = Type.Union([
   Type.Literal("untrusted"),
   Type.Literal("on-request"),
@@ -58,7 +60,6 @@ export type AgentCollaborationMode = Readonly<Static<typeof AgentCollaborationMo
 const AgentGlobalSettingProperties = {
   commitMessageModel: Type.String({ minLength: 1 }),
   commitMessagePrompt: Type.String({ maxLength: 4_000 }),
-  commitMessageReasoningEffort: Type.String({ minLength: 1 }),
   // 文件专用系统关联不能成为 Project 根目录的默认打开方式。
   defaultOpenAppId: Type.Union([
     Type.Exclude(ProjectOpenAppIdSchema, Type.Literal("system-default")),

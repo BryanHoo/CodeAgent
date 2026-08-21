@@ -1170,7 +1170,6 @@ describe("project protocol", () => {
       approvalsReviewer: "auto_review",
       commitMessageModel: "gpt-5.6-terra",
       commitMessagePrompt: "突出说明用户可见影响。",
-      commitMessageReasoningEffort: "medium",
       defaultOpenAppId: "visual-studio-code",
       fastMode: false,
       followUpBehavior: "queue",
@@ -1211,6 +1210,12 @@ describe("project protocol", () => {
     expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings, legacy: true })).toBe(false);
     expect(
       Value.Check(AgentGlobalSettingsSchema, { ...settings, commitMessageModel: undefined }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, {
+        ...settings,
+        commitMessageReasoningEffort: "medium",
+      }),
     ).toBe(false);
     expect(
       Value.Check(AgentGlobalSettingsSchema, {

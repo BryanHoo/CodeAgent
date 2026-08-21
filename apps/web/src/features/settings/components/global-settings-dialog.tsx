@@ -89,7 +89,6 @@ export function GlobalSettingsDialog({
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [isSaving, setIsSaving] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
-  const selectedCommitModel = models.find((model) => model.id === draft.commitMessageModel);
 
   useEffect(() => {
     if (settings !== undefined) {
@@ -352,31 +351,9 @@ export function GlobalSettingsDialog({
                         disabled={isSaving}
                         models={models}
                         onChange={(modelId) => {
-                          setDraft((current) => {
-                            const next = resolveGlobalSettingsModel(
-                              models,
-                              modelId,
-                              current.commitMessageReasoningEffort,
-                            );
-                            return {
-                              ...current,
-                              commitMessageModel: next.model,
-                              commitMessageReasoningEffort: next.reasoningEffort,
-                            };
-                          });
+                          setDraft((current) => ({ ...current, commitMessageModel: modelId }));
                         }}
                         value={draft.commitMessageModel}
-                      />
-                    </SettingsField>
-                    <SettingsField label={t("fields.reasoningEffort")}>
-                      <ReasoningSelect
-                        ariaLabel={t("fields.commitReasoningEffort")}
-                        disabled={isSaving || selectedCommitModel === undefined}
-                        model={selectedCommitModel}
-                        onChange={(commitMessageReasoningEffort) => {
-                          setDraft((current) => ({ ...current, commitMessageReasoningEffort }));
-                        }}
-                        value={draft.commitMessageReasoningEffort}
                       />
                     </SettingsField>
                     <SettingsField alignStart label={t("fields.prompt")}>

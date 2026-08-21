@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
+import { createFallbackSettings } from "./global-settings-model.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { AppReleaseNotesDialog } from "./app-release-notes-dialog.js";
 
@@ -60,7 +61,6 @@ describe("GlobalSettingsDialog", () => {
           approvalsReviewer: "auto_review",
           commitMessageModel: "gpt-5.6-terra",
           commitMessagePrompt: "突出用户可见影响。",
-          commitMessageReasoningEffort: "medium",
           defaultOpenAppId: "visual-studio-code",
           fastMode: true,
           followUpBehavior: "queue",
@@ -93,9 +93,9 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain('aria-label="语言"');
     expect(markup).toContain('aria-label="默认打开方式"');
     expect(markup).toContain('aria-label="提交模型"');
-    expect(markup).toContain('aria-label="提交思考量"');
     expect(markup).toContain('aria-label="提交提示词"');
-    expect(markup.match(/<select/gu)).toHaveLength(9);
+    expect(markup).not.toContain("提交思考量");
+    expect(markup.match(/<select/gu)).toHaveLength(8);
     expect(markup).toContain("突出用户可见影响。");
     expect(markup).toContain("保存全局默认");
     expect(markup).not.toContain("__SYSTEM_DEFAULT__");
@@ -118,7 +118,6 @@ describe("GlobalSettingsDialog", () => {
           approvalsReviewer: "user",
           commitMessageModel: "gpt-5.6-sol",
           commitMessagePrompt: "",
-          commitMessageReasoningEffort: "high",
           defaultOpenAppId: null,
           fastMode: false,
           followUpBehavior: "queue",
@@ -163,7 +162,6 @@ describe("GlobalSettingsDialog", () => {
           approvalsReviewer: "user",
           commitMessageModel: "gpt-5.6-sol",
           commitMessagePrompt: "",
-          commitMessageReasoningEffort: "high",
           defaultOpenAppId: null,
           fastMode: false,
           followUpBehavior: "queue",
@@ -296,6 +294,10 @@ describe("GlobalSettingsDialog", () => {
     });
   });
 
+  it("uses GPT-5.6 Luna as the fallback commit message model", () => {
+    expect(createFallbackSettings(models).commitMessageModel).toBe("gpt-5.6-luna");
+  });
+
   it("renders official Codex terminology in English without rewriting model data", async () => {
     await changeAppLanguage("en");
     try {
@@ -313,7 +315,6 @@ describe("GlobalSettingsDialog", () => {
             approvalsReviewer: "user",
             commitMessageModel: "gpt-5.6-sol",
             commitMessagePrompt: "",
-            commitMessageReasoningEffort: "high",
             defaultOpenAppId: null,
             fastMode: false,
             followUpBehavior: "queue",

@@ -56,7 +56,6 @@ function globalSettingsFromRow(row) {
     approvalsReviewer: row.approvals_reviewer,
     commitMessageModel: row.commit_message_model,
     commitMessagePrompt: row.commit_message_prompt,
-    commitMessageReasoningEffort: row.commit_message_reasoning_effort,
     defaultOpenAppId: row.default_open_app_id,
     fastMode: row.fast_mode === 1,
     followUpBehavior: row.follow_up_behavior,
@@ -168,9 +167,8 @@ function createOperations(database) {
         ),
         readGlobalSettings: database.prepare(
           `SELECT approval_policy, approvals_reviewer, commit_message_model,
-                  commit_message_prompt, commit_message_reasoning_effort, model,
-                  reasoning_effort, sandbox_mode, default_open_app_id, fast_mode,
-                  follow_up_behavior
+                  commit_message_prompt, model, reasoning_effort, sandbox_mode,
+                  default_open_app_id, fast_mode, follow_up_behavior
            FROM global_settings WHERE id = 1`,
         ),
         readProviderConnection: database.prepare(
@@ -192,15 +190,14 @@ function createOperations(database) {
         writeGlobalSettings: database.prepare(`
       INSERT INTO global_settings (
         id, approval_policy, approvals_reviewer, commit_message_model, commit_message_prompt,
-        commit_message_reasoning_effort, model, reasoning_effort, sandbox_mode,
-        default_open_app_id, fast_mode, follow_up_behavior, updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        model, reasoning_effort, sandbox_mode, default_open_app_id, fast_mode,
+        follow_up_behavior, updated_at
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         approval_policy = excluded.approval_policy,
         approvals_reviewer = excluded.approvals_reviewer,
         commit_message_model = excluded.commit_message_model,
         commit_message_prompt = excluded.commit_message_prompt,
-        commit_message_reasoning_effort = excluded.commit_message_reasoning_effort,
         model = excluded.model,
         reasoning_effort = excluded.reasoning_effort,
         sandbox_mode = excluded.sandbox_mode,
@@ -367,7 +364,6 @@ function createOperations(database) {
         settings.approvalsReviewer,
         settings.commitMessageModel,
         settings.commitMessagePrompt,
-        settings.commitMessageReasoningEffort,
         settings.model,
         settings.reasoningEffort,
         settings.sandboxMode,

@@ -30,6 +30,7 @@ import { GitHistoryError } from "../git-history.js";
 import { GitCommitReviewError } from "../git-commit-review.js";
 import { GitRepositorySelectionError } from "../git-working-tree.js";
 import { originalErrorMessage } from "../error-message.js";
+import { resolveProjectDefaults } from "../server-runtime.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 import { registerProjectGitWorktreeRoutes } from "./project-git-worktree-routes.js";
@@ -66,6 +67,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     createProjectBranch,
     generateCommitMessageWithCodex,
     getProjectContext,
+    listModels,
     readEffectiveGlobalSettings,
     readProjectGitHistory,
     readProjectGitCommitFiles,
@@ -377,13 +379,17 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
             );
           });
           assertCommitSelection(status, request.body);
-          const globalSettings = await readEffectiveGlobalSettings();
+          const models = await listModels();
+          const globalSettings = await readEffectiveGlobalSettings(models);
+          const commitSettings = resolveProjectDefaults(
+            models,
+            { model: globalSettings.commitMessageModel, sandboxMode: "read-only" },
+            "read-only",
+          );
           const settings: AgentTaskSettings = {
             approvalPolicy: "never",
             approvalsReviewer: "user",
-            model: globalSettings.commitMessageModel,
-            reasoningEffort: globalSettings.commitMessageReasoningEffort,
-            sandboxMode: "read-only",
+            ...commitSettings,
           };
           const message = await generateCommitMessageWithCodex(
             context.provider,

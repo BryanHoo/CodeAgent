@@ -185,7 +185,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(dialog.getByRole("combobox", { name: "思考" })).toHaveValue("medium");
   await dialog.getByRole("button", { name: "提交消息" }).click();
   await dialog.getByRole("combobox", { name: "提交模型" }).selectOption("gpt-5.6-terra");
-  await dialog.getByRole("combobox", { name: "提交思考量" }).selectOption("low");
+  await expect(dialog.getByRole("combobox", { name: "提交思考量" })).toHaveCount(0);
   await dialog.getByRole("textbox", { name: "提交提示词" }).fill("突出用户可见影响。");
   await dialog.getByRole("button", { name: "应用集成" }).click();
   await dialog.getByRole("combobox", { name: "默认打开方式" }).selectOption("finder");
@@ -215,7 +215,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(reopenedDialog.getByRole("combobox", { name: "提交模型" })).toHaveValue(
     "gpt-5.6-terra",
   );
-  await expect(reopenedDialog.getByRole("combobox", { name: "提交思考量" })).toHaveValue("low");
+  await expect(reopenedDialog.getByRole("combobox", { name: "提交思考量" })).toHaveCount(0);
   await expect(reopenedDialog.getByRole("textbox", { name: "提交提示词" })).toHaveValue(
     "突出用户可见影响。",
   );
@@ -371,7 +371,6 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
           approvalsReviewer: "user",
           commitMessageModel: "gpt-5.6-sol",
           commitMessagePrompt: "",
-          commitMessageReasoningEffort: "high",
           defaultOpenAppId: "finder",
           fastMode: false,
           followUpBehavior: "queue",

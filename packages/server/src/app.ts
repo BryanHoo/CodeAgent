@@ -1,5 +1,6 @@
 import type { AgentProviderTurnInput } from "@code-agent/core";
 import {
+  DEFAULT_COMMIT_MESSAGE_MODEL,
   MAX_AGENT_FILE_TOTAL_BYTES,
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
@@ -283,13 +284,10 @@ export async function createCodeAgentServer(
     );
     const effectiveCommitModel = resolveProjectDefaults(
       catalog,
-      stored === undefined
-        ? effectiveModel
-        : {
-            model: stored.commitMessageModel,
-            reasoningEffort: stored.commitMessageReasoningEffort,
-            sandboxMode: "read-only",
-          },
+      {
+        model: stored?.commitMessageModel ?? DEFAULT_COMMIT_MESSAGE_MODEL,
+        sandboxMode: "read-only",
+      },
       "read-only",
     );
     // 全局记录缺失时只返回运行时默认值；读取不能隐式创建用户配置。
@@ -299,7 +297,6 @@ export async function createCodeAgentServer(
           approvalsReviewer: "auto_review",
           commitMessageModel: effectiveCommitModel.model,
           commitMessagePrompt: stored?.commitMessagePrompt ?? "",
-          commitMessageReasoningEffort: effectiveCommitModel.reasoningEffort,
           defaultOpenAppId: stored?.defaultOpenAppId ?? null,
           fastMode: stored?.fastMode ?? false,
           followUpBehavior: stored?.followUpBehavior ?? "queue",
@@ -310,7 +307,6 @@ export async function createCodeAgentServer(
           approvalsReviewer: "user",
           commitMessageModel: effectiveCommitModel.model,
           commitMessagePrompt: stored?.commitMessagePrompt ?? "",
-          commitMessageReasoningEffort: effectiveCommitModel.reasoningEffort,
           defaultOpenAppId: stored?.defaultOpenAppId ?? null,
           fastMode: stored?.fastMode ?? false,
           followUpBehavior: stored?.followUpBehavior ?? "queue",

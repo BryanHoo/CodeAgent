@@ -96,6 +96,14 @@ async function multipartAttachment(
 const modelPage: AgentModelPage = {
   data: [
     {
+      defaultReasoningEffort: "low",
+      description: "适合快速任务",
+      displayName: "GPT-5.6 Luna",
+      id: "gpt-5.6-luna",
+      isDefault: false,
+      supportedReasoningEfforts: [{ description: "快速分析", id: "low" }],
+    },
+    {
       defaultReasoningEffort: "high",
       description: "适合复杂编码任务",
       displayName: "GPT-5.6 Sol",
@@ -2025,7 +2033,6 @@ describe("CodeAgent Server", () => {
       approvalsReviewer: "user",
       commitMessageModel: "gpt-5.6-terra",
       commitMessagePrompt: "优先说明行为变化，不要罗列文件名。",
-      commitMessageReasoningEffort: "low",
       defaultOpenAppId: null,
       fastMode: false,
       followUpBehavior: "queue",
@@ -2133,7 +2140,7 @@ describe("CodeAgent Server", () => {
       approvalPolicy: "never",
       approvalsReviewer: "user",
       model: "gpt-5.6-terra",
-      reasoningEffort: "low",
+      reasoningEffort: "medium",
       sandboxMode: "read-only",
     });
     expect(providerHarness.archiveTask).not.toHaveBeenCalled();
@@ -2549,7 +2556,12 @@ describe("CodeAgent Server", () => {
     });
 
     expect(models.statusCode).toBe(200);
-    expect(models.json()).toMatchObject({ data: [{ id: "gpt-5.6-sol", isDefault: true }] });
+    expect(models.json()).toMatchObject({
+      data: [
+        { id: "gpt-5.6-luna", isDefault: false },
+        { id: "gpt-5.6-sol", isDefault: true },
+      ],
+    });
     expect(mcpServers.statusCode).toBe(200);
     expect(mcpServers.json()).toEqual({
       data: [
@@ -3174,7 +3186,6 @@ describe("CodeAgent Server", () => {
       approvalsReviewer: "auto_review" as const,
       commitMessageModel: "gpt-5.6-sol",
       commitMessagePrompt: "",
-      commitMessageReasoningEffort: "high",
       defaultOpenAppId: "visual-studio-code" as const,
       fastMode: true,
       followUpBehavior: "steer" as const,
@@ -3272,9 +3283,8 @@ describe("CodeAgent Server", () => {
       settings: {
         approvalPolicy: "never",
         approvalsReviewer: "user",
-        commitMessageModel: "gpt-5.6-terra",
+        commitMessageModel: "gpt-5.6-luna",
         commitMessagePrompt: "",
-        commitMessageReasoningEffort: "high",
         defaultOpenAppId: null,
         fastMode: false,
         followUpBehavior: "queue",
@@ -3329,7 +3339,6 @@ describe("CodeAgent Server", () => {
       approvalsReviewer: "auto_review",
       commitMessageModel: "gpt-5.6-sol",
       commitMessagePrompt: "",
-      commitMessageReasoningEffort: "high",
       defaultOpenAppId: null,
       fastMode: true,
       followUpBehavior: "queue",
