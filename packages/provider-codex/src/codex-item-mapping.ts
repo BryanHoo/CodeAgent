@@ -28,6 +28,31 @@ import {
   mapToolItem,
 } from "./codex-tool-mapping.js";
 
+type ImageGenerationFailureOutput = Readonly<{
+  reason: "usage_limit_exceeded";
+  resetsAt: number | null;
+}>;
+
+function mapImageGenerationFailure(value: unknown): ImageGenerationFailureOutput | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  const failure = expectRecord(value, "Codex image generation failure");
+  if (failure["type"] !== "usageLimitExceeded") {
+    throw new CodexProtocolMappingError("Codex image generation failure type is invalid");
+  }
+  const limitId = expectString(failure["limitId"], "Codex image generation failure limit id");
+  if (limitId.length === 0) {
+    throw new CodexProtocolMappingError("Codex image generation failure limit id is invalid");
+  }
+  const resetsAt = failure["resetsAt"];
+  if (resetsAt !== null && (typeof resetsAt !== "number" || !Number.isFinite(resetsAt))) {
+    throw new CodexProtocolMappingError("Codex image generation failure reset time is invalid");
+  }
+  // 原生限制 ID 不越过 Provider 边界，只保留通用原因和可展示的重置时间。
+  return { reason: "usage_limit_exceeded", resetsAt };
+}
+
 function mapApprovalReviewAction(value: unknown): AgentApprovalReviewItem["action"] {
   const action = expectRecord(value, "Codex automatic approval review action");
   const type = expectString(action["type"], "Codex automatic approval review action type");
@@ -230,6 +255,7 @@ export function mapAgentItem(
       };
     case "imageGeneration": {
       const status = mapItemStatus(item["status"]);
+      const failure = mapImageGenerationFailure(item["failure"]);
       const attachment = status === "completed" ? mapImage(item, 0) : undefined;
       if (attachment !== undefined) {
         // 图片正文留在受控附件存储，Timeline 和事件只传递固定大小的授权元数据。
@@ -241,7 +267,13 @@ export function mapAgentItem(
           type: "message",
         };
       }
-      return { id, name: "image_generation", status, type: "tool" };
+      return {
+        id,
+        name: "image_generation",
+        ...(failure === undefined ? {} : { output: failure }),
+        status,
+        type: "tool",
+      };
     }
     case "plan":
       return { id, text: expectString(item["text"], "Codex plan text"), type: "plan" };

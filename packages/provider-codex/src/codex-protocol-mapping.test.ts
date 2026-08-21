@@ -303,6 +303,7 @@ describe("Codex protocol mapping", () => {
         hidden: false,
         isDefault: true,
         model: "gpt-test",
+        multiAgentVersion: "v1",
         supportedReasoningEfforts: [{ description: "Deep reasoning", reasoningEffort: "high" }],
       }),
     ).toMatchObject({
@@ -311,7 +312,7 @@ describe("Codex protocol mapping", () => {
       id: "gpt-test",
       isDefault: true,
     });
-    expect(mapAgentModel({ hidden: true })).toBeUndefined();
+    expect(mapAgentModel({ hidden: true, multiAgentVersion: "disabled" })).toBeUndefined();
   });
 
   it("preserves documented agent message phases and omits a null legacy phase", () => {

@@ -633,7 +633,7 @@ export async function mockAppShellApi(
     } else if (url.pathname === "/v1/app-info") {
       body = {
         appVersion: "1.3.0",
-        codexVersion: "0.147.0",
+        codexVersion: "0.148.0",
         latestVersion: "1.3.0",
         releaseNotes: null,
         status: "current",

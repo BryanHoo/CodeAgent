@@ -115,6 +115,7 @@ const project = {
 } as const;
 
 const PINNED_THREAD_SECTION = {
+  appearance: null,
   id: "01984de2-8f74-7c91-a3b2-5c5e937cf318",
   name: "Pinned",
 } as const;
@@ -131,7 +132,7 @@ function createCodexAgentProvider(options: {
 
 function nativeThread(overrides: Record<string, unknown> = {}) {
   return {
-    cliVersion: "0.147.0",
+    cliVersion: "0.148.0",
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     ephemeral: false,
@@ -241,7 +242,7 @@ describe("CodexAgentProvider", () => {
     expect(warn.mock.calls).toEqual([
       [
         {
-          codexVersion: "0.147.0",
+          codexVersion: "0.148.0",
           diagnosticCode: "unknown_notification",
           method: "future/notification",
           projectId: "code-agent",
@@ -251,7 +252,7 @@ describe("CodexAgentProvider", () => {
       ],
       [
         {
-          codexVersion: "0.147.0",
+          codexVersion: "0.148.0",
           diagnosticCode: "invalid_notification",
           method: "item/agentMessage/delta",
           projectId: "code-agent",
@@ -261,7 +262,7 @@ describe("CodexAgentProvider", () => {
       ],
       [
         {
-          codexVersion: "0.147.0",
+          codexVersion: "0.148.0",
           diagnosticCode: "event_listener_failed",
           eventType: "message.delta",
           projectId: "code-agent",
@@ -1916,6 +1917,7 @@ describe("CodexAgentProvider", () => {
             hidden: false,
             isDefault: true,
             model: "gpt-5.6-sol",
+            multiAgentVersion: "v2",
             supportedReasoningEfforts: [
               { description: "快速回答", reasoningEffort: "low" },
               { description: "深入分析", reasoningEffort: "high" },
@@ -1933,6 +1935,7 @@ describe("CodexAgentProvider", () => {
             hidden: true,
             isDefault: false,
             model: "hidden-model",
+            multiAgentVersion: "disabled",
             supportedReasoningEfforts: [{ description: "快速回答", reasoningEffort: "low" }],
           },
           {
@@ -1942,6 +1945,7 @@ describe("CodexAgentProvider", () => {
             hidden: false,
             isDefault: false,
             model: "gpt-5.6-terra",
+            multiAgentVersion: null,
             supportedReasoningEfforts: [
               { description: "平衡速度与深度", reasoningEffort: "medium" },
             ],
@@ -1983,6 +1987,30 @@ describe("CodexAgentProvider", () => {
         params: { cursor: "models-page-2", includeHidden: false, limit: 100 },
       },
     ]);
+  });
+
+  it("rejects Codex models without the 0.148.0 multi-agent version field", async () => {
+    const rpc = new FakeRpcClient([
+      {
+        data: [
+          {
+            defaultReasoningEffort: "high",
+            description: "缺少新字段",
+            displayName: "Incomplete",
+            hidden: false,
+            isDefault: true,
+            model: "incomplete-model",
+            supportedReasoningEfforts: [{ description: "深入分析", reasoningEffort: "high" }],
+          },
+        ],
+        nextCursor: null,
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.listModels()).rejects.toThrow(
+      "Codex model multi-agent version is invalid",
+    );
   });
 
   it("lists enabled project skills and submits the native Codex skill input", async () => {
@@ -2262,6 +2290,7 @@ describe("CodexAgentProvider", () => {
           {
             authStatus: "unsupported",
             name: "playwright",
+            pluginId: null,
             resourceTemplates: [],
             resources: [],
             serverInfo: null,
@@ -2275,6 +2304,7 @@ describe("CodexAgentProvider", () => {
           {
             authStatus: "unknown",
             name: "fast-context",
+            pluginId: "plugin-fast-context",
             resourceTemplates: [],
             resources: [],
             serverInfo: null,
@@ -2283,6 +2313,7 @@ describe("CodexAgentProvider", () => {
           {
             authStatus: "notLoggedIn",
             name: "playwright",
+            pluginId: null,
             resourceTemplates: [],
             resources: [],
             serverInfo: null,
@@ -2380,6 +2411,7 @@ describe("CodexAgentProvider", () => {
           {
             authStatus: "oAuth",
             name: "fast-context",
+            pluginId: "plugin-fast-context",
             resourceTemplates: [],
             resources: [],
             serverInfo: {
@@ -2404,6 +2436,7 @@ describe("CodexAgentProvider", () => {
           {
             authStatus: "oAuth",
             name: "fast-context",
+            pluginId: "plugin-fast-context",
             resourceTemplates: [],
             resources: [],
             serverInfo: {
@@ -2494,6 +2527,7 @@ describe("CodexAgentProvider", () => {
         {
           authStatus: "unsupported",
           name: "playwright",
+          pluginId: null,
           resourceTemplates: [],
           resources: [],
           serverInfo: null,
@@ -2529,6 +2563,31 @@ describe("CodexAgentProvider", () => {
     await provider.startTask();
     await expect(provider.listMcpServers("task-1")).rejects.toThrow(
       "mcpServerStatus/list returned a repeated cursor",
+    );
+  });
+
+  it("rejects MCP status entries without the 0.148.0 plugin ownership field", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      {
+        data: [
+          {
+            authStatus: "unsupported",
+            name: "incomplete-server",
+            resourceTemplates: [],
+            resources: [],
+            serverInfo: null,
+            tools: {},
+          },
+        ],
+        nextCursor: null,
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await provider.startTask();
+    await expect(provider.listMcpServers("task-1")).rejects.toThrow(
+      "mcpServerStatus/list pluginId is invalid",
     );
   });
 
@@ -3499,6 +3558,7 @@ describe("CodexAgentProvider", () => {
     rpc.emitNotification("item/completed", {
       item: {
         id: "generated-image-live",
+        failure: null,
         result: encodedImage,
         revisedPrompt: null,
         status: "completed",
@@ -3539,6 +3599,47 @@ describe("CodexAgentProvider", () => {
       content: imageContent,
       mediaType: "image/png",
     });
+  });
+
+  it("maps image generation usage-limit failures without exposing provider identifiers", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitNotification("item/completed", {
+      item: {
+        failure: {
+          limitId: "private-image-limit-id",
+          resetsAt: 1_777_777_777,
+          type: "usageLimitExceeded",
+        },
+        id: "generated-image-failed",
+        result: "",
+        revisedPrompt: null,
+        status: "failed",
+        type: "imageGeneration",
+      },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(events[0]).toMatchObject({
+      payload: {
+        item: {
+          id: "generated-image-failed",
+          name: "image_generation",
+          output: { reason: "usage_limit_exceeded", resetsAt: 1_777_777_777 },
+          status: "failed",
+          type: "tool",
+        },
+      },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "item.completed",
+    });
+    expect(JSON.stringify(events[0])).not.toContain("private-image-limit-id");
   });
 
   it("publishes structured item starts for live operation status", async () => {
@@ -4065,7 +4166,13 @@ describe("CodexAgentProvider", () => {
     const rpc = new FakeRpcClient([
       {
         data: [
-          nativeThread({ section: { id: "01984de2-8f74-7c91-a3b2-5c5e937cf999", name: "Later" } }),
+          nativeThread({
+            section: {
+              appearance: { color: "blue", icon: "clock" },
+              id: "01984de2-8f74-7c91-a3b2-5c5e937cf999",
+              name: "Later",
+            },
+          }),
         ],
         nextCursor: null,
       },
@@ -4075,6 +4182,24 @@ describe("CodexAgentProvider", () => {
     await expect(provider.listTasks()).resolves.toMatchObject({
       data: [{ id: "task-1", pinned: false }],
     });
+  });
+
+  it("rejects thread sections without the 0.148.0 appearance field", async () => {
+    const rpc = new FakeRpcClient([
+      {
+        data: [
+          nativeThread({
+            section: { id: PINNED_THREAD_SECTION.id, name: PINNED_THREAD_SECTION.name },
+          }),
+        ],
+        nextCursor: null,
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.listTasks()).rejects.toThrow(
+      "Codex thread section appearance is invalid",
+    );
   });
 
   it.each([
@@ -4370,6 +4495,7 @@ describe("CodexAgentProvider", () => {
               items: [
                 {
                   id: "generated-image-1",
+                  failure: null,
                   result: encodedImage,
                   revisedPrompt: "一张架构图",
                   status: "completed",

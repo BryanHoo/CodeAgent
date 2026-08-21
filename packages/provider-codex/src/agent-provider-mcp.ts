@@ -58,6 +58,10 @@ export async function listCodexMcpServers(
       if (name.length === 0) {
         throw new CodexProtocolMappingError("mcpServerStatus/list server name is invalid");
       }
+      const pluginId = server["pluginId"];
+      if (pluginId !== null && typeof pluginId !== "string") {
+        throw new CodexProtocolMappingError("mcpServerStatus/list pluginId is invalid");
+      }
       const serverInfoValue = server["serverInfo"];
       const serverInfo =
         serverInfoValue === null || serverInfoValue === undefined

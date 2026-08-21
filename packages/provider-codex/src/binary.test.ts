@@ -137,7 +137,7 @@ describe("locateCodexBinary", () => {
 
 describe("checkCodexVersion", () => {
   it("pins the current Codex release", () => {
-    expect(SUPPORTED_CODEX_VERSION).toBe("0.147.0");
+    expect(SUPPORTED_CODEX_VERSION).toBe("0.148.0");
   });
 
   it("accepts the pinned supported Codex version", async () => {

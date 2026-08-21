@@ -132,7 +132,7 @@ describe("GlobalSettingsDialog", () => {
   it("shows CodeAgent and Codex versions with an available update", () => {
     const appInfo: AppInfoResponse = {
       appVersion: "1.3.0",
-      codexVersion: "0.147.0",
+      codexVersion: "0.148.0",
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available" as const,
@@ -172,7 +172,7 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain("CodeAgent 版本");
     expect(markup).toContain("1.3.0");
     expect(markup).toContain("Codex 版本");
-    expect(markup).toContain("0.147.0");
+    expect(markup).toContain("0.148.0");
     expect(markup).toContain("发现新版本 1.4.0");
     expect(markup).toContain("检查更新");
     expect(markup).toContain("更新日志");
@@ -190,7 +190,7 @@ describe("GlobalSettingsDialog", () => {
       <GlobalSettingsDialog
         appInfo={{
           appVersion: "1.3.0",
-          codexVersion: "0.147.0",
+          codexVersion: "0.148.0",
           latestVersion: "1.4.0",
           releaseNotes: "### 新增\n\n- 添加在线更新。",
           status: "available",
@@ -215,7 +215,7 @@ describe("GlobalSettingsDialog", () => {
   it("shows updating, restart, and update-check failure states", () => {
     const available: AppInfoResponse = {
       appVersion: "1.3.0",
-      codexVersion: "0.147.0",
+      codexVersion: "0.148.0",
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available",

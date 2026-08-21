@@ -39,6 +39,15 @@ export function normalizedTitle(thread: Record<string, unknown>): string {
 
 export function mapAgentModel(value: unknown): AgentModelPage["data"][number] | undefined {
   const model = expectRecord(value, "Codex model");
+  const multiAgentVersion = model["multiAgentVersion"];
+  if (
+    multiAgentVersion !== null &&
+    multiAgentVersion !== "disabled" &&
+    multiAgentVersion !== "v1" &&
+    multiAgentVersion !== "v2"
+  ) {
+    throw new CodexProtocolMappingError("Codex model multi-agent version is invalid");
+  }
   if (model["hidden"] === true) {
     return undefined;
   }

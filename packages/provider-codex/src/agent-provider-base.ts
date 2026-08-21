@@ -33,6 +33,7 @@ import {
   type CodexSkill,
   expectRecord,
   expectString,
+  isRecord,
   mapAgentModel,
   mapCodexSkill,
   mapSandboxMode,
@@ -66,6 +67,15 @@ function isPinnedThreadSection(value: unknown): boolean {
   const section = expectRecord(value, "Codex thread section");
   const sectionId = expectString(section["id"], "Codex thread section id");
   expectString(section["name"], "Codex thread section name");
+  const appearance = section["appearance"];
+  if (
+    appearance !== null &&
+    (!isRecord(appearance) ||
+      (appearance["icon"] !== null && typeof appearance["icon"] !== "string") ||
+      (appearance["color"] !== null && typeof appearance["color"] !== "string"))
+  ) {
+    throw new CodexProtocolMappingError("Codex thread section appearance is invalid");
+  }
   return sectionId === CODEX_PINNED_THREAD_SECTION_ID;
 }
 

@@ -5,7 +5,7 @@ import { createInterface } from "node:readline";
 const args = process.argv.slice(2);
 
 if (args.includes("--version")) {
-  process.stdout.write("codex-cli 0.147.0\n");
+  process.stdout.write("codex-cli 0.148.0\n");
   process.exit(0);
 }
 
@@ -669,6 +669,7 @@ input.on("line", (line) => {
             hidden: false,
             isDefault: true,
             model: "gpt-5.6-sol",
+            multiAgentVersion: "v2",
             supportedReasoningEfforts: [
               { description: "快速回答", reasoningEffort: "low" },
               { description: "深入分析", reasoningEffort: "high" },
@@ -681,6 +682,7 @@ input.on("line", (line) => {
             hidden: false,
             isDefault: false,
             model: "gpt-5.6-terra",
+            multiAgentVersion: null,
             supportedReasoningEfforts: [
               { description: "快速回答", reasoningEffort: "low" },
               { description: "平衡速度与深度", reasoningEffort: "medium" },
@@ -756,6 +758,7 @@ input.on("line", (line) => {
           {
             authStatus: "notLoggedIn",
             name: "context7",
+            pluginId: null,
             resourceTemplates: [],
             resources: [],
             serverInfo: null,
