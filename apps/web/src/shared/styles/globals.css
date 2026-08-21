@@ -27,10 +27,10 @@
   --ui-color-diff-added: light-dark(#28a948, #40c977);
   --ui-color-diff-removed: light-dark(#eb001d, #fa423e);
   --ui-color-warning: light-dark(#b25900, #ffb347);
-  --ui-color-task-running: light-dark(#3f8bdc, #5eabe9);
-  --ui-color-task-waiting: light-dark(#d19a2b, #e1ad43);
-  --ui-color-task-completed: light-dark(#48a765, #5dbd7a);
-  --ui-color-task-failed: light-dark(#db5660, #eb7070);
+  --ui-color-task-running: light-dark(#087cf0, #2196ff);
+  --ui-color-task-waiting: light-dark(#e59a00, #ffb300);
+  --ui-color-task-completed: light-dark(#00b83e, #00e676);
+  --ui-color-task-failed: light-dark(#ed1b2e, #ff3b4f);
   --ui-color-danger: var(--ui-color-diff-removed);
   --ui-color-focus: var(--ui-color-accent);
   --ui-color-scrim: light-dark(rgb(23 23 23 / 0.16), rgb(0 0 0 / 0.52));
@@ -509,20 +509,20 @@ a {
   visibility: hidden;
 }
 
-/* 状态圆点保持纯色扁平外观，避免小尺寸下出现高光和浮起感。 */
+/* 高饱和度纯色提升小尺寸辨识度，快速呼吸只改变透明度以避免布局抖动。 */
 .task-status-dot {
   opacity: 1;
 }
 
 .task-status-dot--breathing {
-  animation: task-status-breathe 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: task-status-breathe 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   will-change: opacity;
 }
 
 @keyframes task-status-breathe {
   0%,
   100% {
-    opacity: 0.4;
+    opacity: 0.65;
   }
 
   50% {
