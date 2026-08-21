@@ -778,6 +778,16 @@ describe("TaskTimeline", () => {
         sequence: 6,
         type: "task.notice",
       },
+      {
+        ...eventBase,
+        payload: {
+          code: "strict_review_required",
+          level: "warning",
+          message: "provider strict review text",
+        },
+        sequence: 7,
+        type: "task.notice",
+      },
     ]);
     // Zustand 的 SSR 快照固定为建 Store 时的状态；同步瞬时字段以覆盖静态标记输出。
     Object.assign(store.getInitialState(), {
@@ -812,6 +822,9 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("正在使用安全缓冲模型 gpt-5.6-sol");
     expect(markup).toContain("正在验证模型可用性");
     expect(markup).not.toContain("provider text should be localized");
+    expect(markup).toContain("需要严格审核");
+    expect(markup).toContain("安全审核已升级，当前操作将在严格审核完成后继续");
+    expect(markup).not.toContain("provider strict review text");
   });
 });
 

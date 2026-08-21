@@ -130,6 +130,36 @@ function hasTable(database, tableName) {
   );
 }
 
+function ensureGlobalSettingsCompatibility(database) {
+  if (!hasTable(database, "global_settings")) {
+    return;
+  }
+  const columns = new Set(
+    database
+      .prepare("PRAGMA table_info(global_settings)")
+      .all()
+      .map((column) => column.name),
+  );
+  database.transaction(() => {
+    // 版本切换不能依赖迁移记录推断实际列，准备语句前必须修复持久化契约。
+    if (!columns.has("fast_mode")) {
+      database.exec(`
+        ALTER TABLE global_settings
+          ADD COLUMN fast_mode INTEGER NOT NULL DEFAULT 0
+          CHECK (fast_mode IN (0, 1));
+      `);
+    }
+    if (!columns.has("commit_message_reasoning_effort")) {
+      database.exec(`
+        ALTER TABLE global_settings
+          ADD COLUMN commit_message_reasoning_effort TEXT NOT NULL DEFAULT '';
+        UPDATE global_settings
+        SET commit_message_reasoning_effort = reasoning_effort;
+      `);
+    }
+  })();
+}
+
 function createOperations(database) {
   const statements = hasTable(database, "projects")
     ? {
@@ -406,6 +436,7 @@ try {
   database = new Database(workerData.databasePath);
   configureDatabase(database);
   runMigrations(database, workerData.migrations);
+  ensureGlobalSettingsCompatibility(database);
   const operations = createOperations(database);
   parentPort.on("message", (message) => {
     try {

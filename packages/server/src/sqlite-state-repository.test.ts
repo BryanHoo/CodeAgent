@@ -283,6 +283,40 @@ describe("SqliteStateRepository", () => {
     await expect(reopened.readGlobalSettings()).resolves.toEqual(settings);
   });
 
+  it("repairs global settings columns required across version switches", async () => {
+    const root = await createWorkspace();
+    const databasePath = join(root, "state.sqlite3");
+    const repository = await openRepository(root);
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+
+    const database = new Database(databasePath);
+    try {
+      // 模拟版本切换后迁移记录仍在、但新版字段被旧 Schema 移除的状态。
+      database.exec("ALTER TABLE global_settings DROP COLUMN fast_mode;");
+    } finally {
+      database.close();
+    }
+
+    const reopened = await openRepository(root);
+    await expect(reopened.readGlobalSettings()).resolves.toBeUndefined();
+    await reopened.close();
+    repositories.splice(repositories.indexOf(reopened), 1);
+
+    const repairedDatabase = new Database(databasePath, { readonly: true });
+    try {
+      const columnNames = repairedDatabase
+        .prepare("PRAGMA table_info(global_settings)")
+        .all()
+        .map((column) => (column as { name: string }).name);
+      expect(columnNames).toEqual(
+        expect.arrayContaining(["commit_message_reasoning_effort", "fast_mode"]),
+      );
+    } finally {
+      repairedDatabase.close();
+    }
+  });
+
   it("persists non-sensitive provider connection metadata across repository restarts", async () => {
     const root = await createWorkspace();
     const databasePath = join(root, "state.sqlite3");

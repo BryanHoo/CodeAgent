@@ -285,6 +285,8 @@ export const conversation = {
       model_verification: "Model verification",
       modelVerification: "Verifying model availability",
       runtime_warning: "Runtime warning",
+      strict_review_required: "Strict review required",
+      strictReviewRequired: "Safety review was escalated; this action will continue after review",
     },
     reasoning: "Reasoning summary",
     reasoningStreaming: "Reasoning",

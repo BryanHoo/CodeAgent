@@ -132,7 +132,7 @@ function createCodexAgentProvider(options: {
 
 function nativeThread(overrides: Record<string, unknown> = {}) {
   return {
-    cliVersion: "0.148.0",
+    cliVersion: "0.149.0",
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     ephemeral: false,
@@ -140,6 +140,7 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
     modelProvider: "openai",
     name: null,
     preview: "实现真实 Task 历史\n更多内容",
+    projectId: null,
     section: null,
     sectionEnteredAt: null,
     sessionId: "native-session",
@@ -152,6 +153,22 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("requires the 0.149.0 nullable native project assignment", async () => {
+    const missingRpc = new FakeRpcClient([
+      { data: [nativeThread({ projectId: undefined })], nextCursor: null },
+    ]);
+    const invalidRpc = new FakeRpcClient([
+      { data: [nativeThread({ projectId: 42 })], nextCursor: null },
+    ]);
+
+    await expect(
+      createCodexAgentProvider({ client: missingRpc, project }).listTasks(),
+    ).rejects.toThrow("Codex thread projectId must be a string or null");
+    await expect(
+      createCodexAgentProvider({ client: invalidRpc, project }).listTasks(),
+    ).rejects.toThrow("Codex thread projectId must be a string or null");
+  });
+
   it("publishes plan updates and restores the latest plan in task snapshots", async () => {
     const rpc = new FakeRpcClient([
       { data: [nativeThread()], nextCursor: null },
@@ -242,7 +259,7 @@ describe("CodexAgentProvider", () => {
     expect(warn.mock.calls).toEqual([
       [
         {
-          codexVersion: "0.148.0",
+          codexVersion: "0.149.0",
           diagnosticCode: "unknown_notification",
           method: "future/notification",
           projectId: "code-agent",
@@ -252,7 +269,7 @@ describe("CodexAgentProvider", () => {
       ],
       [
         {
-          codexVersion: "0.148.0",
+          codexVersion: "0.149.0",
           diagnosticCode: "invalid_notification",
           method: "item/agentMessage/delta",
           projectId: "code-agent",
@@ -262,7 +279,7 @@ describe("CodexAgentProvider", () => {
       ],
       [
         {
-          codexVersion: "0.148.0",
+          codexVersion: "0.149.0",
           diagnosticCode: "event_listener_failed",
           eventType: "message.delta",
           projectId: "code-agent",
@@ -2035,7 +2052,7 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
-  it("rejects Codex models without the 0.148.0 multi-agent version field", async () => {
+  it("rejects Codex models without the 0.149.0 multi-agent version field", async () => {
     const rpc = new FakeRpcClient([
       {
         data: [
@@ -2613,7 +2630,7 @@ describe("CodexAgentProvider", () => {
     );
   });
 
-  it("rejects MCP status entries without the 0.148.0 plugin ownership field", async () => {
+  it("rejects MCP status entries without the 0.149.0 plugin ownership field", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread() },
       {
@@ -3044,6 +3061,7 @@ describe("CodexAgentProvider", () => {
     rpc.emitNotification("turn/started", { threadId: "reviewer-thread", turn: nestedTurn });
     rpc.emitNotification("item/completed", {
       item: {
+        delivery: null,
         id: "review-commentary",
         phase: "commentary",
         text: "正在检查变更。",
@@ -3087,6 +3105,7 @@ describe("CodexAgentProvider", () => {
     });
     rpc.emitNotification("item/completed", {
       item: {
+        delivery: null,
         id: "worker-review-result",
         phase: "final_answer",
         text: "- [P1] 修复消息顺序。",
@@ -3110,6 +3129,7 @@ describe("CodexAgentProvider", () => {
     });
     rpc.emitNotification("item/completed", {
       item: {
+        delivery: null,
         id: "duplicate-review-result",
         phase: "final_answer",
         text: "- [P1] 修复消息顺序。",
@@ -3131,6 +3151,7 @@ describe("CodexAgentProvider", () => {
             type: "exitedReviewMode",
           },
           {
+            delivery: null,
             id: "duplicate-review-result",
             phase: "final_answer",
             text: "- [P1] 修复消息顺序。",
@@ -3311,6 +3332,7 @@ describe("CodexAgentProvider", () => {
     });
     rpc.emitNotification("item/completed", {
       item: {
+        delivery: null,
         id: "review-commentary",
         phase: "commentary",
         text: "正在检查变更。",
@@ -3391,7 +3413,12 @@ describe("CodexAgentProvider", () => {
       startedAt: 1_753_228_800,
       status: "inProgress",
     };
-    const completedItem = { id: "item-1", text: "实时完成", type: "agentMessage" };
+    const completedItem = {
+      delivery: null,
+      id: "item-1",
+      text: "实时完成",
+      type: "agentMessage",
+    };
     const startedSubagentItem = {
       agentsStates: {},
       id: "subagent-spawn",
@@ -3802,6 +3829,7 @@ describe("CodexAgentProvider", () => {
     await provider.listTasks();
 
     const commentaryItem = {
+      delivery: null,
       id: "commentary-1",
       memoryCitation: null,
       phase: "commentary",
@@ -3826,6 +3854,7 @@ describe("CodexAgentProvider", () => {
     });
 
     const finalAnswerItem = {
+      delivery: null,
       id: "answer-1",
       memoryCitation: null,
       phase: "final_answer",
@@ -4232,7 +4261,7 @@ describe("CodexAgentProvider", () => {
     });
   });
 
-  it("rejects thread sections without the 0.148.0 appearance field", async () => {
+  it("rejects thread sections without the 0.149.0 appearance field", async () => {
     const rpc = new FakeRpcClient([
       {
         data: [
@@ -4338,7 +4367,7 @@ describe("CodexAgentProvider", () => {
                   id: "i1-skill",
                   type: "userMessage",
                 },
-                { id: "i2", text: "已读取", type: "agentMessage" },
+                { delivery: null, id: "i2", text: "已读取", type: "agentMessage" },
                 {
                   content: ["核对边界"],
                   id: "i3",

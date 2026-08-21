@@ -286,7 +286,9 @@ function TaskNoticeRow({ notice }: Readonly<{ notice: TaskNotice }>) {
   const message =
     notice.payload.code === "model_verification"
       ? i18n.t("timeline.notice.modelVerification", { ns: "conversation" })
-      : notice.payload.message;
+      : notice.payload.code === "strict_review_required"
+        ? i18n.t("timeline.notice.strictReviewRequired", { ns: "conversation" })
+        : notice.payload.message;
   const title = i18n.t(`timeline.notice.${notice.payload.code}`, { ns: "conversation" });
 
   return (

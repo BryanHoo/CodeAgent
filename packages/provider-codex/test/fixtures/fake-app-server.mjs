@@ -5,7 +5,7 @@ import { createInterface } from "node:readline";
 const args = process.argv.slice(2);
 
 if (args.includes("--version")) {
-  process.stdout.write("codex-cli 0.148.0\n");
+  process.stdout.write("codex-cli 0.149.0\n");
   process.exit(0);
 }
 
@@ -144,6 +144,7 @@ function realtimeThread(turns = []) {
     id: "task-realtime",
     name: "Realtime Path",
     preview: "Realtime Path",
+    projectId: null,
     section: null,
     sectionEnteredAt: null,
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
@@ -161,6 +162,7 @@ function actionThread(id, turns = []) {
     id,
     name: "Agent Action",
     preview: "Agent Action",
+    projectId: null,
     section: null,
     sectionEnteredAt: null,
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
@@ -201,6 +203,7 @@ function scheduleSubagentRealtimeEvents() {
   const turnId = "turn-frontend-analysis";
   const messageId = "frontend-analysis-message";
   const firstMessage = {
+    delivery: null,
     id: messageId,
     memoryCitation: null,
     phase: null,
@@ -249,6 +252,7 @@ function completeActionTurn(threadId, turnId) {
     (item) => item.id === `${turnId}-snapshot-user`,
   );
   const message = {
+    delivery: null,
     id: usesSyntheticSnapshotIds ? `${turnId}-realtime-assistant` : `${turnId}-assistant`,
     memoryCitation: null,
     phase: null,
@@ -448,6 +452,7 @@ function scheduleRealtimeEvents() {
   realtimeRunning = true;
   setTimeout(() => {
     const messageItem = {
+      delivery: null,
       id: "message-realtime",
       memoryCitation: null,
       phase: null,
@@ -800,6 +805,7 @@ input.on("line", (line) => {
             id: "task-realtime",
             name: "Realtime Path",
             preview: "Realtime Path",
+            projectId: null,
             section: null,
             sectionEnteredAt: null,
             status: { type: "active" },
@@ -948,6 +954,7 @@ input.on("line", (line) => {
         return;
       }
       const assistantMessage = {
+        delivery: null,
         id: messageId,
         memoryCitation: null,
         phase: null,

@@ -20,7 +20,7 @@ import { join } from "node:path";
 
 const args = process.argv.slice(2);
 if (args[0] === "--version") {
-  process.stdout.write("codex-cli 0.148.0\\n");
+  process.stdout.write("codex-cli 0.149.0\\n");
   process.exit(0);
 }
 
@@ -97,11 +97,11 @@ describe("Codex Schema 漂移门禁", () => {
     };
 
     expect(updateResult.status).toBe(0);
-    expect(updateResult.stdout).toContain("Codex Schema baseline updated: 0.148.0");
+    expect(updateResult.stdout).toContain("Codex Schema baseline updated: 0.149.0");
     expect(verifyResult.status).toBe(0);
-    expect(verifyResult.stdout).toContain("Codex Schema baseline verified: 0.148.0");
+    expect(verifyResult.stdout).toContain("Codex Schema baseline verified: 0.149.0");
     expect(baseline).toMatchObject({
-      codexVersion: "0.148.0",
+      codexVersion: "0.149.0",
       experimental: true,
       generators: {
         "generate-json-schema": "--experimental",
@@ -125,7 +125,7 @@ describe("Codex Schema 漂移门禁", () => {
     const result = runChecker(cliPath, baselinePath, { variant: "drift" });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Codex Schema drift detected for 0.148.0");
+    expect(result.stderr).toContain("Codex Schema drift detected for 0.149.0");
     expect(result.stderr).toContain("Added: typescript/added.ts");
     expect(result.stderr).toContain("Removed: typescript/removed.ts");
     expect(result.stderr).toContain("Changed: typescript/index.ts");
@@ -138,7 +138,7 @@ describe("Codex Schema 漂移门禁", () => {
     const result = runChecker(cliPath, baselinePath, { variant: "json-order" });
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Codex Schema baseline verified: 0.148.0");
+    expect(result.stdout).toContain("Codex Schema baseline verified: 0.149.0");
   });
 
   it("缺少当前 Codex 版本基线时拒绝校验", () => {
@@ -147,7 +147,7 @@ describe("Codex Schema 漂移门禁", () => {
     const result = runChecker(cliPath, baselinePath);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Codex Schema baseline is missing for 0.148.0");
+    expect(result.stderr).toContain("Codex Schema baseline is missing for 0.149.0");
     expect(result.stderr).toContain("pnpm run codex:schema:update");
   });
 });

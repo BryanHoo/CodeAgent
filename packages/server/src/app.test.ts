@@ -480,7 +480,7 @@ function createServerOptions(
     readAppInfo: vi.fn(() =>
       Promise.resolve({
         appVersion: "1.3.0",
-        codexVersion: "0.148.0",
+        codexVersion: "0.149.0",
         latestVersion: "1.3.0",
         releaseNotes: null,
         status: "current" as const,
@@ -1194,7 +1194,7 @@ describe("CodeAgent Server", () => {
     const readAppInfo = vi.fn(() =>
       Promise.resolve({
         appVersion: "1.3.0",
-        codexVersion: "0.148.0",
+        codexVersion: "0.149.0",
         latestVersion: "1.4.0",
         releaseNotes: "### 新增\n\n- 添加在线更新。",
         status: "available" as const,
@@ -1205,7 +1205,7 @@ describe("CodeAgent Server", () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
       return {
         appVersion: "1.3.0",
-        codexVersion: "0.148.0",
+        codexVersion: "0.149.0",
         latestVersion: "1.4.0",
         releaseNotes: null,
         status: "restart-required" as const,
@@ -1230,7 +1230,7 @@ describe("CodeAgent Server", () => {
     expect(infoResponse.statusCode).toBe(200);
     expect(infoResponse.json()).toEqual({
       appVersion: "1.3.0",
-      codexVersion: "0.148.0",
+      codexVersion: "0.149.0",
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available",
@@ -3629,7 +3629,7 @@ describe("CodeAgent Server", () => {
       readAppInfo: vi.fn(() =>
         Promise.resolve({
           appVersion: "1.3.0",
-          codexVersion: "0.148.0",
+          codexVersion: "0.149.0",
           latestVersion: "1.3.0",
           releaseNotes: null,
           status: "current" as const,

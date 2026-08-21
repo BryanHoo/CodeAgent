@@ -271,6 +271,20 @@ describe("Codex protocol mapping", () => {
       type: "task.notice",
     });
     expect(
+      mapNotification("autoApprovalReview/strictReviewRequired", {
+        startedAtMs: 1_753_228_800_000,
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({
+      payload: {
+        code: "strict_review_required",
+        level: "warning",
+        message: "Strict review is required before this action can continue.",
+      },
+      type: "task.notice",
+    });
+    expect(
       mapNotification("error", {
         error: {
           additionalDetails: null,
@@ -285,6 +299,23 @@ describe("Codex protocol mapping", () => {
       payload: { code: "connection_failed", httpStatusCode: 502, willRetry: true },
       type: "provider.error",
     });
+  });
+
+  it("rejects invalid strict review notification fields", () => {
+    expect(() =>
+      mapNotification("autoApprovalReview/strictReviewRequired", {
+        startedAtMs: -1,
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toThrow("Codex strict review startedAtMs must be a non-negative integer");
+    expect(() =>
+      mapNotification("autoApprovalReview/strictReviewRequired", {
+        startedAtMs: 1_753_228_800_000,
+        threadId: "task-1",
+        turnId: null,
+      }),
+    ).toThrow("Codex strict review turnId must be a string");
   });
 
   it("maps supported sandbox modes and rejects unknown values", () => {
@@ -323,18 +354,21 @@ describe("Codex protocol mapping", () => {
         id: "message-phase-turn",
         items: [
           {
+            delivery: null,
             id: "commentary-message",
             phase: "commentary",
             text: "正在检查。",
             type: "agentMessage",
           },
           {
+            delivery: "async",
             id: "final-message",
             phase: "final_answer",
             text: "检查完成。",
             type: "agentMessage",
           },
           {
+            delivery: null,
             id: "legacy-message",
             phase: null,
             text: "旧版消息。",
@@ -366,6 +400,31 @@ describe("Codex protocol mapping", () => {
         type: "message",
       },
     ]);
+  });
+
+  it("rejects missing or invalid 0.149.0 agent message delivery", () => {
+    const mapMessage = (delivery?: unknown) =>
+      mapAgentTurn({
+        completedAt: 1_753_228_830,
+        error: null,
+        id: "message-delivery-turn",
+        items: [
+          {
+            ...(delivery === undefined ? {} : { delivery }),
+            id: "message-delivery",
+            phase: "final_answer",
+            text: "检查完成。",
+            type: "agentMessage",
+          },
+        ],
+        startedAt: 1_753_228_800,
+        status: "completed",
+      });
+
+    expect(() => mapMessage()).toThrow("Codex agent message delivery must be async or null");
+    expect(() => mapMessage("inline")).toThrow(
+      "Codex agent message delivery must be async or null",
+    );
   });
 
   it("projects a completed Codex review to one request and one authoritative result", () => {
@@ -400,6 +459,7 @@ describe("Codex protocol mapping", () => {
             type: "exitedReviewMode",
           },
           {
+            delivery: null,
             id: "review-agent-result",
             phase: "final_answer",
             text: "- [P1] 修复消息顺序。",
@@ -431,6 +491,7 @@ describe("Codex protocol mapping", () => {
         items: [
           { id: "review-mode", review: "current changes", type: "enteredReviewMode" },
           {
+            delivery: null,
             id: "review-commentary",
             phase: "commentary",
             text: "正在审查。",
@@ -438,6 +499,7 @@ describe("Codex protocol mapping", () => {
           },
           { id: "review-exit", review: null, type: "exitedReviewMode" },
           {
+            delivery: null,
             id: "review-interrupted",
             phase: null,
             text: "Review was interrupted.",
@@ -559,6 +621,7 @@ describe("Codex protocol mapping", () => {
               type: "userMessage",
             },
             {
+              delivery: null,
               id: "review-interrupted",
               phase: null,
               text: "Review was interrupted. Please re-run /review and wait for it to complete.",

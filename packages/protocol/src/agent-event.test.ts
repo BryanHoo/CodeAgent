@@ -139,6 +139,15 @@ describe("Agent Event v2 protocol", () => {
       {
         ...baseEvent,
         payload: {
+          code: "strict_review_required",
+          level: "warning",
+          message: "严格审核已启用",
+        },
+        type: "task.notice",
+      },
+      {
+        ...baseEvent,
+        payload: {
           error: null,
           failureReason: null,
           name: "context7",

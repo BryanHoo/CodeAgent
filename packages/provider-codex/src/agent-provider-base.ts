@@ -155,6 +155,10 @@ export async function mapAgentTask(
   project: Project,
 ): Promise<AgentTask> {
   await assertProjectThread(thread, project);
+  // Codex 0.149.0 固定返回可空原生 Project 归属，但该字段不越过 Provider 边界。
+  if (thread["projectId"] !== null && typeof thread["projectId"] !== "string") {
+    throw new CodexProtocolMappingError("Codex thread projectId must be a string or null");
+  }
   return {
     id: expectString(thread["id"], "Codex thread id"),
     pinned: isPinnedThreadSection(thread["section"]),

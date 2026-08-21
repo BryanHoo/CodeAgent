@@ -117,6 +117,7 @@ export const TaskNoticeEventSchema = createEventSchema({
       code: Type.Union([
         Type.Literal("runtime_warning"),
         Type.Literal("guardian_warning"),
+        Type.Literal("strict_review_required"),
         Type.Literal("model_verification"),
         Type.Literal("hook_status"),
       ]),

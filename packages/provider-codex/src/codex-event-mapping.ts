@@ -146,6 +146,20 @@ export function mapCodexNotification(
   }
   const taskId = explicitTaskId ?? expectString(params["threadId"], `Codex ${method} threadId`);
 
+  if (method === "autoApprovalReview/strictReviewRequired") {
+    expectNonNegativeInteger(params["startedAtMs"], "Codex strict review startedAtMs");
+    expectString(params["turnId"], "Codex strict review turnId");
+    return {
+      payload: {
+        code: "strict_review_required",
+        level: "warning",
+        message: "Strict review is required before this action can continue.",
+      },
+      taskId,
+      type: "task.notice",
+    };
+  }
+
   if (method === "warning" || method === "guardianWarning") {
     return {
       payload: {

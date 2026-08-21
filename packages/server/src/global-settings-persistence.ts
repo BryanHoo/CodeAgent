@@ -8,13 +8,14 @@ export const FAST_MODE_SETTING_MIGRATION = {
   version: 12,
 } as const;
 
-export const DROP_COMMIT_MESSAGE_REASONING_EFFORT_MIGRATION = {
-  name: "drop_commit_message_reasoning_effort",
-  sql: "ALTER TABLE global_settings DROP COLUMN commit_message_reasoning_effort;",
+export const PRESERVE_LEGACY_GLOBAL_SETTINGS_COLUMNS_MIGRATION = {
+  name: "preserve_legacy_global_settings_columns",
+  // version 13 已被使用，保留版本号但不再删除旧版本仍会读取的列。
+  sql: "SELECT 1;",
   version: 13,
 } as const;
 
 export const GLOBAL_SETTINGS_MIGRATIONS = [
   FAST_MODE_SETTING_MIGRATION,
-  DROP_COMMIT_MESSAGE_REASONING_EFFORT_MIGRATION,
+  PRESERVE_LEGACY_GLOBAL_SETTINGS_COLUMNS_MIGRATION,
 ] as const;
