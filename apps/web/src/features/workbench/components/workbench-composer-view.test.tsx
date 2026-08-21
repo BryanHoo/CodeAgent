@@ -124,6 +124,35 @@ describe("WorkbenchComposerView", () => {
     expect(markup).not.toContain("<button");
   });
 
+  it("非 Git 项目不展示分支状态", () => {
+    const markup = renderToStaticMarkup(
+      <ComposerBranchSwitcher
+        creatingBranch={undefined}
+        creatingWorktree={undefined}
+        gitStatus={{
+          baseBranches: [],
+          branch: null,
+          branches: [],
+          repositoryMode: "none",
+          snapshot: "a".repeat(64),
+          staged: [],
+          unstaged: [],
+        }}
+        onBranchChange={() => undefined}
+        onBranchCreate={() => Promise.resolve(true)}
+        onWorktreeChange={() => undefined}
+        onWorktreeCreate={() => Promise.resolve(true)}
+        switchingBranch={undefined}
+        switchingWorktree={undefined}
+        worktrees={[]}
+        worktreesError={null}
+        worktreesPending={false}
+      />,
+    );
+
+    expect(markup).toBe("");
+  });
+
   it("将项目路径渲染为带 Tooltip 的文件夹打开按钮", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>

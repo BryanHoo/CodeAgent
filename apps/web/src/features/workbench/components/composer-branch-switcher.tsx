@@ -50,9 +50,13 @@ export function ComposerBranchSwitcher({
   const { t } = useTranslation("workbench");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createWorktreeDialogOpen, setCreateWorktreeDialogOpen] = useState(false);
-  const currentBranch = gitStatus?.branch;
-  const interactive =
-    gitStatus?.repositoryMode === "root" && currentBranch !== null && currentBranch !== undefined;
+
+  if (gitStatus === undefined || gitStatus.repositoryMode === "none") {
+    return null;
+  }
+
+  const currentBranch = gitStatus.branch;
+  const interactive = gitStatus.repositoryMode === "root" && currentBranch !== null;
   const label = currentBranch ?? t("composer.gitBranchMissing");
   const mutationPending =
     switchingBranch !== undefined ||
