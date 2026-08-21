@@ -220,6 +220,7 @@ export function projectDefaultsMutationOptions(
   client: Pick<CodeAgentClient, "updateProjectDefaults"> = codeAgentClient,
 ) {
   return mutationOptions({
+    meta: { actionNotification: { successMessage: false } },
     mutationFn: (settings: AgentProjectDefaults) =>
       client.updateProjectDefaults(projectId, settings),
     mutationKey: ["projects", projectId, "defaults", "update"] as const,

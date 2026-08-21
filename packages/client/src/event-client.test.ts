@@ -27,6 +27,13 @@ vi.mock("@sinclair/typebox/value", async (importOriginal) => {
   };
 });
 
+function createCloseEvent(code: number): Event {
+  const event = new Event("close");
+  // Node 22 没有浏览器的 CloseEvent，全量测试仅需保留真实关闭事件的 code 语义。
+  Object.defineProperty(event, "code", { enumerable: true, value: code });
+  return event;
+}
+
 class FakeWebSocket extends EventTarget {
   public readonly url: string;
   public readyState: number = WebSocket.CONNECTING;
@@ -41,7 +48,7 @@ class FakeWebSocket extends EventTarget {
       return;
     }
     this.readyState = WebSocket.CLOSED;
-    this.dispatchEvent(new CloseEvent("close", { code }));
+    this.dispatchEvent(createCloseEvent(code));
   }
 
   public open(): void {
@@ -55,7 +62,7 @@ class FakeWebSocket extends EventTarget {
 
   public serverClose(code = 1006): void {
     this.readyState = WebSocket.CLOSED;
-    this.dispatchEvent(new CloseEvent("close", { code }));
+    this.dispatchEvent(createCloseEvent(code));
   }
 }
 

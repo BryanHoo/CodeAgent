@@ -613,16 +613,20 @@ describe("project queries", () => {
     };
     const queryClient = new QueryClient();
 
+    const defaultsMutationOptions = projectDefaultsMutationOptions("code-agent", client);
     const taskMutationOptions = taskSettingsMutationOptions("code-agent", "task-1", client);
 
     await queryClient
       .getMutationCache()
-      .build(queryClient, projectDefaultsMutationOptions("code-agent", client))
+      .build(queryClient, defaultsMutationOptions)
       .execute(defaults);
     await queryClient.getMutationCache().build(queryClient, taskMutationOptions).execute(settings);
 
     expect(client.updateProjectDefaults).toHaveBeenCalledWith("code-agent", defaults);
     expect(client.updateTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", settings);
+    expect(defaultsMutationOptions.meta).toEqual({
+      actionNotification: { successMessage: false },
+    });
     expect(taskMutationOptions.meta).toEqual({
       actionNotification: { successMessage: false },
     });

@@ -61,10 +61,10 @@ export function MessageImageAttachment({
       </DialogTrigger>
       <DialogContent
         aria-labelledby={titleId}
-        className="max-h-[92dvh] w-auto max-w-[calc(100%-2rem)] overflow-hidden p-0"
+        className="h-[min(92dvh,54rem)] max-w-[72rem] overflow-hidden p-0"
         data-message-image-preview=""
       >
-        <section className="grid max-h-[92dvh] max-w-[92vw] grid-rows-[auto_minmax(0,1fr)] bg-raised">
+        <section className="grid size-full grid-rows-[auto_minmax(0,1fr)] bg-raised">
           <header className="flex min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
             <DialogTitle className="min-w-0 flex-1 truncate text-body-small" id={titleId}>
               {name}
@@ -86,13 +86,8 @@ export function MessageImageAttachment({
               <TooltipContent>{t("timeline.closeImagePreview")}</TooltipContent>
             </Tooltip>
           </header>
-          <div className="grid min-h-0 place-items-center overflow-auto bg-content p-2">
-            <img
-              alt={name}
-              className="block max-h-[calc(92dvh-3rem)] max-w-[calc(92vw-1rem)] object-contain"
-              decoding="async"
-              src={url}
-            />
+          <div className="grid min-h-0 place-items-center overflow-hidden bg-content p-2">
+            <img alt={name} className="block size-full object-contain" decoding="async" src={url} />
           </div>
         </section>
       </DialogContent>

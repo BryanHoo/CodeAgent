@@ -87,6 +87,7 @@ describe("readProjectFileTree", () => {
       mkdir(join(projectRoot, "src", "components"), { recursive: true }),
     ]);
     await Promise.all([
+      writeFile(join(projectRoot, ".DS_Store"), "finder metadata"),
       writeFile(join(projectRoot, "README.md"), "# Project\n"),
       writeFile(join(projectRoot, "src", "main.tsx"), "export {};\n"),
       writeFile(join(projectRoot, "src", "components", "button.tsx"), "export {};\n"),
@@ -103,6 +104,7 @@ describe("readProjectFileTree", () => {
     });
     await expect(readProjectFileTree(projectRoot, "linked-outside")).rejects.toThrow();
     await expect(readProjectFileTree(projectRoot, "../outside")).rejects.toThrow();
+    await expect(readProjectFileSearch(projectRoot, ".DS_Store")).resolves.toEqual({ data: [] });
   });
 
   it("returns every direct child without an entry limit", async () => {

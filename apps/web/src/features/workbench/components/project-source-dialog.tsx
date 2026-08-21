@@ -309,7 +309,7 @@ export function ProjectSourceDialog({
           {previewKind === "image" ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
               <SourceHeader {...headerProps} />
-              <div className="grid min-h-0 place-items-center overflow-auto p-4 sm:p-6">
+              <div className="grid min-h-0 place-items-center overflow-hidden p-4 sm:p-6">
                 {imageLoadFailed ? (
                   <div className="text-body-small text-danger" role="alert">
                     {t("projectDialog.loadImageError")}
@@ -317,7 +317,7 @@ export function ProjectSourceDialog({
                 ) : (
                   <img
                     alt={fileName}
-                    className="max-h-full max-w-full object-contain"
+                    className="block size-full object-contain"
                     decoding="async"
                     onError={() => {
                       setImageLoadFailed(true);

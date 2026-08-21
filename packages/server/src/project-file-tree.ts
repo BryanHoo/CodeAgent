@@ -33,6 +33,8 @@ const ignoredDirectories = new Set([
   "dist",
   "node_modules",
 ]);
+// Finder 元数据不属于项目内容，目录树与文件搜索统一跳过。
+const ignoredFiles = new Set([".DS_Store"]);
 
 function compareEntries(left: ClassifiedFilesystemEntry, right: ClassifiedFilesystemEntry): number {
   const typeOrder = Number(right.type === "directory") - Number(left.type === "directory");
@@ -151,7 +153,7 @@ export async function readProjectFileTree(
 
   for (const { entry: child, type } of children) {
     // 符号链接不进入树，避免跟随链接越过 Project 根目录或形成递归环。
-    if (child.name === ".git" || type === "symbolic-link") {
+    if (child.name === ".git" || ignoredFiles.has(child.name) || type === "symbolic-link") {
       continue;
     }
     if (type === "directory" && ignoredDirectories.has(child.name)) {
@@ -218,7 +220,7 @@ export async function readProjectFileSearch(
     const children = (await readClassifiedDirectory(absoluteDirectory)).sort(compareEntries);
     for (const { entry: child, type } of children) {
       signal?.throwIfAborted();
-      if (child.name === ".git" || type === "symbolic-link") {
+      if (child.name === ".git" || ignoredFiles.has(child.name) || type === "symbolic-link") {
         continue;
       }
       const path = joinProjectPath(relativeDirectory, child.name);
