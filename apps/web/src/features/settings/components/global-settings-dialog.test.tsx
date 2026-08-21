@@ -49,6 +49,7 @@ describe("GlobalSettingsDialog", () => {
           { id: "finder", kind: "file-manager", name: "Finder" },
         ]}
         error={null}
+        fastModeAvailable
         isPending={false}
         models={models}
         onClose={vi.fn()}
@@ -61,6 +62,7 @@ describe("GlobalSettingsDialog", () => {
           commitMessagePrompt: "突出用户可见影响。",
           commitMessageReasoningEffort: "medium",
           defaultOpenAppId: "visual-studio-code",
+          fastMode: true,
           followUpBehavior: "queue",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
@@ -83,6 +85,7 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain('aria-label="审批"');
     expect(markup).toContain('aria-label="工作区"');
     expect(markup).toContain('aria-label="跟进消息"');
+    expect(markup).toContain('aria-label="快速模式"');
     expect(markup).toContain("排队");
     expect(markup).toContain("引导");
     expect(markup).toContain('aria-label="模型"');
@@ -117,6 +120,7 @@ describe("GlobalSettingsDialog", () => {
           commitMessagePrompt: "",
           commitMessageReasoningEffort: "high",
           defaultOpenAppId: null,
+          fastMode: false,
           followUpBehavior: "queue",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
@@ -127,6 +131,7 @@ describe("GlobalSettingsDialog", () => {
 
     expect(markup).toContain("局域网访问");
     expect(markup).toContain("退出局域网访问");
+    expect(markup).not.toContain('aria-label="快速模式"');
   });
 
   it("shows CodeAgent and Codex versions with an available update", () => {
@@ -160,6 +165,7 @@ describe("GlobalSettingsDialog", () => {
           commitMessagePrompt: "",
           commitMessageReasoningEffort: "high",
           defaultOpenAppId: null,
+          fastMode: false,
           followUpBehavior: "queue",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
@@ -309,6 +315,7 @@ describe("GlobalSettingsDialog", () => {
             commitMessagePrompt: "",
             commitMessageReasoningEffort: "high",
             defaultOpenAppId: null,
+            fastMode: false,
             followUpBehavior: "queue",
             model: "gpt-5.6-sol",
             reasoningEffort: "high",

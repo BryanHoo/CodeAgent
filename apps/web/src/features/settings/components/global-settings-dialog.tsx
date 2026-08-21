@@ -5,7 +5,7 @@ import type {
   AppInfoResponse,
   ProjectOpenApp,
 } from "@code-agent/protocol";
-import { MonitorCog, Moon, Settings, Sun, X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
@@ -14,15 +14,16 @@ import { Tooltip } from "../../../shared/components/core/tooltip.js";
 import { TooltipContent } from "../../../shared/components/core/tooltip.js";
 import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 import { setThemePreference, type ThemePreference } from "../theme-preference.js";
 import {
+  AppearanceSettingsPanel,
+  FastModeSettingsField,
   ModelSelect,
   ReasoningSelect,
   SettingsField,
   SettingsPanel,
   SettingsSelect,
-  ThemeButton,
   settingsSections,
   type SettingsSectionId,
 } from "./global-settings-fields.js";
@@ -44,6 +45,7 @@ type GlobalSettingsDialogProps = Readonly<{
   appInfoError?: Error | null;
   apps: readonly ProjectOpenApp[];
   error: Error | null;
+  fastModeAvailable?: boolean;
   initialSection?: SettingsSectionId;
   isAppInfoPending?: boolean;
   isAppUpdatePending?: boolean;
@@ -64,6 +66,7 @@ export function GlobalSettingsDialog({
   appInfoError = null,
   apps,
   error,
+  fastModeAvailable = false,
   initialSection = "appearance",
   isAppInfoPending = false,
   isAppUpdatePending = false,
@@ -98,10 +101,6 @@ export function GlobalSettingsDialog({
     if (!isSaving) {
       onClose();
     }
-  };
-
-  const selectTheme = (nextTheme: ThemePreference) => {
-    setTheme(nextTheme);
   };
 
   return (
@@ -241,55 +240,11 @@ export function GlobalSettingsDialog({
                 </div>
               ) : (
                 <>
-                  <SettingsPanel
+                  <AppearanceSettingsPanel
                     activeSection={activeSection}
-                    id="appearance"
-                    title={t("sections.appearance")}
-                  >
-                    <SettingsField label={t("appearance.colorMode")}>
-                      <div className="grid grid-cols-3 rounded-control bg-control p-0.5">
-                        <ThemeButton
-                          ariaLabel={t("appearance.automaticMode")}
-                          icon={MonitorCog}
-                          label={t("appearance.automatic")}
-                          onClick={() => {
-                            selectTheme("system");
-                          }}
-                          selected={theme === "system"}
-                        />
-                        <ThemeButton
-                          ariaLabel={t("appearance.lightMode")}
-                          icon={Sun}
-                          label={t("appearance.light")}
-                          onClick={() => {
-                            selectTheme("light");
-                          }}
-                          selected={theme === "light"}
-                        />
-                        <ThemeButton
-                          ariaLabel={t("appearance.darkMode")}
-                          icon={Moon}
-                          label={t("appearance.dark")}
-                          onClick={() => {
-                            selectTheme("dark");
-                          }}
-                          selected={theme === "dark"}
-                        />
-                      </div>
-                    </SettingsField>
-                    <SettingsField label={t("appearance.language")}>
-                      <SettingsSelect
-                        aria-label={t("appearance.language")}
-                        onChange={(event) => {
-                          void changeAppLanguage(event.currentTarget.value as "en" | "zh-CN");
-                        }}
-                        value={getCurrentLanguage()}
-                      >
-                        <option value="zh-CN">{t("languages.zhCN")}</option>
-                        <option value="en">{t("languages.en")}</option>
-                      </SettingsSelect>
-                    </SettingsField>
-                  </SettingsPanel>
+                    onThemeChange={setTheme}
+                    theme={theme}
+                  />
 
                   {accessMode === "lan" ? (
                     <GlobalSettingsAccess
@@ -350,6 +305,15 @@ export function GlobalSettingsDialog({
                         <option value="steer">{t("followUp.steer")}</option>
                       </SettingsSelect>
                     </SettingsField>
+                    {fastModeAvailable ? (
+                      <FastModeSettingsField
+                        disabled={isSaving}
+                        enabled={draft.fastMode}
+                        onChange={(fastMode) => {
+                          setDraft((current) => ({ ...current, fastMode }));
+                        }}
+                      />
+                    ) : null}
                     <SettingsField label={t("fields.model")}>
                       <ModelSelect
                         ariaLabel={t("fields.model")}

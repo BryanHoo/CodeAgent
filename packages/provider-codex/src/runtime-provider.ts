@@ -13,26 +13,27 @@ import type {
   ResolvePendingRequestInput,
   StartAgentTaskOptions,
 } from "@code-agent/core";
-import type {
-  AgentCapabilities,
-  AgentBackgroundTerminalPage,
-  AgentProviderConnectionMutationResponse,
-  AgentProviderConnectionStatus,
-  AgentMcpServerPage,
-  AgentTask,
-  AgentTaskPage,
-  AgentTurn,
-  AgentModelPage,
-  AgentTurnOptions,
-  AgentReviewTarget,
-  AgentSandboxMode,
-  AgentSkillPage,
-  ConfigureCustomProviderRequest,
-  ConfigureCustomProviderResponse,
-  PendingRequest,
-  Project,
-  StartOfficialProviderLoginResponse,
-  UploadAgentFeedbackRequest,
+import {
+  isAgentFastModeAvailable,
+  type AgentCapabilities,
+  type AgentBackgroundTerminalPage,
+  type AgentProviderConnectionMutationResponse,
+  type AgentProviderConnectionStatus,
+  type AgentMcpServerPage,
+  type AgentTask,
+  type AgentTaskPage,
+  type AgentTurn,
+  type AgentModelPage,
+  type AgentTurnOptions,
+  type AgentReviewTarget,
+  type AgentSandboxMode,
+  type AgentSkillPage,
+  type ConfigureCustomProviderRequest,
+  type ConfigureCustomProviderResponse,
+  type PendingRequest,
+  type Project,
+  type StartOfficialProviderLoginResponse,
+  type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 import { RuntimeOwnerRegistry, isSameResolvedPath } from "./runtime-owner-registry.js";
 import { CodexProtocolMappingError, expectRecord } from "./codex-protocol-mapping.js";
@@ -203,13 +204,23 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return task;
   }
 
-  public startTurn(
+  public async startTurn(
     taskId: string,
     input: AgentProviderTurnInput,
     options: AgentTurnOptions,
   ): Promise<AgentTurn> {
     this.#runtime.assertTaskOwner(this.#project, taskId);
-    return this.#delegate.startTurn(taskId, input, options);
+    if (options.fastMode !== true) {
+      return this.#delegate.startTurn(taskId, input, options);
+    }
+    const status = await this.#runtime.readProviderConnection();
+    if (isAgentFastModeAvailable(status)) {
+      return this.#delegate.startTurn(taskId, input, options);
+    }
+    // HTTP 输入不可信，非官方账号即使手工提交 fastMode 也必须在 Provider 边界移除。
+    const standardOptions = { ...options };
+    delete standardOptions.fastMode;
+    return this.#delegate.startTurn(taskId, input, standardOptions);
   }
 
   public steerTurn(taskId: string, turnId: string, input: AgentProviderTurnInput): Promise<void> {

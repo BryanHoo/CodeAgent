@@ -6,6 +6,7 @@ import {
   AgentProviderConnectionStatusSchema,
   ConfigureCustomProviderRequestSchema,
   ConfigureCustomProviderResponseSchema,
+  isAgentFastModeAvailable,
   StartOfficialProviderLoginResponseSchema,
 } from "./provider-connection.js";
 
@@ -24,6 +25,23 @@ const modelPage = {
 } as const;
 
 describe("Provider connection protocol", () => {
+  it("enables fast mode only for a connected official ChatGPT account", () => {
+    const officialChatGpt = {
+      account: { email: "developer@example.com", planType: "plus", type: "chatgpt" as const },
+      customBaseUrl: null,
+      mode: "official" as const,
+      pendingLogin: null,
+      state: "connected" as const,
+    };
+
+    expect(isAgentFastModeAvailable(officialChatGpt)).toBe(true);
+    expect(isAgentFastModeAvailable({ ...officialChatGpt, state: "pending" })).toBe(false);
+    expect(isAgentFastModeAvailable({ ...officialChatGpt, mode: "custom" })).toBe(false);
+    expect(isAgentFastModeAvailable({ ...officialChatGpt, account: { type: "apiKey" } })).toBe(
+      false,
+    );
+  });
+
   it("accepts strict official and custom connection states", () => {
     expect(
       Value.Check(AgentProviderConnectionStatusSchema, {

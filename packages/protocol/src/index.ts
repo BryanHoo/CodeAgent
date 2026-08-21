@@ -32,6 +32,7 @@ export {
   CancelProviderLoginRequestSchema,
   ConfigureCustomProviderRequestSchema,
   ConfigureCustomProviderResponseSchema,
+  isAgentFastModeAvailable,
   StartOfficialProviderLoginRequestSchema,
   StartOfficialProviderLoginResponseSchema,
   type AgentProviderAccount,

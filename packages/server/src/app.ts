@@ -301,6 +301,7 @@ export async function createCodeAgentServer(
           commitMessagePrompt: stored?.commitMessagePrompt ?? "",
           commitMessageReasoningEffort: effectiveCommitModel.reasoningEffort,
           defaultOpenAppId: stored?.defaultOpenAppId ?? null,
+          fastMode: stored?.fastMode ?? false,
           followUpBehavior: stored?.followUpBehavior ?? "queue",
           ...effectiveModel,
         }
@@ -311,6 +312,7 @@ export async function createCodeAgentServer(
           commitMessagePrompt: stored?.commitMessagePrompt ?? "",
           commitMessageReasoningEffort: effectiveCommitModel.reasoningEffort,
           defaultOpenAppId: stored?.defaultOpenAppId ?? null,
+          fastMode: stored?.fastMode ?? false,
           followUpBehavior: stored?.followUpBehavior ?? "queue",
           ...effectiveModel,
         };

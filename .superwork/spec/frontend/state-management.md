@@ -15,6 +15,7 @@
 - MCP 清单 Query Key 必须同时包含 `projectId + taskId`，没有当前 Task 时禁用；手动重载成功后以返回页更新同一缓存。Project Runtime 收到 `mcp_server.status_updated` 后只失效对应 `projectId + taskId` 的 MCP Query，通过权威清单补齐工具数、认证和版本元数据；不得再为 `starting` 状态建立轮询。
 - 高扇出 React Provider 必须按只读数据、稳定操作和高频活动状态拆分 Context，消费者只通过专用 Hook 订阅所需边界；每个 Provider value 及派生数组、Map 必须保持引用稳定，Mutation Pending 或单个活动状态变化不得使无关数据/操作消费者重新渲染。
 - Global settings 与 Project 新 Task 默认设置使用 TanStack Query 独立缓存；Task Snapshot 必须直接携带 Server 校验后的完整 Task 设置。
+- 快速模式可见性必须复用 Provider 连接 Query，并严格由 `official + connected + chatgpt` 判定。Global settings 保存默认布尔值，Composer 按当前作用域保留用户覆盖；连接资格失效时控件必须隐藏且提交值强制为关闭，不能把该字段写入 Project 或 Task settings。
 - Global settings、Project defaults 与 Task settings 只在用户事件中通过原子 `PUT` 更新完整对象；Mutation 按 Global、Project 或 Task 串行，成功后更新对应 Query/Snapshot 缓存。
 - TanStack `MutationCache` 是网络 Mutation 动作通知的唯一默认入口：成功发送一次根级成功 toast，失败发送一次保留 `Error.message` 的根级错误 toast；内部后台任务必须显式绕过该通道。非 Mutation 用户动作通过同一通知服务发布，组件局部状态只保存输入校验、数据加载和业务执行状态。
 - 主题偏好属于浏览器本地状态，必须使用版本化存储并在 React 挂载前应用；不得混入 Global settings Query 或服务端持久化。

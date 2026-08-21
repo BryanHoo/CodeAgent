@@ -50,6 +50,7 @@ type ComposerSubmissionOptions = Readonly<{
   composerScope: string;
   controller: ReturnType<typeof useWorkbenchComposerController>;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
+  fastMode: boolean;
   onDirectSubmission: WorkbenchComposerProps["onDirectSubmission"];
   onRequestNotificationPermission: () => void;
   onTaskCreated: WorkbenchComposerProps["onTaskCreated"];
@@ -88,6 +89,7 @@ export function createComposerSubmission({
   composerScope,
   controller,
   followUpBehavior,
+  fastMode,
   onDirectSubmission,
   onRequestNotificationPermission,
   onTaskCreated,
@@ -298,6 +300,7 @@ export function createComposerSubmission({
       selectedModel.id,
       selectedReasoningEffort,
       requestedComposerMode,
+      fastMode,
     );
     const turnAttempt = resolveIdempotencyAttempt(
       startTurnAttempt.current,

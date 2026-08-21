@@ -1,5 +1,5 @@
 import type { AgentTaskSettings } from "@code-agent/protocol";
-import { useEffect, useImperativeHandle } from "react";
+import { useEffect, useImperativeHandle, useState } from "react";
 import { v4 as createUuid } from "uuid";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -50,6 +50,8 @@ export function WorkbenchComposer({
   composerRef,
   capabilities,
   client,
+  fastModeAvailable,
+  fastModeDefault,
   fixedSandboxMode,
   followUpBehavior,
   models,
@@ -154,6 +156,11 @@ export function WorkbenchComposer({
     state,
     turnControlsDisabled,
   } = session;
+  const [fastModeSelection, setFastModeSelection] =
+    useState<Readonly<{ enabled: boolean; scope: string }>>();
+  const fastModeEnabled =
+    fastModeAvailable &&
+    (fastModeSelection?.scope === composerScope ? fastModeSelection.enabled : fastModeDefault);
   const {
     actionLock: composerActionLock,
     autoStartedQueueIds,
@@ -226,6 +233,7 @@ export function WorkbenchComposer({
     controller: composerController,
     composerMode,
     followUpBehavior,
+    fastMode: fastModeEnabled,
     onDirectSubmission,
     onGoalStarted: () => {
       setComposerModeState(undefined);
@@ -366,6 +374,8 @@ export function WorkbenchComposer({
       fileSearchError={fileSearchError}
       fileSearchPending={fileSearchPending}
       fileSearchResults={fileSearchResults}
+      fastModeAvailable={fastModeAvailable}
+      fastModeEnabled={fastModeEnabled}
       getCommandAvailability={getCommandAvailability}
       gitStatus={gitStatus}
       hasComposerInput={hasComposerInput}
@@ -392,6 +402,9 @@ export function WorkbenchComposer({
       }}
       onExecuteReview={(target) => {
         void executeReviewTarget(target);
+      }}
+      onFastModeChange={(enabled) => {
+        setFastModeSelection({ enabled, scope: composerScope });
       }}
       onInterrupt={() => {
         void interruptTurn();

@@ -373,6 +373,7 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
           commitMessagePrompt: "",
           commitMessageReasoningEffort: "high",
           defaultOpenAppId: "finder",
+          fastMode: false,
           followUpBehavior: "queue",
           model: "gpt-5.6-terra",
           reasoningEffort: "medium",

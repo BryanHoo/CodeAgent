@@ -20,6 +20,7 @@ import {
 } from "../../conversation/runtime/task-runtime.js";
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
+import { providerConnectionQueryOptions } from "../../provider-connection/provider-connection-queries.js";
 import { useProjectActions, useProjectData } from "../../projects/project-context.js";
 import {
   appInfoQueryOptions,
@@ -157,6 +158,7 @@ export function useWorkbenchShellRuntime({
     },
   });
   const modelsQuery = useQuery(modelsQueryOptions(client));
+  const providerConnectionQuery = useQuery(providerConnectionQueryOptions());
   const mcpServersQuery = useQuery(
     mcpServersQueryOptions(projectId, taskId, client, inspectorActivation.context),
   );
@@ -412,6 +414,7 @@ export function useWorkbenchShellRuntime({
     projectDefaultsQuery,
     projectName,
     projectOpenCapabilitiesQuery,
+    providerConnectionQuery,
     projectFolderOpenDisabled:
       projectFileManagerApp === undefined || projectPathOpenMutation.isPending,
     projectPath,

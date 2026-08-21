@@ -50,6 +50,8 @@ export type WorkbenchComposerViewProps = Readonly<{
   fileSearchError: Error | null;
   fileSearchPending: boolean;
   fileSearchResults: readonly ProjectFileSearchEntry[];
+  fastModeAvailable: boolean;
+  fastModeEnabled: boolean;
   getCommandAvailability: (command: PromptCommandItem) => CommandAvailability;
   gitStatus: ProjectGitStatus | undefined;
   hasComposerInput: boolean;
@@ -65,6 +67,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onWorktreeCreate: (branch: string) => Promise<boolean>;
   onExecuteCommand: (command: PromptCommandItem) => void;
   onExecuteReview: (target: AgentReviewTarget) => void;
+  onFastModeChange: (enabled: boolean) => void;
   onInterrupt: () => void;
   onOpenProjectPath: () => void;
   onOpenReviewBranches: () => void;

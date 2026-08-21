@@ -74,13 +74,13 @@ describe("WorkbenchComposer", () => {
   });
 
   it("adds plan mode only to the active Turn options", () => {
-    expect(createComposerTurnOptions(task.settings, model.id, "high", "plan")).toEqual({
+    expect(createComposerTurnOptions(task.settings, model.id, "high", "plan", false)).toEqual({
       ...task.settings,
       collaborationMode: "plan",
       model: model.id,
       reasoningEffort: "high",
     });
-    expect(createComposerTurnOptions(task.settings, model.id, "high", undefined)).toEqual({
+    expect(createComposerTurnOptions(task.settings, model.id, "high", undefined, false)).toEqual({
       ...task.settings,
       model: model.id,
       reasoningEffort: "high",
@@ -88,9 +88,18 @@ describe("WorkbenchComposer", () => {
   });
 
   it("adds goal mode only to the first Goal Turn options", () => {
-    expect(createComposerTurnOptions(task.settings, model.id, "high", "goal")).toEqual({
+    expect(createComposerTurnOptions(task.settings, model.id, "high", "goal", false)).toEqual({
       ...task.settings,
       goalMode: true,
+      model: model.id,
+      reasoningEffort: "high",
+    });
+  });
+
+  it("adds fast mode only to the active Turn options", () => {
+    expect(createComposerTurnOptions(task.settings, model.id, "high", undefined, true)).toEqual({
+      ...task.settings,
+      fastMode: true,
       model: model.id,
       reasoningEffort: "high",
     });

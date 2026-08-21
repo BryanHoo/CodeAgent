@@ -1172,6 +1172,7 @@ describe("project protocol", () => {
       commitMessagePrompt: "突出说明用户可见影响。",
       commitMessageReasoningEffort: "medium",
       defaultOpenAppId: "visual-studio-code",
+      fastMode: false,
       followUpBehavior: "queue",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
@@ -1179,6 +1180,8 @@ describe("project protocol", () => {
     };
 
     expect(Value.Check(AgentGlobalSettingsSchema, settings)).toBe(true);
+    expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, fastMode: true })).toBe(true);
+    expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, fastMode: "true" })).toBe(false);
     expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings })).toBe(true);
     expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, followUpBehavior: "steer" })).toBe(
       true,
@@ -1642,6 +1645,10 @@ describe("project protocol", () => {
     };
     expect(Value.Check(AgentTurnOptionsSchema, planTurnOptions)).toBe(true);
     expect(Value.Check(AgentTaskSettingsSchema, planTurnOptions)).toBe(false);
+    expect(Value.Check(AgentTurnOptionsSchema, { ...planTurnOptions, fastMode: true })).toBe(true);
+    expect(Value.Check(AgentTurnOptionsSchema, { ...planTurnOptions, fastMode: false })).toBe(
+      false,
+    );
     const goalTurnOptions = {
       approvalPolicy: "on-request",
       approvalsReviewer: "user",

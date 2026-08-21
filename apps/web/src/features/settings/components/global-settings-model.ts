@@ -44,6 +44,7 @@ export function createFallbackSettings(models: readonly AgentModel[]): AgentGlob
     commitMessagePrompt: "",
     commitMessageReasoningEffort: model?.defaultReasoningEffort ?? "",
     defaultOpenAppId: null,
+    fastMode: false,
     followUpBehavior: "queue",
     model: model?.id ?? "",
     reasoningEffort: model?.defaultReasoningEffort ?? "",

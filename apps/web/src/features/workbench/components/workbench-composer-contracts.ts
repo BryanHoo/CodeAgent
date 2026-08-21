@@ -34,11 +34,13 @@ export function createComposerTurnOptions(
   model: string,
   reasoningEffort: string | undefined,
   mode: ComposerMode | undefined,
+  fastMode: boolean,
 ): AgentTurnOptions {
   return {
     ...settings,
     ...(mode === "plan" ? { collaborationMode: "plan" as const } : {}),
     ...(mode === "goal" ? { goalMode: true as const } : {}),
+    ...(fastMode ? { fastMode: true as const } : {}),
     model,
     reasoningEffort: reasoningEffort ?? settings.reasoningEffort,
   };
@@ -63,6 +65,8 @@ export type WorkbenchComposerProps = Readonly<{
     > &
     CodeAgentProjectFileSearchClient;
   fixedSandboxMode?: AgentSandboxMode;
+  fastModeAvailable: boolean;
+  fastModeDefault: boolean;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
   modelsError: Error | null;

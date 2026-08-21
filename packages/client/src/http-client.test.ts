@@ -34,6 +34,7 @@ const globalSettings = {
   commitMessagePrompt: "",
   commitMessageReasoningEffort: "high",
   defaultOpenAppId: "visual-studio-code" as const,
+  fastMode: false,
   followUpBehavior: "queue" as const,
 };
 

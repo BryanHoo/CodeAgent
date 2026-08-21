@@ -35,6 +35,8 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   client,
   composerRef,
   fallbackSettings,
+  fastModeAvailable,
+  fastModeDefault,
   fixedSandboxMode,
   followUpBehavior,
   models,
@@ -61,6 +63,8 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   client: CodeAgentWorkbenchClient;
   composerRef: RefObject<WorkbenchComposerHandle | null>;
   fallbackSettings: AgentTaskSettings;
+  fastModeAvailable: boolean;
+  fastModeDefault: boolean;
   fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
@@ -195,6 +199,8 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         client={client}
         {...(fixedSandboxMode === undefined ? {} : { fixedSandboxMode })}
         followUpBehavior={followUpBehavior}
+        fastModeAvailable={fastModeAvailable}
+        fastModeDefault={fastModeDefault}
         models={models}
         modelsError={modelsError}
         modelsPending={modelsPending || runtime.isPending}

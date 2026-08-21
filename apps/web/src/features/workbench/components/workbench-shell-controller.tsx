@@ -1,5 +1,6 @@
 import {
   TEMPORARY_TASK_SANDBOX_MODE,
+  isAgentFastModeAvailable,
   type AgentMessageAttachment,
   type AgentPromptInput,
   type AgentTask,
@@ -44,6 +45,7 @@ export function useWorkbenchShellController(
     navigate,
     projectDefaultsMutation,
     projectDefaultsQuery,
+    providerConnectionQuery,
     projectPathOpenLockRef,
     projectPathOpenMutationRef,
     queryClient,
@@ -183,6 +185,10 @@ export function useWorkbenchShellController(
   );
   const models = modelsQuery.data?.data ?? [];
   const globalSettings = globalSettingsQuery.data?.settings;
+  const fastModeAvailable =
+    providerConnectionQuery.data === undefined
+      ? false
+      : isAgentFastModeAvailable(providerConnectionQuery.data);
   const draftDefaults = temporary ? globalSettings : projectDefaultsQuery.data?.settings;
   const defaultModel =
     models.find((model) => model.id === draftDefaults?.model) ??
@@ -302,6 +308,7 @@ export function useWorkbenchShellController(
     closeSidebar,
     closeTaskRenameDialog,
     draftSettings,
+    fastModeAvailable,
     globalSettings,
     handleNewTaskProjectChange,
     handleTaskCreated,

@@ -43,12 +43,16 @@ import { PromptSkillEditor } from "./prompt-skill-editor.js";
 import { selectionOffset } from "./prompt-skill-editor-dom.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
-import { ComposerAttachments, ComposerModeTag } from "./workbench-composer-toolbar.js";
+import {
+  ComposerAttachments,
+  ComposerFastModeButton,
+  ComposerModeTag,
+} from "./workbench-composer-toolbar.js";
 import {
   resolveQueuedPromptSummary,
   type WorkbenchComposerViewProps,
 } from "./workbench-composer-view-contracts.js";
-export { ComposerModeTag } from "./workbench-composer-toolbar.js";
+export { ComposerFastModeButton, ComposerModeTag } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
 
 export function ComposerProjectPathButton({
@@ -323,6 +327,13 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   onRemove={props.onComposerModeRemove}
                 />
               )}
+              {props.fastModeAvailable ? (
+                <ComposerFastModeButton
+                  disabled={props.turnControlsDisabled}
+                  enabled={props.fastModeEnabled}
+                  onChange={props.onFastModeChange}
+                />
+              ) : null}
             </PromptInputTools>
             {/* 模型与提交动作保持固定分组，避免内容宽度变化时拆成两行。 */}
             <div className="flex min-w-0 items-center gap-1 max-workbench:shrink-0 max-workbench:gap-0.5 max-[360px]:!gap-0">

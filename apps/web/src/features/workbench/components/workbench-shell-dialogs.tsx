@@ -32,6 +32,7 @@ export function WorkbenchShellDialogs({
     globalSettingsMutation,
     globalSettingsSection,
     globalSettingsQuery,
+    fastModeAvailable,
     models,
     modelsQuery,
     projectOpenCapabilitiesQuery,
@@ -113,6 +114,7 @@ export function WorkbenchShellDialogs({
               modelsQuery.isPending ||
               (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
             }
+            fastModeAvailable={fastModeAvailable}
             initialSection={globalSettingsSection}
             isAppInfoPending={appInfoQuery.isPending}
             isAppUpdatePending={appUpdateMutation.isPending}

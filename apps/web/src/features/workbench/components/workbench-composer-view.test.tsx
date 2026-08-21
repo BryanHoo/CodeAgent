@@ -5,11 +5,24 @@ import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import {
   ComposerModeTag,
+  ComposerFastModeButton,
   ComposerProjectPathButton,
   resolveQueuedPromptSummary,
 } from "./workbench-composer-view.js";
 
 describe("WorkbenchComposerView", () => {
+  it("渲染可切换的快速模式按钮", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ComposerFastModeButton disabled={false} enabled onChange={() => undefined} />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain('aria-label="关闭快速模式"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain('data-fast-mode=""');
+  });
+
   it("渲染可取消的计划模式标签", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>

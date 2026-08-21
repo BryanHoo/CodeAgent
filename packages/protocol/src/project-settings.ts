@@ -64,6 +64,7 @@ const AgentGlobalSettingProperties = {
     Type.Exclude(ProjectOpenAppIdSchema, Type.Literal("system-default")),
     Type.Null(),
   ]),
+  fastMode: Type.Boolean(),
   followUpBehavior: Type.Union([Type.Literal("queue"), Type.Literal("steer")]),
   ...AgentTaskSettingProperties,
 };
@@ -127,11 +128,12 @@ export type AgentTaskSettingsResponse = Readonly<Static<typeof AgentTaskSettings
 
 const AgentTurnOptionProperties = {
   collaborationMode: Type.Optional(AgentCollaborationModeSchema),
+  fastMode: Type.Optional(Type.Literal(true)),
   goalMode: Type.Optional(Type.Literal(true)),
   ...AgentTaskSettingProperties,
 };
 
-// Collaboration 与 Goal 模式只控制当前 Turn，不得进入持久化 Task 设置。
+// Collaboration、Goal 与快速模式只控制当前 Turn，不得进入持久化 Task 设置。
 export const AgentTurnOptionsSchema = Type.Union([
   Type.Object(
     {

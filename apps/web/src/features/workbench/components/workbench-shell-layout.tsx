@@ -48,6 +48,7 @@ export function WorkbenchShellLayout({
     closeSidebar,
     draftSettings,
     error,
+    fastModeAvailable,
     expandedFileTreePaths,
     gitStatusQuery,
     globalSettings,
@@ -294,6 +295,8 @@ export function WorkbenchShellLayout({
               composerRef={composerRef}
               {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
               followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
+              fastModeAvailable={fastModeAvailable}
+              fastModeDefault={globalSettings?.fastMode ?? false}
               models={models}
               modelsError={null}
               modelsPending={
@@ -325,6 +328,8 @@ export function WorkbenchShellLayout({
             fallbackSettings={draftSettings}
             {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
             followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
+            fastModeAvailable={fastModeAvailable}
+            fastModeDefault={globalSettings?.fastMode ?? false}
             models={models}
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}

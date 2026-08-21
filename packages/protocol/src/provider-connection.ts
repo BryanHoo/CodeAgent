@@ -137,3 +137,9 @@ export type AgentProviderConnectionMutationResponse = Readonly<
 export type AgentProviderConnectionRecord = Readonly<
   Static<typeof AgentProviderConnectionRecordSchema>
 >;
+
+export function isAgentFastModeAvailable(status: AgentProviderConnectionStatus): boolean {
+  return (
+    status.mode === "official" && status.state === "connected" && status.account?.type === "chatgpt"
+  );
+}

@@ -45,6 +45,8 @@ function mapCodexTurnSettings(options: AgentTurnOptions) {
     effort: options.reasoningEffort,
     model: options.model,
     sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
+    // Codex 会把 Service Tier 粘附到 Thread，关闭时必须显式清除。
+    serviceTier: options.fastMode === true ? "fast" : null,
   };
 }
 

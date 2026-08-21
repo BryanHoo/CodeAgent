@@ -5,16 +5,20 @@ import {
   GitCommitHorizontal,
   Info,
   MonitorCog,
+  Moon,
   Network,
   Palette,
   ServerCog,
+  Sun,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode, SelectHTMLAttributes } from "react";
 
-import { useTranslation } from "../../../i18n/i18n.js";
+import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import { PromptInputSelect } from "../../../shared/components/agent/prompt-input.js";
 import { Button } from "../../../shared/components/core/button.js";
+import { Checkbox } from "../../../shared/components/core/checkbox.js";
+import type { ThemePreference } from "../theme-preference.js";
 
 export type SettingsSectionId =
   "about" | "access" | "agent" | "appearance" | "commit" | "integration" | "provider";
@@ -31,6 +35,17 @@ export const settingsSections: readonly Readonly<{
   { icon: Network, id: "access" },
   { icon: Info, id: "about" },
 ];
+
+const themeOptions = [
+  {
+    ariaKey: "appearance.automaticMode",
+    icon: MonitorCog,
+    labelKey: "appearance.automatic",
+    value: "system",
+  },
+  { ariaKey: "appearance.lightMode", icon: Sun, labelKey: "appearance.light", value: "light" },
+  { ariaKey: "appearance.darkMode", icon: Moon, labelKey: "appearance.dark", value: "dark" },
+] as const;
 
 export function SettingsPanel({
   activeSection,
@@ -72,6 +87,27 @@ export function SettingsField({
   );
 }
 
+export function FastModeSettingsField({
+  disabled,
+  enabled,
+  onChange,
+}: Readonly<{ disabled: boolean; enabled: boolean; onChange: (enabled: boolean) => void }>) {
+  const { t } = useTranslation("settings");
+  const label = t("fields.fastMode");
+  return (
+    <SettingsField label={label}>
+      <Checkbox
+        aria-label={label}
+        checked={enabled}
+        disabled={disabled}
+        onCheckedChange={(checked) => {
+          onChange(checked === true);
+        }}
+      />
+    </SettingsField>
+  );
+}
+
 export function ThemeButton({
   ariaLabel,
   icon: Icon,
@@ -97,6 +133,52 @@ export function ThemeButton({
       <Icon aria-hidden="true" className="hidden size-4 min-[360px]:block" />
       <span>{label}</span>
     </Button>
+  );
+}
+
+export function AppearanceSettingsPanel({
+  activeSection,
+  onThemeChange,
+  theme,
+}: Readonly<{
+  activeSection: SettingsSectionId;
+  onThemeChange: (theme: ThemePreference) => void;
+  theme: ThemePreference;
+}>) {
+  const { t } = useTranslation("settings");
+  return (
+    <SettingsPanel activeSection={activeSection} id="appearance" title={t("sections.appearance")}>
+      <SettingsField label={t("appearance.colorMode")}>
+        <div className="grid grid-cols-3 rounded-control bg-control p-0.5">
+          {themeOptions.map((option) => {
+            return (
+              <ThemeButton
+                ariaLabel={t(option.ariaKey)}
+                icon={option.icon}
+                key={option.value}
+                label={t(option.labelKey)}
+                onClick={() => {
+                  onThemeChange(option.value);
+                }}
+                selected={theme === option.value}
+              />
+            );
+          })}
+        </div>
+      </SettingsField>
+      <SettingsField label={t("appearance.language")}>
+        <SettingsSelect
+          aria-label={t("appearance.language")}
+          onChange={(event) => {
+            void changeAppLanguage(event.currentTarget.value as "en" | "zh-CN");
+          }}
+          value={getCurrentLanguage()}
+        >
+          <option value="zh-CN">{t("languages.zhCN")}</option>
+          <option value="en">{t("languages.en")}</option>
+        </SettingsSelect>
+      </SettingsField>
+    </SettingsPanel>
   );
 }
 

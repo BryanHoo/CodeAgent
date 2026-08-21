@@ -68,6 +68,7 @@ export const settings = {
     commitModel: "Commit model",
     commitReasoningEffort: "Commit reasoning effort",
     defaultOpenWith: "Default open with",
+    fastMode: "Fast mode",
     followUpMessages: "Follow-up messages",
     model: "Model",
     prompt: "Prompt",

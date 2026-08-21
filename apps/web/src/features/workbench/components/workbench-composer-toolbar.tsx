@@ -1,4 +1,4 @@
-import { Bug, CircleGauge, FilePlus2, GitFork, Lightbulb, Target, X } from "lucide-react";
+import { Bug, CircleGauge, FilePlus2, GitFork, Lightbulb, Target, X, Zap } from "lucide-react";
 import type { PromptCommandAction } from "./prompt-command.js";
 import type { ComposerMode } from "./workbench-composer-contracts.js";
 
@@ -68,6 +68,34 @@ export function ComposerModeTag({
         </PromptInputButton>
       </TooltipTrigger>
       <TooltipContent>{cancelLabel}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function ComposerFastModeButton({
+  disabled,
+  enabled,
+  onChange,
+}: Readonly<{ disabled: boolean; enabled: boolean; onChange: (enabled: boolean) => void }>) {
+  const { t } = useTranslation("workbench");
+  const label = t(enabled ? "composer.disableFastMode" : "composer.enableFastMode");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <PromptInputButton
+          aria-label={label}
+          aria-pressed={enabled}
+          className={enabled ? "text-brand" : "text-muted-foreground"}
+          data-fast-mode=""
+          disabled={disabled}
+          onClick={() => {
+            onChange(!enabled);
+          }}
+        >
+          <Zap aria-hidden="true" className="size-3.5" />
+        </PromptInputButton>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
 }

@@ -370,6 +370,7 @@ describe("CodexAgentProvider", () => {
           type: "workspaceWrite",
           writableRoots: [],
         },
+        serviceTier: null,
         threadId: "task-1",
       },
     });
@@ -1075,7 +1076,52 @@ describe("CodexAgentProvider", () => {
             reasoning_effort: "high",
           },
         },
+        serviceTier: null,
       },
+    });
+  });
+
+  it("uses the Codex fast service tier for a connected official ChatGPT account", async () => {
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-fast",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ status: { type: "active" } }) },
+      { config: { model_provider: "openai", openai_base_url: null } },
+      {
+        account: { email: "developer@example.com", planType: "plus", type: "chatgpt" },
+        requiresOpenaiAuth: true,
+      },
+      { turn: runningTurn },
+    ]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+    const task = await provider.startTask();
+
+    await expect(
+      provider.startTurn(
+        task.id,
+        { files: [], images: [], skills: [], text: "快速处理", textAttachments: [] },
+        {
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          fastMode: true,
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        },
+      ),
+    ).resolves.toMatchObject({ id: "turn-fast", status: "running" });
+
+    expect(rpc.calls.at(-1)).toMatchObject({
+      method: "turn/start",
+      params: { serviceTier: "fast" },
     });
   });
 
@@ -2169,6 +2215,7 @@ describe("CodexAgentProvider", () => {
             type: "workspaceWrite",
             writableRoots: [],
           },
+          serviceTier: null,
           threadId: "task-1",
         },
       },
@@ -2696,6 +2743,7 @@ describe("CodexAgentProvider", () => {
             type: "workspaceWrite",
             writableRoots: [],
           },
+          serviceTier: null,
           threadId: "task-1",
         },
       },
