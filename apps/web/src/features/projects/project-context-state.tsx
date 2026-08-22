@@ -7,7 +7,6 @@ import {
 } from "@code-agent/protocol";
 import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo } from "react";
-
 import type { ProjectRuntimeManager } from "../conversation/runtime/project-runtime.js";
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
 import {
@@ -101,7 +100,7 @@ export const ProjectRootSelectionContext = createContext<
   ProjectRootSelectionContextValue | undefined
 >(undefined);
 
-type ProjectTaskQueryProps = Readonly<{
+export type ProjectTaskQueryProps = Readonly<{
   client: CodeAgentWorkbenchClient;
   onRemove: (projectId: string) => void;
   onUpdate: (projectId: string, result: ProjectTaskQueryResult) => void;

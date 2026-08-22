@@ -1,17 +1,11 @@
 import { TEMPORARY_TASK_SCOPE_ID, type Project, type ProjectPage } from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-
 import { i18n } from "../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../shared/utils/async-action-lock.js";
 import { createProjectRuntimeManager } from "../conversation/runtime/project-runtime.js";
 import { notifyActionError, notifyActionSuccess } from "../notifications/action-notifications.js";
 import {
-  ProjectActionsContext,
-  ProjectActivityContext,
-  ProjectDataContext,
-  ProjectRootSelectionContext,
-  ProjectTaskQuery,
   buildTaskScopeCollections,
   requestNextProjectTaskPage,
   type ProjectActionsContextValue,
@@ -37,6 +31,7 @@ import {
   updateTaskTitleInProjectListCaches,
 } from "./project-queries.js";
 import type { ProjectProviderProps } from "./project-provider-types.js";
+import { ProjectProviderView } from "./project-provider-view.js";
 import { resolveProjectRootFromSelections } from "./project-root-selection.js";
 
 const emptyProjects: readonly Project[] = [];
@@ -230,7 +225,6 @@ export function ProjectProvider({
       return nextResults;
     });
   }, []);
-  // 派生集合只在查询范围或结果变化时重建，保持 Context value 的引用稳定。
   const { projectTaskStates, tasks } = useMemo(
     () => buildTaskScopeCollections(queriedTaskScopeIds, projectTaskResults),
     [projectTaskResults, queriedTaskScopeIds],
@@ -259,7 +253,6 @@ export function ProjectProvider({
   );
   const viewTask = useCallback(
     (projectId: string, taskId?: string) => {
-      // 当前路由始终激活对应列表，即使用户把该 Project 的任务树收起。
       setActiveProjectId((currentProjectId) =>
         currentProjectId === projectId ? currentProjectId : projectId,
       );
@@ -279,7 +272,6 @@ export function ProjectProvider({
     });
   }, []);
   const requestNotificationPermission = useCallback(() => {
-    // 由 Composer 的用户手势触发；权限失败只关闭增强能力，不阻断 Task 操作。
     void projectRuntime.requestNotificationPermission();
   }, [projectRuntime]);
   const addProject = useCallback(
@@ -406,7 +398,6 @@ export function ProjectProvider({
     [gitStatusCoordinator],
   );
   const retry = useCallback(async () => {
-    // Runtime 恢复后统一刷新全部服务端状态，避免部分 Query 继续保留失败结果。
     await queryClient.invalidateQueries();
   }, [queryClient]);
 
@@ -492,32 +483,17 @@ export function ProjectProvider({
   );
 
   return (
-    <>
-      <ProjectTaskQuery
-        client={client}
-        key={TEMPORARY_TASK_SCOPE_ID}
-        onRemove={removeProjectTaskResult}
-        onUpdate={updateProjectTaskResult}
-        projectId={TEMPORARY_TASK_SCOPE_ID}
-      />
-      {queriedProjects.map((project) => (
-        <ProjectTaskQuery
-          client={client}
-          key={project.id}
-          onRemove={removeProjectTaskResult}
-          onUpdate={updateProjectTaskResult}
-          projectId={project.id}
-        />
-      ))}
-      <ProjectDataContext.Provider value={dataValue}>
-        <ProjectActionsContext.Provider value={actionsValue}>
-          <ProjectRootSelectionContext.Provider value={rootSelectionValue}>
-            <ProjectActivityContext.Provider value={activityValue}>
-              {children}
-            </ProjectActivityContext.Provider>
-          </ProjectRootSelectionContext.Provider>
-        </ProjectActionsContext.Provider>
-      </ProjectDataContext.Provider>
-    </>
+    <ProjectProviderView
+      actions={actionsValue}
+      activity={activityValue}
+      client={client}
+      data={dataValue}
+      onRemoveTaskQuery={removeProjectTaskResult}
+      onUpdateTaskQuery={updateProjectTaskResult}
+      projects={queriedProjects}
+      rootSelection={rootSelectionValue}
+    >
+      {children}
+    </ProjectProviderView>
   );
 }

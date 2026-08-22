@@ -9,7 +9,6 @@ import type {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-
 import { useTranslation } from "../../../i18n/i18n.js";
 import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
@@ -54,6 +53,9 @@ import {
   shouldEnableProjectGitDetails,
 } from "../workbench-inspector-activation.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
+import { useSubmissionStartedAt } from "./use-submission-started-at.js";
+
+export { useSubmissionStartedAt } from "./use-submission-started-at.js";
 
 const emptyExpandedFileTreePaths = new Set<string>();
 
@@ -82,30 +84,6 @@ export type WorkbenchShellProps = Readonly<{
   taskId?: string;
   temporary?: boolean;
 }>;
-
-export function useSubmissionStartedAt() {
-  const [startedAt, setStartedAt] = useState<string>();
-  const startedAtRef = useRef<string | undefined>(undefined);
-  const beginSubmission = useCallback(() => {
-    const nextStartedAt = new Date().toISOString();
-    startedAtRef.current = nextStartedAt;
-    setStartedAt(nextStartedAt);
-  }, []);
-  const handleSubmissionStateChange = useCallback((submitting: boolean) => {
-    if (submitting) {
-      if (startedAtRef.current === undefined) {
-        const nextStartedAt = new Date().toISOString();
-        startedAtRef.current = nextStartedAt;
-        setStartedAt(nextStartedAt);
-      }
-      return;
-    }
-    startedAtRef.current = undefined;
-    setStartedAt(undefined);
-  }, []);
-  const getStartedAt = useCallback(() => startedAtRef.current, []);
-  return { beginSubmission, getStartedAt, handleSubmissionStateChange, startedAt } as const;
-}
 
 export function useWorkbenchShellRuntime({
   projectId,
