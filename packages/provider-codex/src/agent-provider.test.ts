@@ -5426,6 +5426,13 @@ describe("CodexAgentProvider", () => {
     await expect(provider.readTask("task-1")).resolves.toBeUndefined();
   });
 
+  it("returns undefined for an unassigned task that was not started locally", async () => {
+    const rpc = new FakeRpcClient([{ thread: nativeThread({ projectId: null }) }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.readTask("task-1")).resolves.toBeUndefined();
+  });
+
   it("returns undefined when Codex reports that a thread is not loaded", async () => {
     const rpc = new FakeRpcClient([
       new RpcResponseError({
@@ -5460,6 +5467,26 @@ describe("CodexAgentProvider", () => {
       projectId: project.id,
       status: "idle",
       turns: [],
+    });
+  });
+
+  it("keeps ownership when an unmaterialized thread read omits its project id", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      { thread: nativeThread({ projectId: null }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await provider.startTask();
+
+    await expect(provider.readTask("task-1")).resolves.toMatchObject({
+      contextUsage: null,
+      id: "task-1",
+      pendingRequests: [],
+      projectId: project.id,
+      status: "idle",
+      turns: [],
+      turnsNextCursor: null,
     });
   });
 

@@ -66,6 +66,17 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
       const response = expectRecord(nativeResponse, "thread/read response");
       const thread = expectRecord(response["thread"], "thread/read thread");
       if (!(await isProjectThread(thread, this.project))) {
+        const unmaterializedTask = this.runtime.unmaterializedTasks.get(taskId);
+        if (
+          unmaterializedTask !== undefined &&
+          thread["id"] === unmaterializedTask.id &&
+          thread["projectId"] === null
+        ) {
+          // Codex 0.149 的内存快照会在首条消息落盘前暂时省略已分配的 projectId。
+          projectOwnershipVerified = true;
+          this.promotePendingServerRequests(taskId);
+          return createUnmaterializedTaskSnapshot(unmaterializedTask);
+        }
         return undefined;
       }
       projectOwnershipVerified = true;
