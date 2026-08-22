@@ -67,6 +67,7 @@ type WorkbenchProjectFileTreeProps = Readonly<{
   onRefreshProject: () => unknown;
   projectId: string;
   projectName: string;
+  projectRootId: string;
   projectOpenApps: readonly ProjectOpenApp[];
   projectOpenPending: boolean;
   projectPath: string;
@@ -95,6 +96,7 @@ type ProjectFileTreeRowProps = Readonly<{
   projectOpenApps: readonly ProjectOpenApp[];
   projectOpenPending: boolean;
   projectPath: string;
+  projectRootId: string;
   projectRefreshing: boolean;
 }>;
 
@@ -109,11 +111,12 @@ const ProjectFileTreeRow = memo(function ProjectFileTreeRow({
   projectOpenApps,
   projectOpenPending,
   projectPath,
+  projectRootId,
   projectRefreshing,
 }: ProjectFileTreeRowProps) {
   const data = item.getItemData();
   const name = getItemName(data);
-  const target = createProjectFileTreeOpenTarget(data, projectPath);
+  const target = createProjectFileTreeOpenTarget(data, { id: projectRootId, path: projectPath });
   const openTarget =
     data.kind === "root"
       ? (appId: ProjectOpenAppId) => {
@@ -299,6 +302,7 @@ export function WorkbenchProjectFileTree({
   projectOpenApps,
   projectOpenPending,
   projectPath,
+  projectRootId,
   projectRefreshing = false,
 }: WorkbenchProjectFileTreeProps) {
   useTranslation("conversation");
@@ -470,6 +474,7 @@ export function WorkbenchProjectFileTree({
                 projectOpenApps={projectOpenApps}
                 projectOpenPending={projectOpenPending}
                 projectPath={projectPath}
+                projectRootId={projectRootId}
                 projectRefreshing={projectRefreshing}
               />
             </div>

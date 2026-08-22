@@ -49,7 +49,7 @@ const project = {
   id: "code-agent",
   name: "CodeAgent",
   rootPath: "/workspace/CodeAgent",
-  roots: [{ path: "/workspace/CodeAgent" }],
+  roots: [{ id: "root-code-agent", path: "/workspace/CodeAgent" }],
 } as const;
 const rootPath = "/workspace/CodeAgent";
 

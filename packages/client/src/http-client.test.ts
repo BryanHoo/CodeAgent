@@ -189,7 +189,10 @@ describe("CodeAgentClient", () => {
       createdAt: "2026-07-23T00:00:00.000Z",
       id: "code-agent",
       name: "CodeAgent",
-      roots: [{ path: primaryRootPath }, { path: "/Users/bryan/Develop/CodeAgentDocs" }],
+      roots: [
+        { id: "root-code-agent", path: primaryRootPath },
+        { id: "root-code-agent-docs", path: "/Users/bryan/Develop/CodeAgentDocs" },
+      ],
     };
     const listing = {
       entries: [{ name: "CodeAgent", path: primaryRootPath }],
@@ -224,7 +227,7 @@ describe("CodeAgentClient", () => {
     );
     expect(fetchMock.mock.calls[2]?.[0]).toBe("/v1/projects");
     expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
-      body: JSON.stringify({ roots: project.roots }),
+      body: JSON.stringify({ roots: project.roots.map(({ path }) => ({ path })) }),
       method: "POST",
     });
   });
@@ -270,7 +273,7 @@ describe("CodeAgentClient", () => {
       createdAt: "2026-07-23T00:00:00.000Z",
       id: "project / one",
       name: "工作区别名",
-      roots: [{ path: projectRootPath }],
+      roots: [{ id: "root-code-agent", path: projectRootPath }],
     };
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
@@ -365,7 +368,7 @@ describe("CodeAgentClient", () => {
         createdAt: "2026-07-23T00:00:00.000Z",
         id: "superwork",
         name: "superwork",
-        roots: [{ path: "/workspace/superwork" }],
+        roots: [{ id: "root-superwork", path: "/workspace/superwork" }],
       },
     ];
     const fetchMock = vi.fn<typeof fetch>();
@@ -769,7 +772,7 @@ describe("CodeAgentClient", () => {
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-feat-worktree",
         name: "CodeAgent-feat-worktree",
-        roots: [{ path: worktree.path }],
+        roots: [{ id: "root-code-agent-feat-worktree", path: worktree.path }],
       },
       worktree,
     };
@@ -955,7 +958,16 @@ describe("CodeAgentClient", () => {
   });
 
   it("searches and validates project file references", async () => {
-    const page = { data: [{ name: "index.ts", path: "src/index.ts" }] };
+    const page = {
+      data: [
+        {
+          name: "index.ts",
+          path: "src/index.ts",
+          rootId: "root-code-agent",
+          rootPath: projectRootPath,
+        },
+      ],
+    };
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(page));
     const client = new CodeAgentClient({ fetch: fetchMock });
 

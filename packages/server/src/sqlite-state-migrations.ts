@@ -275,4 +275,25 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 18,
   },
+  {
+    name: "store_stable_project_root_ids",
+    sql: `
+      CREATE TABLE project_roots_projection (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL CHECK (position >= 0),
+        root_id TEXT NOT NULL,
+        path TEXT NOT NULL,
+        PRIMARY KEY (project_id, position),
+        UNIQUE (project_id, root_id),
+        UNIQUE (project_id, path)
+      ) STRICT;
+
+      INSERT INTO project_roots_projection (project_id, position, root_id, path)
+      SELECT project_id, position, project_id || ':' || position, path FROM project_roots;
+
+      DROP TABLE project_roots;
+      ALTER TABLE project_roots_projection RENAME TO project_roots;
+    `,
+    version: 19,
+  },
 ];

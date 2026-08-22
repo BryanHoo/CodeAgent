@@ -29,7 +29,6 @@ import type {
   HostFileListing,
   InstallAppUpdateResponse,
   ProjectDirectoryListing,
-  ProjectFileSearchPage,
   ProjectFileTree,
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
@@ -52,6 +51,7 @@ import type { AttachmentStore } from "../attachment-store.js";
 import type { GitCommitError } from "../git-commit.js";
 import type { HostAttachmentSource } from "../host-file-browser.js";
 import type { ProjectOpenService } from "../project-open.js";
+import type { ProjectFileSearchMatches } from "../project-file-tree.js";
 import type { ProjectImageFile } from "../project-image-file.js";
 
 export class MutationHttpError extends Error {
@@ -168,7 +168,7 @@ export interface ServerRouteContext {
     projectRoot: string,
     query: string,
     signal?: AbortSignal,
-  ) => Promise<ProjectFileSearchPage>;
+  ) => Promise<ProjectFileSearchMatches>;
   readonly readHostFileDirectory: (
     kind: HostFileKind,
     path?: string,

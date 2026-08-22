@@ -2,7 +2,7 @@ export function projectFromRows(row, rootRows) {
   if (row === undefined) {
     return undefined;
   }
-  const roots = rootRows.map((root) => ({ path: root.path }));
+  const roots = rootRows.map((root) => ({ id: root.root_id, path: root.path }));
   if (roots.length === 0) {
     throw new Error(`Project ${row.id} has no stored roots`);
   }

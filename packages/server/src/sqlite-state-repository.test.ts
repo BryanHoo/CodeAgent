@@ -18,7 +18,12 @@ type RepositoryTestOptions = Readonly<{
 const repositories: SqliteStateRepository[] = [];
 
 function createProject(id: string, name: string, rootPath: string): Project {
-  return { createdAt: "2026-08-21T00:00:00.000Z", id, name, roots: [{ path: rootPath }] };
+  return {
+    createdAt: "2026-08-21T00:00:00.000Z",
+    id,
+    name,
+    roots: [{ id: `${id}-root`, path: rootPath }],
+  };
 }
 
 async function createWorkspace(): Promise<string> {
@@ -48,7 +53,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 18,
+      migrationVersion: 19,
       synchronous: "normal",
       writable: true,
     });
@@ -140,13 +145,16 @@ describe("SqliteStateRepository", () => {
       createdAt: "2026-08-21T01:00:00.000Z",
       id: "codex-project-1",
       name: "First",
-      roots: [{ path: sharedRoot }, { path: otherRoot }],
+      roots: [
+        { id: "first-shared-root", path: sharedRoot },
+        { id: "first-other-root", path: otherRoot },
+      ],
     };
     const second = {
       createdAt: "2026-08-21T02:00:00.000Z",
       id: "codex-project-2",
       name: "Second",
-      roots: [{ path: sharedRoot }],
+      roots: [{ id: "second-shared-root", path: sharedRoot }],
     };
 
     await expect(repository.replaceProjects([first, second])).resolves.toEqual([first, second]);
@@ -159,7 +167,10 @@ describe("SqliteStateRepository", () => {
     const updatedFirst = {
       ...first,
       name: "Updated First",
-      roots: [{ path: otherRoot }, { path: sharedRoot }],
+      roots: [
+        { id: "first-other-root", path: otherRoot },
+        { id: "first-shared-root", path: sharedRoot },
+      ],
     };
     await expect(repository.replaceProjects([second, updatedFirst])).resolves.toEqual([
       second,
@@ -180,13 +191,16 @@ describe("SqliteStateRepository", () => {
       createdAt: "2026-08-21T01:00:00.000Z",
       id: "codex-project-1",
       name: "First",
-      roots: [{ path: firstRoot }, { path: secondRoot }],
+      roots: [
+        { id: "first-primary-root", path: firstRoot },
+        { id: "first-secondary-root", path: secondRoot },
+      ],
     };
     const second = {
       createdAt: "2026-08-21T02:00:00.000Z",
       id: "codex-project-2",
       name: "Second",
-      roots: [{ path: secondRoot }],
+      roots: [{ id: "second-primary-root", path: secondRoot }],
     };
 
     await repository.upsertProject(first);

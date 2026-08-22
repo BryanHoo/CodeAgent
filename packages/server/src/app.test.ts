@@ -49,7 +49,7 @@ const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
   id: "code-agent",
   name: "CodeAgent",
-  roots: [{ path: projectRootPath }],
+  roots: [{ id: "root-code-agent", path: projectRootPath }],
 } as const;
 
 const temporaryProject = {
@@ -57,7 +57,7 @@ const temporaryProject = {
   id: "temporary",
   name: "Temporary",
   rootPath: "/code-agent/temporary-workspace",
-  roots: [{ path: "/code-agent/temporary-workspace" }],
+  roots: [{ id: "root-temporary", path: "/code-agent/temporary-workspace" }],
 } as const;
 
 const pixelDataUrl =
@@ -1361,7 +1361,7 @@ describe("CodeAgent Server", () => {
       createdAt: "2026-07-23T00:01:00.000Z",
       id: "superwork",
       name: "superwork",
-      roots: [{ path: "/workspace/superwork" }],
+      roots: [{ id: "root-superwork", path: "/workspace/superwork" }],
     };
     let orderedProjects = [project, secondProject];
     const reorder = vi.fn((projectIds: readonly string[]) => {
@@ -1415,7 +1415,10 @@ describe("CodeAgent Server", () => {
   it("browses host directories and adds the explicitly selected project", async () => {
     const { provider } = createProvider();
     const selectedPath = "/Users/bryan/Develop/CodeAgent";
-    const selectedProject = { ...project, roots: [{ path: selectedPath }] };
+    const selectedProject = {
+      ...project,
+      roots: [{ id: "root-selected", path: selectedPath }],
+    };
     const register = vi.fn(() => Promise.resolve(selectedProject));
     const readProjectDirectory = vi.fn(() =>
       Promise.resolve({
@@ -1989,7 +1992,7 @@ describe("CodeAgent Server", () => {
       createdAt: "2026-08-18T00:00:00.000Z",
       id: "code-agent-feat-worktree",
       name: "CodeAgent-feat-worktree",
-      roots: [{ path: worktree.path }],
+      roots: [{ id: "root-worktree", path: worktree.path }],
     };
     const readProjectWorktrees = vi.fn(() => Promise.resolve({ worktrees: [worktree] }));
     const createProjectWorktree = vi.fn(() => Promise.resolve(worktree));
@@ -2561,7 +2564,16 @@ describe("CodeAgent Server", () => {
       url: `/v1/projects/code-agent/files/search?query=main&rootPath=${encodedProjectRootPath}`,
     });
     expect(search.statusCode).toBe(200);
-    expect(search.json()).toEqual({ data: [{ name: "main.tsx", path: "src/main.tsx" }] });
+    expect(search.json()).toEqual({
+      data: [
+        {
+          name: "main.tsx",
+          path: "src/main.tsx",
+          rootId: "root-code-agent",
+          rootPath: projectRootPath,
+        },
+      ],
+    });
     expect(readProjectFileSearch.mock.calls[0]?.slice(0, 2)).toEqual([projectRootPath, "main"]);
   });
 

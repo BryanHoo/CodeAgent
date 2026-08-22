@@ -599,7 +599,7 @@ describe("WorkbenchComposer", () => {
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-worktree",
         name: "CodeAgent-feat-review",
-        roots: [{ path: "/workspace/CodeAgent-feat-review" }],
+        roots: [{ id: "root-review", path: "/workspace/CodeAgent-feat-review" }],
       },
       worktree: {
         branch: "feat/review",
@@ -640,7 +640,7 @@ describe("WorkbenchComposer", () => {
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-worktree",
         name: "CodeAgent-feat-review",
-        roots: [{ path: worktree.path }],
+        roots: [{ id: "root-worktree", path: worktree.path }],
       },
       worktree,
     };

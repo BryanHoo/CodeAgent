@@ -85,6 +85,11 @@ export type ProjectActivityContextValue = Readonly<{
   taskActivity: TaskActivityMap;
 }>;
 
+export type ProjectRootSelectionContextValue = Readonly<{
+  selectedRootIds: ReadonlyMap<string, string>;
+  setSelectedProjectRoot: (projectId: string, rootId: string) => void;
+}>;
+
 export const ProjectDataContext = createContext<ProjectDataContextValue | undefined>(undefined);
 export const ProjectActionsContext = createContext<ProjectActionsContextValue | undefined>(
   undefined,
@@ -92,6 +97,9 @@ export const ProjectActionsContext = createContext<ProjectActionsContextValue | 
 export const ProjectActivityContext = createContext<ProjectActivityContextValue | undefined>(
   undefined,
 );
+export const ProjectRootSelectionContext = createContext<
+  ProjectRootSelectionContextValue | undefined
+>(undefined);
 
 type ProjectTaskQueryProps = Readonly<{
   client: CodeAgentWorkbenchClient;
@@ -178,6 +186,14 @@ export function useProjectActivity() {
   const context = useContext(ProjectActivityContext);
   if (context === undefined) {
     throw new Error("useProjectActivity must be used inside ProjectProvider");
+  }
+  return context;
+}
+
+export function useProjectRootSelection() {
+  const context = useContext(ProjectRootSelectionContext);
+  if (context === undefined) {
+    throw new Error("useProjectRootSelection must be used inside ProjectProvider");
   }
   return context;
 }

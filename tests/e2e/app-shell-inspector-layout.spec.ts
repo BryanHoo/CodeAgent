@@ -366,8 +366,12 @@ test("switches every project view to the selected aggregate root", async ({ page
   });
   await page.goto("/p/superwork");
 
-  const rootSelector = page.getByRole("combobox", { name: "选择项目目录" });
-  const projectPath = page.getByRole("button", { name: "在系统文件夹中打开" });
+  const rootControls = page.locator("[data-composer-project-root-controls]");
+  const rootSelector = rootControls.getByRole("combobox", { name: "选择项目目录" });
+  const projectPath = rootControls.getByRole("button", { name: "在系统文件夹中打开" });
+  await expect(page.locator("header").getByRole("combobox", { name: "选择项目目录" })).toHaveCount(
+    0,
+  );
   await expect(rootSelector).toContainText("superwork");
   await expect(projectPath).toContainText("/workspace/superwork");
 
@@ -388,6 +392,13 @@ test("switches every project view to the selected aggregate root", async ({ page
       ].sort(),
     )
     .toEqual(["/v1/projects/superwork/files/tree", "/v1/projects/superwork/git/status"]);
+
+  await page.setViewportSize({ height: 720, width: 320 });
+  await expect(rootControls).toBeVisible();
+  const rootControlsBox = await rootControls.boundingBox();
+  expect(rootControlsBox).not.toBeNull();
+  expect(rootControlsBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect((rootControlsBox?.x ?? 321) + (rootControlsBox?.width ?? 0)).toBeLessThanOrEqual(320);
 });
 
 test("navigates absolute paths and toggles hidden folders in the project directory picker", async ({

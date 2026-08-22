@@ -40,6 +40,7 @@ import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import { ComposerModelSelector } from "./composer-model-selector.js";
 import { shouldNavigatePromptHistory } from "./prompt-history.js";
 import { PromptSkillEditor } from "./prompt-skill-editor.js";
+import { ProjectRootSelector } from "./project-root-selector.js";
 import { selectionOffset } from "./prompt-skill-editor-dom.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
@@ -80,6 +81,35 @@ export function ComposerProjectPathButton({
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
+  );
+}
+
+export function ComposerProjectRootControls({
+  onOpen,
+  onRootChange,
+  projectPath,
+  projectPathOpenDisabled,
+  roots,
+  selectedRootId,
+}: Readonly<{
+  onOpen: () => void;
+  onRootChange: (rootId: string) => void;
+  projectPath: string;
+  projectPathOpenDisabled: boolean;
+  roots: WorkbenchComposerViewProps["projectRoots"];
+  selectedRootId: string;
+}>) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1" data-composer-project-root-controls="">
+      <div className="min-w-0 flex-1">
+        <ComposerProjectPathButton
+          disabled={projectPathOpenDisabled}
+          onOpen={onOpen}
+          projectPath={projectPath}
+        />
+      </div>
+      <ProjectRootSelector onChange={onRootChange} roots={roots} value={selectedRootId} />
+    </div>
   );
 }
 
@@ -437,13 +467,15 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 worktreesPending={props.worktreesPending}
               />
             </div>
-            <div className="min-w-0 flex-1">
-              <ComposerProjectPathButton
-                disabled={props.projectPathOpenDisabled}
-                onOpen={props.onOpenProjectPath}
-                projectPath={props.projectPath}
-              />
-            </div>
+            {/* 主目录选择与路径保持同一操作区，切换后所有项目视图共享该 rootId。 */}
+            <ComposerProjectRootControls
+              onOpen={props.onOpenProjectPath}
+              onRootChange={props.onProjectRootChange}
+              projectPath={props.projectPath}
+              projectPathOpenDisabled={props.projectPathOpenDisabled}
+              roots={props.projectRoots}
+              selectedRootId={props.selectedProjectRootId}
+            />
           </>
         ) : null}
         <Context

@@ -6,7 +6,7 @@ import type {
   ProjectRepository,
   RegisterProjectInput,
 } from "@code-agent/core";
-import type { Project } from "@code-agent/protocol";
+import type { Project, ProjectRoot } from "@code-agent/protocol";
 
 import type { CodexRpcClient } from "./agent-provider-base.js";
 import { CodexProtocolMappingError, expectRecord, expectString } from "./codex-protocol-mapping.js";
@@ -56,7 +56,7 @@ function mapUnixSeconds(value: unknown, context: string): string {
   return date.toISOString();
 }
 
-function mapProjectRoot(value: unknown, index: number): string {
+function mapProjectRoot(value: unknown, index: number): ProjectRoot {
   const root = expectRecord(value, `Codex project root ${String(index)}`);
   const path = expectNonEmptyString(root["path"], `Codex project root ${String(index)} path`);
   if (!isAbsolute(path)) {
@@ -64,7 +64,8 @@ function mapProjectRoot(value: unknown, index: number): string {
       `Codex project root ${String(index)} path must be absolute`,
     );
   }
-  return path;
+  // Codex root 只有 path；路径摘要让重复同步得到稳定且不泄露路径的公共身份。
+  return { id: createHash("sha256").update(path).digest("hex"), path };
 }
 
 function validateMetadata(value: unknown): void {
@@ -80,7 +81,8 @@ function mapCodexProject(value: unknown): MappedCodexProject {
   if (!Array.isArray(roots) || roots.length === 0) {
     throw new CodexProtocolMappingError("Codex project roots must contain at least one root");
   }
-  const rootPaths = roots.map(mapProjectRoot);
+  const mappedRoots = roots.map(mapProjectRoot);
+  const rootPaths = mappedRoots.map((root) => root.path);
   if (new Set(rootPaths).size !== rootPaths.length) {
     throw new CodexProtocolMappingError("Codex project roots must not contain duplicates");
   }
@@ -93,7 +95,7 @@ function mapCodexProject(value: unknown): MappedCodexProject {
       createdAt: mapUnixSeconds(nativeProject["createdAt"], "Codex project createdAt"),
       id: expectNonEmptyString(nativeProject["id"], "Codex project id"),
       name: expectNonEmptyString(nativeProject["name"], "Codex project name"),
-      roots: rootPaths.map((path) => ({ path })),
+      roots: mappedRoots,
     },
   };
 }
@@ -263,7 +265,7 @@ export class CodexProjectRepository implements ProjectRepository {
         idempotencyKey: input.idempotencyKey,
         metadata: {},
         name: input.name,
-        roots: input.roots,
+        roots: input.roots.map(({ path }) => ({ path })),
       }),
       "project/create",
     );

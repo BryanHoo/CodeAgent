@@ -51,7 +51,12 @@ describe("ProjectOpenContextMenuItems", () => {
             absolutePath: "/workspace/CodeAgent/README.md",
             path: "README.md",
             relativePath: "README.md",
-            reference: { name: "README.md", path: "README.md" },
+            reference: {
+              name: "README.md",
+              path: "README.md",
+              rootId: "root-code-agent",
+              rootPath: "/workspace/CodeAgent",
+            },
             type: "file",
           }}
         />

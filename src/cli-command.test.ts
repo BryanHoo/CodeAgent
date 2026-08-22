@@ -124,7 +124,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     createdAt: "2026-07-23T00:00:00.000Z",
     id: "project",
     name: "project",
-    roots: [{ path: "/workspace/project" }],
+    roots: [{ id: "root-project", path: "/workspace/project" }],
   };
   const projectRepository = {
     list: vi.fn(() => Promise.resolve([project])),

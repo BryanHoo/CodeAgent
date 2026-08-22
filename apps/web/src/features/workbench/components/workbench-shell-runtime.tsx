@@ -21,8 +21,12 @@ import {
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { providerConnectionQueryOptions } from "../../provider-connection/provider-connection-queries.js";
-import { useProjectActions, useProjectData } from "../../projects/project-context.js";
-import { resolveSelectedProjectRoot } from "../../projects/project-root-selection.js";
+import {
+  useProjectActions,
+  useProjectData,
+  useProjectRootSelection,
+} from "../../projects/project-context.js";
+import { resolveProjectRootFromSelections } from "../../projects/project-root-selection.js";
 import {
   appInfoQueryOptions,
   appUpdateMutationOptions,
@@ -113,8 +117,9 @@ export function useWorkbenchShellRuntime({
   const { capabilities, client, error, isPending, projects, projectTaskStates, tasks } =
     useProjectData();
   const project = projects.find((item) => item.id === projectId);
-  const [rootSelection, setRootSelection] = useState<{ path: string; projectId: string }>();
-  const selectedRoot = resolveSelectedProjectRoot(project, rootSelection);
+  const { selectedRootIds, setSelectedProjectRoot } = useProjectRootSelection();
+  const selectedRoot = resolveProjectRootFromSelections(project, selectedRootIds);
+  const activeRootId = temporary ? undefined : selectedRoot?.id;
   const selectedRootPath = temporary ? undefined : selectedRoot?.path;
   const {
     markTaskRunning,
@@ -331,15 +336,15 @@ export function useWorkbenchShellRuntime({
     projectId: string;
     selection: SubagentSelection;
   } | null>(null);
-  const setSelectedRootPath = useCallback(
-    (path: string) => {
-      setRootSelection({ path, projectId });
+  const setSelectedRootId = useCallback(
+    (rootId: string) => {
+      setSelectedProjectRoot(projectId, rootId);
       // 根切换后关闭旧根派生的详情，避免相同相对路径被误解为新根文件。
       setFileDiffSelection(null);
       setFileReviewSelection(null);
       setSourceFileSelection(null);
     },
-    [projectId],
+    [projectId, setSelectedProjectRoot],
   );
 
   const gitStatusDetailsQuery = useQuery(
@@ -462,6 +467,7 @@ export function useWorkbenchShellRuntime({
     runtime,
     selectedFileChange,
     selectedFileReview,
+    selectedRootId: activeRootId,
     selectedRootPath,
     selectedSourceFile,
     selectedSubagent,
@@ -476,7 +482,7 @@ export function useWorkbenchShellRuntime({
     setSidebarOpen,
     setSidebarWidth,
     setSourceFileSelection,
-    setSelectedRootPath,
+    setSelectedRootId,
     setSubagentDialogSelection,
     setTaskRenameOpen,
     sidebarConnectionState,

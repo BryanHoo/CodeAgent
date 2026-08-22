@@ -53,6 +53,7 @@ export function WorkbenchComposer({
   modelsPending,
   onDirectSubmission,
   onOpenProjectPath,
+  onProjectRootChange,
   onRequestNotificationPermission,
   onSettingsChange,
   onSubmissionStateChange,
@@ -62,7 +63,9 @@ export function WorkbenchComposer({
   projectId,
   projectPath,
   projectPathOpenDisabled,
+  projectRoots,
   projectToolsEnabled = true,
+  selectedProjectRootId,
   gitStatus,
   runtime,
   settings,
@@ -386,6 +389,7 @@ export function WorkbenchComposer({
         void interruptTurn();
       }}
       onOpenProjectPath={onOpenProjectPath}
+      onProjectRootChange={onProjectRootChange}
       onOpenReviewBranches={() => {
         setActiveCommandIndex(0);
         setReviewMenuMode("branches");
@@ -403,6 +407,7 @@ export function WorkbenchComposer({
       }}
       projectPath={projectPath}
       projectPathOpenDisabled={projectPathOpenDisabled}
+      projectRoots={projectRoots}
       projectToolsEnabled={projectToolsEnabled}
       promptContent={promptContent}
       promptSubmissionText={promptSubmission.text}
@@ -414,6 +419,7 @@ export function WorkbenchComposer({
       sandboxModeSelectable
       selectedModel={selectedModel}
       selectedReasoningEffort={selectedReasoningEffort}
+      selectedProjectRootId={selectedProjectRootId}
       setActiveCommandIndex={setActiveCommandIndex}
       skills={skills}
       skillEditorRef={skillEditorRef}

@@ -11,6 +11,7 @@ import type {
   AgentTurn,
   PendingRequest,
   ProjectGitStatus,
+  ProjectRoot,
 } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { memo, useEffect, useState, type RefObject } from "react";
@@ -42,11 +43,14 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   modelsPending,
   onRequestNotificationPermission,
   onOpenProjectPath,
+  onProjectRootChange,
   onTaskStarted,
   projectId,
   projectPath,
   projectPathOpenDisabled,
+  projectRoots,
   projectToolsEnabled,
+  selectedProjectRootId,
   gitStatus,
   runtime,
   skills,
@@ -69,6 +73,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   modelsPending: boolean;
   onRequestNotificationPermission: () => void;
   onOpenProjectPath: () => void;
+  onProjectRootChange: (rootId: string) => void;
   onTaskStarted: (
     task: AgentTask,
     turn?: AgentTurn,
@@ -79,7 +84,9 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   projectId: string;
   projectPath: string;
   projectPathOpenDisabled: boolean;
+  projectRoots: readonly ProjectRoot[];
   projectToolsEnabled: boolean;
+  selectedProjectRootId: string;
   gitStatus?: ProjectGitStatus;
   runtime: TaskRuntimeView;
   skills: readonly AgentSkill[];
@@ -205,6 +212,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
           setTimelineScrollToBottomSignal((current) => current + 1);
         }}
         onOpenProjectPath={onOpenProjectPath}
+        onProjectRootChange={onProjectRootChange}
         onRequestNotificationPermission={onRequestNotificationPermission}
         onSettingsChange={(settings) =>
           settingsMutation.mutateAsync(settings).then(() => undefined)
@@ -226,7 +234,9 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         projectId={projectId}
         projectPath={projectPath}
         projectPathOpenDisabled={projectPathOpenDisabled}
+        projectRoots={projectRoots}
         projectToolsEnabled={projectToolsEnabled}
+        selectedProjectRootId={selectedProjectRootId}
         {...(gitStatus === undefined ? {} : { gitStatus })}
         runtime={visibleRuntime}
         settings={visibleSnapshot?.settings ?? startingSnapshot?.settings ?? fallbackSettings}

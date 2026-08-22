@@ -149,7 +149,7 @@ const project = {
   id: "code-agent",
   kind: "project",
   name: "CodeAgent",
-  roots: [{ path: projectRootPath }],
+  roots: [{ id: "root-code-agent", path: projectRootPath }],
 } as const;
 
 const projectTaskScope = {
@@ -213,7 +213,10 @@ describe("CodexAgentProvider", () => {
       createdAt: project.createdAt,
       id: project.id,
       name: project.name,
-      roots: [{ path: "/workspace/primary" }, { path: "/workspace/secondary" }],
+      roots: [
+        { id: "root-primary", path: "/workspace/primary" },
+        { id: "root-secondary", path: "/workspace/secondary" },
+      ],
     } as Project;
     const rpc = new FakeRpcClient([{ thread: nativeThread({ cwd: "/workspace/primary" }) }]);
 
@@ -913,7 +916,7 @@ describe("CodexAgentProvider", () => {
       id: "temporary",
       name: "Temporary",
       rootPath: "/workspace/temporary",
-      roots: [{ path: "/workspace/temporary" }],
+      roots: [{ id: "root-temporary", path: "/workspace/temporary" }],
     };
     const rpc = new FakeRpcClient([
       {
@@ -987,7 +990,7 @@ describe("CodexAgentProvider", () => {
       id: "other",
       name: "Other",
       rootPath: "/workspace/Other",
-      roots: [{ path: "/workspace/Other" }],
+      roots: [{ id: "root-other", path: "/workspace/Other" }],
     };
     const rpc = new FakeRpcClient([
       { data: [nativeThread()], nextCursor: null },
@@ -1058,7 +1061,7 @@ describe("CodexAgentProvider", () => {
     expect(() =>
       runtime.forProject({
         ...project,
-        roots: [{ path: "/workspace/Conflicting" }],
+        roots: [{ id: "root-conflicting", path: "/workspace/Conflicting" }],
       }),
     ).toThrow("project identity belongs to another cwd");
   });
@@ -1258,7 +1261,7 @@ describe("CodexAgentProvider", () => {
       await expect(provider.readTaskAttachment("task-1", attachmentId)).resolves.toBeUndefined();
       const replacement = runtime.forProject({
         ...project,
-        roots: [{ path: "/workspace/RecreatedCodeAgent" }],
+        roots: [{ id: "root-recreated", path: "/workspace/RecreatedCodeAgent" }],
       });
       expect(replacement).not.toBe(provider);
     } finally {
@@ -1270,7 +1273,7 @@ describe("CodexAgentProvider", () => {
     const windowsProject = {
       ...project,
       rootPath: "C:\\Users\\Test\\CodeAgent",
-      roots: [{ path: "C:\\Users\\Test\\CodeAgent" }],
+      roots: [{ id: "root-windows", path: "C:\\Users\\Test\\CodeAgent" }],
     };
     const rpc = new FakeRpcClient([
       {
@@ -1294,7 +1297,10 @@ describe("CodexAgentProvider", () => {
       try {
         await mkdir(projectRoot);
         await symlink(projectRoot, projectAlias);
-        const linkedProject = { ...project, roots: [{ path: projectRoot }] };
+        const linkedProject = {
+          ...project,
+          roots: [{ id: "root-linked", path: projectRoot }],
+        };
         const rpc = new FakeRpcClient([
           { data: [nativeThread({ cwd: projectAlias })], nextCursor: null },
         ]);

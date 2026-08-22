@@ -4,6 +4,7 @@ import { i18n } from "../../../i18n/i18n.js";
 import {
   normalizePromptSkillContent,
   fileReferencePlainText,
+  projectFileReferenceKey,
   serializePromptSkillContent,
   skillPlainText,
   type PromptSkillContent,
@@ -54,6 +55,7 @@ export function createEditorFileNode(
   token.className = `${skillTokenClassName} relative top-0.5 cursor-pointer select-none hover:bg-control-hover`;
   token.contentEditable = "false";
   token.dataset["promptFilePath"] = file.path;
+  token.dataset["promptFileRootId"] = file.rootId;
   token.dataset["serializedText"] = fileReferencePlainText(file);
   token.setAttribute("aria-label", fileReferencePlainText(file));
   token.setAttribute("role", "button");
@@ -101,7 +103,7 @@ export function renderEditorContent(
 export function readEditorContent(
   root: HTMLDivElement,
   skillsById: ReadonlyMap<string, AgentSkill>,
-  filesByPath: ReadonlyMap<string, ProjectFileSearchEntry>,
+  filesByIdentity: ReadonlyMap<string, ProjectFileSearchEntry>,
 ): PromptSkillContent {
   const parts: PromptSkillContentPart[] = [];
   const appendText = (text: string) => {
@@ -126,8 +128,11 @@ export function readEditorContent(
       return;
     }
     const filePath = node.dataset["promptFilePath"];
-    if (filePath !== undefined) {
-      const file = filesByPath.get(filePath);
+    const fileRootId = node.dataset["promptFileRootId"];
+    if (filePath !== undefined && fileRootId !== undefined) {
+      const file = filesByIdentity.get(
+        projectFileReferenceKey({ path: filePath, rootId: fileRootId }),
+      );
       if (file !== undefined) {
         parts.push({ file, type: "file" });
       }

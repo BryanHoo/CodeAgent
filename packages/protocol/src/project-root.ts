@@ -8,8 +8,19 @@ export const ProjectRootPathSchema = Type.String({
 
 export type ProjectRootPath = Static<typeof ProjectRootPathSchema>;
 
-export const ProjectRootSchema = Type.Object(
+export const ProjectRootIdSchema = Type.String({ maxLength: 64, minLength: 1 });
+
+export type ProjectRootId = Static<typeof ProjectRootIdSchema>;
+
+export const ProjectRootInputSchema = Type.Object(
   { path: ProjectRootPathSchema },
+  { additionalProperties: false },
+);
+
+export type ProjectRootInput = Readonly<Static<typeof ProjectRootInputSchema>>;
+
+export const ProjectRootSchema = Type.Object(
+  { id: ProjectRootIdSchema, path: ProjectRootPathSchema },
   { additionalProperties: false },
 );
 
@@ -24,6 +35,15 @@ export const ProjectRootsSchema = Type.Readonly(
 );
 
 export type ProjectRoots = readonly ProjectRoot[];
+
+export const ProjectRootInputsSchema = Type.Readonly(
+  Type.Array(ProjectRootInputSchema, {
+    minItems: 1,
+    uniqueItems: true,
+  }),
+);
+
+export type ProjectRootInputs = readonly ProjectRootInput[];
 
 export const ProjectRootQuerySchema = Type.Object(
   { rootPath: ProjectRootPathSchema },

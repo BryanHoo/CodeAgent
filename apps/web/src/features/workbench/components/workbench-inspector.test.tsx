@@ -1,11 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentMcpServer } from "@code-agent/protocol";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
-import { WorkbenchInspector } from "./workbench-inspector.js";
+import { WorkbenchInspector as WorkbenchInspectorComponent } from "./workbench-inspector.js";
+
+function WorkbenchInspector(
+  props: Omit<ComponentProps<typeof WorkbenchInspectorComponent>, "projectRootId">,
+) {
+  return <WorkbenchInspectorComponent {...props} projectRootId="root-code-agent" />;
+}
 
 function renderInspectorMarkup(children: ReactNode): string {
   return renderToStaticMarkup(

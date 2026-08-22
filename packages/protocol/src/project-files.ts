@@ -1,6 +1,13 @@
 import { FormatRegistry, Type, type Static } from "@sinclair/typebox";
 
-import { ProjectRootPathSchema, ProjectRootsSchema, type ProjectRoots } from "./project-root.js";
+import {
+  ProjectRootInputsSchema,
+  ProjectRootIdSchema,
+  ProjectRootPathSchema,
+  ProjectRootsSchema,
+  type ProjectRootInputs,
+  type ProjectRoots,
+} from "./project-root.js";
 
 if (!FormatRegistry.Has("date-time")) {
   // HTTP 边界统一使用可解析的 ISO 时间，避免各层重复实现时间格式校验。
@@ -28,6 +35,8 @@ export const ProjectFileSearchEntrySchema = Type.Object(
   {
     name: Type.String({ minLength: 1 }),
     path: ProjectRelativePathSchema,
+    rootId: ProjectRootIdSchema,
+    rootPath: ProjectRootPathSchema,
   },
   { additionalProperties: false },
 );
@@ -156,11 +165,14 @@ export type ImportHostAttachmentRequest = Readonly<
 >;
 
 export const AddProjectRequestSchema = Type.Object(
-  { roots: ProjectRootsSchema },
+  { roots: ProjectRootInputsSchema },
   { additionalProperties: false },
 );
 
-export type AddProjectRequest = Readonly<Static<typeof AddProjectRequestSchema>>;
+type AddProjectRequestValue = Static<typeof AddProjectRequestSchema>;
+export type AddProjectRequest = Readonly<
+  Omit<AddProjectRequestValue, "roots"> & { roots: ProjectRootInputs }
+>;
 
 export const AddProjectResponseSchema = Type.Object(
   { project: ProjectSchema },

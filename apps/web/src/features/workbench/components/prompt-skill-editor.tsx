@@ -18,6 +18,7 @@ import {
 } from "../../../shared/components/agent/prompt-input.js";
 import {
   partLength,
+  projectFileReferenceKey,
   removePromptFileReference,
   removePromptSkill,
   recognizePromptSkillReferences,
@@ -80,7 +81,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
     const contentRef = useRef(content);
     const availableSkillsRef = useRef(skills);
     const skillsByIdRef = useRef(new Map<string, AgentSkill>());
-    const filesByPathRef = useRef(new Map<string, ProjectFileSearchEntry>());
+    const filesByIdentityRef = useRef(new Map<string, ProjectFileSearchEntry>());
     const previousScopeRef = useRef<string | undefined>(undefined);
 
     const rememberReferences = useCallback((nextContent: PromptSkillContent) => {
@@ -88,7 +89,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
         if (part.type === "skill") {
           skillsByIdRef.current.set(part.skill.id, part.skill);
         } else if (part.type === "file") {
-          filesByPathRef.current.set(part.file.path, part.file);
+          filesByIdentityRef.current.set(projectFileReferenceKey(part.file), part.file);
         }
       }
     }, []);
@@ -103,7 +104,11 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       if (root === null) {
         return;
       }
-      const editorContent = readEditorContent(root, skillsByIdRef.current, filesByPathRef.current);
+      const editorContent = readEditorContent(
+        root,
+        skillsByIdRef.current,
+        filesByIdentityRef.current,
+      );
       const nextContent = recognizePromptSkillReferences(editorContent, availableSkillsRef.current);
       const cursorOffset = selectionOffset(root);
       if (nextContent !== editorContent) {
@@ -158,7 +163,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
           const root = rootRef.current;
           return root === null
             ? contentRef.current
-            : readEditorContent(root, skillsByIdRef.current, filesByPathRef.current);
+            : readEditorContent(root, skillsByIdRef.current, filesByIdentityRef.current);
         },
         replace,
       }),
@@ -178,7 +183,11 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       if (root === null || skills.length === 0) {
         return;
       }
-      const editorContent = readEditorContent(root, skillsByIdRef.current, filesByPathRef.current);
+      const editorContent = readEditorContent(
+        root,
+        skillsByIdRef.current,
+        filesByIdentityRef.current,
+      );
       const nextContent = recognizePromptSkillReferences(editorContent, skills);
       if (nextContent === editorContent) {
         return;
@@ -207,11 +216,12 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
         .reduce((total, node) => total + serializedNodeLength(node), 0);
       const skillId = token.dataset["promptSkillId"];
       const filePath = token.dataset["promptFilePath"];
+      const fileRootId = token.dataset["promptFileRootId"];
       const nextContent =
         skillId !== undefined
           ? removePromptSkill(contentRef.current, skillId)
-          : filePath !== undefined
-            ? removePromptFileReference(contentRef.current, filePath)
+          : filePath !== undefined && fileRootId !== undefined
+            ? removePromptFileReference(contentRef.current, { path: filePath, rootId: fileRootId })
             : contentRef.current;
       replace(nextContent, tokenOffset);
       emitChange();
@@ -341,7 +351,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
               return;
             }
             const serializedText = serializePromptSkillContent(
-              readEditorContent(root, skillsByIdRef.current, filesByPathRef.current),
+              readEditorContent(root, skillsByIdRef.current, filesByIdentityRef.current),
             );
             const start = serializedPointOffset(root, range.startContainer, range.startOffset);
             const end = serializedPointOffset(root, range.endContainer, range.endOffset);

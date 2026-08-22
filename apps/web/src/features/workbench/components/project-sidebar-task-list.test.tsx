@@ -10,7 +10,7 @@ const project: Project = {
   createdAt: "2026-08-17T00:00:00.000Z",
   id: "code-agent",
   name: "CodeAgent",
-  roots: [{ path: "/workspace/CodeAgent" }],
+  roots: [{ id: "root-code-agent", path: "/workspace/CodeAgent" }],
 };
 
 const pendingTaskState: ProjectTaskListState = {

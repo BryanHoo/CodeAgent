@@ -5,13 +5,13 @@ import type {
   AgentTask,
   AgentTaskSettings,
   Project,
-  ProjectRoot,
+  ProjectRootInput,
 } from "@code-agent/protocol";
 
 export type RegisterProjectInput = Readonly<{
   idempotencyKey: string;
   name: string;
-  roots: readonly ProjectRoot[];
+  roots: readonly ProjectRootInput[];
 }>;
 
 export type ProjectSourceMigration = Readonly<{

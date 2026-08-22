@@ -10,7 +10,10 @@ describe("resolveTaskScope", () => {
       createdAt: "2026-08-22T00:00:00.000Z",
       id: "aggregate-project",
       name: "Aggregate Project",
-      roots: [{ path: "/workspace/primary" }, { path: "/workspace/secondary" }],
+      roots: [
+        { id: "root-primary", path: "/workspace/primary" },
+        { id: "root-secondary", path: "/workspace/secondary" },
+      ],
     } satisfies Project;
     const projectProvider = {} as AgentProvider;
     const runtimeProvider = {

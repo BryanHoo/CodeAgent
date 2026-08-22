@@ -234,13 +234,16 @@ export const projects = [
     createdAt: "2026-07-22T06:00:00.000Z",
     id: "code-agent",
     name: "CodeAgent",
-    roots: [{ path: "/workspace/CodeAgent" }],
+    roots: [{ id: "root-code-agent", path: "/workspace/CodeAgent" }],
   },
   {
     createdAt: "2026-07-22T06:30:00.000Z",
     id: "superwork",
     name: "superwork",
-    roots: [{ path: "/workspace/superwork" }, { path: "/workspace/shared" }],
+    roots: [
+      { id: "root-superwork", path: "/workspace/superwork" },
+      { id: "root-shared", path: "/workspace/shared" },
+    ],
   },
 ];
 
@@ -1080,7 +1083,7 @@ export async function mockAppShellApi(
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-composer-worktree",
         name: "CodeAgent-composer-worktree",
-        roots: [{ path: worktree.path }],
+        roots: [{ id: "root-code-agent-composer-worktree", path: worktree.path }],
       };
       routedProjectGitWorktrees.push(worktree);
       routedProjects = [...routedProjects, project];
@@ -1098,7 +1101,7 @@ export async function mockAppShellApi(
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-worktree-review",
         name: "CodeAgent-worktree-review",
-        roots: [{ path: worktree.path }],
+        roots: [{ id: "root-code-agent-worktree-review", path: worktree.path }],
       };
       if (!routedProjects.some((candidate) => candidate.id === project.id)) {
         routedProjects = [...routedProjects, project];

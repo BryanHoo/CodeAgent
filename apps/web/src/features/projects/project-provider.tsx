@@ -10,6 +10,7 @@ import {
   ProjectActionsContext,
   ProjectActivityContext,
   ProjectDataContext,
+  ProjectRootSelectionContext,
   ProjectTaskQuery,
   buildTaskScopeCollections,
   requestNextProjectTaskPage,
@@ -17,6 +18,7 @@ import {
   type ProjectActivityContextValue,
   type ProjectDataContextValue,
   type ProjectTaskQueryResult,
+  type ProjectRootSelectionContextValue,
 } from "./project-context-state.js";
 import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js";
 import {
@@ -35,6 +37,7 @@ import {
   updateTaskTitleInProjectListCaches,
 } from "./project-queries.js";
 import type { ProjectProviderProps } from "./project-provider-types.js";
+import { resolveProjectRootFromSelections } from "./project-root-selection.js";
 
 const emptyProjects: readonly Project[] = [];
 
@@ -44,6 +47,19 @@ export function ProjectProvider({
   taskNotifier,
 }: ProjectProviderProps) {
   const queryClient = useQueryClient();
+  const [selectedRootIds, setSelectedRootIds] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const selectedRootIdsRef = useRef(selectedRootIds);
+  selectedRootIdsRef.current = selectedRootIds;
+  const setSelectedProjectRoot = useCallback((projectId: string, rootId: string) => {
+    setSelectedRootIds((current) => {
+      if (current.get(projectId) === rootId) return current;
+      const next = new Map(current);
+      next.set(projectId, rootId);
+      return next;
+    });
+  }, []);
   const gitStatusCoordinator = useMemo(
     () => new ProjectGitStatusCoordinator(queryClient, client),
     [client, queryClient],
@@ -64,9 +80,12 @@ export function ProjectProvider({
           const project = queryClient
             .getQueryData<ProjectPage>(["projects"])
             ?.data.find((candidate) => candidate.id === projectId);
-          const primaryRoot = project?.roots[0];
-          if (primaryRoot !== undefined) {
-            gitStatusCoordinator.handleActivity(projectId, primaryRoot.path, taskId, reason);
+          const selectedRoot = resolveProjectRootFromSelections(
+            project,
+            selectedRootIdsRef.current,
+          );
+          if (selectedRoot !== undefined) {
+            gitStatusCoordinator.handleActivity(projectId, selectedRoot.path, taskId, reason);
           }
         }
       },
@@ -358,6 +377,12 @@ export function ProjectProvider({
           const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
           const remainingProjects =
             currentPage?.data.filter((project) => project.id !== projectId) ?? emptyProjects;
+          setSelectedRootIds((current) => {
+            if (!current.has(projectId)) return current;
+            const next = new Map(current);
+            next.delete(projectId);
+            return next;
+          });
           queryClient.setQueryData<ProjectPage>(
             ["projects"],
             currentPage === undefined ? undefined : { ...currentPage, data: remainingProjects },
@@ -461,6 +486,10 @@ export function ProjectProvider({
       taskActivity,
     ],
   );
+  const rootSelectionValue = useMemo<ProjectRootSelectionContextValue>(
+    () => ({ selectedRootIds, setSelectedProjectRoot }),
+    [selectedRootIds, setSelectedProjectRoot],
+  );
 
   return (
     <>
@@ -482,9 +511,11 @@ export function ProjectProvider({
       ))}
       <ProjectDataContext.Provider value={dataValue}>
         <ProjectActionsContext.Provider value={actionsValue}>
-          <ProjectActivityContext.Provider value={activityValue}>
-            {children}
-          </ProjectActivityContext.Provider>
+          <ProjectRootSelectionContext.Provider value={rootSelectionValue}>
+            <ProjectActivityContext.Provider value={activityValue}>
+              {children}
+            </ProjectActivityContext.Provider>
+          </ProjectRootSelectionContext.Provider>
         </ProjectActionsContext.Provider>
       </ProjectDataContext.Provider>
     </>

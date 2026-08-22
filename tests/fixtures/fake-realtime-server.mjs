@@ -40,7 +40,7 @@ const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
   id: "code-agent",
   name: "CodeAgent",
-  roots: [{ path: projectRoot }],
+  roots: [{ id: "root-code-agent", path: projectRoot }],
 };
 const provider = createCodexRuntimeProvider({ client: runtime.client });
 let globalSettings;

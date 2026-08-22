@@ -21,7 +21,6 @@ import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
-import { ProjectRootSelector } from "./project-root-selector.js";
 
 type WorkbenchShellStyle = CSSProperties &
   Readonly<{ "--inspector-open-width": string; "--sidebar-open-width": string }>;
@@ -89,6 +88,7 @@ export function WorkbenchShellLayout({
     retry,
     runtime,
     selectedRootPath,
+    selectedRootId,
     setFileTreeExpansion,
     setGlobalSettingsSection,
     setInspectorOpen,
@@ -96,7 +96,7 @@ export function WorkbenchShellLayout({
     setInspectorWidth,
     setSidebarOpen,
     setSidebarWidth,
-    setSelectedRootPath,
+    setSelectedRootId,
     setSubagentDialogSelection,
     setTaskRenameOpen,
     sidebarConnectionState,
@@ -233,13 +233,6 @@ export function WorkbenchShellLayout({
               )}
             </h1>
           </div>
-          {selectedRootPath === undefined ? null : (
-            <ProjectRootSelector
-              onChange={setSelectedRootPath}
-              roots={projectRoots}
-              value={selectedRootPath}
-            />
-          )}
           <div className="flex shrink-0 items-center gap-1">
             <ProjectQuickOpenMenu
               apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
@@ -323,6 +316,7 @@ export function WorkbenchShellLayout({
               }
               onSettingsChange={updateDraftSettings}
               onOpenProjectPath={openProjectFolder}
+              onProjectRootChange={setSelectedRootId}
               onRequestNotificationPermission={requestNotificationPermission}
               onDirectSubmission={beginNewChatSubmission}
               onSubmissionStateChange={handleNewChatSubmissionStateChange}
@@ -331,7 +325,9 @@ export function WorkbenchShellLayout({
               projectId={projectId}
               projectPath={projectPath}
               projectPathOpenDisabled={projectFolderOpenDisabled}
+              projectRoots={projectRoots}
               projectToolsEnabled={!temporary}
+              selectedProjectRootId={selectedRootId ?? ""}
               {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
               settings={draftSettings}
               skills={skillsQuery.data?.data ?? []}
@@ -351,11 +347,14 @@ export function WorkbenchShellLayout({
             modelsPending={modelsQuery.isPending}
             onRequestNotificationPermission={requestNotificationPermission}
             onOpenProjectPath={openProjectFolder}
+            onProjectRootChange={setSelectedRootId}
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
             projectPath={projectPath}
             projectPathOpenDisabled={projectFolderOpenDisabled}
+            projectRoots={projectRoots}
             projectToolsEnabled={!temporary}
+            selectedProjectRootId={selectedRootId ?? ""}
             {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
             runtime={runtime}
             skills={skillsQuery.data?.data ?? []}
@@ -476,6 +475,7 @@ export function WorkbenchShellLayout({
           projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
           projectOpenPending={projectPathOpenMutation.isPending}
           projectPath={projectPath}
+          projectRootId={selectedRootId ?? ""}
           skills={skillsQuery.data?.data ?? []}
           subagents={subagents}
           tab={temporary ? "context" : inspectorTab}

@@ -43,6 +43,7 @@ describe("WorkbenchProjectFileTree", () => {
           projectOpenApps={[]}
           projectOpenPending={false}
           projectPath="/workspace/CodeAgent"
+          projectRootId="root-code-agent"
         />
       </QueryClientProvider>,
     );

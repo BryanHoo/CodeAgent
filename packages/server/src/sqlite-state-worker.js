@@ -53,7 +53,7 @@ function createOperations(database) {
             "SELECT id, name, created_at FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
           ),
           listProjectRoots: database.prepare(
-            `SELECT project_roots.project_id, project_roots.path
+            `SELECT project_roots.project_id, project_roots.root_id, project_roots.path
            FROM project_roots
            JOIN projects ON projects.id = project_roots.project_id
            WHERE projects.kind = 'user'
@@ -67,11 +67,11 @@ function createOperations(database) {
             "SELECT id, name, created_at, sort_order FROM projects WHERE id = ? AND kind = 'user'",
           ),
           readProjectRoots: database.prepare(
-            "SELECT project_id, path FROM project_roots WHERE project_id = ? ORDER BY position",
+            "SELECT project_id, root_id, path FROM project_roots WHERE project_id = ? ORDER BY position",
           ),
           removeProjectRoots: database.prepare("DELETE FROM project_roots WHERE project_id = ?"),
           writeProjectRoot: database.prepare(
-            "INSERT INTO project_roots (project_id, position, path) VALUES (?, ?, ?)",
+            "INSERT INTO project_roots (project_id, position, root_id, path) VALUES (?, ?, ?, ?)",
           ),
           removeProject: database.prepare("DELETE FROM projects WHERE id = ? AND kind = 'user'"),
           copyProjectDefaults: database.prepare(
@@ -200,7 +200,14 @@ function createOperations(database) {
     if (!Array.isArray(project.roots) || project.roots.length === 0) {
       throw new Error("Project roots must contain a primary root");
     }
+    const rootIds = project.roots.map((root) => root.id);
     const paths = project.roots.map((root) => root.path);
+    if (rootIds.some((rootId) => typeof rootId !== "string" || rootId.length === 0)) {
+      throw new Error("Project root ids must be non-empty strings");
+    }
+    if (new Set(rootIds).size !== rootIds.length) {
+      throw new Error("Project root ids must be unique");
+    }
     if (paths.some((path) => typeof path !== "string" || path.length === 0)) {
       throw new Error("Project root paths must be non-empty strings");
     }
@@ -209,7 +216,7 @@ function createOperations(database) {
     }
     stateStatements.removeProjectRoots.run(project.id);
     paths.forEach((path, position) => {
-      stateStatements.writeProjectRoot.run(project.id, position, path);
+      stateStatements.writeProjectRoot.run(project.id, position, rootIds[position], path);
     });
   }
 

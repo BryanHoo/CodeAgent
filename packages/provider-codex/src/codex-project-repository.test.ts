@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectProjectionStore } from "@code-agent/core";
@@ -6,18 +8,22 @@ import type { Project } from "@code-agent/protocol";
 import { CodexProtocolMappingError } from "./codex-protocol-mapping.js";
 import { CodexProjectRepository } from "./codex-project-repository.js";
 
+function projectRoot(path: string) {
+  return { id: createHash("sha256").update(path).digest("hex"), path };
+}
+
 const firstProject: Project = {
   createdAt: "2026-08-21T01:00:00.000Z",
   id: "project-1",
   name: "First",
-  roots: [{ path: "/workspace/first" }],
+  roots: [projectRoot("/workspace/first")],
 };
 
 const secondProject: Project = {
   createdAt: "2026-08-21T02:00:00.000Z",
   id: "project-2",
   name: "Second",
-  roots: [{ path: "/workspace/second" }],
+  roots: [projectRoot("/workspace/second")],
 };
 
 function primaryRootPath(project: Project): string {
@@ -33,7 +39,7 @@ function nativeProject(project: Project, position: number, roots = project.roots
     metadata: {},
     name: project.name,
     position,
-    roots,
+    roots: roots.map(({ path }) => ({ path })),
     updatedAt: Date.parse(project.createdAt) / 1_000,
   };
 }
@@ -109,7 +115,7 @@ function nativeLegacyThread(
 
 describe("CodexProjectRepository", () => {
   it("preserves every ordered Codex project root in the public projection", async () => {
-    const roots = [{ path: "/workspace/primary" }, { path: "/workspace/secondary" }];
+    const roots = [projectRoot("/workspace/primary"), projectRoot("/workspace/secondary")];
     const aggregate = {
       createdAt: firstProject.createdAt,
       id: "aggregate-project",

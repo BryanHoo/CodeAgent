@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSelectedProjectRoot, setProjectRootPathChecked } from "./project-root-selection.js";
+import {
+  resolveProjectRootFromSelections,
+  resolveSelectedProjectRoot,
+  setProjectRootPathChecked,
+} from "./project-root-selection.js";
 
 const project = {
   id: "project-1",
-  roots: [{ path: "/workspace/primary" }, { path: "/workspace/secondary" }],
+  roots: [
+    { id: "root-primary", path: "/workspace/primary" },
+    { id: "root-secondary", path: "/workspace/secondary" },
+  ],
 } as const;
 
 describe("project root selection", () => {
@@ -12,8 +19,8 @@ describe("project root selection", () => {
     expect(resolveSelectedProjectRoot(project, undefined)?.path).toBe("/workspace/primary");
     expect(
       resolveSelectedProjectRoot(project, {
-        path: "/workspace/secondary",
         projectId: "project-1",
+        rootId: "root-secondary",
       })?.path,
     ).toBe("/workspace/secondary");
   });
@@ -21,16 +28,22 @@ describe("project root selection", () => {
   it("falls back when the project or selected root changes", () => {
     expect(
       resolveSelectedProjectRoot(project, {
-        path: "/workspace/missing",
         projectId: "project-1",
+        rootId: "root-missing",
       })?.path,
     ).toBe("/workspace/primary");
     expect(
       resolveSelectedProjectRoot(project, {
-        path: "/workspace/secondary",
         projectId: "another-project",
+        rootId: "root-secondary",
       })?.path,
     ).toBe("/workspace/primary");
+  });
+
+  it("resolves the active root from Project-level selections for Git activity", () => {
+    expect(
+      resolveProjectRootFromSelections(project, new Map([[project.id, "root-secondary"]]))?.path,
+    ).toBe("/workspace/secondary");
   });
 
   it("builds an ordered root list from checkbox changes", () => {

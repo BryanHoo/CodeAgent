@@ -6,6 +6,7 @@ import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import {
   ComposerModeTag,
   ComposerFastModeButton,
+  ComposerProjectRootControls,
   ComposerProjectPathButton,
   resolveQueuedPromptSummary,
 } from "./workbench-composer-view.js";
@@ -189,5 +190,27 @@ describe("WorkbenchComposerView", () => {
     expect(markup).toContain("/workspace/CodeAgent");
     expect(markup).not.toContain("flex-1");
     expect(markup).not.toContain('title="/workspace/CodeAgent"');
+  });
+
+  it("将主目录切换器与项目路径放在同一底部控件中", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ComposerProjectRootControls
+          onOpen={() => undefined}
+          onRootChange={() => undefined}
+          projectPath="/workspace/primary"
+          projectPathOpenDisabled={false}
+          roots={[
+            { id: "root-primary", path: "/workspace/primary" },
+            { id: "root-secondary", path: "/workspace/secondary" },
+          ]}
+          selectedRootId="root-primary"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain('data-composer-project-root-controls=""');
+    expect(markup).toContain('aria-label="在系统文件夹中打开"');
+    expect(markup).toContain('aria-label="选择项目目录"');
   });
 });

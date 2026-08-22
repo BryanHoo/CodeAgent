@@ -14,7 +14,6 @@ import type {
   HostFileListing,
   InstallAppUpdateResponse,
   ProjectDirectoryListing,
-  ProjectFileSearchPage,
   ProjectFileTree,
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
@@ -34,6 +33,7 @@ import type {
 import type { CodeAgentAccessOptions } from "./access-control.js";
 import type { HostAttachmentSource } from "./host-file-browser.js";
 import type { ProjectImageFile } from "./project-image-file.js";
+import type { ProjectFileSearchMatches } from "./project-file-tree.js";
 import type { ProjectOpenService } from "./project-open.js";
 
 export interface CreateCodeAgentServerOptions {
@@ -101,7 +101,7 @@ export interface CreateCodeAgentServerOptions {
     projectRoot: string,
     query: string,
     signal?: AbortSignal,
-  ) => Promise<ProjectFileSearchPage>;
+  ) => Promise<ProjectFileSearchMatches>;
   readProjectDirectory?: (
     path?: string,
     options?: Readonly<{ includeHidden?: boolean }>,

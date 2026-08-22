@@ -12,6 +12,7 @@ import type {
   AgentTurnOptions,
   ProjectGitStatus,
   ProjectFileSearchEntry,
+  ProjectRoot,
 } from "@code-agent/protocol";
 import type { Ref } from "react";
 
@@ -75,6 +76,7 @@ export type WorkbenchComposerProps = Readonly<{
   ) => Promise<void> | void;
   onRequestNotificationPermission: () => void;
   onOpenProjectPath: () => void;
+  onProjectRootChange: (rootId: string) => void;
   onDirectSubmission?: () => void;
   onSubmissionStateChange?: (submitting: boolean) => void;
   onTaskCreated?: (task: AgentTask) => void;
@@ -94,6 +96,8 @@ export type WorkbenchComposerProps = Readonly<{
   projectPathOpenDisabled: boolean;
   projectPath: string;
   projectToolsEnabled?: boolean;
+  projectRoots: readonly ProjectRoot[];
+  selectedProjectRootId: string;
   gitStatus?: ProjectGitStatus;
   runtime?: TaskRuntimeView;
   settings: AgentTaskSettings;

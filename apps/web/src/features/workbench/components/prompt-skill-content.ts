@@ -60,8 +60,22 @@ export function skillPlainText(skill: Pick<AgentSkill, "name">): string {
   return `$${skill.name}`;
 }
 
-export function fileReferencePlainText(file: Pick<ProjectFileSearchEntry, "path">): string {
-  return `@${file.path}`;
+export function projectFileReferenceKey(
+  file: Pick<ProjectFileSearchEntry, "path" | "rootId">,
+): string {
+  return `${file.rootId}\u0000${file.path}`;
+}
+
+export function fileReferencePlainText(
+  file: Pick<ProjectFileSearchEntry, "path" | "rootPath">,
+): string {
+  const usesWindowsSeparator = file.rootPath.includes("\\") && !file.rootPath.includes("/");
+  const separator = usesWindowsSeparator ? "\\" : "/";
+  const rootPath = file.rootPath.replace(/[\\/]+$/u, "");
+  const relativePath = usesWindowsSeparator
+    ? file.path.replace(/\//gu, "\\").replace(/^\\+/u, "")
+    : file.path.replace(/\\/gu, "/").replace(/^\/+/u, "");
+  return `@${rootPath}${separator}${relativePath}`;
 }
 
 export function partLength(part: PromptSkillContentPart): number {
@@ -139,7 +153,8 @@ export function insertPromptFileReference(
   const [before] = splitPromptSkillContent(content, mention.start);
   const [, after] = splitPromptSkillContent(content, mention.end);
   const alreadySelected = content.some(
-    (part) => part.type === "file" && part.file.path === file.path,
+    (part) =>
+      part.type === "file" && projectFileReferenceKey(part.file) === projectFileReferenceKey(file),
   );
   return normalizePromptSkillContent([
     ...before,
@@ -152,7 +167,13 @@ export function appendPromptFileReference(
   content: PromptSkillContent,
   file: ProjectFileSearchEntry,
 ): PromptSkillContent {
-  if (content.some((part) => part.type === "file" && part.file.path === file.path)) {
+  if (
+    content.some(
+      (part) =>
+        part.type === "file" &&
+        projectFileReferenceKey(part.file) === projectFileReferenceKey(file),
+    )
+  ) {
     return content;
   }
   const serializedText = serializePromptSkillContent(content);
@@ -230,10 +251,11 @@ export function removePromptSkill(
 
 export function removePromptFileReference(
   content: PromptSkillContent,
-  path: string,
+  file: Pick<ProjectFileSearchEntry, "path" | "rootId">,
 ): PromptSkillContent {
+  const key = projectFileReferenceKey(file);
   return normalizePromptSkillContent(
-    content.filter((part) => part.type !== "file" || part.file.path !== path),
+    content.filter((part) => part.type !== "file" || projectFileReferenceKey(part.file) !== key),
   );
 }
 

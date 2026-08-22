@@ -18,7 +18,7 @@ import {
 import type { ProjectRepository } from "@code-agent/core";
 import { AttachmentNotFoundError, type StoredAttachmentUpload } from "../attachment-store.js";
 import { HostFileBrowserError } from "../host-file-browser.js";
-import { ProjectRootScopeError, resolveProjectRoot } from "../project-root-scope.js";
+import { ProjectRootScopeError, resolveProjectRootEntry } from "../project-root-scope.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import {
   ErrorResponseSchema,
@@ -37,15 +37,16 @@ async function resolveReadRoot(
   projectId: string,
   rootPath: string | undefined,
   reply: FastifyReply,
-): Promise<string | undefined> {
+): Promise<Readonly<{ id: string; path: string }> | undefined> {
   try {
     if (projectId === TEMPORARY_TASK_SCOPE_ID) {
-      return (await getProjectContext(projectId))?.scope.rootPath;
+      const rootPath = (await getProjectContext(projectId))?.scope.rootPath;
+      return rootPath === undefined ? undefined : { id: TEMPORARY_TASK_SCOPE_ID, path: rootPath };
     }
     if (rootPath === undefined) {
       throw new ProjectRootScopeError("PROJECT_ROOT_INVALID", "Project root is required");
     }
-    return await resolveProjectRoot(repository, projectId, rootPath);
+    return await resolveProjectRootEntry(repository, projectId, rootPath);
   } catch (error) {
     if (error instanceof ProjectRootScopeError) {
       const status = error.code === "PROJECT_NOT_FOUND" ? 404 : 400;
@@ -86,16 +87,16 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
       },
     },
     async (request, reply) => {
-      const rootPath = await resolveReadRoot(
+      const root = await resolveReadRoot(
         projectRepository,
         getProjectContext,
         request.params.projectId,
         request.query.rootPath,
         reply,
       );
-      if (rootPath === undefined) return;
+      if (root === undefined) return;
       try {
-        return await readFileTree(rootPath, request.query.path);
+        return await readFileTree(root.path, request.query.path);
       } catch {
         // 文件系统错误在交付边界收敛，响应不泄露 Project 的本机路径。
         return reply.code(500).send({
@@ -121,16 +122,19 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
       },
     },
     async (request, reply) => {
-      const rootPath = await resolveReadRoot(
+      const root = await resolveReadRoot(
         projectRepository,
         getProjectContext,
         request.params.projectId,
         request.query.rootPath,
         reply,
       );
-      if (rootPath === undefined) return;
+      if (root === undefined) return;
       try {
-        return await readFileSearch(rootPath, request.query.query, request.signal);
+        const page = await readFileSearch(root.path, request.query.query, request.signal);
+        return {
+          data: page.data.map((entry) => ({ ...entry, rootId: root.id, rootPath: root.path })),
+        };
       } catch (error) {
         if (request.signal.aborted) {
           throw error;
@@ -153,16 +157,16 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
       },
     },
     async (request, reply) => {
-      const rootPath = await resolveReadRoot(
+      const root = await resolveReadRoot(
         projectRepository,
         getProjectContext,
         request.params.projectId,
         request.query.rootPath,
         reply,
       );
-      if (rootPath === undefined) return;
+      if (root === undefined) return;
       try {
-        const image = await readImageFile(rootPath, request.query.path);
+        const image = await readImageFile(root.path, request.query.path);
         return await reply
           .header("cache-control", "private, max-age=60")
           .header("x-content-type-options", "nosniff")
@@ -192,16 +196,16 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
       },
     },
     async (request, reply) => {
-      const rootPath = await resolveReadRoot(
+      const root = await resolveReadRoot(
         projectRepository,
         getProjectContext,
         request.params.projectId,
         request.query.rootPath,
         reply,
       );
-      if (rootPath === undefined) return;
+      if (root === undefined) return;
       try {
-        return await readSourceFile(rootPath, request.query.path, request.query.cursor ?? 0);
+        return await readSourceFile(root.path, request.query.path, request.query.cursor ?? 0);
       } catch {
         // 路径不可读、文件不存在和二进制内容统一隐藏为不可预览。
         return reply.code(404).send({

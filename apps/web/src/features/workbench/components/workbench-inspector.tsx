@@ -91,6 +91,7 @@ type WorkbenchInspectorProps = Readonly<{
   projectOpenApps?: readonly ProjectOpenApp[];
   projectOpenPending?: boolean;
   projectPath: string;
+  projectRootId: string;
   projectRefreshing?: boolean;
   skills?: readonly AgentSkill[];
   subagents?: readonly SubagentContextEntry[];
@@ -141,6 +142,7 @@ export function WorkbenchInspector({
   projectOpenApps = [],
   projectOpenPending = false,
   projectPath,
+  projectRootId,
   projectRefreshing = false,
   skills = [],
   subagents = [],
@@ -284,6 +286,7 @@ export function WorkbenchInspector({
                   projectOpenApps={projectOpenApps}
                   projectOpenPending={projectOpenPending}
                   projectPath={projectPath}
+                  projectRootId={projectRootId}
                   projectRefreshing={projectRefreshing}
                 />
               </div>

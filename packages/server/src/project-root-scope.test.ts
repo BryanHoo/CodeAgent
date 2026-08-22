@@ -3,13 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { ProjectRepository } from "@code-agent/core";
 import type { Project } from "@code-agent/protocol";
 
-import { resolveProjectRoot } from "./project-root-scope.js";
+import { resolveProjectRoot, resolveProjectRootEntry } from "./project-root-scope.js";
 
 const project: Project = {
   createdAt: "2026-08-22T00:00:00.000Z",
   id: "aggregate",
   name: "Aggregate",
-  roots: [{ path: "/workspace/primary" }, { path: "/workspace/secondary" }],
+  roots: [
+    { id: "root-primary", path: "/workspace/primary" },
+    { id: "root-secondary", path: "/workspace/secondary" },
+  ],
 };
 
 function createRepository(value: Project | undefined): ProjectRepository {
@@ -31,6 +34,9 @@ describe("resolveProjectRoot", () => {
       "/workspace/secondary",
     );
     await expect(resolveProjectRoot(repository, project.id)).resolves.toBe("/workspace/primary");
+    await expect(
+      resolveProjectRootEntry(repository, project.id, "/workspace/secondary"),
+    ).resolves.toEqual(project.roots[1]);
   });
 
   it("rejects unknown projects and roots without probing the filesystem", async () => {

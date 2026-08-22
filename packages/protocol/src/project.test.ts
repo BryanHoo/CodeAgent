@@ -170,10 +170,17 @@ describe("project protocol", () => {
       createdAt: "2026-07-25T00:00:00.000Z",
       id: "code-agent",
       name: "CodeAgent",
-      roots: [{ path: "/workspace/CodeAgent" }, { path: "/workspace/superwork" }],
+      roots: [
+        { id: "root-code-agent", path: "/workspace/CodeAgent" },
+        { id: "root-superwork", path: "/workspace/superwork" },
+      ],
     };
 
-    expect(Value.Check(AddProjectRequestSchema, { roots: project.roots })).toBe(true);
+    expect(
+      Value.Check(AddProjectRequestSchema, {
+        roots: project.roots.map(({ path }) => ({ path })),
+      }),
+    ).toBe(true);
     expect(Value.Check(AddProjectRequestSchema, { roots: [] })).toBe(false);
     expect(Value.Check(AddProjectRequestSchema, { roots: [{ path: "workspace/CodeAgent" }] })).toBe(
       false,
@@ -308,7 +315,7 @@ describe("project protocol", () => {
             createdAt: "2026-07-23T00:00:00.000Z",
             id: "code-agent",
             name: "CodeAgent",
-            roots: [{ path: "/workspace/CodeAgent" }],
+            roots: [{ id: "root-code-agent", path: "/workspace/CodeAgent" }],
           },
         ],
         nextCursor: null,
@@ -326,7 +333,7 @@ describe("project protocol", () => {
           createdAt: "2026-07-25T00:00:00.000Z",
           id: "code-agent",
           name: "工作区别名",
-          roots: [{ path: "/workspace/CodeAgent" }],
+          roots: [{ id: "root-code-agent", path: "/workspace/CodeAgent" }],
         },
       }),
     ).toBe(true);
@@ -536,7 +543,7 @@ describe("project protocol", () => {
       createdAt: "2026-08-18T00:00:00.000Z",
       id: "code-agent-feat-worktree",
       name: "CodeAgent-feat-worktree",
-      roots: [{ path: worktree.path }],
+      roots: [{ id: "root-code-agent-feat-worktree", path: worktree.path }],
     };
 
     expect(Value.Check(ProjectGitWorktreePageSchema, { worktrees: [worktree] })).toBe(true);
@@ -693,7 +700,7 @@ describe("project protocol", () => {
             createdAt: "2026-07-23T00:00:00.000Z",
             id: "code-agent",
             name: "CodeAgent",
-            roots: [{ path: "/workspace/CodeAgent" }],
+            roots: [{ id: "root-code-agent", path: "/workspace/CodeAgent" }],
           },
         ],
         nextCursor: null,
@@ -1015,12 +1022,26 @@ describe("project protocol", () => {
     expect(Value.Check(ProjectFileSearchQuerySchema, { query: "x".repeat(257) })).toBe(false);
     expect(
       Value.Check(ProjectFileSearchPageSchema, {
-        data: [{ name: "index.ts", path: "src/index.ts" }],
+        data: [
+          {
+            name: "index.ts",
+            path: "src/index.ts",
+            rootId: "root-code-agent",
+            rootPath: "/workspace/CodeAgent",
+          },
+        ],
       }),
     ).toBe(true);
     expect(
       Value.Check(ProjectFileSearchPageSchema, {
-        data: [{ name: "outside.ts", path: "/tmp/outside.ts" }],
+        data: [
+          {
+            name: "outside.ts",
+            path: "/tmp/outside.ts",
+            rootId: "root-code-agent",
+            rootPath: "/workspace/CodeAgent",
+          },
+        ],
       }),
     ).toBe(false);
     expect(

@@ -7,6 +7,7 @@ import type {
   ProjectFileSearchEntry,
   ProjectGitStatus,
   ProjectGitWorktree,
+  ProjectRoot,
 } from "@code-agent/protocol";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
@@ -71,6 +72,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onFastModeChange: (enabled: boolean) => void;
   onInterrupt: () => void;
   onOpenProjectPath: () => void;
+  onProjectRootChange: (rootId: string) => void;
   onOpenReviewBranches: () => void;
   onComposerModeRemove: () => void;
   onPromptChange: (
@@ -88,6 +90,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onViewError: (error: Error) => void;
   projectPath: string;
   projectPathOpenDisabled: boolean;
+  projectRoots: readonly ProjectRoot[];
   projectToolsEnabled: boolean;
   promptContent: PromptSkillContent;
   promptSubmissionText: string;
@@ -97,6 +100,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   sandboxModeSelectable: boolean;
   selectedModel: AgentModel | undefined;
   selectedReasoningEffort: string | undefined;
+  selectedProjectRootId: string;
   setActiveCommandIndex: Dispatch<SetStateAction<number>>;
   skills: readonly AgentSkill[];
   skillEditorRef: RefObject<PromptSkillEditorHandle | null>;

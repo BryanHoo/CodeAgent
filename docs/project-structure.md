@@ -21,7 +21,7 @@ apps/web/src/features/projects/
   project-query-options.ts     根隔离 Query/Mutation
 
 apps/web/src/features/workbench/components/
-  project-root-selector.tsx    多根 Project 顶部选择器
+  project-root-selector.tsx    Composer 底部多根主目录选择器
   workbench-shell-runtime.tsx  当前根派生和根级 UI 状态
 ```
 

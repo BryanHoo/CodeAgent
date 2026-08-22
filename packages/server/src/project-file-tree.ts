@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 
 import type {
   ProjectFileSearchEntry,
-  ProjectFileSearchPage,
   ProjectFileTree,
   ProjectFileTreeEntry,
 } from "@code-agent/protocol";
@@ -16,6 +15,9 @@ import {
 
 export const MAX_PROJECT_FILE_TREE_DEPTH = 20;
 export const MAX_PROJECT_FILE_SEARCH_RESULTS = 50;
+
+export type ProjectFileSearchMatch = Readonly<Pick<ProjectFileSearchEntry, "name" | "path">>;
+export type ProjectFileSearchMatches = Readonly<{ data: readonly ProjectFileSearchMatch[] }>;
 
 type IgnoreMatcher = ReturnType<typeof createIgnore>;
 
@@ -170,7 +172,7 @@ export async function readProjectFileTree(
 }
 
 type RankedProjectFile = Readonly<{
-  entry: ProjectFileSearchEntry;
+  entry: ProjectFileSearchMatch;
   rank: number;
 }>;
 
@@ -195,14 +197,14 @@ export async function readProjectFileSearch(
   projectRoot: string,
   query: string,
   signal?: AbortSignal,
-): Promise<ProjectFileSearchPage> {
+): Promise<ProjectFileSearchMatches> {
   const normalizedQuery = query.toLocaleLowerCase();
   const root = await resolveDirectoryContext(projectRoot, undefined);
   const rootIgnoreScope = await readIgnoreScope(root.absoluteDirectory, root.relativeDirectory);
   const rootIgnoreScopes = rootIgnoreScope === undefined ? [] : [rootIgnoreScope];
   const matches: RankedProjectFile[] = [];
 
-  const addMatch = (entry: ProjectFileSearchEntry) => {
+  const addMatch = (entry: ProjectFileSearchMatch) => {
     matches.push({ entry, rank: rankSearchResult(entry.name, normalizedQuery) });
     matches.sort(compareSearchResults);
     if (matches.length > MAX_PROJECT_FILE_SEARCH_RESULTS) {
