@@ -212,5 +212,9 @@ describe("WorkbenchComposerView", () => {
     expect(markup).toContain('data-composer-project-root-controls=""');
     expect(markup).toContain('aria-label="在系统文件夹中打开"');
     expect(markup).toContain('aria-label="选择项目目录"');
+    expect(markup).toContain('data-size="toolbar"');
+    expect(markup.indexOf('aria-label="选择项目目录"')).toBeLessThan(
+      markup.indexOf('aria-label="在系统文件夹中打开"'),
+    );
   });
 });

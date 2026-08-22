@@ -101,6 +101,7 @@ export function ComposerProjectRootControls({
 }>) {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1" data-composer-project-root-controls="">
+      <ProjectRootSelector onChange={onRootChange} roots={roots} value={selectedRootId} />
       <div className="min-w-0 flex-1">
         <ComposerProjectPathButton
           disabled={projectPathOpenDisabled}
@@ -108,7 +109,6 @@ export function ComposerProjectRootControls({
           projectPath={projectPath}
         />
       </div>
-      <ProjectRootSelector onChange={onRootChange} roots={roots} value={selectedRootId} />
     </div>
   );
 }

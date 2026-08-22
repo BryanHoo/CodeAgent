@@ -70,6 +70,7 @@
   --ui-line-height-tight: 1.25;
   --ui-line-height-normal: 1.5;
   --ui-line-height-relaxed: 1.65;
+  --ui-icon-size-default: 1rem;
 
   --ui-space-unit: 0.25rem;
   --ui-radius-control: 6px;
@@ -96,6 +97,15 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
+}
+
+@layer base {
+  /* Lucide 图标统一从 16px 起步，具体控件可通过 size-* 使用更紧凑或语义化尺寸。 */
+  .lucide {
+    width: var(--ui-icon-size-default);
+    height: var(--ui-icon-size-default);
+    flex-shrink: 0;
+  }
 }
 
 .access-code-input {

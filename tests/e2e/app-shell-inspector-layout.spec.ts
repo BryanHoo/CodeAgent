@@ -374,8 +374,39 @@ test("switches every project view to the selected aggregate root", async ({ page
   );
   await expect(rootSelector).toContainText("superwork");
   await expect(projectPath).toContainText("/workspace/superwork");
+  const [rootSelectorBox, projectPathBox] = await Promise.all([
+    rootSelector.boundingBox(),
+    projectPath.boundingBox(),
+  ]);
+  expect(rootSelectorBox).not.toBeNull();
+  expect(projectPathBox).not.toBeNull();
+  expect((rootSelectorBox?.x ?? 0) + (rootSelectorBox?.width ?? 0)).toBeLessThanOrEqual(
+    projectPathBox?.x ?? 0,
+  );
+  await expect
+    .poll(() =>
+      rootSelector.locator("svg").evaluateAll((icons) =>
+        icons.map((icon) => {
+          const style = getComputedStyle(icon);
+          return `${style.width}x${style.height}`;
+        }),
+      ),
+    )
+    .toEqual(["12pxx12px", "12pxx12px"]);
 
   await rootSelector.click();
+  const selectedRootOption = page.getByRole("option", { name: /superwork/u });
+  await expect(selectedRootOption).toBeVisible();
+  await expect
+    .poll(() =>
+      selectedRootOption.locator("svg").evaluateAll((icons) =>
+        icons.map((icon) => {
+          const style = getComputedStyle(icon);
+          return `${style.width}x${style.height}`;
+        }),
+      ),
+    )
+    .toEqual(["14pxx14px"]);
   await page.getByRole("option", { name: /shared/u }).click();
 
   await expect(rootSelector).toContainText("shared");

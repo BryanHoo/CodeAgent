@@ -29,6 +29,7 @@ import {
 } from "./dropdown-menu.js";
 import { Input } from "./input.js";
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from "./input-group.js";
+import { Select, SelectTrigger, SelectValue } from "./select.js";
 import { Sheet, SheetContent, SheetTitle } from "./sheet.js";
 import { Textarea } from "./textarea.js";
 import { Tooltip, TooltipProvider, TooltipTrigger } from "./tooltip.js";
@@ -40,6 +41,10 @@ describe("项目核心组件", () => {
     expect(css).toContain("--color-brand: var(--ui-color-accent);");
     expect(css).toContain("--color-control-hover: var(--ui-color-control-hover);");
     expect(css).toContain("--color-foreground: var(--ui-color-text);");
+    expect(css).toContain("--ui-icon-size-default: 1rem;");
+    expect(css).toContain(".lucide {");
+    expect(css).toContain("height: var(--ui-icon-size-default);");
+    expect(css).toContain("width: var(--ui-icon-size-default);");
     expect(css).not.toContain("--color-primary:");
     expect(css).not.toContain("--primary:");
   });
@@ -92,6 +97,23 @@ describe("项目核心组件", () => {
     expect(inputClasses[1]).toContain("bg-transparent");
     expect(inputClasses[1]).not.toContain("bg-control");
     expect(/<textarea class="([^"]+)"/u.exec(markup)?.[1]).toContain("min-h-20");
+  });
+
+  it("统一约束工具栏 Select 内的图标尺寸", () => {
+    const markup = renderToStaticMarkup(
+      <Select defaultValue="primary">
+        <SelectTrigger aria-label="选择目录" size="toolbar">
+          <SelectValue>primary</SelectValue>
+        </SelectTrigger>
+      </Select>,
+    );
+    const triggerClasses = /data-slot="select-trigger"[^>]*class="([^"]+)"/u.exec(markup)?.[1];
+
+    expect(markup).toContain('data-size="toolbar"');
+    expect(triggerClasses).toContain("h-6");
+    expect(triggerClasses).toContain("text-caption");
+    expect(triggerClasses).toContain("size-3");
+    expect(triggerClasses).not.toContain("size-4");
   });
 
   it("composes a one-row multiline input with an inline action", () => {

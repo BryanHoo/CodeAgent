@@ -32,10 +32,11 @@ export function ProjectRootSelector({
     <Select onValueChange={onChange} value={value}>
       <SelectTrigger
         aria-label={t("shell.selectProjectRoot")}
-        className="h-6 min-w-0 max-w-28 shrink gap-1 border-0 bg-transparent px-1 text-caption shadow-none hover:bg-control-hover sm:max-w-40"
+        className="min-w-0 max-w-28 shrink border-0 bg-transparent shadow-none hover:bg-control-hover sm:max-w-40"
+        size="toolbar"
         title={selectedRoot.path}
       >
-        <FolderKanban aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
+        <FolderKanban aria-hidden="true" />
         <SelectValue>{rootName(selectedRoot.path)}</SelectValue>
       </SelectTrigger>
       <SelectContent position="popper">
