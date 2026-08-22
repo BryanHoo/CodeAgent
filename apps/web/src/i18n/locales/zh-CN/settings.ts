@@ -42,19 +42,9 @@ export const settings = {
     lightMode: "浅色模式",
   },
   approval: {
-    autoReview: "自动审批",
-    categories: {
-      mcp_elicitations: "MCP 交互",
-      request_permissions: "权限请求",
-      rules: "规则触发",
-      sandbox_approval: "沙箱升级",
-      skill_approval: "Skill 脚本",
-    },
-    granular: "细粒度审批",
-    granularAutoReview: "细粒度自动审批",
+    autoReview: "自动审核",
     never: "从不询问",
     onRequest: "按需审批",
-    untrusted: "仅不受信任操作",
   },
   effort: {
     high: "高",

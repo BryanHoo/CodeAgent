@@ -17,11 +17,11 @@ import type { CodeAgentMutationClient } from "../projects/project-queries.js";
 import {
   applyApprovalMode as applySharedApprovalMode,
   deriveApprovalMode as deriveSharedApprovalMode,
-  type TurnApprovalMode,
+  type ApprovalMode as SharedApprovalMode,
 } from "../../shared/approval-mode.js";
 
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
-export type ApprovalMode = TurnApprovalMode;
+export type ApprovalMode = SharedApprovalMode;
 
 export const LARGE_PASTE_CHARACTER_THRESHOLD = 1_000;
 export const PASTED_TEXT_ATTACHMENT_NAME = "Pasted text.txt";

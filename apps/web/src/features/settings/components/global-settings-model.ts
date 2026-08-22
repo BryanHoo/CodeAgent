@@ -9,12 +9,10 @@ import { readThemePreference, type ThemePreference } from "../theme-preference.j
 import {
   applyApprovalMode as applySharedApprovalMode,
   deriveApprovalMode as deriveSharedApprovalMode,
-  updateGranularApprovalCategory as updateSharedGranularApprovalCategory,
-  type GlobalApprovalMode,
+  type ApprovalMode as SharedApprovalMode,
 } from "../../../shared/approval-mode.js";
-import type { AgentGranularApprovalConfig } from "@code-agent/protocol";
 
-export type ApprovalMode = GlobalApprovalMode;
+export type ApprovalMode = SharedApprovalMode;
 
 export function resolveGlobalSettingsModel(
   models: readonly AgentModel[],
@@ -34,7 +32,7 @@ export function resolveGlobalSettingsModel(
 }
 
 export function deriveApprovalMode(settings: AgentGlobalSettings): ApprovalMode {
-  return deriveSharedApprovalMode(settings) as ApprovalMode;
+  return deriveSharedApprovalMode(settings);
 }
 
 export function applyApprovalMode(
@@ -42,14 +40,6 @@ export function applyApprovalMode(
   mode: ApprovalMode,
 ): AgentGlobalSettings {
   return applySharedApprovalMode(settings, mode);
-}
-
-export function updateGranularApprovalCategory(
-  settings: AgentGlobalSettings,
-  category: keyof AgentGranularApprovalConfig,
-  enabled: boolean,
-): AgentGlobalSettings {
-  return updateSharedGranularApprovalCategory(settings, category, enabled);
 }
 
 export function createFallbackSettings(models: readonly AgentModel[]): AgentGlobalSettings {

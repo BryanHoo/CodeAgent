@@ -264,25 +264,9 @@ describe("WorkbenchComposer", () => {
     expect(resolveReasoningEffort(undefined, "high")).toBeUndefined();
   });
 
-  it("maps automatic approval to the Codex reviewer setting", () => {
-    const automatic = applyApprovalMode(task.settings, "auto-review");
-
-    expect(automatic).toMatchObject({
-      approvalPolicy: "on-request",
-      approvalsReviewer: "auto_review",
-    });
-    expect(deriveApprovalMode(automatic)).toBe("auto-review");
-    expect(applyApprovalMode(automatic, "never")).toMatchObject({
-      approvalPolicy: "never",
-      approvalsReviewer: "user",
-    });
-  });
-
-  it("maps granular approval to a complete per-turn policy", () => {
-    const granular = applyApprovalMode(task.settings, "granular");
-
-    expect(deriveApprovalMode(granular)).toBe("granular");
-    expect(granular).toMatchObject({
+  it("仅将 CLI 审批策略暴露给任务编辑器", () => {
+    const granularSettings = {
+      ...task.settings,
       approvalPolicy: {
         granular: {
           mcp_elicitations: true,
@@ -292,12 +276,36 @@ describe("WorkbenchComposer", () => {
           skill_approval: true,
         },
       },
+    } as const;
+
+    expect(deriveApprovalMode({ ...task.settings, approvalPolicy: "untrusted" })).toBe(
+      "on-request",
+    );
+    expect(deriveApprovalMode(granularSettings)).toBe("on-request");
+    expect(
+      applyApprovalMode({ ...task.settings, approvalsReviewer: "auto_review" }, "never"),
+    ).toMatchObject({
+      approvalPolicy: "never",
       approvalsReviewer: "user",
     });
-    const automatic = applyApprovalMode(granular, "granular-auto-review");
-    expect(deriveApprovalMode(automatic)).toBe("granular-auto-review");
-    expect(automatic.approvalPolicy).toEqual(granular.approvalPolicy);
-    expect(automatic.approvalsReviewer).toBe("auto_review");
+  });
+
+  it("互斥切换自动审核且不修改沙盒", () => {
+    const automatic = applyApprovalMode(
+      { ...task.settings, sandboxMode: "read-only" },
+      "auto-review",
+    );
+
+    expect(automatic).toMatchObject({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      sandboxMode: "read-only",
+    });
+    expect(deriveApprovalMode(automatic)).toBe("auto-review");
+    expect({ ...automatic, sandboxMode: "danger-full-access" }).toMatchObject({
+      approvalsReviewer: "auto_review",
+      sandboxMode: "danger-full-access",
+    });
   });
 
   it("creates a task before its first turn and continues existing tasks directly", async () => {

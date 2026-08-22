@@ -45,27 +45,21 @@ describe("GlobalSettingsDialog", () => {
     await changeAppLanguage("zh-CN");
   });
 
-  it("maps granular approval without losing its category settings", () => {
-    const settings = createFallbackSettings(models);
-    const granular = applyApprovalMode(settings, "granular");
+  it("将自动审核作为审批下拉框中的互斥选项", () => {
+    const settings = { ...createFallbackSettings(models), sandboxMode: "read-only" as const };
+    const automatic = applyApprovalMode(settings, "auto-review");
 
-    expect(deriveApprovalMode(granular)).toBe("granular");
-    expect(granular).toMatchObject({
-      approvalPolicy: {
-        granular: {
-          mcp_elicitations: true,
-          request_permissions: true,
-          rules: true,
-          sandbox_approval: true,
-          skill_approval: true,
-        },
-      },
-      approvalsReviewer: "user",
+    expect(automatic).toMatchObject({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      sandboxMode: "read-only",
     });
-    const automatic = applyApprovalMode(granular, "granular-auto-review");
-    expect(deriveApprovalMode(automatic)).toBe("granular-auto-review");
-    expect(automatic.approvalPolicy).toEqual(granular.approvalPolicy);
-    expect(automatic.approvalsReviewer).toBe("auto_review");
+    expect(deriveApprovalMode(automatic)).toBe("auto-review");
+    expect(applyApprovalMode(automatic, "never")).toMatchObject({
+      approvalPolicy: "never",
+      approvalsReviewer: "user",
+      sandboxMode: "read-only",
+    });
   });
 
   it("renders all global defaults with accessible 项目 Agent 组件 selects", () => {
@@ -110,8 +104,12 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain('aria-label="浅色模式"');
     expect(markup).toContain('aria-label="深色模式"');
     expect(markup).toContain('aria-label="审批"');
-    expect(markup).toContain('<option value="granular">细粒度审批</option>');
+    expect(markup).toMatch(/<option value="on-request"[^>]*>按需审批<\/option>/u);
+    expect(markup).toContain('<option value="never">从不询问</option>');
+    expect(markup).not.toContain('<option value="granular">');
     expect(markup).not.toContain('<option value="untrusted">');
+    expect(markup).toMatch(/<option value="auto-review"[^>]*>自动审核<\/option>/u);
+    expect(markup).not.toContain('aria-label="自动审核"');
     expect(markup).toContain('aria-label="工作区"');
     expect(markup).toContain('aria-label="跟进消息"');
     expect(markup).toContain('aria-label="快速模式"');

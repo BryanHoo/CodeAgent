@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
+import { ComposerApprovalControls } from "./workbench-composer-approval-controls.js";
 import {
   ComposerModeTag,
   ComposerFastModeButton,
@@ -12,6 +13,40 @@ import {
 } from "./workbench-composer-view.js";
 
 describe("WorkbenchComposerView", () => {
+  it("仅渲染 CLI 对外提供的审批选项", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ComposerApprovalControls
+          disabled={false}
+          onSettingsChange={() => undefined}
+          sandboxModeSelectable
+          settings={{
+            approvalPolicy: {
+              granular: {
+                mcp_elicitations: true,
+                request_permissions: true,
+                rules: true,
+                sandbox_approval: true,
+                skill_approval: true,
+              },
+            },
+            approvalsReviewer: "user",
+            model: "gpt-5.6-sol",
+            reasoningEffort: "high",
+            sandboxMode: "workspace-write",
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toMatch(/<option value="on-request"[^>]*>按需审批<\/option>/u);
+    expect(markup).toContain('<option value="never">从不询问</option>');
+    expect(markup).not.toContain('<option value="untrusted">');
+    expect(markup).not.toContain('<option value="granular">');
+    expect(markup).toContain('<option value="auto-review">自动审核</option>');
+    expect(markup).not.toContain('data-approve-for-me=""');
+  });
+
   it("渲染可切换的快速模式按钮", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>

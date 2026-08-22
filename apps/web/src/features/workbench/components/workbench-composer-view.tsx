@@ -6,7 +6,6 @@ import {
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
-  type AgentSandboxMode,
 } from "@code-agent/protocol";
 import { ArrowDown, ArrowUp, Folder, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
 
@@ -17,7 +16,6 @@ import {
   PromptInputActionAddAttachments,
   PromptInputBody,
   PromptInputFooter,
-  PromptInputSelect,
   PromptInputSubmit,
   PromptInputTools,
   isPromptInputComposing,
@@ -30,14 +28,12 @@ import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import {
   LARGE_PASTE_CHARACTER_THRESHOLD,
   PASTED_TEXT_ATTACHMENT_NAME,
-  applyApprovalMode,
-  deriveApprovalMode,
   resolveComposerPlaceholder,
-  type ApprovalMode,
 } from "../composer-state.js";
 import { movePromptCommandSelection } from "./prompt-command.js";
 import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import { ComposerModelSelector } from "./composer-model-selector.js";
+import { ComposerApprovalControls } from "./workbench-composer-approval-controls.js";
 import { shouldNavigatePromptHistory } from "./prompt-history.js";
 import { PromptSkillEditor } from "./prompt-skill-editor.js";
 import { ProjectRootSelector } from "./project-root-selector.js";
@@ -345,53 +341,12 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 disabled={props.attachmentsDisabled}
                 onSelectKind={props.onSelectAttachmentKind}
               />
-              <PromptInputSelect
-                aria-label={t("composer.approvalMode")}
-                className="max-workbench:px-0.5"
+              <ComposerApprovalControls
                 disabled={props.turnControlsDisabled}
-                onChange={(event) => {
-                  props.onSettingsChange(
-                    applyApprovalMode(
-                      props.activeSettings,
-                      event.currentTarget.value as ApprovalMode,
-                    ),
-                    "approvalPolicy",
-                  );
-                }}
-                value={deriveApprovalMode(props.activeSettings)}
-              >
-                <option value="untrusted">{t("settings:approval.untrusted")}</option>
-                <option value="on-request">{t("settings:approval.onRequest")}</option>
-                <option value="granular">{t("settings:approval.granular")}</option>
-                <option value="auto-review">{t("settings:approval.autoReview")}</option>
-                <option value="granular-auto-review">
-                  {t("settings:approval.granularAutoReview")}
-                </option>
-                <option value="never">{t("settings:approval.never")}</option>
-              </PromptInputSelect>
-              {props.sandboxModeSelectable ? (
-                <PromptInputSelect
-                  aria-label={t("composer.sandboxMode")}
-                  className="max-workbench:px-0.5"
-                  disabled={props.turnControlsDisabled}
-                  onChange={(event) => {
-                    props.onSettingsChange(
-                      {
-                        ...props.activeSettings,
-                        sandboxMode: event.currentTarget.value as AgentSandboxMode,
-                      },
-                      "sandboxMode",
-                    );
-                  }}
-                  value={props.activeSettings.sandboxMode}
-                >
-                  <option value="read-only">{t("settings:sandbox.readOnly")}</option>
-                  <option value="workspace-write">{t("settings:sandbox.workspaceWrite")}</option>
-                  <option value="danger-full-access">
-                    {t("settings:sandbox.dangerFullAccess")}
-                  </option>
-                </PromptInputSelect>
-              ) : null}
+                onSettingsChange={props.onSettingsChange}
+                sandboxModeSelectable={props.sandboxModeSelectable}
+                settings={props.activeSettings}
+              />
               {props.composerMode === undefined ? null : (
                 <ComposerModeTag
                   disabled={props.turnControlsDisabled}
