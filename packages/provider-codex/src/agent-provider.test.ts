@@ -558,8 +558,16 @@ describe("CodexAgentProvider", () => {
           textAttachments: [],
         },
         {
-          approvalPolicy: "on-request",
-          approvalsReviewer: "user",
+          approvalPolicy: {
+            granular: {
+              mcp_elicitations: false,
+              request_permissions: true,
+              rules: false,
+              sandbox_approval: true,
+              skill_approval: false,
+            },
+          },
+          approvalsReviewer: "auto_review",
           goalMode: true,
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
@@ -576,8 +584,16 @@ describe("CodexAgentProvider", () => {
     expect(rpc.calls[1]).toEqual({
       method: "thread/settings/update",
       params: {
-        approvalPolicy: "on-request",
-        approvalsReviewer: "user",
+        approvalPolicy: {
+          granular: {
+            mcp_elicitations: false,
+            request_permissions: true,
+            rules: false,
+            sandbox_approval: true,
+            skill_approval: false,
+          },
+        },
+        approvalsReviewer: "auto_review",
         collaborationMode: {
           mode: "default",
           settings: {
@@ -1377,8 +1393,16 @@ describe("CodexAgentProvider", () => {
         "task-1",
         { files: [], images: [], skills: [], text: "继续之前的任务", textAttachments: [] },
         {
-          approvalPolicy: "on-request",
-          approvalsReviewer: "user",
+          approvalPolicy: {
+            granular: {
+              mcp_elicitations: true,
+              request_permissions: false,
+              rules: true,
+              sandbox_approval: false,
+              skill_approval: true,
+            },
+          },
+          approvalsReviewer: "auto_review",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -1399,6 +1423,16 @@ describe("CodexAgentProvider", () => {
     expect(rpc.calls[3]).toMatchObject({
       method: "turn/start",
       params: {
+        approvalPolicy: {
+          granular: {
+            mcp_elicitations: true,
+            request_permissions: false,
+            rules: true,
+            sandbox_approval: false,
+            skill_approval: true,
+          },
+        },
+        approvalsReviewer: "auto_review",
         collaborationMode: {
           mode: "default",
           settings: {
@@ -2930,8 +2964,14 @@ describe("CodexAgentProvider", () => {
       },
       {
         config: {
-          approval_policy: { granular: {} },
-          approvals_reviewer: "guardian_subagent",
+          approval_policy: {
+            granular: {
+              mcp_elicitations: false,
+              rules: false,
+              sandbox_approval: true,
+            },
+          },
+          approvals_reviewer: "user",
           model: null,
           model_reasoning_effort: null,
           sandbox_mode: null,
@@ -2957,9 +2997,20 @@ describe("CodexAgentProvider", () => {
       reasoningEffort: "high",
       sandboxMode: "read-only",
     });
-    await expect(runtime.readDefaultSettings()).resolves.toEqual({});
     await expect(runtime.readDefaultSettings()).resolves.toEqual({
-      approvalPolicy: "on-request",
+      approvalPolicy: {
+        granular: {
+          mcp_elicitations: false,
+          request_permissions: false,
+          rules: false,
+          sandbox_approval: true,
+          skill_approval: false,
+        },
+      },
+      approvalsReviewer: "user",
+    });
+    await expect(runtime.readDefaultSettings()).resolves.toEqual({
+      approvalPolicy: "never",
       approvalsReviewer: "auto_review",
     });
     expect(rpc.calls).toEqual([

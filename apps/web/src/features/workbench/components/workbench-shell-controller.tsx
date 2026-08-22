@@ -196,12 +196,8 @@ export function useWorkbenchShellController(
   // 临时草稿直接继承 Global；普通 Project 草稿继续使用 Project effective defaults。
   const inheritedDraftSettings = useMemo<AgentTaskSettings>(
     () => ({
-      ...(globalSettings?.approvalsReviewer === "auto_review"
-        ? { approvalPolicy: "on-request" as const, approvalsReviewer: "auto_review" as const }
-        : {
-            approvalPolicy: globalSettings?.approvalPolicy ?? "on-request",
-            approvalsReviewer: "user" as const,
-          }),
+      approvalPolicy: globalSettings?.approvalPolicy ?? "on-request",
+      approvalsReviewer: globalSettings?.approvalsReviewer ?? "user",
       model: defaultModel?.id ?? draftDefaults?.model ?? "",
       reasoningEffort: draftDefaults?.reasoningEffort ?? defaultModel?.defaultReasoningEffort ?? "",
       sandboxMode: draftDefaults?.sandboxMode ?? "workspace-write",

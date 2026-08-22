@@ -4,13 +4,57 @@ import { ProjectOpenAppIdSchema } from "./project-files.js";
 
 export const DEFAULT_COMMIT_MESSAGE_MODEL = "gpt-5.6-luna";
 
-export const AgentApprovalPolicySchema = Type.Union([
-  Type.Literal("untrusted"),
+export const AgentGranularApprovalConfigSchema = Type.Object(
+  {
+    mcp_elicitations: Type.Boolean(),
+    request_permissions: Type.Boolean(),
+    rules: Type.Boolean(),
+    sandbox_approval: Type.Boolean(),
+    skill_approval: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentGranularApprovalConfig = Readonly<
+  Static<typeof AgentGranularApprovalConfigSchema>
+>;
+
+export const AgentGranularApprovalPolicySchema = Type.Object(
+  { granular: AgentGranularApprovalConfigSchema },
+  { additionalProperties: false },
+);
+
+export type AgentGranularApprovalPolicy = Readonly<
+  Static<typeof AgentGranularApprovalPolicySchema>
+>;
+
+export const DEFAULT_AGENT_GRANULAR_APPROVAL_POLICY: AgentGranularApprovalPolicy = {
+  granular: {
+    mcp_elicitations: true,
+    request_permissions: true,
+    rules: true,
+    sandbox_approval: true,
+    skill_approval: true,
+  },
+};
+
+// Codex 0.149 的全局配置不接受 untrusted；该值仅属于 App Server 的 per-turn 协议。
+export const AgentGlobalApprovalPolicySchema = Type.Union([
   Type.Literal("on-request"),
+  AgentGranularApprovalPolicySchema,
   Type.Literal("never"),
 ]);
 
-export type AgentApprovalPolicy = Readonly<Static<typeof AgentApprovalPolicySchema>>;
+export type AgentGlobalApprovalPolicy = Readonly<Static<typeof AgentGlobalApprovalPolicySchema>>;
+
+export const AgentTurnApprovalPolicySchema = Type.Union([
+  Type.Literal("untrusted"),
+  Type.Literal("on-request"),
+  AgentGranularApprovalPolicySchema,
+  Type.Literal("never"),
+]);
+
+export type AgentTurnApprovalPolicy = Readonly<Static<typeof AgentTurnApprovalPolicySchema>>;
 
 export const AgentApprovalsReviewerSchema = Type.Union([
   Type.Literal("user"),
@@ -33,24 +77,14 @@ const AgentTaskSettingProperties = {
   sandboxMode: AgentSandboxModeSchema,
 };
 
-export const AgentTaskSettingsSchema = Type.Union([
-  Type.Object(
-    {
-      approvalPolicy: AgentApprovalPolicySchema,
-      approvalsReviewer: Type.Literal("user"),
-      ...AgentTaskSettingProperties,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      approvalPolicy: Type.Literal("on-request"),
-      approvalsReviewer: Type.Literal("auto_review"),
-      ...AgentTaskSettingProperties,
-    },
-    { additionalProperties: false },
-  ),
-]);
+export const AgentTaskSettingsSchema = Type.Object(
+  {
+    approvalPolicy: AgentTurnApprovalPolicySchema,
+    approvalsReviewer: AgentApprovalsReviewerSchema,
+    ...AgentTaskSettingProperties,
+  },
+  { additionalProperties: false },
+);
 
 export type AgentTaskSettings = Readonly<Static<typeof AgentTaskSettingsSchema>>;
 
@@ -70,24 +104,14 @@ const AgentGlobalSettingProperties = {
   ...AgentTaskSettingProperties,
 };
 
-export const AgentGlobalSettingsSchema = Type.Union([
-  Type.Object(
-    {
-      approvalPolicy: AgentApprovalPolicySchema,
-      approvalsReviewer: Type.Literal("user"),
-      ...AgentGlobalSettingProperties,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      approvalPolicy: Type.Literal("on-request"),
-      approvalsReviewer: Type.Literal("auto_review"),
-      ...AgentGlobalSettingProperties,
-    },
-    { additionalProperties: false },
-  ),
-]);
+export const AgentGlobalSettingsSchema = Type.Object(
+  {
+    approvalPolicy: AgentGlobalApprovalPolicySchema,
+    approvalsReviewer: AgentApprovalsReviewerSchema,
+    ...AgentGlobalSettingProperties,
+  },
+  { additionalProperties: false },
+);
 
 export type AgentGlobalSettings = Readonly<Static<typeof AgentGlobalSettingsSchema>>;
 
@@ -135,24 +159,14 @@ const AgentTurnOptionProperties = {
 };
 
 // Collaboration、Goal 与快速模式只控制当前 Turn，不得进入持久化 Task 设置。
-export const AgentTurnOptionsSchema = Type.Union([
-  Type.Object(
-    {
-      approvalPolicy: AgentApprovalPolicySchema,
-      approvalsReviewer: Type.Literal("user"),
-      ...AgentTurnOptionProperties,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      approvalPolicy: Type.Literal("on-request"),
-      approvalsReviewer: Type.Literal("auto_review"),
-      ...AgentTurnOptionProperties,
-    },
-    { additionalProperties: false },
-  ),
-]);
+export const AgentTurnOptionsSchema = Type.Object(
+  {
+    approvalPolicy: AgentTurnApprovalPolicySchema,
+    approvalsReviewer: AgentApprovalsReviewerSchema,
+    ...AgentTurnOptionProperties,
+  },
+  { additionalProperties: false },
+);
 export type AgentTurnOptions = Readonly<Static<typeof AgentTurnOptionsSchema>>;
 
 export const AgentReasoningEffortOptionSchema = Type.Object(

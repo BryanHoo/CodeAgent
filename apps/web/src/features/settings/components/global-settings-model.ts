@@ -6,8 +6,15 @@ import {
 } from "@code-agent/protocol";
 
 import { readThemePreference, type ThemePreference } from "../theme-preference.js";
+import {
+  applyApprovalMode as applySharedApprovalMode,
+  deriveApprovalMode as deriveSharedApprovalMode,
+  updateGranularApprovalCategory as updateSharedGranularApprovalCategory,
+  type GlobalApprovalMode,
+} from "../../../shared/approval-mode.js";
+import type { AgentGranularApprovalConfig } from "@code-agent/protocol";
 
-export type ApprovalMode = AgentGlobalSettings["approvalPolicy"] | "auto-review";
+export type ApprovalMode = GlobalApprovalMode;
 
 export function resolveGlobalSettingsModel(
   models: readonly AgentModel[],
@@ -27,17 +34,22 @@ export function resolveGlobalSettingsModel(
 }
 
 export function deriveApprovalMode(settings: AgentGlobalSettings): ApprovalMode {
-  return settings.approvalsReviewer === "auto_review" ? "auto-review" : settings.approvalPolicy;
+  return deriveSharedApprovalMode(settings) as ApprovalMode;
 }
 
 export function applyApprovalMode(
   settings: AgentGlobalSettings,
   mode: ApprovalMode,
 ): AgentGlobalSettings {
-  // 自动审批由 on-request 与 auto_review 共同表达，不能映射为权限更宽的 never。
-  return mode === "auto-review"
-    ? { ...settings, approvalPolicy: "on-request", approvalsReviewer: "auto_review" }
-    : { ...settings, approvalPolicy: mode, approvalsReviewer: "user" };
+  return applySharedApprovalMode(settings, mode);
+}
+
+export function updateGranularApprovalCategory(
+  settings: AgentGlobalSettings,
+  category: keyof AgentGranularApprovalConfig,
+  enabled: boolean,
+): AgentGlobalSettings {
+  return updateSharedGranularApprovalCategory(settings, category, enabled);
 }
 
 export function createFallbackSettings(models: readonly AgentModel[]): AgentGlobalSettings {

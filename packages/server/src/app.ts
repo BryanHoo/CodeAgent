@@ -323,28 +323,19 @@ export async function createCodeAgentServer(
       },
       "read-only",
     );
+    const approvalPolicy = requestedDefaults.approvalPolicy ?? "on-request";
+    const approvalsReviewer = requestedDefaults.approvalsReviewer ?? "user";
     // 全局记录缺失时只返回运行时默认值；读取不能隐式创建用户配置。
-    return requestedDefaults.approvalsReviewer === "auto_review"
-      ? {
-          approvalPolicy: "on-request",
-          approvalsReviewer: "auto_review",
-          commitMessageModel: effectiveCommitModel.model,
-          commitMessagePrompt: stored?.commitMessagePrompt ?? "",
-          defaultOpenAppId: stored?.defaultOpenAppId ?? null,
-          fastMode: stored?.fastMode ?? false,
-          followUpBehavior: stored?.followUpBehavior ?? "queue",
-          ...effectiveModel,
-        }
-      : {
-          approvalPolicy: requestedDefaults.approvalPolicy ?? "on-request",
-          approvalsReviewer: "user",
-          commitMessageModel: effectiveCommitModel.model,
-          commitMessagePrompt: stored?.commitMessagePrompt ?? "",
-          defaultOpenAppId: stored?.defaultOpenAppId ?? null,
-          fastMode: stored?.fastMode ?? false,
-          followUpBehavior: stored?.followUpBehavior ?? "queue",
-          ...effectiveModel,
-        };
+    return {
+      approvalPolicy,
+      approvalsReviewer,
+      commitMessageModel: effectiveCommitModel.model,
+      commitMessagePrompt: stored?.commitMessagePrompt ?? "",
+      defaultOpenAppId: stored?.defaultOpenAppId ?? null,
+      fastMode: stored?.fastMode ?? false,
+      followUpBehavior: stored?.followUpBehavior ?? "queue",
+      ...effectiveModel,
+    };
   };
   const readEffectiveProjectDefaults = async (
     projectId: string,
@@ -363,18 +354,11 @@ export async function createCodeAgentServer(
     const catalog = models ?? (await listModels());
     const globalSettings = await readEffectiveGlobalSettings(catalog);
     const projectDefaults = await readEffectiveProjectDefaults(projectId, catalog, globalSettings);
-    const settings: AgentTaskSettings =
-      globalSettings.approvalsReviewer === "auto_review"
-        ? {
-            approvalPolicy: "on-request",
-            approvalsReviewer: "auto_review",
-            ...projectDefaults,
-          }
-        : {
-            approvalPolicy: globalSettings.approvalPolicy,
-            approvalsReviewer: "user",
-            ...projectDefaults,
-          };
+    const settings: AgentTaskSettings = {
+      approvalPolicy: globalSettings.approvalPolicy,
+      approvalsReviewer: globalSettings.approvalsReviewer,
+      ...projectDefaults,
+    };
     return settings;
   };
   const readEffectiveTaskSettings = async (
@@ -388,18 +372,11 @@ export async function createCodeAgentServer(
       return readInheritedTaskSettings(projectId, catalog);
     }
     const effectiveModel = resolveProjectDefaults(catalog, stored, stored.sandboxMode);
-    const effective: AgentTaskSettings =
-      stored.approvalsReviewer === "auto_review"
-        ? {
-            approvalPolicy: "on-request",
-            approvalsReviewer: "auto_review",
-            ...effectiveModel,
-          }
-        : {
-            approvalPolicy: stored.approvalPolicy,
-            approvalsReviewer: "user",
-            ...effectiveModel,
-          };
+    const effective: AgentTaskSettings = {
+      approvalPolicy: stored.approvalPolicy,
+      approvalsReviewer: stored.approvalsReviewer,
+      ...effectiveModel,
+    };
     return effective;
   };
   const activeGitMutations = new Set<string>();

@@ -18,6 +18,7 @@ import {
   runMigrations,
   taskSettingsFromRow,
 } from "./sqlite-state-worker-bootstrap.js";
+import { serializeApprovalPolicy } from "./approval-policy-persistence.js";
 
 function serializeError(error) {
   return {
@@ -399,7 +400,7 @@ function createOperations(database) {
     writeGlobalSettings(payload) {
       const settings = payload.settings;
       requireStatements().writeGlobalSettings.run(
-        settings.approvalPolicy,
+        serializeApprovalPolicy(settings.approvalPolicy),
         settings.approvalsReviewer,
         settings.commitMessageModel,
         settings.commitMessagePrompt,
@@ -427,7 +428,7 @@ function createOperations(database) {
       requireStatements().writeTaskSettings.run(
         payload.projectId,
         payload.taskId,
-        settings.approvalPolicy,
+        serializeApprovalPolicy(settings.approvalPolicy),
         settings.approvalsReviewer,
         settings.model,
         settings.reasoningEffort,

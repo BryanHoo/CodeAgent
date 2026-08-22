@@ -278,6 +278,28 @@ describe("WorkbenchComposer", () => {
     });
   });
 
+  it("maps granular approval to a complete per-turn policy", () => {
+    const granular = applyApprovalMode(task.settings, "granular");
+
+    expect(deriveApprovalMode(granular)).toBe("granular");
+    expect(granular).toMatchObject({
+      approvalPolicy: {
+        granular: {
+          mcp_elicitations: true,
+          request_permissions: true,
+          rules: true,
+          sandbox_approval: true,
+          skill_approval: true,
+        },
+      },
+      approvalsReviewer: "user",
+    });
+    const automatic = applyApprovalMode(granular, "granular-auto-review");
+    expect(deriveApprovalMode(automatic)).toBe("granular-auto-review");
+    expect(automatic.approvalPolicy).toEqual(granular.approvalPolicy);
+    expect(automatic.approvalsReviewer).toBe("auto_review");
+  });
+
   it("creates a task before its first turn and continues existing tasks directly", async () => {
     const onTaskCreated = vi.fn();
     const client = {

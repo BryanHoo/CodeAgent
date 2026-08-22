@@ -43,6 +43,15 @@ export const settings = {
   },
   approval: {
     autoReview: "Automatic approval",
+    categories: {
+      mcp_elicitations: "MCP elicitations",
+      request_permissions: "Permission requests",
+      rules: "Rule prompts",
+      sandbox_approval: "Sandbox escalation",
+      skill_approval: "Skill scripts",
+    },
+    granular: "Granular approvals",
+    granularAutoReview: "Granular automatic approval",
     never: "Never ask",
     onRequest: "On request",
     untrusted: "Untrusted operations only",

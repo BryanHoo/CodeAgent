@@ -1226,6 +1226,21 @@ describe("project protocol", () => {
       true,
     );
     expect(Value.Check(AgentTaskSettingsSchema, taskSettings)).toBe(true);
+    const granularApprovalPolicy = {
+      granular: {
+        mcp_elicitations: false,
+        request_permissions: true,
+        rules: false,
+        sandbox_approval: true,
+        skill_approval: false,
+      },
+    } as const;
+    expect(
+      Value.Check(AgentTaskSettingsSchema, {
+        ...taskSettings,
+        approvalPolicy: granularApprovalPolicy,
+      }),
+    ).toBe(true);
     expect(Value.Check(AgentTaskSettingsResponseSchema, { settings: taskSettings })).toBe(true);
     expect(
       Value.Check(AgentProjectDefaultsSchema, { ...projectDefaults, approvalPolicy: "never" }),
@@ -1237,7 +1252,7 @@ describe("project protocol", () => {
       Value.Check(AgentTaskSettingsSchema, { ...taskSettings, approvalsReviewer: "always" }),
     ).toBe(false);
     expect(Value.Check(AgentTaskSettingsSchema, { ...taskSettings, approvalPolicy: "never" })).toBe(
-      false,
+      true,
     );
     const settingsWithoutReviewer = {
       approvalPolicy: taskSettings.approvalPolicy,
@@ -1270,6 +1285,28 @@ describe("project protocol", () => {
     };
 
     expect(Value.Check(AgentGlobalSettingsSchema, settings)).toBe(true);
+    const granularApprovalPolicy = {
+      granular: {
+        mcp_elicitations: false,
+        request_permissions: true,
+        rules: false,
+        sandbox_approval: true,
+        skill_approval: false,
+      },
+    } as const;
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, {
+        ...settings,
+        approvalPolicy: granularApprovalPolicy,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, {
+        ...settings,
+        approvalPolicy: "untrusted",
+        approvalsReviewer: "user",
+      }),
+    ).toBe(false);
     expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, fastMode: true })).toBe(true);
     expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, fastMode: "true" })).toBe(false);
     expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings })).toBe(true);
@@ -1297,7 +1334,7 @@ describe("project protocol", () => {
         approvalPolicy: "never",
         approvalsReviewer: "auto_review",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings, legacy: true })).toBe(false);
     expect(
       Value.Check(AgentGlobalSettingsSchema, { ...settings, commitMessageModel: undefined }),
@@ -1778,6 +1815,26 @@ describe("project protocol", () => {
       sandboxMode: "workspace-write",
     };
     expect(Value.Check(AgentTurnOptionsSchema, planTurnOptions)).toBe(true);
+    expect(
+      Value.Check(AgentTurnOptionsSchema, {
+        ...planTurnOptions,
+        approvalPolicy: "untrusted",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentTurnOptionsSchema, {
+        ...planTurnOptions,
+        approvalPolicy: {
+          granular: {
+            mcp_elicitations: false,
+            request_permissions: true,
+            rules: false,
+            sandbox_approval: true,
+            skill_approval: false,
+          },
+        },
+      }),
+    ).toBe(true);
     expect(Value.Check(AgentTaskSettingsSchema, planTurnOptions)).toBe(false);
     expect(Value.Check(AgentTurnOptionsSchema, { ...planTurnOptions, fastMode: true })).toBe(true);
     expect(Value.Check(AgentTurnOptionsSchema, { ...planTurnOptions, fastMode: false })).toBe(

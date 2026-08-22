@@ -3278,8 +3278,17 @@ describe("CodeAgent Server", () => {
       writeProjectDefaults,
       writeTaskSettings,
     } = await createHarness();
+    const granularApprovalPolicy = {
+      granular: {
+        mcp_elicitations: false,
+        request_permissions: true,
+        rules: false,
+        sandbox_approval: true,
+        skill_approval: false,
+      },
+    } as const;
     const globalSettings = {
-      approvalPolicy: "on-request" as const,
+      approvalPolicy: granularApprovalPolicy,
       approvalsReviewer: "auto_review" as const,
       commitMessageModel: "gpt-5.6-sol",
       commitMessagePrompt: "",
@@ -3321,7 +3330,7 @@ describe("CodeAgent Server", () => {
     expect(taskResponse.json()).toMatchObject({
       snapshot: {
         settings: {
-          approvalPolicy: "on-request",
+          approvalPolicy: granularApprovalPolicy,
           approvalsReviewer: "auto_review",
           model: globalSettings.model,
           reasoningEffort: globalSettings.reasoningEffort,

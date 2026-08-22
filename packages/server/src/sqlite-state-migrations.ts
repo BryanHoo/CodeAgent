@@ -296,4 +296,70 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 19,
   },
+  {
+    name: "store_structured_approval_policies",
+    sql: `
+      CREATE TABLE task_settings_approval_v20 (
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        approval_policy TEXT NOT NULL,
+        model TEXT NOT NULL,
+        reasoning_effort TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        sandbox_mode TEXT NOT NULL DEFAULT 'workspace-write'
+          CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access')),
+        approvals_reviewer TEXT NOT NULL DEFAULT 'user'
+          CHECK (approvals_reviewer IN ('user', 'auto_review')),
+        PRIMARY KEY (project_id, task_id)
+      ) STRICT;
+
+      INSERT INTO task_settings_approval_v20
+        (project_id, task_id, approval_policy, model, reasoning_effort, updated_at,
+         sandbox_mode, approvals_reviewer)
+      SELECT project_id, task_id, approval_policy, model, reasoning_effort, updated_at,
+             sandbox_mode, approvals_reviewer
+      FROM task_settings;
+
+      DROP TABLE task_settings;
+      ALTER TABLE task_settings_approval_v20 RENAME TO task_settings;
+
+      CREATE TABLE global_settings_approval_v20 (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        approval_policy TEXT NOT NULL,
+        approvals_reviewer TEXT NOT NULL
+          CHECK (approvals_reviewer IN ('user', 'auto_review')),
+        model TEXT NOT NULL,
+        reasoning_effort TEXT NOT NULL,
+        sandbox_mode TEXT NOT NULL
+          CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access')),
+        default_open_app_id TEXT CHECK (default_open_app_id IN (
+          'visual-studio-code', 'zed', 'windsurf', 'finder', 'terminal', 'ghostty', 'xcode',
+          'android-studio', 'file-manager', 'gnome-terminal', 'konsole', 'xfce-terminal',
+          'explorer', 'windows-terminal', 'command-prompt'
+        )),
+        updated_at TEXT NOT NULL,
+        commit_message_model TEXT NOT NULL DEFAULT '',
+        commit_message_reasoning_effort TEXT NOT NULL DEFAULT '',
+        commit_message_prompt TEXT NOT NULL DEFAULT '',
+        follow_up_behavior TEXT NOT NULL DEFAULT 'queue'
+          CHECK (follow_up_behavior IN ('queue', 'steer')),
+        fast_mode INTEGER NOT NULL DEFAULT 0 CHECK (fast_mode IN (0, 1))
+      ) STRICT;
+
+      INSERT INTO global_settings_approval_v20
+        (id, approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode,
+         default_open_app_id, updated_at, commit_message_model,
+         commit_message_reasoning_effort, commit_message_prompt, follow_up_behavior, fast_mode)
+      SELECT id,
+             CASE approval_policy WHEN 'untrusted' THEN 'on-request' ELSE approval_policy END,
+             approvals_reviewer, model, reasoning_effort, sandbox_mode, default_open_app_id,
+             updated_at, commit_message_model, commit_message_reasoning_effort,
+             commit_message_prompt, follow_up_behavior, fast_mode
+      FROM global_settings;
+
+      DROP TABLE global_settings;
+      ALTER TABLE global_settings_approval_v20 RENAME TO global_settings;
+    `,
+    version: 20,
+  },
 ];

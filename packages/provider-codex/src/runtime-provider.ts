@@ -31,7 +31,48 @@ function optionalNonEmptyString(value: unknown): string | undefined {
 }
 
 function optionalApprovalPolicy(value: unknown): AgentRuntimeDefaultSettings["approvalPolicy"] {
-  return value === "untrusted" || value === "on-request" || value === "never" ? value : undefined;
+  if (value === "on-request" || value === "never") {
+    return value;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).length !== 1 || !("granular" in record)) {
+    return undefined;
+  }
+  const granular = record["granular"];
+  if (typeof granular !== "object" || granular === null || Array.isArray(granular)) {
+    return undefined;
+  }
+  const fields = granular as Record<string, unknown>;
+  const knownFields = new Set([
+    "mcp_elicitations",
+    "request_permissions",
+    "rules",
+    "sandbox_approval",
+    "skill_approval",
+  ]);
+  if (
+    Object.keys(fields).some((key) => !knownFields.has(key)) ||
+    typeof fields["mcp_elicitations"] !== "boolean" ||
+    typeof fields["rules"] !== "boolean" ||
+    typeof fields["sandbox_approval"] !== "boolean" ||
+    (fields["request_permissions"] !== undefined &&
+      typeof fields["request_permissions"] !== "boolean") ||
+    (fields["skill_approval"] !== undefined && typeof fields["skill_approval"] !== "boolean")
+  ) {
+    return undefined;
+  }
+  return {
+    granular: {
+      mcp_elicitations: fields["mcp_elicitations"],
+      request_permissions: fields["request_permissions"] ?? false,
+      rules: fields["rules"],
+      sandbox_approval: fields["sandbox_approval"],
+      skill_approval: fields["skill_approval"] ?? false,
+    },
+  };
 }
 
 function optionalSandboxMode(value: unknown): AgentRuntimeDefaultSettings["sandboxMode"] {
@@ -228,14 +269,13 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     const approvalsReviewer = config["approvals_reviewer"];
     const approvalPolicy = optionalApprovalPolicy(config["approval_policy"]);
 
-    // 自动审核在统一协议中固定搭配 on-request，其他新枚举留给项目默认值处理。
-    const approvalDefaults =
-      approvalsReviewer === "auto_review"
-        ? { approvalPolicy: "on-request" as const, approvalsReviewer: "auto_review" as const }
-        : {
-            ...(approvalPolicy === undefined ? {} : { approvalPolicy }),
-            ...(approvalsReviewer === "user" ? { approvalsReviewer: "user" as const } : {}),
-          };
+    // 审批策略与审核方是独立配置；never 下审核方保留但不会收到交互请求。
+    const approvalDefaults: AgentRuntimeDefaultSettings = {
+      ...(approvalPolicy === undefined ? {} : { approvalPolicy }),
+      ...(approvalsReviewer === "user" || approvalsReviewer === "auto_review"
+        ? { approvalsReviewer }
+        : {}),
+    };
     const model = optionalNonEmptyString(config["model"]);
     const reasoningEffort = optionalNonEmptyString(config["model_reasoning_effort"]);
     const sandboxMode = optionalSandboxMode(config["sandbox_mode"]);

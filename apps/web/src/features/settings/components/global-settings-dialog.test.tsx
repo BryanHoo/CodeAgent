@@ -6,7 +6,11 @@ import type { ReactNode } from "react";
 import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
-import { createFallbackSettings } from "./global-settings-model.js";
+import {
+  applyApprovalMode,
+  createFallbackSettings,
+  deriveApprovalMode,
+} from "./global-settings-model.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { AppReleaseNotesDialog } from "./app-release-notes-dialog.js";
 
@@ -39,6 +43,29 @@ const models: AgentModel[] = [
 describe("GlobalSettingsDialog", () => {
   beforeEach(async () => {
     await changeAppLanguage("zh-CN");
+  });
+
+  it("maps granular approval without losing its category settings", () => {
+    const settings = createFallbackSettings(models);
+    const granular = applyApprovalMode(settings, "granular");
+
+    expect(deriveApprovalMode(granular)).toBe("granular");
+    expect(granular).toMatchObject({
+      approvalPolicy: {
+        granular: {
+          mcp_elicitations: true,
+          request_permissions: true,
+          rules: true,
+          sandbox_approval: true,
+          skill_approval: true,
+        },
+      },
+      approvalsReviewer: "user",
+    });
+    const automatic = applyApprovalMode(granular, "granular-auto-review");
+    expect(deriveApprovalMode(automatic)).toBe("granular-auto-review");
+    expect(automatic.approvalPolicy).toEqual(granular.approvalPolicy);
+    expect(automatic.approvalsReviewer).toBe("auto_review");
   });
 
   it("renders all global defaults with accessible 项目 Agent 组件 selects", () => {
@@ -83,6 +110,8 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain('aria-label="浅色模式"');
     expect(markup).toContain('aria-label="深色模式"');
     expect(markup).toContain('aria-label="审批"');
+    expect(markup).toContain('<option value="granular">细粒度审批</option>');
+    expect(markup).not.toContain('<option value="untrusted">');
     expect(markup).toContain('aria-label="工作区"');
     expect(markup).toContain('aria-label="跟进消息"');
     expect(markup).toContain('aria-label="快速模式"');

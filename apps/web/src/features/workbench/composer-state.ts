@@ -1,5 +1,4 @@
 import type {
-  AgentApprovalPolicy,
   AgentCapabilities,
   AgentGlobalSettings,
   AgentPromptInput,
@@ -15,9 +14,14 @@ import { v4 as createUuid } from "uuid";
 import { i18n } from "../../i18n/i18n.js";
 import type { TaskRuntimeView } from "../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../projects/project-queries.js";
+import {
+  applyApprovalMode as applySharedApprovalMode,
+  deriveApprovalMode as deriveSharedApprovalMode,
+  type TurnApprovalMode,
+} from "../../shared/approval-mode.js";
 
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
-export type ApprovalMode = AgentApprovalPolicy | "auto-review";
+export type ApprovalMode = TurnApprovalMode;
 
 export const LARGE_PASTE_CHARACTER_THRESHOLD = 1_000;
 export const PASTED_TEXT_ATTACHMENT_NAME = "Pasted text.txt";
@@ -61,19 +65,14 @@ export function resolveReasoningEffort(
 export function deriveApprovalMode(
   settings: Pick<AgentTaskSettings, "approvalPolicy" | "approvalsReviewer">,
 ): ApprovalMode {
-  return settings.approvalPolicy === "on-request" && settings.approvalsReviewer === "auto_review"
-    ? "auto-review"
-    : settings.approvalPolicy;
+  return deriveSharedApprovalMode(settings);
 }
 
 export function applyApprovalMode(
   settings: AgentTaskSettings,
   mode: ApprovalMode,
 ): AgentTaskSettings {
-  // 自动审批是 on-request 策略加自动审核方，不能降级成语义不同的 never。
-  return mode === "auto-review"
-    ? { ...settings, approvalPolicy: "on-request", approvalsReviewer: "auto_review" }
-    : { ...settings, approvalPolicy: mode, approvalsReviewer: "user" };
+  return applySharedApprovalMode(settings, mode);
 }
 
 export function deriveComposerActions(

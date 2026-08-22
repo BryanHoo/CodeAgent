@@ -362,7 +362,11 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               >
                 <option value="untrusted">{t("settings:approval.untrusted")}</option>
                 <option value="on-request">{t("settings:approval.onRequest")}</option>
+                <option value="granular">{t("settings:approval.granular")}</option>
                 <option value="auto-review">{t("settings:approval.autoReview")}</option>
+                <option value="granular-auto-review">
+                  {t("settings:approval.granularAutoReview")}
+                </option>
                 <option value="never">{t("settings:approval.never")}</option>
               </PromptInputSelect>
               {props.sandboxModeSelectable ? (

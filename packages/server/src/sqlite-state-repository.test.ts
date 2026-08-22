@@ -53,7 +53,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 19,
+      migrationVersion: 20,
       synchronous: "normal",
       writable: true,
     });
@@ -494,6 +494,52 @@ describe("SqliteStateRepository", () => {
 
     const reopened = await openRepository(root);
     await expect(reopened.readGlobalSettings()).resolves.toEqual(settings);
+  });
+
+  it("persists complete granular approval settings for global and task scopes", async () => {
+    const root = await createWorkspace();
+    const repository = await openRepository(root);
+    const approvalPolicy = {
+      granular: {
+        mcp_elicitations: false,
+        request_permissions: true,
+        rules: false,
+        sandbox_approval: true,
+        skill_approval: false,
+      },
+    } as const;
+    const globalSettings = {
+      approvalPolicy,
+      approvalsReviewer: "user" as const,
+      commitMessageModel: "gpt-5.6-terra",
+      commitMessagePrompt: "",
+      defaultOpenAppId: null,
+      fastMode: false,
+      followUpBehavior: "queue" as const,
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write" as const,
+    };
+    const taskSettings = {
+      approvalPolicy,
+      approvalsReviewer: "auto_review" as const,
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write" as const,
+    };
+
+    await expect(repository.writeGlobalSettings(globalSettings)).resolves.toEqual(globalSettings);
+    await expect(
+      repository.writeTaskSettings("temporary", "task-granular", taskSettings),
+    ).resolves.toEqual(taskSettings);
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+
+    const reopened = await openRepository(root);
+    await expect(reopened.readGlobalSettings()).resolves.toEqual(globalSettings);
+    await expect(reopened.readTaskSettings("temporary", "task-granular")).resolves.toEqual(
+      taskSettings,
+    );
   });
 
   it("repairs global settings columns required across version switches", async () => {

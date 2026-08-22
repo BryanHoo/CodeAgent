@@ -1,5 +1,5 @@
 import type {
-  AgentApprovalPolicy,
+  AgentGlobalApprovalPolicy,
   AgentApprovalsReviewer,
   AgentCapabilities,
   AgentAttachmentMediaType,
@@ -32,7 +32,7 @@ import type {
 } from "@code-agent/protocol";
 
 export type AgentRuntimeDefaultSettings = Readonly<{
-  approvalPolicy?: AgentApprovalPolicy;
+  approvalPolicy?: AgentGlobalApprovalPolicy;
   approvalsReviewer?: AgentApprovalsReviewer;
   model?: string;
   reasoningEffort?: string;

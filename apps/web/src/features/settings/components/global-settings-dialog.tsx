@@ -9,6 +9,7 @@ import { Settings, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
+import { Checkbox } from "../../../shared/components/core/checkbox.js";
 import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
 import { Tooltip } from "../../../shared/components/core/tooltip.js";
 import { TooltipContent } from "../../../shared/components/core/tooltip.js";
@@ -33,12 +34,21 @@ import {
   deriveApprovalMode,
   readInitialTheme,
   resolveGlobalSettingsModel,
+  updateGranularApprovalCategory,
   type ApprovalMode,
 } from "./global-settings-model.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { GlobalSettingsAccess } from "./global-settings-access.js";
 import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
+
+const granularApprovalCategories = [
+  "sandbox_approval",
+  "rules",
+  "mcp_elicitations",
+  "request_permissions",
+  "skill_approval",
+] as const;
 type GlobalSettingsDialogProps = Readonly<{
   accessMode?: AccessMode;
   appInfo?: AppInfoResponse;
@@ -89,6 +99,8 @@ export function GlobalSettingsDialog({
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [isSaving, setIsSaving] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
+  const granularApproval =
+    typeof draft.approvalPolicy === "object" ? draft.approvalPolicy.granular : undefined;
 
   useEffect(() => {
     if (settings !== undefined) {
@@ -257,21 +269,52 @@ export function GlobalSettingsDialog({
                     id="agent"
                     title={t("sections.agent")}
                   >
-                    <SettingsField label={t("fields.approvalPolicy")}>
-                      <SettingsSelect
-                        aria-label={t("fields.approvalPolicy")}
-                        disabled={isSaving}
-                        onChange={(event) => {
-                          const mode = event.currentTarget.value as ApprovalMode;
-                          setDraft((current) => applyApprovalMode(current, mode));
-                        }}
-                        value={deriveApprovalMode(draft)}
-                      >
-                        <option value="untrusted">{t("approval.untrusted")}</option>
-                        <option value="on-request">{t("approval.onRequest")}</option>
-                        <option value="auto-review">{t("approval.autoReview")}</option>
-                        <option value="never">{t("approval.never")}</option>
-                      </SettingsSelect>
+                    <SettingsField alignStart label={t("fields.approvalPolicy")}>
+                      <div className="grid min-w-0 gap-2">
+                        <SettingsSelect
+                          aria-label={t("fields.approvalPolicy")}
+                          disabled={isSaving}
+                          onChange={(event) => {
+                            const mode = event.currentTarget.value as ApprovalMode;
+                            setDraft((current) => applyApprovalMode(current, mode));
+                          }}
+                          value={deriveApprovalMode(draft)}
+                        >
+                          <option value="on-request">{t("approval.onRequest")}</option>
+                          <option value="granular">{t("approval.granular")}</option>
+                          <option value="auto-review">{t("approval.autoReview")}</option>
+                          <option value="granular-auto-review">
+                            {t("approval.granularAutoReview")}
+                          </option>
+                          <option value="never">{t("approval.never")}</option>
+                        </SettingsSelect>
+                        {granularApproval !== undefined ? (
+                          <fieldset className="grid gap-1 sm:grid-cols-2">
+                            <legend className="sr-only">{t("approval.granular")}</legend>
+                            {granularApprovalCategories.map((category) => (
+                              <label
+                                className="flex min-h-11 items-center gap-2 text-body-small text-foreground sm:min-h-8"
+                                key={category}
+                              >
+                                <Checkbox
+                                  checked={granularApproval[category]}
+                                  disabled={isSaving}
+                                  onCheckedChange={(checked) => {
+                                    setDraft((current) =>
+                                      updateGranularApprovalCategory(
+                                        current,
+                                        category,
+                                        checked === true,
+                                      ),
+                                    );
+                                  }}
+                                />
+                                <span>{t(`approval.categories.${category}`)}</span>
+                              </label>
+                            ))}
+                          </fieldset>
+                        ) : null}
+                      </div>
                     </SettingsField>
                     <SettingsField label={t("fields.sandbox")}>
                       <SettingsSelect

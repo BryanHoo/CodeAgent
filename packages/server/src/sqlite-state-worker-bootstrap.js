@@ -1,3 +1,5 @@
+import { deserializeApprovalPolicy } from "./approval-policy-persistence.js";
+
 export function projectFromRows(row, rootRows) {
   if (row === undefined) {
     return undefined;
@@ -42,7 +44,7 @@ export function taskSettingsFromRow(row) {
     return undefined;
   }
   return {
-    approvalPolicy: row.approval_policy,
+    approvalPolicy: deserializeApprovalPolicy(row.approval_policy, "turn"),
     approvalsReviewer: row.approvals_reviewer,
     model: row.model,
     reasoningEffort: row.reasoning_effort,
@@ -55,7 +57,7 @@ export function globalSettingsFromRow(row) {
     return undefined;
   }
   return {
-    approvalPolicy: row.approval_policy,
+    approvalPolicy: deserializeApprovalPolicy(row.approval_policy, "global"),
     approvalsReviewer: row.approvals_reviewer,
     commitMessageModel: row.commit_message_model,
     commitMessagePrompt: row.commit_message_prompt,
