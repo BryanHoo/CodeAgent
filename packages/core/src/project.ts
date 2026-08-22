@@ -22,7 +22,6 @@ export type ProjectSourceMigration = Readonly<{
 export interface ProjectProjectionStore {
   completeProjectSourceMigration(): Promise<void>;
   deleteProject(projectId: string): Promise<boolean>;
-  ensureTemporaryProject(rootPath: string): Promise<Project>;
   list(): Promise<readonly Project[]>;
   migrateProject(legacyProjectId: string, project: Project): Promise<Project>;
   read(projectId: string): Promise<Project | undefined>;
@@ -33,7 +32,6 @@ export interface ProjectProjectionStore {
 }
 
 export interface ProjectRepository {
-  ensureTemporaryProject(rootPath: string): Promise<Project>;
   list(): Promise<readonly Project[]>;
   read(projectId: string): Promise<Project | undefined>;
   register(input: RegisterProjectInput): Promise<Project>;

@@ -5,7 +5,6 @@ import type {
   AgentMessageAttachment,
   AgentModel,
   AgentPromptInput,
-  AgentSandboxMode,
   AgentSkill,
   AgentTask,
   AgentTaskSettings,
@@ -64,7 +63,6 @@ export type WorkbenchComposerProps = Readonly<{
       | "switchProjectWorktree"
     > &
     CodeAgentProjectFileSearchClient;
-  fixedSandboxMode?: AgentSandboxMode;
   fastModeAvailable: boolean;
   fastModeDefault: boolean;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];

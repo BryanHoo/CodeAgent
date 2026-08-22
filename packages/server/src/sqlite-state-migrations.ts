@@ -224,4 +224,37 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     sql: "UPDATE project_source_migration SET completed = 0;",
     version: 16,
   },
+  {
+    name: "store_task_settings_by_scope",
+    sql: `
+      CREATE TABLE task_scope_settings (
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        approval_policy TEXT NOT NULL CHECK (approval_policy IN ('untrusted', 'on-request', 'never')),
+        model TEXT NOT NULL,
+        reasoning_effort TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        sandbox_mode TEXT NOT NULL DEFAULT 'workspace-write'
+          CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access')),
+        approvals_reviewer TEXT NOT NULL DEFAULT 'user'
+          CHECK (
+            approvals_reviewer IN ('user', 'auto_review')
+            AND (approvals_reviewer = 'user' OR approval_policy = 'on-request')
+          ),
+        PRIMARY KEY (project_id, task_id)
+      ) STRICT;
+
+      INSERT INTO task_scope_settings
+        (project_id, task_id, approval_policy, model, reasoning_effort, updated_at,
+         sandbox_mode, approvals_reviewer)
+      SELECT project_id, task_id, approval_policy, model, reasoning_effort, updated_at,
+             sandbox_mode, approvals_reviewer
+      FROM task_settings;
+
+      DROP TABLE task_settings;
+      ALTER TABLE task_scope_settings RENAME TO task_settings;
+      DELETE FROM projects WHERE kind = 'temporary';
+    `,
+    version: 17,
+  },
 ];

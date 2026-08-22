@@ -120,7 +120,6 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
   return {
     installAppUpdate: () => Promise.reject(new Error("No update available")),
     projectRepository: {
-      ensureTemporaryProject: () => Promise.resolve(project),
       list: () => Promise.resolve([project]),
       read: (projectId: string) => Promise.resolve(projectId === project.id ? project : undefined),
       register: () => Promise.resolve(project),
@@ -140,6 +139,7 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
         updateAvailable: false,
       }),
     settingsRepository: stateRepository,
+    temporaryWorkspace: "/workspace/temporary",
   };
 }
 

@@ -48,7 +48,6 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     assertValidProjectDefaults,
     getProjectContext,
     listModels,
-    projectContexts,
     projectOpenService,
     projectRepository,
     readEffectiveProjectDefaults,
@@ -370,10 +369,6 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
           );
           if (project === undefined) {
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const existingContext = projectContexts.get(project.id);
-          if (existingContext !== undefined) {
-            projectContexts.set(project.id, { ...existingContext, project });
           }
           return { project };
         },

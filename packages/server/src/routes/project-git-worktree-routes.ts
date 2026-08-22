@@ -74,7 +74,7 @@ export function registerProjectGitWorktreeRoutes(
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readProjectWorktrees(projectContext.project.rootPath);
+        return await readProjectWorktrees(projectContext.scope.rootPath);
       } catch (error) {
         return reply.code(500).send({
           code: "GIT_WORKTREE_LIST_FAILED",
@@ -119,7 +119,7 @@ export function registerProjectGitWorktreeRoutes(
           activeGitMutations.add(request.params.projectId);
           try {
             const worktree = await createProjectWorktree(
-              projectContext.project.rootPath,
+              projectContext.scope.rootPath,
               request.body,
             );
             // 每个 worktree 形成独立 Project，避免当前 Task Runtime 被静默换目录。
@@ -178,7 +178,7 @@ export function registerProjectGitWorktreeRoutes(
         async () => {
           try {
             const worktree = await resolveProjectWorktree(
-              projectContext.project.rootPath,
+              projectContext.scope.rootPath,
               request.body.path,
             );
             const project = await projectRepository.register({

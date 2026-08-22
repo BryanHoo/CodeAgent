@@ -3,6 +3,7 @@ import type {
   AgentProvider,
   AgentRuntimeDefaultSettings,
   AgentRuntimeProvider,
+  AgentTaskScope,
 } from "@code-agent/core";
 import type {
   AgentCapabilities,
@@ -14,6 +15,7 @@ import type {
   Project,
   StartOfficialProviderLoginResponse,
 } from "@code-agent/protocol";
+import { TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 import { RuntimeOwnerRegistry, isSameResolvedPath } from "./runtime-owner-registry.js";
 import { CodexProtocolMappingError, expectRecord } from "./codex-protocol-mapping.js";
 
@@ -43,7 +45,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
   readonly #logger: CodexProviderLogger;
   readonly #providerConnection: CodexProviderConnectionService;
   readonly #owners = new RuntimeOwnerRegistry();
-  readonly #projects = new Map<string, Project>();
+  readonly #projects = new Map<string, AgentTaskScope>();
   readonly #projectProviders = new Map<string, CodexRuntimeProjectProvider>();
   readonly #rawProviders = new Map<string, CodexAgentProvider>();
   readonly #reviewWorkerOwners = new Map<
@@ -136,6 +138,14 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
   }
 
   public forProject(project: Project): AgentProvider {
+    return this.#forScope({ id: project.id, kind: "project", rootPath: project.rootPath });
+  }
+
+  public forTemporary(rootPath: string): AgentProvider {
+    return this.#forScope({ id: TEMPORARY_TASK_SCOPE_ID, kind: "temporary", rootPath });
+  }
+
+  #forScope(project: AgentTaskScope): AgentProvider {
     const current = this.#projectProviders.get(project.id);
     if (current !== undefined) {
       const registeredProject = this.#projects.get(project.id);
@@ -179,10 +189,9 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     if (firstProvider !== undefined) {
       return firstProvider.listModels();
     }
-    const runtimeProject: Project = {
-      createdAt: new Date(0).toISOString(),
+    const runtimeProject: AgentTaskScope = {
       id: "runtime",
-      name: "Runtime",
+      kind: "project",
       rootPath: resolve("/"),
     };
     return new CodexAgentProvider(this.#client, runtimeProject, {
@@ -248,23 +257,23 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     return this.#providerConnection.startOfficialLogin();
   }
 
-  public beginTaskRead(project: Project, taskId: string): boolean {
+  public beginTaskRead(project: AgentTaskScope, taskId: string): boolean {
     return this.#owners.beginTaskRead(project, taskId);
   }
 
-  public claimTask(project: Project, taskId: string): void {
+  public claimTask(project: AgentTaskScope, taskId: string): void {
     this.#owners.claimTask(project, taskId);
   }
 
-  public assertTaskOwner(project: Project, taskId: string): void {
+  public assertTaskOwner(project: AgentTaskScope, taskId: string): void {
     this.#owners.assertTaskOwner(project, taskId);
   }
 
-  public isTaskOwner(project: Project, taskId: string): boolean {
+  public isTaskOwner(project: AgentTaskScope, taskId: string): boolean {
     return this.#owners.isTaskOwner(project, taskId);
   }
 
-  public releaseTask(project: Project, taskId: string): void {
+  public releaseTask(project: AgentTaskScope, taskId: string): void {
     this.#owners.releaseTask(project, taskId);
     for (const [workerTaskId, owner] of this.#reviewWorkerOwners) {
       if (owner.parentTaskId === taskId) {
@@ -273,7 +282,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     }
   }
 
-  public releaseProvisionalTask(project: Project, taskId: string): void {
+  public releaseProvisionalTask(project: AgentTaskScope, taskId: string): void {
     this.#owners.releaseProvisionalTask(project, taskId);
   }
 }

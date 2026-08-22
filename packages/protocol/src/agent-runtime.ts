@@ -13,7 +13,6 @@ import {
 
 export const TEMPORARY_TASK_SCOPE_ID = "temporary";
 export const TEMPORARY_TASK_API_PATH = "/v1/temporary";
-export const TEMPORARY_TASK_SANDBOX_MODE = "danger-full-access";
 
 export * from "./pending-request.js";
 

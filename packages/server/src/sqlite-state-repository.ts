@@ -1,5 +1,4 @@
-import { realpath, stat } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import { Worker } from "node:worker_threads";
 
 import type {
@@ -181,21 +180,6 @@ export class SqliteStateRepository
 
   public diagnose(): Promise<SqliteDatabaseDiagnostics> {
     return this.#call("diagnose");
-  }
-
-  public async ensureTemporaryProject(rootPathInput: string): Promise<Project> {
-    const rootPath = await realpath(resolve(rootPathInput));
-    if (!(await stat(rootPath)).isDirectory()) {
-      throw new Error(`Temporary project path is not a directory: ${rootPath}`);
-    }
-    return this.#call("ensureTemporaryProject", {
-      project: {
-        createdAt: this.#now().toISOString(),
-        id: "temporary",
-        name: "Temporary",
-        rootPath,
-      },
-    });
   }
 
   public list(): Promise<readonly Project[]> {

@@ -93,6 +93,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     ),
     configureCustomProvider: vi.fn(() => Promise.reject(new Error("Not configured"))),
     forProject: vi.fn(() => provider),
+    forTemporary: vi.fn(() => provider),
     getCapabilities: provider.getCapabilities,
     listModels: provider.listModels,
     logoutProvider: vi.fn(() =>
@@ -126,7 +127,6 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     rootPath: "/workspace/project",
   };
   const projectRepository = {
-    ensureTemporaryProject: vi.fn(),
     list: vi.fn(() => Promise.resolve([project])),
     migrateLegacyProjects: vi.fn(() => {
       lifecycle.push("projects.migrate");
@@ -157,14 +157,6 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         migrationVersion: 4,
         synchronous: "normal",
         writable: true,
-      }),
-    ),
-    ensureTemporaryProject: vi.fn(() =>
-      Promise.resolve({
-        createdAt: "2026-07-23T00:00:00.000Z",
-        id: "temporary",
-        name: "Temporary",
-        rootPath: "/custom/home/code-agent/temporary-workspace",
       }),
     ),
     deleteProject: vi.fn(() => Promise.resolve(false)),
@@ -364,6 +356,7 @@ describe("runCli", () => {
       provider: harness.runtimeProvider,
       settingsRepository: harness.stateRepository,
       staticRoot: "/package/dist/web",
+      temporaryWorkspace: join("/custom/home", "code-agent", "temporary-workspace"),
     });
     expect(typeof serverOptions?.installAppUpdate).toBe("function");
     expect(typeof serverOptions?.readAppInfo).toBe("function");
@@ -371,9 +364,6 @@ describe("runCli", () => {
       join("/custom/home", "code-agent", "state.sqlite3"),
     );
     expect(harness.dependencies.ensureTemporaryWorkspace).toHaveBeenCalledWith(
-      join("/custom/home", "code-agent", "temporary-workspace"),
-    );
-    expect(harness.stateRepository.ensureTemporaryProject).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "temporary-workspace"),
     );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });

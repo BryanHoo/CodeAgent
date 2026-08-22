@@ -4,16 +4,15 @@ import type {
   ListAgentTasksInput,
   StartAgentTaskOptions,
 } from "@code-agent/core";
-import {
-  TEMPORARY_TASK_SCOPE_ID,
-  type AgentBackgroundTerminal,
-  type AgentBackgroundTerminalPage,
-  type AgentTask,
-  type AgentTaskPage,
-  type AgentTurn,
-  type AgentTurnOptions,
-  type AgentReviewTarget,
-  type UploadAgentFeedbackRequest,
+import type {
+  AgentBackgroundTerminal,
+  AgentBackgroundTerminalPage,
+  AgentTask,
+  AgentTaskPage,
+  AgentTurn,
+  AgentTurnOptions,
+  AgentReviewTarget,
+  UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 import {
   CodexProtocolMappingError,
@@ -57,7 +56,7 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderQueue {
       await this.client.request("thread/start", {
         cwd: this.project.rootPath,
         historyMode: "paginated",
-        ...(this.project.id === TEMPORARY_TASK_SCOPE_ID ? {} : { projectId: this.project.id }),
+        ...(this.project.kind === "temporary" ? {} : { projectId: this.project.id }),
         ...(options.ephemeral === true ? { ephemeral: true } : {}),
       }),
       "thread/start response",
@@ -315,8 +314,8 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderQueue {
     const response = expectRecord(
       await this.client.request("thread/list", {
         ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-        ...(this.project.id === TEMPORARY_TASK_SCOPE_ID
-          ? { cwd: this.project.rootPath }
+        ...(this.project.kind === "temporary"
+          ? { cwd: this.project.rootPath, projectId: null }
           : { projectId: this.project.id }),
         ...(input.limit === undefined ? {} : { limit: input.limit }),
         // 锁定版本用稳定 Pinned Section 过滤，保证固定任务先过滤再分页。

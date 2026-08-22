@@ -261,7 +261,7 @@ function mapSafeUrl(value: unknown): string {
 
 export function mapMcpServerElicitationRequest(
   serverRequest: RpcServerRequest,
-  project: Project,
+  project: Pick<Project, "id">,
 ): PendingCodexRequest {
   const params = expectRecord(serverRequest.params, "MCP elicitation request params");
   const requestId = requestIdKey(serverRequest.id);

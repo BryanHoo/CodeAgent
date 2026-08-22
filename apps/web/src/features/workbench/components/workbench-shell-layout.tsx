@@ -1,4 +1,3 @@
-import { TEMPORARY_TASK_SANDBOX_MODE } from "@code-agent/protocol";
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 import { useRef, type CSSProperties } from "react";
 
@@ -293,7 +292,6 @@ export function WorkbenchShellLayout({
               capabilities={capabilities}
               client={client}
               composerRef={composerRef}
-              {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
               followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
               fastModeAvailable={fastModeAvailable}
               fastModeDefault={globalSettings?.fastMode ?? false}
@@ -326,7 +324,6 @@ export function WorkbenchShellLayout({
             client={client}
             composerRef={composerRef}
             fallbackSettings={draftSettings}
-            {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
             followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
             fastModeAvailable={fastModeAvailable}
             fastModeDefault={globalSettings?.fastMode ?? false}

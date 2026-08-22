@@ -7,6 +7,7 @@ import type {
   AgentProviderTaskSnapshot,
   AgentProviderTurnInput,
   AgentTaskUnsubscribeStatus,
+  AgentTaskScope,
   ListAgentTasksInput,
   ReadAgentTaskInput,
   ResolvePendingRequestInput,
@@ -27,7 +28,6 @@ import {
   type AgentTurn,
   type AgentTurnOptions,
   type PendingRequest,
-  type Project,
   type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 
@@ -36,25 +36,25 @@ import type { CodexAgentProvider } from "./agent-provider-runtime.js";
 import { createOwnedAgentProviderQueue } from "./runtime-provider-queue.js";
 
 export interface CodexRuntimeProjectOwner {
-  assertTaskOwner(project: Project, taskId: string): void;
-  beginTaskRead(project: Project, taskId: string): boolean;
-  claimTask(project: Project, taskId: string): void;
-  isTaskOwner(project: Project, taskId: string): boolean;
+  assertTaskOwner(project: AgentTaskScope, taskId: string): void;
+  beginTaskRead(project: AgentTaskScope, taskId: string): boolean;
+  claimTask(project: AgentTaskScope, taskId: string): void;
+  isTaskOwner(project: AgentTaskScope, taskId: string): boolean;
   readProviderConnection(): Promise<AgentProviderConnectionStatus>;
-  releaseProvisionalTask(project: Project, taskId: string): void;
-  releaseTask(project: Project, taskId: string): void;
+  releaseProvisionalTask(project: AgentTaskScope, taskId: string): void;
+  releaseTask(project: AgentTaskScope, taskId: string): void;
 }
 
 export class CodexRuntimeProjectProvider implements AgentProvider {
   readonly #delegate: CodexAgentProvider;
-  readonly #project: Project;
+  readonly #project: AgentTaskScope;
   readonly #runtime: CodexRuntimeProjectOwner;
   public readonly queue: AgentProviderQueue;
 
   public constructor(
     runtime: CodexRuntimeProjectOwner,
     delegate: CodexAgentProvider,
-    project: Project,
+    project: AgentTaskScope,
   ) {
     this.#delegate = delegate;
     this.#project = project;

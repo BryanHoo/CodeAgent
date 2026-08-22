@@ -6,6 +6,7 @@ import { RuntimeOwnerRegistry } from "./runtime-owner-registry.js";
 const project = {
   createdAt: "2026-08-02T00:00:00.000Z",
   id: "project-1",
+  kind: "project" as const,
   name: "Project",
   rootPath: "/workspace/project",
 };

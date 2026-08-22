@@ -1,19 +1,18 @@
 import { realpath } from "node:fs/promises";
 import type {
+  AgentTaskScope,
   AgentProviderEvent,
   AgentProviderEventListener,
   AgentProviderTaskSnapshot,
 } from "@code-agent/core";
-import {
-  TEMPORARY_TASK_SCOPE_ID,
-  type AgentCapabilities,
-  type AgentMessageAttachment,
-  type AgentMcpServerPage,
-  type AgentModelPage,
-  type AgentSandboxMode,
-  type AgentSkillPage,
-  type AgentTask,
-  type Project,
+import type {
+  AgentCapabilities,
+  AgentMessageAttachment,
+  AgentMcpServerPage,
+  AgentModelPage,
+  AgentSandboxMode,
+  AgentSkillPage,
+  AgentTask,
 } from "@code-agent/protocol";
 import {
   RpcResponseError,
@@ -99,13 +98,13 @@ export async function isSameCanonicalPath(left: string, right: string): Promise<
 
 export async function isProjectThread(
   thread: Record<string, unknown>,
-  project: Project,
+  project: AgentTaskScope,
 ): Promise<boolean> {
   const nativeProjectId = thread["projectId"];
   if (nativeProjectId !== null && typeof nativeProjectId !== "string") {
     throw new CodexProtocolMappingError("Codex thread projectId must be a string or null");
   }
-  if (project.id !== TEMPORARY_TASK_SCOPE_ID) {
+  if (project.kind === "project") {
     return nativeProjectId === project.id;
   }
   if (nativeProjectId !== null) {
@@ -117,7 +116,7 @@ export async function isProjectThread(
 
 export async function assertProjectThread(
   thread: Record<string, unknown>,
-  project: Project,
+  project: AgentTaskScope,
 ): Promise<void> {
   if (!(await isProjectThread(thread, project))) {
     throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
@@ -167,7 +166,7 @@ export function createUnmaterializedTaskSnapshot(task: AgentTask): AgentProvider
 
 export async function mapAgentTask(
   thread: Record<string, unknown>,
-  project: Project,
+  project: AgentTaskScope,
 ): Promise<AgentTask> {
   await assertProjectThread(thread, project);
   return {
@@ -185,7 +184,7 @@ export abstract class CodexAgentProviderBase {
   protected readonly eventListeners = new Set<AgentProviderEventListener>();
   protected readonly historicalAttachments = new CodexHistoricalAttachmentStore();
   protected readonly logger: CodexProviderLogger;
-  protected readonly project: Project;
+  protected readonly project: AgentTaskScope;
   protected readonly pendingLifecycle: PendingRequestLifecycle;
   protected readonly runtime = new TaskRuntimeState();
   protected readonly skillsById = new Map<string, CodexSkill>();
@@ -251,7 +250,7 @@ export abstract class CodexAgentProviderBase {
 
   public constructor(
     client: CodexRpcClient,
-    project: Project,
+    project: AgentTaskScope,
     options: { logger?: CodexProviderLogger; subscribeRpc?: boolean } = {},
   ) {
     this.client = client;

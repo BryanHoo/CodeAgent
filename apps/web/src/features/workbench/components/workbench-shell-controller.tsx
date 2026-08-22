@@ -1,5 +1,4 @@
 import {
-  TEMPORARY_TASK_SANDBOX_MODE,
   isAgentFastModeAvailable,
   type AgentMessageAttachment,
   type AgentPromptInput,
@@ -205,11 +204,9 @@ export function useWorkbenchShellController(
           }),
       model: defaultModel?.id ?? draftDefaults?.model ?? "",
       reasoningEffort: draftDefaults?.reasoningEffort ?? defaultModel?.defaultReasoningEffort ?? "",
-      sandboxMode: temporary
-        ? TEMPORARY_TASK_SANDBOX_MODE
-        : (draftDefaults?.sandboxMode ?? "workspace-write"),
+      sandboxMode: draftDefaults?.sandboxMode ?? "workspace-write",
     }),
-    [defaultModel, draftDefaults, globalSettings, temporary],
+    [defaultModel, draftDefaults, globalSettings],
   );
   const [temporaryDraftSettings, setTemporaryDraftSettings] = useState<AgentTaskSettings>();
   const draftSettings = temporary

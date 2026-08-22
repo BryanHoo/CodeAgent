@@ -48,7 +48,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 16,
+      migrationVersion: 17,
       synchronous: "normal",
       writable: true,
     });
@@ -75,34 +75,67 @@ describe("SqliteStateRepository", () => {
     await expect(reopened.diagnose()).resolves.toMatchObject({ migrationVersion: 1 });
   });
 
-  it("persists one hidden temporary project without exposing project mutations", async () => {
+  it("persists temporary task settings without creating a Project", async () => {
     const root = await createWorkspace();
-    const temporaryRoot = join(root, "temporary-workspace");
-    const userRoot = join(root, "user-workspace");
-    await Promise.all([mkdir(temporaryRoot), mkdir(userRoot)]);
     const repository = await openRepository(root);
+    await repository.writeTaskSettings("temporary", "task-1", {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      model: "gpt-5.6-terra",
+      reasoningEffort: "medium",
+      sandboxMode: "workspace-write",
+    });
 
-    const temporary = await repository.ensureTemporaryProject(temporaryRoot);
-    const duplicate = await repository.ensureTemporaryProject(temporaryRoot);
-    const userProject = createProject("codex-user", "User", userRoot);
-    await repository.upsertProject(userProject);
+    await expect(repository.read("temporary")).resolves.toBeUndefined();
+    await expect(repository.list()).resolves.toEqual([]);
+    await expect(repository.readTaskSettings("temporary", "task-1")).resolves.toMatchObject({
+      model: "gpt-5.6-terra",
+      sandboxMode: "workspace-write",
+    });
+  });
 
-    expect(duplicate).toEqual(temporary);
-    await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
-    await expect(repository.list()).resolves.toEqual([userProject]);
-    await expect(repository.deleteProject(temporary.id)).resolves.toBe(false);
-    await expect(repository.setProjectOrder([userProject.id])).resolves.toEqual([userProject]);
-    await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
+  it("removes the legacy temporary Project without losing its task settings", async () => {
+    const root = await createWorkspace();
+    const databasePath = join(root, "state.sqlite3");
+    const version16 = await openRepository(root, {
+      migrations: SQLITE_MIGRATIONS.filter((migration) => migration.version <= 16),
+    });
+    await version16.close();
+    repositories.splice(repositories.indexOf(version16), 1);
+
+    const database = new Database(databasePath);
+    database
+      .prepare(
+        `INSERT INTO projects (id, name, root_path, created_at, sort_order, kind)
+         VALUES ('temporary', 'Temporary', '/workspace/temporary', ?, 0, 'temporary')`,
+      )
+      .run("2026-08-21T00:00:00.000Z");
+    database
+      .prepare(
+        `INSERT INTO task_settings
+           (project_id, task_id, approval_policy, approvals_reviewer, model,
+            reasoning_effort, sandbox_mode, updated_at)
+         VALUES ('temporary', 'task-1', 'never', 'user', 'gpt-5.6-sol',
+                 'high', 'read-only', ?)`,
+      )
+      .run("2026-08-21T00:00:00.000Z");
+    database.close();
+
+    const upgraded = await openRepository(root);
+    await expect(upgraded.read("temporary")).resolves.toBeUndefined();
+    await expect(upgraded.readTaskSettings("temporary", "task-1")).resolves.toMatchObject({
+      approvalPolicy: "never",
+      model: "gpt-5.6-sol",
+      sandboxMode: "read-only",
+    });
   });
 
   it("atomically projects Codex projects by id while allowing a shared root path", async () => {
     const root = await createWorkspace();
     const sharedRoot = join(root, "shared-workspace");
     const otherRoot = join(root, "other-workspace");
-    const temporaryRoot = join(root, "temporary-workspace");
-    await Promise.all([mkdir(sharedRoot), mkdir(otherRoot), mkdir(temporaryRoot)]);
+    await Promise.all([mkdir(sharedRoot), mkdir(otherRoot)]);
     const repository = await openRepository(root);
-    const temporary = await repository.ensureTemporaryProject(temporaryRoot);
     const first = {
       createdAt: "2026-08-21T01:00:00.000Z",
       id: "codex-project-1",
@@ -131,7 +164,6 @@ describe("SqliteStateRepository", () => {
     await expect(repository.readProjectDefaults(first.id)).resolves.toMatchObject({
       model: "gpt-5.6-sol",
     });
-    await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
   });
 
   it("applies incremental Codex project projection mutations", async () => {

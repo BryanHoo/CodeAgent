@@ -485,6 +485,7 @@ function createServerOptions(
   const runtimeProvider: AgentRuntimeProvider = {
     ...createRuntimeConnectionMethods(),
     forProject: () => provider,
+    forTemporary: () => provider,
     getCapabilities: () => provider.getCapabilities(),
     listModels: () => provider.listModels(),
     readDefaultSettings,
@@ -496,7 +497,6 @@ function createServerOptions(
     installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
     loggerEnabled: false,
     projectRepository: {
-      ensureTemporaryProject: vi.fn(() => Promise.resolve(temporaryProject)),
       list: vi.fn(() => Promise.resolve(orderedProjects)),
       read: vi.fn((projectId: string) =>
         Promise.resolve(
@@ -549,6 +549,7 @@ function createServerOptions(
       }),
     ),
     settingsRepository: stateRepository,
+    temporaryWorkspace: temporaryProject.rootPath,
     ...overrides,
   };
 }
@@ -739,6 +740,7 @@ describe("CodeAgent Server", () => {
       cancelProviderLogin,
       configureCustomProvider,
       forProject: () => providerHarness.provider,
+      forTemporary: () => providerHarness.provider,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
       readDefaultSettings: () => Promise.resolve({}),
@@ -857,10 +859,7 @@ describe("CodeAgent Server", () => {
     expect(skills.statusCode).toBe(200);
     expect(skills.json()).toMatchObject({ data: [{ name: "review-security" }] });
     expect(startTemporaryTask).toHaveBeenCalledWith();
-    const temporaryTurnOptions = {
-      ...turnOptions,
-      sandboxMode: "danger-full-access",
-    };
+    const temporaryTurnOptions = turnOptions;
     expect(settingsUpdate.json()).toEqual({ settings: temporaryTurnOptions });
     expect(settings.writeTaskSettings).toHaveBeenNthCalledWith(
       1,
@@ -1645,6 +1644,7 @@ describe("CodeAgent Server", () => {
     const runtimeProvider: AgentRuntimeProvider = {
       ...createRuntimeConnectionMethods(),
       forProject: () => providerHarness.provider,
+      forTemporary: () => providerHarness.provider,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
       readDefaultSettings: () => Promise.resolve({}),
@@ -2942,6 +2942,7 @@ describe("CodeAgent Server", () => {
     const runtimeProvider: AgentRuntimeProvider = {
       ...createRuntimeConnectionMethods(),
       forProject,
+      forTemporary: () => providerHarness.provider,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
       readDefaultSettings: () => Promise.resolve({}),
@@ -2973,6 +2974,7 @@ describe("CodeAgent Server", () => {
     const runtimeProvider: AgentRuntimeProvider = {
       ...createRuntimeConnectionMethods(),
       forProject,
+      forTemporary: () => providerHarness.provider,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
       readDefaultSettings: () => Promise.resolve({}),
@@ -3751,6 +3753,7 @@ describe("CodeAgent Server", () => {
       ...createRuntimeConnectionMethods(),
       forProject: (activeProject) =>
         activeProject.id === otherProject.id ? secondary.provider : primary.provider,
+      forTemporary: () => primary.provider,
       getCapabilities: () => primary.provider.getCapabilities(),
       listModels: () => primary.provider.listModels(),
       readDefaultSettings: () => Promise.resolve({}),
@@ -3760,7 +3763,6 @@ describe("CodeAgent Server", () => {
     const app = await createCodeAgentServer({
       installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
       projectRepository: {
-        ensureTemporaryProject: () => Promise.resolve(temporaryProject),
         list: () => Promise.resolve([project, otherProject]),
         read: (projectId) =>
           Promise.resolve([project, otherProject].find((item) => item.id === projectId)),
@@ -3771,6 +3773,7 @@ describe("CodeAgent Server", () => {
       },
       providerConnectionRepository: stateRepository,
       provider: runtimeProvider,
+      temporaryWorkspace: temporaryProject.rootPath,
       readAppInfo: vi.fn(() =>
         Promise.resolve({
           appVersion: "1.3.0",

@@ -101,7 +101,7 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
       projects: [...projectContexts.values()].map((context) => ({
         ...context.eventStream.metrics,
         activeClients: context.transportMetrics.activeClients,
-        projectId: context.project.id,
+        projectId: context.scope.id,
         slowClientDisconnects: context.transportMetrics.slowClientDisconnects,
       })),
       version: 1 as const,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectProjectionStore } from "@code-agent/core";
-import { TEMPORARY_TASK_SCOPE_ID, type Project } from "@code-agent/protocol";
+import type { Project } from "@code-agent/protocol";
 
 import { CodexProtocolMappingError } from "./codex-protocol-mapping.js";
 import { CodexProjectRepository } from "./codex-project-repository.js";
@@ -41,7 +41,6 @@ function createProjection(initial: readonly Project[] = []) {
       projects = projects.filter((project) => project.id !== projectId);
       return Promise.resolve(projects.length !== previousLength);
     }),
-    ensureTemporaryProject: vi.fn(),
     list: vi.fn(() => Promise.resolve(projects)),
     migrateProject: vi.fn((legacyProjectId: string, project: Project) => {
       projects = [...projects.filter((candidate) => candidate.id !== legacyProjectId), project];
@@ -267,17 +266,6 @@ describe("CodexProjectRepository", () => {
       threadId: "legacy-task",
     });
     expect(rpc.request).not.toHaveBeenCalledWith("project/import", expect.anything());
-  });
-
-  it("reads the internal temporary project without calling Codex", async () => {
-    const temporary = { ...firstProject, id: TEMPORARY_TASK_SCOPE_ID };
-    const projection = createProjection([temporary]);
-    const rpc = createRpc([]);
-    const repository = new CodexProjectRepository(rpc, projection);
-
-    await expect(repository.read(TEMPORARY_TASK_SCOPE_ID)).resolves.toEqual(temporary);
-    expect(projection.read).toHaveBeenCalledWith(TEMPORARY_TASK_SCOPE_ID);
-    expect(rpc.request).not.toHaveBeenCalled();
   });
 
   it("writes Codex before projecting create, update, and delete", async () => {

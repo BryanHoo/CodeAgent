@@ -6,10 +6,9 @@ import { ProjectRuntimeIdleReaper } from "./project-runtime-idle-reaper.js";
 function createContext(activeClients = 0): ProjectRuntimeContext {
   return {
     eventStream: {} as ProjectRuntimeContext["eventStream"],
-    project: {
-      createdAt: "2026-08-17T00:00:00.000Z",
+    scope: {
       id: "project",
-      name: "Project",
+      kind: "project",
       rootPath: "/workspace",
     },
     provider: {} as ProjectRuntimeContext["provider"],

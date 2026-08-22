@@ -1,23 +1,4 @@
-import {
-  TEMPORARY_TASK_API_PATH,
-  TEMPORARY_TASK_SANDBOX_MODE,
-  TEMPORARY_TASK_SCOPE_ID,
-  type AgentTaskSettings,
-} from "@code-agent/protocol";
-
-export function enforceTemporaryTaskSandboxMode(
-  projectId: string,
-  settings: AgentTaskSettings,
-): AgentTaskSettings {
-  if (
-    projectId !== TEMPORARY_TASK_SCOPE_ID ||
-    settings.sandboxMode === TEMPORARY_TASK_SANDBOX_MODE
-  ) {
-    return settings;
-  }
-  // 临时 Task 对用户隐藏内部工作区，因此沙盒能力只能使用固定的完全访问模式。
-  return { ...settings, sandboxMode: TEMPORARY_TASK_SANDBOX_MODE };
-}
+import { TEMPORARY_TASK_API_PATH, TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 
 export function rewriteTemporaryTaskUrl(url: string): string {
   const queryIndex = url.indexOf("?");

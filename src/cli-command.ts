@@ -2,7 +2,6 @@ import { chmod, lstat, mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-
 import type {
   AgentRuntimeProvider,
   AgentProviderConnectionRepository,
@@ -88,6 +87,7 @@ interface CreateServerInput {
   readAppInfo: ReturnType<typeof createAppUpdateService>["read"];
   settingsRepository: AgentSettingsRepository;
   staticRoot: string;
+  temporaryWorkspace: string;
 }
 
 export interface CliDependencies {
@@ -348,7 +348,6 @@ async function runStart(
     const temporaryWorkspace = await dependencies.ensureTemporaryWorkspace(
       join(codexHome, "code-agent", "temporary-workspace"),
     );
-    await stateRepository.ensureTemporaryProject(temporaryWorkspace);
     runtime = await dependencies.startCodexAppServer({
       appVersion: dependencies.appVersion,
       env,
@@ -387,6 +386,7 @@ async function runStart(
       readAppInfo: appUpdateService.read,
       settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
+      temporaryWorkspace,
     });
     const host = options.lan === true ? "0.0.0.0" : "127.0.0.1";
     const activePort = await listenOnAvailablePort(server, host, port);

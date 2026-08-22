@@ -16,7 +16,6 @@ import {
   type SteerAgentTurnRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
-import { enforceTemporaryTaskSandboxMode } from "../temporary-task-routing.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import {
   IdempotencyHeadersSchema,
@@ -152,7 +151,7 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
+          if (task?.projectId !== context.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           const { attachmentIds, providerInput } = await resolveProviderTurnInput(
@@ -161,10 +160,7 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
             context.provider,
             request.params.taskId,
           );
-          const turnOptions = enforceTemporaryTaskSandboxMode(
-            request.params.projectId,
-            request.body.options,
-          );
+          const turnOptions = request.body.options;
           assertValidProjectDefaults(await listModels(), turnOptions);
           // Turn 设置先落库，Provider 成功或进程退出后都能恢复用户最后一次完整选择。
           await settingsRepository.writeTaskSettings(
@@ -225,7 +221,7 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
+          if (task?.projectId !== context.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           const turn = task.turns.find((item) => item.id === request.params.turnId);
@@ -299,7 +295,7 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
+          if (task?.projectId !== context.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           const turn = task.turns.find((item) => item.id === request.params.turnId);
@@ -358,7 +354,7 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
         throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
       }
       const task = await context.provider.readTask(request.params.taskId);
-      if (task?.projectId !== context.project.id) {
+      if (task?.projectId !== context.scope.id) {
         throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
       }
       const resolvedRequest = await runIdempotent(

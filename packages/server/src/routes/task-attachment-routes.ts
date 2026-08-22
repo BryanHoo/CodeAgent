@@ -46,7 +46,7 @@ export function registerTaskAttachmentRoutes(
       );
       if (attachment === undefined) {
         const task = await context.provider.readTask(request.params.taskId);
-        if (task?.projectId !== context.project.id) {
+        if (task?.projectId !== context.scope.id) {
           return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
         }
         try {
@@ -110,7 +110,7 @@ export function registerTaskAttachmentRoutes(
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await projectContext.provider.readTask(request.params.taskId);
-          if (task?.projectId !== projectContext.project.id) {
+          if (task?.projectId !== projectContext.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
 
@@ -157,7 +157,7 @@ export function registerTaskAttachmentRoutes(
               throw new TypeError("Attachment copy is not a file");
             }
             await projectOpenService.open(
-              projectContext.project.rootPath,
+              projectContext.scope.rootPath,
               "system-default",
               resolved.path,
             );

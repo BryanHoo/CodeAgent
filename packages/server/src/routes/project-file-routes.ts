@@ -62,7 +62,7 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readFileTree(context.project.rootPath, request.query.path);
+        return await readFileTree(context.scope.rootPath, request.query.path);
       } catch {
         // 文件系统错误在交付边界收敛，响应不泄露 Project 的本机路径。
         return reply.code(500).send({
@@ -92,7 +92,7 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readFileSearch(context.project.rootPath, request.query.query, request.signal);
+        return await readFileSearch(context.scope.rootPath, request.query.query, request.signal);
       } catch (error) {
         if (request.signal.aborted) {
           throw error;
@@ -120,7 +120,7 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        const image = await readImageFile(context.project.rootPath, request.query.path);
+        const image = await readImageFile(context.scope.rootPath, request.query.path);
         return await reply
           .header("cache-control", "private, max-age=60")
           .header("x-content-type-options", "nosniff")
@@ -155,7 +155,7 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
       }
       try {
         return await readSourceFile(
-          context.project.rootPath,
+          context.scope.rootPath,
           request.query.path,
           request.query.cursor ?? 0,
         );

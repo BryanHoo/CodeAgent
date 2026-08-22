@@ -57,6 +57,7 @@ export interface CreateCodeAgentServerOptions {
   provider: AgentRuntimeProvider;
   readAppInfo: () => Promise<AppInfoResponse>;
   settingsRepository: AgentSettingsRepository;
+  temporaryWorkspace: string;
   commitProjectChanges?: (
     projectRoot: string,
     request: CommitProjectChangesRequest,

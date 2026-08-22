@@ -1,6 +1,6 @@
 import { resolve, win32 } from "node:path";
 
-import type { Project } from "@code-agent/protocol";
+import type { AgentTaskScope } from "@code-agent/core";
 
 import { CodexProtocolMappingError } from "./codex-protocol-mapping.js";
 
@@ -21,7 +21,7 @@ export function isSameResolvedPath(left: string, right: string): boolean {
 export class RuntimeOwnerRegistry {
   readonly #taskOwners = new Map<string, TaskOwner>();
 
-  public beginTaskRead(project: Project, taskId: string): boolean {
+  public beginTaskRead(project: AgentTaskScope, taskId: string): boolean {
     const owner = this.#taskOwners.get(taskId);
     if (owner !== undefined) {
       return owner.projectId === project.id && isSameResolvedPath(owner.rootPath, project.rootPath);
@@ -34,7 +34,7 @@ export class RuntimeOwnerRegistry {
     return true;
   }
 
-  public claimTask(project: Project, taskId: string): void {
+  public claimTask(project: AgentTaskScope, taskId: string): void {
     const owner = this.#taskOwners.get(taskId);
     if (
       owner !== undefined &&
@@ -49,13 +49,13 @@ export class RuntimeOwnerRegistry {
     });
   }
 
-  public assertTaskOwner(project: Project, taskId: string): void {
+  public assertTaskOwner(project: AgentTaskScope, taskId: string): void {
     if (!this.isTaskOwner(project, taskId)) {
       throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
     }
   }
 
-  public isTaskOwner(project: Project, taskId: string): boolean {
+  public isTaskOwner(project: AgentTaskScope, taskId: string): boolean {
     const owner = this.#taskOwners.get(taskId);
     return (
       owner !== undefined &&
@@ -69,13 +69,13 @@ export class RuntimeOwnerRegistry {
     return this.#taskOwners.get(taskId)?.projectId;
   }
 
-  public releaseTask(project: Project, taskId: string): void {
+  public releaseTask(project: AgentTaskScope, taskId: string): void {
     if (this.isTaskOwner(project, taskId)) {
       this.#taskOwners.delete(taskId);
     }
   }
 
-  public releaseProvisionalTask(project: Project, taskId: string): void {
+  public releaseProvisionalTask(project: AgentTaskScope, taskId: string): void {
     const owner = this.#taskOwners.get(taskId);
     if (owner?.provisional === true && owner.projectId === project.id) {
       this.#taskOwners.delete(taskId);

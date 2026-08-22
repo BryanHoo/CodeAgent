@@ -145,6 +145,7 @@ class FakeRpcClient {
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
   id: "code-agent",
+  kind: "project",
   name: "CodeAgent",
   rootPath: "/workspace/CodeAgent",
 } as const;
@@ -160,9 +161,13 @@ function createCodexAgentProvider(options: {
   logger?: CodexProviderLogger;
   project: Project;
 }): CodexAgentProvider {
-  return new CodexAgentProvider(options.client, options.project, {
-    ...(options.logger === undefined ? {} : { logger: options.logger }),
-  });
+  return new CodexAgentProvider(
+    options.client,
+    { id: options.project.id, kind: "project", rootPath: options.project.rootPath },
+    {
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
+    },
+  );
 }
 
 function nativeThread(overrides: Record<string, unknown> = {}) {
@@ -865,7 +870,7 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
-  it("keeps the temporary project on the unassigned ephemeral path", async () => {
+  it("keeps temporary tasks on the persistent unassigned thread path", async () => {
     const temporaryProject = {
       ...project,
       id: "temporary",
@@ -882,9 +887,12 @@ describe("CodexAgentProvider", () => {
       },
       { data: [], nextCursor: null },
     ]);
-    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(temporaryProject);
+    const runtime = createCodexRuntimeProvider({ client: rpc });
+    const createTemporaryProvider = Reflect.get(runtime, "forTemporary");
+    expect(createTemporaryProvider).toBeTypeOf("function");
+    const provider = Reflect.apply(createTemporaryProvider, runtime, [temporaryProject.rootPath]);
 
-    await provider.startTask({ ephemeral: true });
+    await provider.startTask();
     await provider.listTasks();
 
     expect(rpc.calls).toEqual([
@@ -892,7 +900,6 @@ describe("CodexAgentProvider", () => {
         method: "thread/start",
         params: {
           cwd: temporaryProject.rootPath,
-          ephemeral: true,
           historyMode: "paginated",
         },
       },
@@ -900,6 +907,7 @@ describe("CodexAgentProvider", () => {
         method: "thread/list",
         params: {
           cwd: temporaryProject.rootPath,
+          projectId: null,
           sortDirection: "desc",
           sortKey: "updated_at",
         },

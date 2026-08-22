@@ -230,7 +230,7 @@ function mapPermissionProfile(
 function mapPermissionRequest(
   serverRequest: RpcServerRequest,
   params: Record<string, unknown>,
-  project: Project,
+  project: Pick<Project, "id">,
 ): PendingCodexRequest {
   const permissions = mapPermissionProfile(params["permissions"], "Codex requested permissions");
   const taskId = expectString(params["threadId"], "Codex permission request threadId");
@@ -261,7 +261,7 @@ function mapPermissionRequest(
 
 export function mapCodexServerRequest(
   serverRequest: RpcServerRequest,
-  project: Project,
+  project: Pick<Project, "id">,
 ): PendingCodexRequest | undefined {
   if (serverRequest.method === "mcpServer/elicitation/request") {
     return mapMcpServerElicitationRequest(serverRequest, project);

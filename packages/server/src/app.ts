@@ -51,10 +51,8 @@ import { registerQueueRoutes } from "./routes/queue-routes.js";
 import { configureServerDelivery } from "./server-delivery.js";
 import type { CreateCodeAgentServerOptions } from "./server-options.js";
 import { runSingleFlight } from "./single-flight.js";
-import {
-  enforceTemporaryTaskSandboxMode,
-  rewriteTemporaryTaskUrl,
-} from "./temporary-task-routing.js";
+import { resolveTaskScope } from "./task-scope.js";
+import { rewriteTemporaryTaskUrl } from "./temporary-task-routing.js";
 import {
   DEFAULT_HANDLER_TIMEOUT_MS,
   DEFAULT_IDEMPOTENCY_CACHE_SIZE,
@@ -242,13 +240,13 @@ export async function createCodeAgentServer(
     }
     return runSingleFlight(projectContextInitializations, projectId, async () => {
       // 已激活 Runtime 的身份由创建时校验；仅缓存未命中时访问持久层。
-      const project = await options.projectRepository.read(projectId);
+      const resolved = await resolveTaskScope(projectId, options);
       const concurrentContext = projectContexts.get(projectId);
       if (concurrentContext !== undefined) {
         projectRuntimeIdleReaper.touch(projectId);
         return concurrentContext;
       }
-      if (project === undefined) {
+      if (resolved === undefined) {
         return undefined;
       }
       const context = createProjectRuntimeContext({
@@ -264,8 +262,8 @@ export async function createCodeAgentServer(
         onAttachmentReleaseError: (error) => {
           app.log.warn({ error }, "Failed to release turn attachments");
         },
-        project,
-        provider: options.provider.forProject(project),
+        provider: resolved.provider,
+        scope: resolved.scope,
       });
       projectContexts.set(projectId, context);
       projectRuntimeIdleReaper.touch(projectId);
@@ -377,7 +375,7 @@ export async function createCodeAgentServer(
             approvalsReviewer: "user",
             ...projectDefaults,
           };
-    return enforceTemporaryTaskSandboxMode(projectId, settings);
+    return settings;
   };
   const readEffectiveTaskSettings = async (
     projectId: string,
@@ -402,7 +400,7 @@ export async function createCodeAgentServer(
             approvalsReviewer: "user",
             ...effectiveModel,
           };
-    return enforceTemporaryTaskSandboxMode(projectId, effective);
+    return effective;
   };
   const activeGitMutations = new Set<string>();
   const taskStartRecoveries = new Map<string, TaskStartRecovery>();

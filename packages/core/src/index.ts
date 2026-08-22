@@ -11,6 +11,7 @@ export {
   type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
   type AgentRuntimeDefaultSettings,
+  type AgentTaskScope,
   type ListAgentTasksInput,
   type ListAgentQueuedSubmissionsInput,
   type ReadAgentTaskInput,

@@ -47,7 +47,6 @@ export function WorkbenchComposer({
   client,
   fastModeAvailable,
   fastModeDefault,
-  fixedSandboxMode,
   followUpBehavior,
   models,
   modelsError,
@@ -71,10 +70,6 @@ export function WorkbenchComposer({
   taskId,
 }: WorkbenchComposerProps) {
   const { t } = useTranslation(["workbench", "settings"]);
-  const effectiveSettings =
-    fixedSandboxMode === undefined || settings.sandboxMode === fixedSandboxMode
-      ? settings
-      : { ...settings, sandboxMode: fixedSandboxMode };
   const session = useComposerSession({
     capabilities,
     client,
@@ -84,7 +79,7 @@ export function WorkbenchComposer({
     projectId,
     projectToolsEnabled,
     runtime,
-    settings: effectiveSettings,
+    settings,
     skills,
     taskId,
   });
@@ -414,7 +409,7 @@ export function WorkbenchComposer({
         void composerQueue.removeQueuedPrompt(queuedPromptId).catch(setMutationError);
       }}
       reviewMenuMode={reviewMenuMode}
-      sandboxModeSelectable={fixedSandboxMode === undefined}
+      sandboxModeSelectable
       selectedModel={selectedModel}
       selectedReasoningEffort={selectedReasoningEffort}
       setActiveCommandIndex={setActiveCommandIndex}

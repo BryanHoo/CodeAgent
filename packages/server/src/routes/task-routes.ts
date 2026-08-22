@@ -103,7 +103,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       const task = await context.provider.readTask(request.params.taskId, {
         ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
       });
-      if (task?.projectId !== context.project.id) {
+      if (task?.projectId !== context.scope.id) {
         return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
       }
       // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
@@ -196,7 +196,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
+          if (task?.projectId !== context.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           // 终端可能在请求到达前自然退出；终止操作保持幂等成功语义。
@@ -241,7 +241,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
+          if (task?.projectId !== context.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           return {
@@ -283,7 +283,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
+          if (task?.projectId !== context.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           const title = request.body.title.trim();
@@ -326,7 +326,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
+          if (task?.projectId !== context.scope.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           await context.provider.archiveTask(request.params.taskId);

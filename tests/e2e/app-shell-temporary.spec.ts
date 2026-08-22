@@ -27,7 +27,7 @@ test("creates and restores a temporary task without exposing its internal projec
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
   const sandboxSelect = page.getByRole("combobox", { name: "沙盒模式" });
   await expect(approvalSelect).toBeEnabled();
-  await expect(sandboxSelect).toHaveCount(0);
+  await expect(sandboxSelect).toHaveValue("workspace-write");
   await approvalSelect.selectOption("auto-review");
   await input.fill("/");
   await expect(page.getByRole("option", { name: /Security review/u })).toBeVisible();
@@ -68,7 +68,7 @@ test("creates and restores a temporary task without exposing its internal projec
     .poll(() => requestedPaths.filter((path) => path === "/v1/temporary/open").length)
     .toBe(1);
   await expect(approvalSelect).toHaveValue("auto-review");
-  expect(temporaryTurnOptions?.["sandboxMode"]).toBe("danger-full-access");
+  expect(temporaryTurnOptions?.["sandboxMode"]).toBe("workspace-write");
   const inspector = page.getByRole("complementary", { name: "运行环境" });
   await expect(inspector).toBeVisible();
   await expect(inspector.getByRole("tablist")).toHaveCount(0);

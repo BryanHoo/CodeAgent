@@ -4,6 +4,7 @@ import type {
   AgentProviderTurnInput,
   AgentRuntimeProvider,
   AgentSettingsRepository,
+  AgentTaskScope,
   PendingRequestResolutionError,
   ProjectRepository,
 } from "@code-agent/core";
@@ -27,7 +28,6 @@ import type {
   HostFileKind,
   HostFileListing,
   InstallAppUpdateResponse,
-  Project,
   ProjectDirectoryListing,
   ProjectFileSearchPage,
   ProjectFileTree,
@@ -76,8 +76,8 @@ export function toMcpProviderHttpError(error: unknown): MutationHttpError {
 
 export type ProjectRuntimeContext = Readonly<{
   eventStream: AgentEventStream;
-  project: Project;
   provider: AgentProvider;
+  scope: AgentTaskScope;
   transportMetrics: {
     activeClients: number;
     slowClientDisconnects: number;

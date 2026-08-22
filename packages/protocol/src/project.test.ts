@@ -49,7 +49,6 @@ import {
   SteerAgentTurnRequestSchema,
   SteerAgentTurnResponseSchema,
   TEMPORARY_TASK_API_PATH,
-  TEMPORARY_TASK_SANDBOX_MODE,
   TEMPORARY_TASK_SCOPE_ID,
   HealthResponseSchema,
   CreateProjectWorktreeRequestSchema,
@@ -163,7 +162,6 @@ describe("project protocol", () => {
   it("defines a stable public scope for temporary tasks", () => {
     expect(TEMPORARY_TASK_SCOPE_ID).toBe("temporary");
     expect(TEMPORARY_TASK_API_PATH).toBe("/v1/temporary");
-    expect(TEMPORARY_TASK_SANDBOX_MODE).toBe("danger-full-access");
   });
 
   it("requires an absolute directory when adding a project", () => {

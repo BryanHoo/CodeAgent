@@ -4,7 +4,6 @@ import type {
   AgentMessageAttachment,
   AgentModel,
   AgentPromptInput,
-  AgentSandboxMode,
   AgentSkill,
   AgentTask,
   AgentTaskSettings,
@@ -37,7 +36,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   fallbackSettings,
   fastModeAvailable,
   fastModeDefault,
-  fixedSandboxMode,
   followUpBehavior,
   models,
   modelsError,
@@ -65,7 +63,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   fallbackSettings: AgentTaskSettings;
   fastModeAvailable: boolean;
   fastModeDefault: boolean;
-  fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
   modelsError: Error | null;
@@ -197,7 +194,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         composerRef={composerRef}
         capabilities={capabilities}
         client={client}
-        {...(fixedSandboxMode === undefined ? {} : { fixedSandboxMode })}
         followUpBehavior={followUpBehavior}
         fastModeAvailable={fastModeAvailable}
         fastModeDefault={fastModeDefault}

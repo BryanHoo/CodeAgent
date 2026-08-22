@@ -7,7 +7,6 @@ import type {
   RegisterProjectInput,
 } from "@code-agent/core";
 import type { Project } from "@code-agent/protocol";
-import { TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 
 import type { CodexRpcClient } from "./agent-provider-base.js";
 import { CodexProtocolMappingError, expectRecord, expectString } from "./codex-protocol-mapping.js";
@@ -151,10 +150,6 @@ export class CodexProjectRepository implements ProjectRepository {
     this.#projection = projection;
   }
 
-  public ensureTemporaryProject(rootPath: string): Promise<Project> {
-    return this.#projection.ensureTemporaryProject(rootPath);
-  }
-
   public list(): Promise<readonly Project[]> {
     return this.synchronize();
   }
@@ -233,9 +228,6 @@ export class CodexProjectRepository implements ProjectRepository {
   }
 
   public async read(projectId: string): Promise<Project | undefined> {
-    if (projectId === TEMPORARY_TASK_SCOPE_ID) {
-      return this.#projection.read(projectId);
-    }
     try {
       const mapped = responseProject(
         await this.#client.request("project/read", { projectId }),

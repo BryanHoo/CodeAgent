@@ -110,7 +110,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readProjectGitStatus(context.project.rootPath, request.query);
+        return await readProjectGitStatus(context.scope.rootPath, request.query);
       } catch (error) {
         if (error instanceof GitRepositorySelectionError) {
           return reply.code(404).send({
@@ -146,7 +146,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readProjectGitHistory(projectContext.project.rootPath, request.query);
+        return await readProjectGitHistory(projectContext.scope.rootPath, request.query);
       } catch (error) {
         if (error instanceof GitHistoryError && error.code === "INVALID_CURSOR") {
           return reply.code(400).send({ code: "INVALID_REQUEST", message: error.message });
@@ -195,7 +195,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readProjectGitCommitFiles(projectContext.project.rootPath, request.query);
+        return await readProjectGitCommitFiles(projectContext.scope.rootPath, request.query);
       } catch (error) {
         return sendCommitReviewError(error, reply);
       }
@@ -222,7 +222,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readProjectGitCommitFileDiff(projectContext.project.rootPath, request.query);
+        return await readProjectGitCommitFileDiff(projectContext.scope.rootPath, request.query);
       } catch (error) {
         return sendCommitReviewError(error, reply);
       }
@@ -263,7 +263,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
           assertGitMutationAvailable(request.params.projectId);
           activeGitMutations.add(request.params.projectId);
           try {
-            return await switchProjectBranch(projectContext.project.rootPath, request.body);
+            return await switchProjectBranch(projectContext.scope.rootPath, request.body);
           } catch (error) {
             if (error instanceof GitBranchError) {
               throw toGitBranchHttpError(error);
@@ -316,7 +316,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
           assertGitMutationAvailable(request.params.projectId);
           activeGitMutations.add(request.params.projectId);
           try {
-            return await createProjectBranch(projectContext.project.rootPath, request.body);
+            return await createProjectBranch(projectContext.scope.rootPath, request.body);
           } catch (error) {
             if (error instanceof GitBranchError) {
               throw toGitBranchHttpError(error);
@@ -366,7 +366,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const status = await readProjectGitStatus(context.project.rootPath, {
+          const status = await readProjectGitStatus(context.scope.rootPath, {
             includeDiff: true,
             ...(request.body.repository === undefined
               ? {}
@@ -436,7 +436,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
           assertGitMutationAvailable(request.params.projectId);
           activeGitMutations.add(request.params.projectId);
           try {
-            return await commitProjectChanges(context.project.rootPath, request.body);
+            return await commitProjectChanges(context.scope.rootPath, request.body);
           } catch (error) {
             if (error instanceof GitCommitError) {
               throw toGitCommitHttpError(error);

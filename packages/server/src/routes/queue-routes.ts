@@ -50,7 +50,7 @@ export const registerQueueRoutes: FastifyPluginCallback<ServerRouteContext> = (
       throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
     }
     const task = await projectContext.provider.readTask(params.taskId);
-    if (task?.projectId !== projectContext.project.id) {
+    if (task?.projectId !== projectContext.scope.id) {
       throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
     }
     if (projectContext.provider.queue === undefined) {

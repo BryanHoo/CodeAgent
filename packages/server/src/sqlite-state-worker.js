@@ -28,10 +28,6 @@ function serializeError(error) {
 function createOperations(database) {
   const statements = hasTable(database, "projects")
     ? {
-        ensureTemporaryProject: database.prepare(
-          `INSERT OR IGNORE INTO projects (id, name, root_path, created_at, sort_order, kind)
-           VALUES (?, ?, ?, ?, 0, 'temporary')`,
-        ),
         upsertProject: database.prepare(
           `INSERT INTO projects (id, name, root_path, created_at, sort_order, kind)
            VALUES (?, ?, ?, ?, (
@@ -281,21 +277,6 @@ function createOperations(database) {
     },
     listProjects() {
       return requireStatements().listProjects.all().map(projectFromRow);
-    },
-    ensureTemporaryProject(payload) {
-      const stateStatements = requireStatements();
-      const project = payload.project;
-      stateStatements.ensureTemporaryProject.run(
-        project.id,
-        project.name,
-        project.rootPath,
-        project.createdAt,
-      );
-      const stored = projectFromRow(stateStatements.readProject.get(project.id));
-      if (stored === undefined || stored.rootPath !== project.rootPath) {
-        throw new Error("Temporary project identity conflicts with another root path");
-      }
-      return stored;
     },
     readProject(payload) {
       return projectFromRow(requireStatements().readProject.get(payload.projectId));

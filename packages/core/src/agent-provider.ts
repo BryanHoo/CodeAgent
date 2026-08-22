@@ -39,6 +39,12 @@ export type AgentRuntimeDefaultSettings = Readonly<{
   sandboxMode?: AgentSandboxMode;
 }>;
 
+export type AgentTaskScope = Readonly<{
+  id: string;
+  kind: "project" | "temporary";
+  rootPath: string;
+}>;
+
 export type ListAgentTasksInput = Readonly<{
   cursor?: string;
   limit?: number;
@@ -190,6 +196,7 @@ export interface AgentRuntimeProvider {
     input: ConfigureCustomProviderRequest,
   ): Promise<ConfigureCustomProviderResponse>;
   forProject(project: Project): AgentProvider;
+  forTemporary(rootPath: string): AgentProvider;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
   logoutProvider(): Promise<AgentProviderConnectionMutationResponse>;
