@@ -57,6 +57,8 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderQueue {
         cwd: this.project.rootPath,
         historyMode: "paginated",
         ...(this.project.kind === "temporary" ? {} : { projectId: this.project.id }),
+        // Project 身份与运行时文件系统授权彼此独立，必须显式传递完整根列表。
+        runtimeWorkspaceRoots: [...this.project.runtimeWorkspaceRoots],
         ...(options.ephemeral === true ? { ephemeral: true } : {}),
       }),
       "thread/start response",

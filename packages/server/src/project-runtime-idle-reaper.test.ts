@@ -10,6 +10,7 @@ function createContext(activeClients = 0): ProjectRuntimeContext {
       id: "project",
       kind: "project",
       rootPath: "/workspace",
+      runtimeWorkspaceRoots: ["/workspace"],
     },
     provider: {} as ProjectRuntimeContext["provider"],
     transportMetrics: { activeClients, slowClientDisconnects: 0 },

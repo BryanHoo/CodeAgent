@@ -42,7 +42,9 @@ export type AgentRuntimeDefaultSettings = Readonly<{
 export type AgentTaskScope = Readonly<{
   id: string;
   kind: "project" | "temporary";
+  // rootPath 固定为 primary cwd；运行时根列表独立控制 Agent 可访问的完整工作区。
   rootPath: string;
+  runtimeWorkspaceRoots: readonly string[];
 }>;
 
 export type ListAgentTasksInput = Readonly<{

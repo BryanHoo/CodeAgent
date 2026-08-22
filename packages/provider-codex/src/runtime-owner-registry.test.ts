@@ -9,6 +9,7 @@ const project = {
   kind: "project" as const,
   name: "Project",
   rootPath: "/workspace/project",
+  runtimeWorkspaceRoots: ["/workspace/project"],
 };
 
 describe("RuntimeOwnerRegistry", () => {

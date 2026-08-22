@@ -156,6 +156,7 @@ const projectTaskScope = {
   id: project.id,
   kind: "project",
   rootPath: projectRootPath,
+  runtimeWorkspaceRoots: [projectRootPath],
 } as const;
 
 const PINNED_THREAD_SECTION = {
@@ -171,7 +172,12 @@ function createCodexAgentProvider(options: {
 }): CodexAgentProvider {
   return new CodexAgentProvider(
     options.client,
-    { id: options.project.id, kind: "project", rootPath: options.project.roots[0]?.path ?? "" },
+    {
+      id: options.project.id,
+      kind: "project",
+      rootPath: options.project.roots[0]?.path ?? "",
+      runtimeWorkspaceRoots: options.project.roots.map((root) => root.path),
+    },
     {
       ...(options.logger === undefined ? {} : { logger: options.logger }),
     },
@@ -202,7 +208,7 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
-  it("uses the first aggregate project root as the task cwd", async () => {
+  it("uses all aggregate project roots as runtime workspaces", async () => {
     const aggregateProject = {
       createdAt: project.createdAt,
       id: project.id,
@@ -219,6 +225,7 @@ describe("CodexAgentProvider", () => {
         cwd: "/workspace/primary",
         historyMode: "paginated",
         projectId: project.id,
+        runtimeWorkspaceRoots: ["/workspace/primary", "/workspace/secondary"],
       },
     });
   });
@@ -886,6 +893,7 @@ describe("CodexAgentProvider", () => {
           ephemeral: true,
           historyMode: "paginated",
           projectId: project.id,
+          runtimeWorkspaceRoots: [projectRootPath],
         },
       },
       {
@@ -931,6 +939,7 @@ describe("CodexAgentProvider", () => {
         params: {
           cwd: temporaryProject.rootPath,
           historyMode: "paginated",
+          runtimeWorkspaceRoots: [temporaryProject.rootPath],
         },
       },
       {
@@ -1040,6 +1049,7 @@ describe("CodexAgentProvider", () => {
           cwd: otherProject.rootPath,
           historyMode: "paginated",
           projectId: otherProject.id,
+          runtimeWorkspaceRoots: [otherProject.rootPath],
         },
       },
     ]);
@@ -1378,7 +1388,7 @@ describe("CodexAgentProvider", () => {
     ]);
     expect(rpc.calls[2]).toEqual({
       method: "thread/resume",
-      params: { threadId: "task-1" },
+      params: { runtimeWorkspaceRoots: [projectRootPath], threadId: "task-1" },
     });
     expect(rpc.calls[3]).toMatchObject({
       method: "turn/start",
@@ -2797,6 +2807,7 @@ describe("CodexAgentProvider", () => {
           cwd: projectRootPath,
           historyMode: "paginated",
           projectId: project.id,
+          runtimeWorkspaceRoots: [projectRootPath],
         },
       },
       {
@@ -3029,6 +3040,7 @@ describe("CodexAgentProvider", () => {
           cwd: projectRootPath,
           historyMode: "paginated",
           projectId: project.id,
+          runtimeWorkspaceRoots: [projectRootPath],
         },
       },
       {
@@ -3333,6 +3345,7 @@ describe("CodexAgentProvider", () => {
           cwd: "/workspace/CodeAgent",
           historyMode: "paginated",
           projectId: project.id,
+          runtimeWorkspaceRoots: [projectRootPath],
         },
       },
       {
@@ -3537,7 +3550,11 @@ describe("CodexAgentProvider", () => {
       { method: "thread/compact/start", params: { threadId: "task-1" } },
       {
         method: "thread/fork",
-        params: { lastTurnId: "turn-1", threadId: "task-1" },
+        params: {
+          lastTurnId: "turn-1",
+          runtimeWorkspaceRoots: [projectRootPath],
+          threadId: "task-1",
+        },
       },
       {
         method: "feedback/upload",

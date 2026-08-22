@@ -25,4 +25,4 @@ apps/web/src/features/workbench/components/
   workbench-shell-runtime.tsx  当前根派生和根级 UI 状态
 ```
 
-依赖方向保持 `protocol -> core/client -> provider/server -> web`。Provider 原生 Codex 类型不得越过适配边界；Server 不生成 Project 身份，Web 不复制或修改 `roots[]` Server State。
+依赖方向保持 `protocol -> core/client -> provider/server -> web`。Provider 原生 Codex 类型不得越过适配边界；Server 不生成 Project 身份，Web 不复制或修改 `roots[]` Server State。Core 的 `AgentTaskScope` 同时携带 primary `rootPath` 与完整 `runtimeWorkspaceRoots`，Provider 在 `thread/start|resume|fork` 中分别映射 cwd 和运行时工作区根。

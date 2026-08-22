@@ -330,6 +330,8 @@ export abstract class CodexAgentProviderBase {
     const response = expectRecord(
       await this.client.request("thread/fork", {
         ...(lastTurnId === undefined ? {} : { lastTurnId }),
+        // Fork 必须使用当前 Project 的完整运行时根，不能继承旧 Thread 的单根配置。
+        runtimeWorkspaceRoots: [...this.project.runtimeWorkspaceRoots],
         threadId: taskId,
       }),
       "thread/fork response",

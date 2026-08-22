@@ -142,11 +142,21 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     if (primaryRoot === undefined) {
       throw new CodexProtocolMappingError("Codex project roots must contain a primary root");
     }
-    return this.#forScope({ id: project.id, kind: "project", rootPath: primaryRoot.path });
+    return this.#forScope({
+      id: project.id,
+      kind: "project",
+      rootPath: primaryRoot.path,
+      runtimeWorkspaceRoots: project.roots.map((root) => root.path),
+    });
   }
 
   public forTemporary(rootPath: string): AgentProvider {
-    return this.#forScope({ id: TEMPORARY_TASK_SCOPE_ID, kind: "temporary", rootPath });
+    return this.#forScope({
+      id: TEMPORARY_TASK_SCOPE_ID,
+      kind: "temporary",
+      rootPath,
+      runtimeWorkspaceRoots: [rootPath],
+    });
   }
 
   #forScope(project: AgentTaskScope): AgentProvider {
@@ -197,6 +207,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       id: "runtime",
       kind: "project",
       rootPath: resolve("/"),
+      runtimeWorkspaceRoots: [resolve("/")],
     };
     return new CodexAgentProvider(this.#client, runtimeProject, {
       logger: this.#logger,

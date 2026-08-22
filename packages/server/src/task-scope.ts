@@ -26,6 +26,7 @@ export async function resolveTaskScope(
         id: TEMPORARY_TASK_SCOPE_ID,
         kind: "temporary",
         rootPath: options.temporaryWorkspace,
+        runtimeWorkspaceRoots: [options.temporaryWorkspace],
       },
     };
   }
@@ -36,6 +37,11 @@ export async function resolveTaskScope(
   if (primaryRoot === undefined) return undefined;
   return {
     provider: options.provider.forProject(project),
-    scope: { id: project.id, kind: "project", rootPath: primaryRoot.path },
+    scope: {
+      id: project.id,
+      kind: "project",
+      rootPath: primaryRoot.path,
+      runtimeWorkspaceRoots: project.roots.map((root) => root.path),
+    },
   };
 }
