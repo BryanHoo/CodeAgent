@@ -18,15 +18,12 @@ export function resolveSelectedProjectRoot(
   );
 }
 
-/** 目录点击按首次选择顺序加入，再次点击则移除。 */
-export function toggleProjectRootPath(paths: readonly string[], path: string): readonly string[] {
-  return paths.includes(path)
-    ? paths.filter((selectedPath) => selectedPath !== path)
-    : [...paths, path];
-}
-
-/** 将已有目录提升到首项，首项即 Codex primary folder。 */
-export function promoteProjectRootPath(paths: readonly string[], path: string): readonly string[] {
-  if (!paths.includes(path) || paths[0] === path) return paths;
-  return [path, ...paths.filter((selectedPath) => selectedPath !== path)];
+/** 按 checkbox 的明确状态更新根目录，并保留首次勾选顺序。 */
+export function setProjectRootPathChecked(
+  paths: readonly string[],
+  path: string,
+  checked: boolean,
+): readonly string[] {
+  if (checked) return paths.includes(path) ? paths : [...paths, path];
+  return paths.filter((selectedPath) => selectedPath !== path);
 }

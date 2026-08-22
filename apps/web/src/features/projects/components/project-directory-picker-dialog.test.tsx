@@ -76,14 +76,16 @@ describe("ProjectDirectoryPickerDialog", () => {
         }}
         onExpandedChange={vi.fn()}
         onRetry={vi.fn()}
-        onSelect={vi.fn()}
-        selectedPath="/workspace/CodeAgent/packages"
+        onRootCheckedChange={vi.fn()}
+        selectedPaths={new Set(["/workspace/CodeAgent/packages"])}
       />,
     );
 
     expect(markup).toContain('role="tree"');
     expect(markup).toContain("packages");
     expect(markup).toContain("src");
+    expect(markup).toContain('aria-label="选择 packages"');
+    expect(markup).toContain('data-state="checked"');
     expect(markup).toContain("无法读取此文件夹");
     expect(markup).toContain("重试");
   });

@@ -234,9 +234,11 @@ export const workbench = {
   },
   projectPicker: {
     primaryRoot: "Primary",
+    primaryRootHint: "The first selected folder becomes the primary folder",
+    primaryRootSummary: "{{path}} (Primary)",
+    rootSeparator: ", ",
     selectedRoots: "{{count}} project folders selected",
-    makePrimary: "Make {{path}} primary",
-    removeRoot: "Remove {{path}}",
+    selectRoot: "Select {{name}}",
     add: "Add this folder",
     addError: "Unable to add the selected folder",
     adding: "Adding",

@@ -100,6 +100,7 @@ export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
     name: string;
     path: string;
+    selectionControl?: ReactNode;
     trailing?: ReactNode;
   }>;
 
@@ -108,6 +109,7 @@ export function FileTreeFolder({
   className = "",
   name,
   path,
+  selectionControl,
   trailing,
   ...props
 }: FileTreeFolderProps) {
@@ -165,6 +167,7 @@ export function FileTreeFolder({
             className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
           />
         </Button>
+        {selectionControl}
         <Button
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left focus-visible:outline-none"
           contentAlign="start"

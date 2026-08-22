@@ -318,11 +318,25 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
   expect(addProjectRequestCount).toBe(0);
 
   await page.getByRole("button", { name: "添加项目" }).click();
+  const addButton = picker.getByRole("button", { name: "添加此文件夹" });
+  await expect(addButton).toBeDisabled();
   await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
-  await picker.getByRole("button", { exact: true, name: "superwork" }).click();
+  await expect(picker.getByRole("checkbox", { name: "选择 AddedProject" })).not.toBeChecked();
+  await expect(addButton).toBeDisabled();
+
+  await picker.getByRole("checkbox", { name: "选择 AddedProject" }).click();
+  await picker.getByRole("checkbox", { name: "选择 superwork" }).click();
   await expect(picker.getByText("已选择 2 个项目目录")).toBeVisible();
+  await expect(picker.getByText("首个勾选的文件夹将作为主目录")).toBeVisible();
+  await expect(
+    picker.getByText("/workspace/AddedProject（主目录）、/workspace/superwork", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    picker.getByRole("button", { name: "将 /workspace/superwork 设为主目录" }),
+  ).toHaveCount(0);
+  await expect(addButton).toBeEnabled();
   delayCurrentTaskRefresh = true;
-  await picker.getByRole("button", { name: "添加此文件夹" }).evaluate((button) => {
+  await addButton.evaluate((button) => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
@@ -432,7 +446,7 @@ test("keeps the Web directory picker open after add failure", async ({ page }) =
 
   await page.getByRole("button", { name: "添加项目" }).click();
   const picker = page.getByRole("dialog", { name: "选择项目文件夹" });
-  await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
+  await picker.getByRole("checkbox", { name: "选择 AddedProject" }).click();
   await picker.getByRole("button", { name: "添加此文件夹" }).click();
 
   await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveText(

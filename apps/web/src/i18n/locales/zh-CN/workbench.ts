@@ -234,9 +234,11 @@ export const workbench = {
   },
   projectPicker: {
     primaryRoot: "主目录",
+    primaryRootHint: "首个勾选的文件夹将作为主目录",
+    primaryRootSummary: "{{path}}（主目录）",
+    rootSeparator: "、",
     selectedRoots: "已选择 {{count}} 个项目目录",
-    makePrimary: "将 {{path}} 设为主目录",
-    removeRoot: "移除 {{path}}",
+    selectRoot: "选择 {{name}}",
     add: "添加此文件夹",
     addError: "无法添加所选文件夹",
     adding: "正在添加",

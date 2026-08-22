@@ -1,11 +1,12 @@
 import type { ProjectDirectoryListing } from "@code-agent/protocol";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowUpToLine, FolderPlus, LoaderCircle, RotateCcw, X } from "lucide-react";
+import { FolderPlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { FileTree, FileTreeFolder } from "../../../shared/components/agent/file-tree.js";
 import { Button } from "../../../shared/components/core/button.js";
+import { Checkbox } from "../../../shared/components/core/checkbox.js";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import {
   DialogTitle,
 } from "../../../shared/components/core/dialog.js";
 import type { CodeAgentProjectDirectoryClient } from "../project-queries.js";
-import { promoteProjectRootPath, toggleProjectRootPath } from "../project-root-selection.js";
+import { setProjectRootPathChecked } from "../project-root-selection.js";
 import { FilesystemPickerToolbar } from "./filesystem-picker-toolbar.js";
 
 export type ProjectDirectoryState = Readonly<{
@@ -31,8 +32,9 @@ type ProjectDirectoryTreeProps = Readonly<{
   listing: ProjectDirectoryListing;
   onExpandedChange: (paths: Set<string>) => void;
   onRetry: (path: string) => void;
-  onSelect: (path: string) => void;
-  selectedPath: string;
+  onRootCheckedChange: (path: string, checked: boolean) => void;
+  selectedPaths: ReadonlySet<string>;
+  selectionDisabled?: boolean;
 }>;
 
 type ProjectDirectoryNodesProps = Readonly<{
@@ -40,6 +42,9 @@ type ProjectDirectoryNodesProps = Readonly<{
   entries: ProjectDirectoryListing["entries"];
   expandedPaths: Set<string>;
   onRetry: (path: string) => void;
+  onRootCheckedChange: (path: string, checked: boolean) => void;
+  selectedPaths: ReadonlySet<string>;
+  selectionDisabled?: boolean;
 }>;
 
 function ProjectDirectoryNodes({
@@ -47,6 +52,9 @@ function ProjectDirectoryNodes({
   entries,
   expandedPaths,
   onRetry,
+  onRootCheckedChange,
+  selectedPaths,
+  selectionDisabled = false,
 }: ProjectDirectoryNodesProps) {
   const { t } = useTranslation("workbench");
   return entries.map((entry) => {
@@ -57,6 +65,16 @@ function ProjectDirectoryNodes({
         key={entry.path}
         name={entry.name}
         path={entry.path}
+        selectionControl={
+          <Checkbox
+            aria-label={t("projectPicker.selectRoot", { name: entry.name })}
+            checked={selectedPaths.has(entry.path)}
+            disabled={selectionDisabled}
+            onCheckedChange={(checked) => {
+              onRootCheckedChange(entry.path, checked === true);
+            }}
+          />
+        }
         trailing={
           isExpanded && state?.isFetching === true ? (
             <LoaderCircle
@@ -98,6 +116,9 @@ function ProjectDirectoryNodes({
             entries={state.data.entries}
             expandedPaths={expandedPaths}
             onRetry={onRetry}
+            onRootCheckedChange={onRootCheckedChange}
+            selectedPaths={selectedPaths}
+            selectionDisabled={selectionDisabled}
           />
         )}
       </FileTreeFolder>
@@ -111,8 +132,9 @@ export function ProjectDirectoryTree({
   listing,
   onExpandedChange,
   onRetry,
-  onSelect,
-  selectedPath,
+  onRootCheckedChange,
+  selectedPaths,
+  selectionDisabled = false,
 }: ProjectDirectoryTreeProps) {
   const { t } = useTranslation("workbench");
   const directoryStateMap = useMemo(
@@ -124,14 +146,15 @@ export function ProjectDirectoryTree({
       aria-label={t("projectPicker.treeLabel")}
       expanded={expandedPaths}
       onExpandedChange={onExpandedChange}
-      onSelect={onSelect}
-      selectedPath={selectedPath}
     >
       <ProjectDirectoryNodes
         directoryStates={directoryStateMap}
         entries={listing.entries}
         expandedPaths={expandedPaths}
         onRetry={onRetry}
+        onRootCheckedChange={onRootCheckedChange}
+        selectedPaths={selectedPaths}
+        selectionDisabled={selectionDisabled}
       />
     </FileTree>
   );
@@ -155,7 +178,6 @@ export function ProjectDirectoryPickerDialog({
   const [pathDraft, setPathDraft] = useState<string>();
   const [includeHidden, setIncludeHidden] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
-  const [selectedPath, setSelectedPath] = useState<string>();
   const [selectedPaths, setSelectedPaths] = useState<readonly string[]>([]);
   const rootQuery = useQuery({
     queryFn: ({ signal }) => client.listProjectDirectories(rootPath, { includeHidden, signal }),
@@ -163,14 +185,11 @@ export function ProjectDirectoryPickerDialog({
     staleTime: 30_000,
   });
   const listing = rootQuery.data;
-  const activeSelectedPath = selectedPath ?? listing?.path;
-  const canAdd = listing !== undefined && activeSelectedPath !== undefined;
-  const projectRoots =
-    selectedPaths.length > 0
-      ? selectedPaths
-      : activeSelectedPath === undefined
-        ? []
-        : [activeSelectedPath];
+  const canAdd = listing !== undefined && selectedPaths.length > 0;
+  const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const selectedRootsSummary = selectedPaths
+    .map((path, index) => (index === 0 ? t("projectPicker.primaryRootSummary", { path }) : path))
+    .join(t("projectPicker.rootSeparator"));
   const expandedDirectoryPaths = useMemo(() => [...expandedPaths], [expandedPaths]);
   // 仅为当前展开的节点创建 Query，折叠目录不会预读整棵主机文件树。
   const directoryQueries = useQueries({
@@ -198,13 +217,13 @@ export function ProjectDirectoryPickerDialog({
     setRootPath(parentPath);
     setPathDraft(undefined);
     setExpandedPaths(new Set());
-    setSelectedPath(undefined);
+    setSelectedPaths([]);
   };
   const navigateToRoot = (path: string) => {
     setRootPath(path);
     setPathDraft(undefined);
     setExpandedPaths(new Set());
-    setSelectedPath(undefined);
+    setSelectedPaths([]);
   };
   const navigateToPath = () => {
     const path = displayedPath.trim();
@@ -213,11 +232,11 @@ export function ProjectDirectoryPickerDialog({
     setRootPath(path);
     setPathDraft(undefined);
     setExpandedPaths(new Set());
-    setSelectedPath(undefined);
+    setSelectedPaths([]);
   };
   const toggleHiddenDirectories = () => {
     setIncludeHidden((current) => !current);
-    setSelectedPath(undefined);
+    setSelectedPaths([]);
   };
 
   return (
@@ -284,8 +303,7 @@ export function ProjectDirectoryPickerDialog({
                 {t("actions.retry")}
               </Button>
             </div>
-          ) : listing === undefined || activeSelectedPath === undefined ? null : listing.entries
-              .length === 0 ? (
+          ) : listing === undefined ? null : listing.entries.length === 0 ? (
             <p className="grid min-h-32 place-items-center text-body-small text-muted-foreground">
               {t("projectPicker.empty")}
             </p>
@@ -299,63 +317,31 @@ export function ProjectDirectoryPickerDialog({
                 const index = expandedDirectoryPaths.indexOf(path);
                 void directoryQueries[index]?.refetch();
               }}
-              onSelect={(path) => {
-                setSelectedPath(path);
-                setSelectedPaths((current) => toggleProjectRootPath(current, path));
+              onRootCheckedChange={(path, checked) => {
+                // 目录行只负责浏览；checkbox 独立维护有序 Project 根目录选择。
+                setSelectedPaths((current) => setProjectRootPathChecked(current, path, checked));
               }}
-              selectedPath={activeSelectedPath}
+              selectedPaths={selectedPathSet}
+              selectionDisabled={isAdding}
             />
           )}
         </div>
 
         <div className="flex flex-col gap-3 border-t border-separator bg-raised px-4 py-3 sm:flex-row sm:items-center sm:px-5">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <p aria-live="polite" className="text-caption text-muted-foreground">
-              {t("projectPicker.selectedRoots", { count: projectRoots.length })}
-            </p>
-            <div className="max-h-16 overflow-y-auto">
-              {projectRoots.map((path, index) => (
-                <div className="flex min-h-6 items-center gap-1" key={path}>
-                  <p
-                    className="min-w-0 flex-1 truncate font-mono text-caption text-foreground"
-                    title={path}
-                  >
-                    {index === 0 ? `${t("projectPicker.primaryRoot")}: ` : ""}
-                    {path}
-                  </p>
-                  {index === 0 ? null : (
-                    <Button
-                      aria-label={t("projectPicker.makePrimary", { path })}
-                      className="shrink-0"
-                      onClick={() => {
-                        setSelectedPaths((current) => promoteProjectRootPath(current, path));
-                      }}
-                      size="icon-sm"
-                      title={t("projectPicker.makePrimary", { path })}
-                      type="button"
-                      variant="ghost"
-                    >
-                      <ArrowUpToLine aria-hidden="true" />
-                    </Button>
-                  )}
-                  {projectRoots.length < 2 ? null : (
-                    <Button
-                      aria-label={t("projectPicker.removeRoot", { path })}
-                      className="shrink-0"
-                      onClick={() => {
-                        setSelectedPaths((current) => toggleProjectRootPath(current, path));
-                      }}
-                      size="icon-sm"
-                      title={t("projectPicker.removeRoot", { path })}
-                      type="button"
-                      variant="ghost"
-                    >
-                      <X aria-hidden="true" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <p aria-live="polite" className="text-caption text-muted-foreground">
+                {t("projectPicker.selectedRoots", { count: selectedPaths.length })}
+              </p>
+              <p className="ml-auto text-right text-caption text-muted-foreground">
+                {t("projectPicker.primaryRootHint")}
+              </p>
             </div>
+            {selectedRootsSummary.length === 0 ? null : (
+              <p className="min-w-0 break-words font-mono text-caption text-foreground [overflow-wrap:anywhere]">
+                {selectedRootsSummary}
+              </p>
+            )}
           </div>
           <DialogFooter className="w-full flex-col-reverse sm:w-auto sm:flex-row">
             <Button
@@ -371,7 +357,7 @@ export function ProjectDirectoryPickerDialog({
               className="h-10 w-full sm:h-8 sm:w-auto"
               disabled={!canAdd || isAdding}
               onClick={() => {
-                if (projectRoots.length > 0) void onAdd(projectRoots);
+                if (selectedPaths.length > 0) void onAdd(selectedPaths);
               }}
               type="button"
             >

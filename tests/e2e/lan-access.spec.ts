@@ -45,7 +45,10 @@ test("pairs real browsers, persists the cookie, and invalidates it on logout @cr
   await expect(projectPicker).toBeVisible();
   expect((await directoryListingResponse).ok()).toBe(true);
   await expect(projectPicker.getByRole("tree", { name: "项目文件夹目录树" })).toBeVisible();
-  await expect(projectPicker.getByRole("button", { name: "添加此文件夹" })).toBeEnabled();
+  const addProjectButton = projectPicker.getByRole("button", { name: "添加此文件夹" });
+  await expect(addProjectButton).toBeDisabled();
+  await projectPicker.getByRole("checkbox").first().click();
+  await expect(addProjectButton).toBeEnabled();
   await projectPicker.getByRole("button", { name: "取消" }).click();
   await expect(projectPicker).toBeHidden();
 

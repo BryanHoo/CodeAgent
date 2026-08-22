@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  promoteProjectRootPath,
-  resolveSelectedProjectRoot,
-  toggleProjectRootPath,
-} from "./project-root-selection.js";
+import { resolveSelectedProjectRoot, setProjectRootPathChecked } from "./project-root-selection.js";
 
 const project = {
   id: "project-1",
@@ -37,17 +33,14 @@ describe("project root selection", () => {
     ).toBe("/workspace/primary");
   });
 
-  it("builds an ordered root list and promotes the requested primary root", () => {
-    const selected = toggleProjectRootPath([], "/workspace/primary");
-    const aggregated = toggleProjectRootPath(selected, "/workspace/secondary");
+  it("builds an ordered root list from checkbox changes", () => {
+    const selected = setProjectRootPathChecked([], "/workspace/primary", true);
+    const aggregated = setProjectRootPathChecked(selected, "/workspace/secondary", true);
 
     expect(aggregated).toEqual(["/workspace/primary", "/workspace/secondary"]);
-    expect(promoteProjectRootPath(aggregated, "/workspace/secondary")).toEqual([
-      "/workspace/secondary",
-      "/workspace/primary",
-    ]);
-    expect(toggleProjectRootPath(aggregated, "/workspace/primary")).toEqual([
+    expect(setProjectRootPathChecked(aggregated, "/workspace/primary", false)).toEqual([
       "/workspace/secondary",
     ]);
+    expect(setProjectRootPathChecked(aggregated, "/workspace/primary", true)).toBe(aggregated);
   });
 });
