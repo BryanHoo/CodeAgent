@@ -34,6 +34,11 @@
     "iterations": 100,
     "maxGrowthBytes": 33554432
   },
+  "jsonlFragmentation": {
+    "chunkBytes": 65536,
+    "frameBytes": 66060288,
+    "maxAssemblyMs": 2000
+  },
   "longHistory": {
     "items": 10000,
     "itemsPerTurn": 10,

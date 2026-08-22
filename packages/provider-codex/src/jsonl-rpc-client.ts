@@ -1,5 +1,6 @@
 import type { Readable, Writable } from "node:stream";
 
+import { JsonlChunkBuffer } from "./jsonl-chunk-buffer.js";
 import { JsonlFrameParseError, JsonlFrameProcessor } from "./jsonl-frame-processor.js";
 import {
   RpcConnectionClosedError,
@@ -21,7 +22,6 @@ import { RpcPendingRequest } from "./rpc-pending-request.js";
 // 原生 imageGeneration 会把图片 Base64 放进单个 JSONL 帧，64 MiB 可覆盖最大图片并保留协议边界。
 const DEFAULT_MAX_JSONL_BYTES = 64 * 1_024 * 1_024;
 const DEFAULT_LARGE_FRAME_THRESHOLD_BYTES = 1 * 1_024 * 1_024;
-const EMPTY_BUFFER = Buffer.alloc(0);
 
 export {
   RpcConnectionClosedError,
@@ -74,7 +74,7 @@ export class JsonlRpcClient {
   readonly #pending = new Map<number, RpcPendingRequest>();
   readonly #serverRequestListeners = new Set<ServerRequestListener>();
   readonly #workerUrl: URL | undefined;
-  #buffer = EMPTY_BUFFER;
+  readonly #frameBuffer = new JsonlChunkBuffer();
   #closed = false;
   #frameProcessor: JsonlFrameProcessor | undefined;
   #frameQueue = Promise.resolve();
@@ -219,7 +219,7 @@ export class JsonlRpcClient {
       pending.reject(reason);
     }
     this.#pending.clear();
-    this.#buffer = EMPTY_BUFFER;
+    this.#frameBuffer.clear();
     this.#frameProcessor?.dispose();
     this.#notificationListeners.clear();
     this.#serverRequestListeners.clear();
@@ -233,19 +233,17 @@ export class JsonlRpcClient {
     while (newlineIndex >= 0) {
       const chunkFrame = input.subarray(frameStart, newlineIndex);
       const endsWithCarriageReturn =
-        chunkFrame.at(-1) === 0x0d || (chunkFrame.length === 0 && this.#buffer.at(-1) === 0x0d);
-      const frameBytes = this.#buffer.length + chunkFrame.length - (endsWithCarriageReturn ? 1 : 0);
+        chunkFrame.at(-1) === 0x0d ||
+        (chunkFrame.length === 0 && this.#frameBuffer.lastByte === 0x0d);
+      const frameBytes =
+        this.#frameBuffer.byteLength + chunkFrame.length - (endsWithCarriageReturn ? 1 : 0);
       if (frameBytes > this.#maxFrameBytes) {
         this.#failOversizedFrame(frameBytes);
         return;
       }
 
       // 仅在帧跨 chunk 时拼接，完整 burst 内的帧直接使用原 Buffer 视图。
-      let frame =
-        this.#buffer.length === 0
-          ? chunkFrame
-          : Buffer.concat([this.#buffer, chunkFrame], this.#buffer.length + chunkFrame.length);
-      this.#buffer = EMPTY_BUFFER;
+      let frame = this.#frameBuffer.takeFrame(chunkFrame);
       if (endsWithCarriageReturn) {
         frame = frame.subarray(0, -1);
       }
@@ -257,7 +255,7 @@ export class JsonlRpcClient {
     }
 
     const remainder = input.subarray(frameStart);
-    const bufferedBytes = this.#buffer.length + remainder.length;
+    const bufferedBytes = this.#frameBuffer.byteLength + remainder.length;
     if (bufferedBytes > this.#maxBufferBytes) {
       this.#fail(
         new RpcProtocolError(
@@ -272,18 +270,15 @@ export class JsonlRpcClient {
     }
     if (remainder.length > 0) {
       // 保留原始字节可精确计数，并自然覆盖跨 chunk 的 UTF-8 多字节字符。
-      this.#buffer =
-        this.#buffer.length === 0
-          ? Buffer.from(remainder)
-          : Buffer.concat([this.#buffer, remainder], bufferedBytes);
+      this.#frameBuffer.append(remainder);
     }
   };
 
   readonly #handleInputEnd = (): void => {
-    if (this.#buffer.toString("utf8").trim()) {
+    if (this.#frameBuffer.hasNonWhitespace()) {
       this.#fail(
         new RpcProtocolError(
-          `RPC input ended with an incomplete JSONL frame (${String(this.#buffer.length)} bytes)`,
+          `RPC input ended with an incomplete JSONL frame (${String(this.#frameBuffer.byteLength)} bytes)`,
         ),
       );
       return;
