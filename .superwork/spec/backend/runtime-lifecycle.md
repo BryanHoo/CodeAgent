@@ -4,7 +4,7 @@
 
 - 默认使用长驻 `codex app-server --listen stdio://`，不为每个 Turn 创建进程；允许 Codex 忽略其版本尚未识别的前向配置字段，避免 Desktop 与打包 CLI 的配置版本差异阻断启动。
 - CLI 启动 App Server 时不绑定 Project `cwd`；全局 `CodexRuntimeProvider` 只注册一次 RPC Notification 与 Server Request Listener，并维护 `taskId -> projectId/cwd` 归属映射。
-- CodeAgent 只通过 App Server `account/read`、`account/login/start`、`account/login/cancel`、`account/logout` 管理官方登录或 API key 凭证；禁止读取、修改或复制 `auth.json`。CodeAgent 创建的自定义 Provider 固定使用 `code_agent_custom`，通过 `config/batchWrite` 写入无 Secret 的 Responses API 配置，并在写入后调用 `modelProvider/capabilities/read` 严格校验 0.149.0 当前 Provider 的 `namespaceTools`、`imageGeneration` 与 `webSearch` 能力。连接状态必须同时读取有效 `config/read`：只要 `model_provider` 不是内置 `openai`，或配置了 `openai_base_url`，就按用户现有 Codex CLI 自定义 API 处理，并返回所选 Provider 的 `base_url`。
+- CodeAgent 只通过 App Server `account/read`、`account/login/start`、`account/login/cancel`、`account/logout` 管理官方登录或 API key 凭证；禁止读取、修改或复制 `auth.json`。切换官方 Provider 必须在同一次 `config/batchWrite` 中设置 `model_provider = "openai"` 并清除 `openai_base_url`。CodeAgent 创建的自定义 Provider 固定使用 `code_agent_custom`，通过 `config/batchWrite` 写入无 Secret 的 Responses API 配置，并在写入后调用 `modelProvider/capabilities/read` 严格校验 0.149.0 当前 Provider 的 `namespaceTools`、`imageGeneration` 与 `webSearch` 能力；API key 认证必须在能力校验后执行，任一步失败都必须恢复切换前的 Provider 配置。连接状态必须同时读取有效 `config/read`：只要 `model_provider` 不是内置 `openai`，或配置了 `openai_base_url`，就按用户现有 Codex CLI 自定义 API 处理，并返回所选 Provider 的 `base_url`。
 - 包内 Codex 必须解析平台可选依赖中的原生 `codex`/`codex.exe`，不得把会再次派生子进程的 JS launcher 作为受管 App Server 进程。
 - 使用参数数组、`shell: false` 和经过控制的环境变量；Secret 不进入参数或日志。
 - 子进程不消费输入时必须将 stdin 配置为 `ignore`；确需 `pipe` 写入时必须监听写端错误，避免进程提前退出产生未处理的 `EPIPE`。

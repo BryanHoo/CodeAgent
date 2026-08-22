@@ -31,6 +31,11 @@ type PendingLogin = Readonly<{
   state: "failed" | "pending";
 }>;
 
+type AccountState = Readonly<{
+  account: AgentProviderAccount | null;
+  requiresOpenaiAuth: boolean;
+}>;
+
 export interface CodexProviderConnectionServiceOptions {
   fetch?: typeof globalThis.fetch;
   modelCountLimit?: number;
@@ -154,6 +159,30 @@ function readAccountResponse(response: unknown): {
   };
 }
 
+function createConnectionStatus(
+  config: Record<string, unknown>,
+  accountState: AccountState,
+  pendingLogin: PendingLogin | null,
+): AgentProviderConnectionStatus {
+  const { customBaseUrl, mode } = readActiveProvider(config);
+  const connected =
+    mode === "custom"
+      ? !accountState.requiresOpenaiAuth || accountState.account !== null
+      : accountState.account !== null;
+  return {
+    account: accountState.account,
+    customBaseUrl,
+    mode,
+    pendingLogin,
+    state: pendingLogin?.state ?? (connected ? "connected" : "disconnected"),
+  };
+}
+
+function readCustomProviderConfig(config: Record<string, unknown>): unknown {
+  const providers = isRecord(config["model_providers"]) ? config["model_providers"] : null;
+  return providers?.[CUSTOM_PROVIDER_ID] ?? null;
+}
+
 function readProviderCapabilities(response: unknown): void {
   if (
     !isRecord(response) ||
@@ -207,25 +236,15 @@ export class CodexProviderConnectionService {
     ]);
     const config = readConfig(configResponse);
     const accountState = readAccountResponse(accountResponse);
-    const { customBaseUrl, mode } = readActiveProvider(config);
-    const pendingLogin = this.#pendingLogin;
-    const connected =
-      mode === "custom"
-        ? !accountState.requiresOpenaiAuth || accountState.account !== null
-        : accountState.account !== null;
-    const state = pendingLogin?.state ?? (connected ? "connected" : "disconnected");
-    return {
-      account: accountState.account,
-      customBaseUrl,
-      mode,
-      pendingLogin,
-      state,
-    };
+    return createConnectionStatus(config, accountState, this.#pendingLogin);
   }
 
   public async startOfficialLogin(): Promise<StartOfficialProviderLoginResponse> {
     await this.#client.request("config/batchWrite", {
-      edits: [{ keyPath: "model_provider", mergeStrategy: "upsert", value: "openai" }],
+      edits: [
+        { keyPath: "model_provider", mergeStrategy: "upsert", value: "openai" },
+        { keyPath: "openai_base_url", mergeStrategy: "replace", value: null },
+      ],
     });
     const response = await this.#client.request("account/login/start", {
       appBrand: "chatgpt",
@@ -272,9 +291,12 @@ export class CodexProviderConnectionService {
     }
     // 手动条目位于后侧，同 ID 时覆盖远端缺省名称。
     const models = mapCustomModels([...discoveredModels, ...manualModels], this.#modelCountLimit);
-    if (apiKey !== undefined) {
-      await this.#client.request("account/login/start", { apiKey, type: "apiKey" });
-    }
+    const [configResponse, accountResponse] = await Promise.all([
+      this.#client.request("config/read", { includeLayers: false }),
+      this.#client.request("account/read", { refreshToken: false }),
+    ]);
+    const previousConfig = readConfig(configResponse);
+    const previousAccountState = readAccountResponse(accountResponse);
     await this.#client.request("config/batchWrite", {
       edits: [
         {
@@ -290,10 +312,60 @@ export class CodexProviderConnectionService {
         { keyPath: "model_provider", mergeStrategy: "upsert", value: CUSTOM_PROVIDER_ID },
       ],
     });
-    // 0.149.0 会从最新 config 解析当前 Provider；在返回成功前确认其运行时能力可被读取。
-    readProviderCapabilities(await this.#client.request("modelProvider/capabilities/read", {}));
+
+    try {
+      // 0.149.0 只能校验当前 Provider；失败时必须补偿恢复刚才的原子配置写入。
+      readProviderCapabilities(await this.#client.request("modelProvider/capabilities/read", {}));
+      if (apiKey !== undefined) {
+        const loginResponse = await this.#client.request("account/login/start", {
+          apiKey,
+          type: "apiKey",
+        });
+        if (!isRecord(loginResponse) || loginResponse["type"] !== "apiKey") {
+          throw new CodexProviderConnectionError(
+            "Codex returned an invalid API key login response",
+          );
+        }
+      }
+    } catch (error) {
+      try {
+        await this.#client.request("config/batchWrite", {
+          edits: [
+            {
+              keyPath: `model_providers.${CUSTOM_PROVIDER_ID}`,
+              mergeStrategy: "replace",
+              value: readCustomProviderConfig(previousConfig),
+            },
+            {
+              keyPath: "model_provider",
+              mergeStrategy: "replace",
+              value: previousConfig["model_provider"] ?? null,
+            },
+          ],
+        });
+      } catch {
+        throw new CodexProviderConnectionError(
+          "Custom provider setup failed and the previous config could not be restored",
+        );
+      }
+      throw error;
+    }
+
     this.#pendingLogin = null;
-    return { models, status: await this.readStatus() };
+    const activeConfig = {
+      model_provider: CUSTOM_PROVIDER_ID,
+      model_providers: {
+        [CUSTOM_PROVIDER_ID]: { base_url: baseUrl },
+      },
+    };
+    const activeAccountState: AccountState =
+      apiKey === undefined
+        ? { account: previousAccountState.account, requiresOpenaiAuth: false }
+        : { account: { type: "apiKey" }, requiresOpenaiAuth: true };
+    return {
+      models,
+      status: createConnectionStatus(activeConfig, activeAccountState, null),
+    };
   }
 
   async #discoverModels(

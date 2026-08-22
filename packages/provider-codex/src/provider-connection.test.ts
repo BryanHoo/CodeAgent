@@ -124,7 +124,10 @@ describe("CodexProviderConnectionService", () => {
     expect(client.requests[0]).toEqual({
       method: "config/batchWrite",
       params: {
-        edits: [{ keyPath: "model_provider", mergeStrategy: "upsert", value: "openai" }],
+        edits: [
+          { keyPath: "model_provider", mergeStrategy: "upsert", value: "openai" },
+          { keyPath: "openai_base_url", mergeStrategy: "replace", value: null },
+        ],
       },
     });
 
@@ -358,8 +361,26 @@ describe("CodexProviderConnectionService", () => {
 
   it("rejects invalid capabilities after activating a custom provider", async () => {
     const client = new FakeRpcClient();
+    client.enqueue("config/read", {
+      config: {
+        model_provider: "existing_provider",
+        model_providers: {
+          code_agent_custom: {
+            base_url: "https://previous.example.com/v1",
+            name: "Previous Custom API",
+            requires_openai_auth: false,
+            wire_api: "responses",
+          },
+          existing_provider: {
+            base_url: "https://existing.example.com/v1",
+          },
+        },
+      },
+    });
+    client.enqueue("account/read", { account: { type: "chatgpt" }, requiresOpenaiAuth: true });
     client.enqueue("config/batchWrite", {});
     client.enqueue("modelProvider/capabilities/read", { namespaceTools: true });
+    client.enqueue("config/batchWrite", {});
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
@@ -368,8 +389,70 @@ describe("CodexProviderConnectionService", () => {
     const service = new CodexProviderConnectionService(client, { fetch: fetchMock });
 
     await expect(
-      service.configureCustom({ baseUrl: "https://api.example.com/v1" }),
+      service.configureCustom({ apiKey: "replacement-key", baseUrl: "https://api.example.com/v1" }),
     ).rejects.toThrow("Codex returned invalid model provider capabilities");
+    expect(client.requests).not.toContainEqual({
+      method: "account/login/start",
+      params: { apiKey: "replacement-key", type: "apiKey" },
+    });
+    expect(client.requests.at(-1)).toEqual({
+      method: "config/batchWrite",
+      params: {
+        edits: [
+          {
+            keyPath: "model_providers.code_agent_custom",
+            mergeStrategy: "replace",
+            value: {
+              base_url: "https://previous.example.com/v1",
+              name: "Previous Custom API",
+              requires_openai_auth: false,
+              wire_api: "responses",
+            },
+          },
+          {
+            keyPath: "model_provider",
+            mergeStrategy: "replace",
+            value: "existing_provider",
+          },
+        ],
+      },
+    });
+  });
+
+  it("restores the previous config when custom API key login fails", async () => {
+    const client = new FakeRpcClient();
+    enqueueOfficialStatus(client, { type: "chatgpt" });
+    client.enqueue("config/batchWrite", {});
+    client.enqueue("modelProvider/capabilities/read", {
+      imageGeneration: true,
+      namespaceTools: true,
+      webSearch: true,
+    });
+    client.enqueue("account/login/start", new Error("API key login failed"));
+    client.enqueue("config/batchWrite", {});
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: "plain-model" }] }), { status: 200 }),
+      );
+    const service = new CodexProviderConnectionService(client, { fetch: fetchMock });
+
+    await expect(
+      service.configureCustom({ apiKey: "invalid-key", baseUrl: "https://api.example.com/v1" }),
+    ).rejects.toThrow("API key login failed");
+    expect(client.requests.at(-1)).toEqual({
+      method: "config/batchWrite",
+      params: {
+        edits: [
+          {
+            keyPath: "model_providers.code_agent_custom",
+            mergeStrategy: "replace",
+            value: null,
+          },
+          { keyPath: "model_provider", mergeStrategy: "replace", value: "openai" },
+        ],
+      },
+    });
   });
 
   it("times out after response headers while the model response body remains open", async () => {
