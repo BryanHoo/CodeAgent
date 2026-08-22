@@ -34,7 +34,7 @@ describe("project file tree model", () => {
         },
       ],
     ]);
-    const listProjectFiles = vi.fn((_projectId: string, path: string | null) => {
+    const listProjectFiles = vi.fn((_projectId: string, _rootPath: string, path: string | null) => {
       const listing = listings.get(path);
       if (listing === undefined) return Promise.reject(new Error("missing fixture"));
       return Promise.resolve(listing);
@@ -44,6 +44,7 @@ describe("project file tree model", () => {
       projectId: "project-1",
       projectName: "CodeAgent",
       queryClient: createQueryClient(),
+      rootPath: "/workspace/CodeAgent",
     });
 
     await expect(loader.getItem(PROJECT_FILE_TREE_PROJECT_ROOT_ID)).resolves.toMatchObject({
@@ -66,12 +67,24 @@ describe("project file tree model", () => {
     await loader.getChildrenWithData("src");
 
     expect(listProjectFiles).toHaveBeenCalledTimes(2);
-    expect(listProjectFiles).toHaveBeenNthCalledWith(1, "project-1", null, expect.any(Object));
-    expect(listProjectFiles).toHaveBeenNthCalledWith(2, "project-1", "src", expect.any(Object));
+    expect(listProjectFiles).toHaveBeenNthCalledWith(
+      1,
+      "project-1",
+      "/workspace/CodeAgent",
+      null,
+      expect.any(Object),
+    );
+    expect(listProjectFiles).toHaveBeenNthCalledWith(
+      2,
+      "project-1",
+      "/workspace/CodeAgent",
+      "src",
+      expect.any(Object),
+    );
   });
 
   it("turns empty and failed directory loads into stable status items", async () => {
-    const listProjectFiles = vi.fn((_projectId: string, path: string | null) => {
+    const listProjectFiles = vi.fn((_projectId: string, _rootPath: string, path: string | null) => {
       if (path === "broken") return Promise.reject(new Error("permission denied"));
       return Promise.resolve({ entries: [], path } satisfies ProjectFileTree);
     });
@@ -80,6 +93,7 @@ describe("project file tree model", () => {
       projectId: "project-1",
       projectName: "CodeAgent",
       queryClient: createQueryClient(),
+      rootPath: "/workspace/CodeAgent",
     });
 
     await expect(

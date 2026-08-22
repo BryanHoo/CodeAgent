@@ -181,7 +181,7 @@ export interface ServerRouteContext {
   readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readonly readProjectGitStatus: (
     projectRoot: string,
-    query?: ProjectGitStatusQuery,
+    query?: Omit<ProjectGitStatusQuery, "rootPath">,
   ) => Promise<ProjectGitStatus>;
   readonly createProjectBranch: (
     projectRoot: string,
@@ -198,15 +198,15 @@ export interface ServerRouteContext {
   ) => Promise<ProjectGitWorktree>;
   readonly readProjectGitHistory: (
     projectRoot: string,
-    query: ProjectGitHistoryQuery,
+    query: Omit<ProjectGitHistoryQuery, "rootPath">,
   ) => Promise<ProjectGitHistoryPage>;
   readonly readProjectGitCommitFiles: (
     projectRoot: string,
-    query: ProjectGitCommitFilesQuery,
+    query: Omit<ProjectGitCommitFilesQuery, "rootPath">,
   ) => Promise<ProjectGitCommitFilesPage>;
   readonly readProjectGitCommitFileDiff: (
     projectRoot: string,
-    query: ProjectGitCommitFileDiffQuery,
+    query: Omit<ProjectGitCommitFileDiffQuery, "rootPath">,
   ) => Promise<ProjectGitCommitFileDiff>;
   readonly switchProjectBranch: (
     projectRoot: string,

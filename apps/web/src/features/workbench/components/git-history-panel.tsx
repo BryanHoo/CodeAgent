@@ -25,6 +25,7 @@ type QueriedGitHistoryPanelProps = Readonly<{
   panelId: string;
   projectId: string;
   repository: string;
+  rootPath: string;
 }>;
 
 function QueriedGitHistoryPanel({
@@ -36,6 +37,7 @@ function QueriedGitHistoryPanel({
   panelId,
   projectId,
   repository,
+  rootPath,
 }: QueriedGitHistoryPanelProps) {
   return (
     <GitHistoryList
@@ -49,6 +51,7 @@ function QueriedGitHistoryPanel({
       panelId={panelId}
       projectId={projectId}
       repository={repository}
+      rootPath={rootPath}
     />
   );
 }
@@ -60,7 +63,8 @@ function getPanelId(index: number): string {
 export function GitHistoryPanel({
   client = codeAgentClient,
   projectId,
-}: Readonly<{ client?: GitHistoryClient; projectId: string }>) {
+  rootPath,
+}: Readonly<{ client?: GitHistoryClient; projectId: string; rootPath: string }>) {
   useTranslation("conversation");
   const [selectedRepository, setSelectedRepository] = useState<string>();
   const [visitedRepositories, setVisitedRepositories] = useState<readonly string[]>([]);
@@ -70,7 +74,7 @@ export function GitHistoryPanel({
   const [selectedCommit, setSelectedCommit] =
     useState<Readonly<{ commit: ProjectGitCommit; repository?: string }>>();
   const initialQuery = useInfiniteQuery(
-    projectGitHistoryInfiniteQueryOptions(projectId, undefined, true, client),
+    projectGitHistoryInfiniteQueryOptions(projectId, rootPath, undefined, true, client),
   );
   const initialPage = initialQuery.data?.pages[0];
   const initialRepository = initialPage?.repository ?? null;
@@ -214,6 +218,7 @@ export function GitHistoryPanel({
               panelId={getPanelId(repositoryIndex)}
               projectId={projectId}
               repository={repository}
+              rootPath={rootPath}
             />
           );
         })}
@@ -227,6 +232,7 @@ export function GitHistoryPanel({
             setSelectedCommit(undefined);
           }}
           projectId={projectId}
+          rootPath={rootPath}
           {...(selectedCommit.repository === undefined
             ? {}
             : { repository: selectedCommit.repository })}

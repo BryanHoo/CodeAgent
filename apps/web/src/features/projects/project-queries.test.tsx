@@ -49,7 +49,9 @@ const project = {
   id: "code-agent",
   name: "CodeAgent",
   rootPath: "/workspace/CodeAgent",
+  roots: [{ path: "/workspace/CodeAgent" }],
 } as const;
+const rootPath = "/workspace/CodeAgent";
 
 const task = {
   id: "task-1",
@@ -230,7 +232,7 @@ describe("project queries", () => {
       }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = projectGitStatusQueryOptions("code-agent", {
+    const options = projectGitStatusQueryOptions("code-agent", rootPath, {
       getProjectGitStatus,
     });
 
@@ -243,10 +245,10 @@ describe("project queries", () => {
       staged: [],
       unstaged: [],
     });
-    expect(options.queryKey).toEqual(["projects", "code-agent", "git-status"]);
+    expect(options.queryKey).toEqual(["projects", "code-agent", rootPath, "git-status"]);
     expect(options.refetchInterval).toBeUndefined();
     expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
-    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({});
+    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({ rootPath });
     expect(getProjectGitStatus.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -263,20 +265,26 @@ describe("project queries", () => {
       }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = projectGitDetailedStatusQueryOptions("code-agent", null, "a".repeat(64), true, {
-      getProjectGitStatus,
-    });
+    const options = projectGitDetailedStatusQueryOptions(
+      "code-agent",
+      rootPath,
+      null,
+      "a".repeat(64),
+      true,
+      { getProjectGitStatus },
+    );
 
     await queryClient.fetchQuery(options);
 
     expect(options.queryKey).toEqual([
       "projects",
       "code-agent",
+      rootPath,
       "git-status-detail",
       null,
       "a".repeat(64),
     ]);
-    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({ includeDiff: true });
+    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({ includeDiff: true, rootPath });
   });
 
   it("loads a selected child repository status into an isolated query", async () => {
@@ -292,17 +300,28 @@ describe("project queries", () => {
       }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = projectGitRepositoryStatusQueryOptions("code-agent", "frontend", true, {
-      getProjectGitStatus,
-    });
+    const options = projectGitRepositoryStatusQueryOptions(
+      "code-agent",
+      rootPath,
+      "frontend",
+      true,
+      { getProjectGitStatus },
+    );
 
     await queryClient.fetchQuery(options);
 
-    expect(options.queryKey).toEqual(["projects", "code-agent", "git-status", "frontend"]);
+    expect(options.queryKey).toEqual([
+      "projects",
+      "code-agent",
+      rootPath,
+      "git-status",
+      "frontend",
+    ]);
     expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
     expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({
       includeDiff: true,
       repository: "frontend",
+      rootPath,
     });
     expect(getProjectGitStatus.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
   });
@@ -334,27 +353,37 @@ describe("project queries", () => {
         repositoryMode: "children",
       });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = projectGitHistoryInfiniteQueryOptions("code-agent", "packages/server", true, {
-      getProjectGitHistory,
-    });
+    const options = projectGitHistoryInfiniteQueryOptions(
+      "code-agent",
+      rootPath,
+      "packages/server",
+      true,
+      { getProjectGitHistory },
+    );
     const observer = new InfiniteQueryObserver(queryClient, options);
     const unsubscribe = observer.subscribe(() => undefined);
 
     await observer.refetch();
     await observer.fetchNextPage();
 
-    expect(options.queryKey).toEqual(["projects", "code-agent", "git-history", "packages/server"]);
+    expect(options.queryKey).toEqual([
+      "projects",
+      "code-agent",
+      rootPath,
+      "git-history",
+      "packages/server",
+    ]);
     expect(getProjectGitHistory.mock.calls[0]?.slice(0, 2)).toEqual([
       "code-agent",
-      { repository: "packages/server" },
+      { repository: "packages/server", rootPath },
     ]);
     expect(getProjectGitHistory.mock.calls[1]?.slice(0, 2)).toEqual([
       "code-agent",
-      { cursor: "20", repository: "packages/server" },
+      { cursor: "20", repository: "packages/server", rootPath },
     ]);
     expect(getProjectGitHistory.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
     expect(
-      projectGitHistoryInfiniteQueryOptions("code-agent", undefined, false, {
+      projectGitHistoryInfiniteQueryOptions("code-agent", rootPath, undefined, false, {
         getProjectGitHistory,
       }).enabled,
     ).toBe(false);
@@ -380,6 +409,7 @@ describe("project queries", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const filesOptions = projectGitCommitFilesInfiniteQueryOptions(
       "code-agent",
+      rootPath,
       "packages/server",
       sha,
       true,
@@ -392,6 +422,7 @@ describe("project queries", () => {
     await observer.fetchNextPage();
     const diffOptions = projectGitCommitFileDiffQueryOptions(
       "code-agent",
+      rootPath,
       "packages/server",
       sha,
       "index.ts",
@@ -403,6 +434,7 @@ describe("project queries", () => {
     expect(filesOptions.queryKey).toEqual([
       "projects",
       "code-agent",
+      rootPath,
       "git-commit-files",
       "packages/server",
       sha,
@@ -410,11 +442,13 @@ describe("project queries", () => {
     expect(getProjectGitCommitFiles.mock.calls[1]?.[1]).toEqual({
       cursor: "100",
       repository: "packages/server",
+      rootPath,
       sha,
     });
     expect(diffOptions.queryKey).toEqual([
       "projects",
       "code-agent",
+      rootPath,
       "git-commit-diff",
       "packages/server",
       sha,
@@ -432,16 +466,19 @@ describe("project queries", () => {
       }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = projectFileTreeQueryOptions("code-agent", "src", { listProjectFiles });
+    const options = projectFileTreeQueryOptions("code-agent", rootPath, "src", {
+      listProjectFiles,
+    });
 
     await expect(queryClient.fetchQuery(options)).resolves.toEqual({
       entries: [{ path: "src/components", type: "directory" }],
       path: "src",
     });
-    expect(options.queryKey).toEqual(["projects", "code-agent", "file-tree", "src"]);
+    expect(options.queryKey).toEqual(["projects", "code-agent", rootPath, "file-tree", "src"]);
     expect(listProjectFiles.mock.calls[0]?.[0]).toBe("code-agent");
-    expect(listProjectFiles.mock.calls[0]?.[1]).toBe("src");
-    expect(listProjectFiles.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+    expect(listProjectFiles.mock.calls[0]?.[1]).toBe(rootPath);
+    expect(listProjectFiles.mock.calls[0]?.[2]).toBe("src");
+    expect(listProjectFiles.mock.calls[0]?.[3]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("loads readable MCP servers with a task-scoped query key", async () => {
@@ -670,16 +707,20 @@ describe("project queries", () => {
       ),
     };
     const queryClient = new QueryClient();
-    const messageOptions = projectCommitMessageMutationOptions("code-agent", client);
-    const commitOptions = projectCommitChangesMutationOptions("code-agent", client);
+    const messageOptions = projectCommitMessageMutationOptions("code-agent", rootPath, client);
+    const commitOptions = projectCommitChangesMutationOptions("code-agent", rootPath, client);
 
     await queryClient.getMutationCache().build(queryClient, messageOptions).execute(messageRequest);
     await queryClient.getMutationCache().build(queryClient, commitOptions).execute(commitRequest);
 
-    expect(client.generateCommitMessage).toHaveBeenCalledWith("code-agent", messageRequest);
-    expect(client.commitProjectChanges).toHaveBeenCalledWith("code-agent", commitRequest);
-    expect(messageOptions.scope).toEqual({ id: "project-git-message:code-agent" });
-    expect(commitOptions.scope).toEqual({ id: "project-git-mutation:code-agent" });
+    expect(client.generateCommitMessage).toHaveBeenCalledWith(
+      "code-agent",
+      rootPath,
+      messageRequest,
+    );
+    expect(client.commitProjectChanges).toHaveBeenCalledWith("code-agent", rootPath, commitRequest);
+    expect(messageOptions.scope).toEqual({ id: `project-git-message:code-agent:${rootPath}` });
+    expect(commitOptions.scope).toEqual({ id: `project-git-mutation:code-agent:${rootPath}` });
   });
 
   it("loads only the first task page until the next page is explicitly requested", async () => {

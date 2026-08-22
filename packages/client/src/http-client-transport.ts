@@ -149,8 +149,13 @@ export function buildTaskAttachmentUrl(
   return `${baseUrl.replace(/\/$/u, "")}${taskPath(projectId, taskId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
-export function buildProjectImageFileUrl(baseUrl: string, projectId: string, path: string): string {
-  const requestPath = appendQuery(`${projectPath(projectId)}/files/image`, { path });
+export function buildProjectImageFileUrl(
+  baseUrl: string,
+  projectId: string,
+  path: string,
+  rootPath?: string,
+): string {
+  const requestPath = appendQuery(`${projectPath(projectId)}/files/image`, { path, rootPath });
   return `${baseUrl.replace(/\/$/u, "")}${requestPath}`;
 }
 

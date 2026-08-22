@@ -32,8 +32,10 @@ export async function resolveTaskScope(
 
   const project = await options.projectRepository.read(projectId);
   if (project === undefined) return undefined;
+  const primaryRoot = project.roots[0];
+  if (primaryRoot === undefined) return undefined;
   return {
     provider: options.provider.forProject(project),
-    scope: { id: project.id, kind: "project", rootPath: project.rootPath },
+    scope: { id: project.id, kind: "project", rootPath: primaryRoot.path },
   };
 }

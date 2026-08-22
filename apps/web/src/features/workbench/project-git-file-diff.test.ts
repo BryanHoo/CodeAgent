@@ -32,11 +32,15 @@ describe("loadProjectGitFileDiff", () => {
         queryClient,
         { getProjectGitStatus },
         "project-1",
+        "/workspace/CodeAgent",
         summary,
         summaryChange,
       ),
     ).resolves.toEqual(detailedChange);
-    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({ includeDiff: true });
+    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({
+      includeDiff: true,
+      rootPath: "/workspace/CodeAgent",
+    });
   });
 
   it("keeps an already detailed change without another request", async () => {
@@ -49,6 +53,7 @@ describe("loadProjectGitFileDiff", () => {
         queryClient,
         { getProjectGitStatus },
         "project-1",
+        "/workspace/CodeAgent",
         summary,
         detailedChange,
       ),

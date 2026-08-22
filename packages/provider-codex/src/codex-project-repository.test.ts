@@ -10,17 +10,23 @@ const firstProject: Project = {
   createdAt: "2026-08-21T01:00:00.000Z",
   id: "project-1",
   name: "First",
-  rootPath: "/workspace/first",
+  roots: [{ path: "/workspace/first" }],
 };
 
 const secondProject: Project = {
   createdAt: "2026-08-21T02:00:00.000Z",
   id: "project-2",
   name: "Second",
-  rootPath: "/workspace/second",
+  roots: [{ path: "/workspace/second" }],
 };
 
-function nativeProject(project: Project, position: number, roots = [{ path: project.rootPath }]) {
+function primaryRootPath(project: Project): string {
+  const root = project.roots[0];
+  if (root === undefined) throw new Error("missing primary root");
+  return root.path;
+}
+
+function nativeProject(project: Project, position: number, roots = project.roots) {
   return {
     createdAt: Date.parse(project.createdAt) / 1_000,
     id: project.id,
@@ -102,6 +108,23 @@ function nativeLegacyThread(
 }
 
 describe("CodexProjectRepository", () => {
+  it("preserves every ordered Codex project root in the public projection", async () => {
+    const roots = [{ path: "/workspace/primary" }, { path: "/workspace/secondary" }];
+    const aggregate = {
+      createdAt: firstProject.createdAt,
+      id: "aggregate-project",
+      name: "Aggregate",
+      roots,
+    } as Project;
+    const projection = createProjection();
+    const rpc = createRpc([{ data: [nativeProject(aggregate, 1, roots)], nextCursor: null }]);
+
+    await expect(new CodexProjectRepository(rpc, projection).synchronize()).resolves.toEqual([
+      aggregate,
+    ]);
+    expect(projection.replaceProjects).toHaveBeenCalledWith([aggregate]);
+  });
+
   it("pages through Codex projects and replaces the local projection in position order", async () => {
     const projection = createProjection();
     const rpc = createRpc([
@@ -138,13 +161,13 @@ describe("CodexProjectRepository", () => {
       { data: [], nextCursor: null },
       {
         data: [
-          nativeLegacyThread("legacy-task-1", legacyProject.rootPath),
-          nativeLegacyThread("legacy-task-2", legacyProject.rootPath, "legacy"),
+          nativeLegacyThread("legacy-task-1", primaryRootPath(legacyProject)),
+          nativeLegacyThread("legacy-task-2", primaryRootPath(legacyProject), "legacy"),
         ],
         nextCursor: null,
       },
       {
-        data: [nativeLegacyThread("archived-task", legacyProject.rootPath, "legacy")],
+        data: [nativeLegacyThread("archived-task", primaryRootPath(legacyProject), "legacy")],
         nextCursor: null,
       },
       { project: nativeProject(importedProject, 0) },
@@ -155,14 +178,14 @@ describe("CodexProjectRepository", () => {
 
     expect(rpc.request).toHaveBeenNthCalledWith(2, "thread/list", {
       archived: false,
-      cwd: [legacyProject.rootPath],
+      cwd: [primaryRootPath(legacyProject)],
       limit: 100,
       projectId: null,
       sourceKinds: ["vscode"],
     });
     expect(rpc.request).toHaveBeenNthCalledWith(3, "thread/list", {
       archived: true,
-      cwd: [legacyProject.rootPath],
+      cwd: [primaryRootPath(legacyProject)],
       limit: 100,
       projectId: null,
       sourceKinds: ["vscode"],
@@ -171,7 +194,7 @@ describe("CodexProjectRepository", () => {
       idempotencyKey: "code-agent:legacy-project:legacy-local-id",
       metadata: { codeAgentMigration: "legacy-project-v1" },
       name: legacyProject.name,
-      roots: [{ path: legacyProject.rootPath }],
+      roots: [{ path: primaryRootPath(legacyProject) }],
       threads: ["legacy-task-1", "legacy-task-2", "archived-task"],
     });
     expect(projection.migrateProject).toHaveBeenCalledWith(legacyProject.id, importedProject);
@@ -186,7 +209,7 @@ describe("CodexProjectRepository", () => {
         nextCursor: null,
       },
       {
-        data: [nativeLegacyThread("legacy-task", firstProject.rootPath)],
+        data: [nativeLegacyThread("legacy-task", primaryRootPath(firstProject))],
         nextCursor: null,
       },
       { data: [], nextCursor: null },
@@ -213,7 +236,7 @@ describe("CodexProjectRepository", () => {
     const rpc = createRpc([
       { data: [], nextCursor: null },
       {
-        data: [nativeLegacyThread("legacy-task", firstProject.rootPath)],
+        data: [nativeLegacyThread("legacy-task", primaryRootPath(firstProject))],
         nextCursor: null,
       },
       { data: [], nextCursor: null },
@@ -240,7 +263,7 @@ describe("CodexProjectRepository", () => {
         "code-agent:unassigned-vscode:137219d36395cedc4eacd4d74308c51184e54616b2a5c957a411ce5aa43c9e30",
       metadata: { codeAgentMigration: "unassigned-vscode-v2" },
       name: "first",
-      roots: [{ path: firstProject.rootPath }],
+      roots: [{ path: primaryRootPath(firstProject) }],
       threads: ["legacy-task"],
     });
   });
@@ -251,7 +274,7 @@ describe("CodexProjectRepository", () => {
     const rpc = createRpc([
       { data: [nativeProject(readdedProject, 0)], nextCursor: null },
       {
-        data: [nativeLegacyThread("legacy-task", readdedProject.rootPath)],
+        data: [nativeLegacyThread("legacy-task", primaryRootPath(readdedProject))],
         nextCursor: null,
       },
       { data: [], nextCursor: null },
@@ -289,7 +312,7 @@ describe("CodexProjectRepository", () => {
     await repository.register({
       idempotencyKey: "request-1",
       name: firstProject.name,
-      rootPath: firstProject.rootPath,
+      roots: [{ path: primaryRootPath(firstProject) }, { path: "/workspace/secondary" }],
     });
     await repository.rename(firstProject.id, renamed.name);
     await repository.remove(firstProject.id);
@@ -306,7 +329,7 @@ describe("CodexProjectRepository", () => {
       idempotencyKey: "request-1",
       metadata: {},
       name: firstProject.name,
-      roots: [{ path: firstProject.rootPath }],
+      roots: [{ path: primaryRootPath(firstProject) }, { path: "/workspace/secondary" }],
     });
   });
 

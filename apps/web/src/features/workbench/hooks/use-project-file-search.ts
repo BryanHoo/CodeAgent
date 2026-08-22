@@ -8,14 +8,15 @@ export const PROJECT_FILE_SEARCH_DEBOUNCE_MS = 150;
 export function projectFileSearchQueryOptions(
   client: CodeAgentProjectFileSearchClient,
   projectId: string,
+  rootPath: string,
   query: string,
   enabled: boolean,
 ) {
   return queryOptions({
     enabled,
     placeholderData: keepPreviousData,
-    queryFn: ({ signal }) => client.searchProjectFiles(projectId, query, { signal }),
-    queryKey: ["projects", projectId, "file-search", query] as const,
+    queryFn: ({ signal }) => client.searchProjectFiles(projectId, rootPath, query, { signal }),
+    queryKey: ["projects", projectId, rootPath, "file-search", query] as const,
     staleTime: 30_000,
   });
 }
@@ -23,6 +24,7 @@ export function projectFileSearchQueryOptions(
 export function useProjectFileSearch(
   client: CodeAgentProjectFileSearchClient,
   projectId: string,
+  rootPath: string,
   query: string,
   enabled: boolean,
 ) {
@@ -48,6 +50,7 @@ export function useProjectFileSearch(
     projectFileSearchQueryOptions(
       client,
       projectId,
+      rootPath,
       debouncedState.query,
       enabled && debounceSettled,
     ),

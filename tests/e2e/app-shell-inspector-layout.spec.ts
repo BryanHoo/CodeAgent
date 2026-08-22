@@ -282,7 +282,7 @@ test("uses the brand logo across the sidebar and favicon", async ({ page }) => {
 
 test("adds a folder through the Web project directory picker", async ({ page }) => {
   let addProjectRequestCount = 0;
-  let addedRootPath: unknown;
+  let addedRootPaths: unknown;
   let delayCurrentTaskRefresh = false;
   let releaseCurrentTaskRefresh: () => void = () => undefined;
   const currentTaskRefreshGate = new Promise<void>((resolve) => {
@@ -291,7 +291,14 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
   await page.route("**/v1/projects", async (route) => {
     if (route.request().method() === "POST") {
       addProjectRequestCount += 1;
-      addedRootPath = Reflect.get(parseRequestRecord(route.request().postData()), "rootPath");
+      const roots = Reflect.get(parseRequestRecord(route.request().postData()), "roots");
+      addedRootPaths = Array.isArray(roots)
+        ? roots.map((root: unknown) =>
+            typeof root === "object" && root !== null && !Array.isArray(root)
+              ? (root as { path?: unknown }).path
+              : root,
+          )
+        : roots;
     }
     await route.fallback();
   });
@@ -312,6 +319,8 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
 
   await page.getByRole("button", { name: "添加项目" }).click();
   await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
+  await picker.getByRole("button", { exact: true, name: "superwork" }).click();
+  await expect(picker.getByText("已选择 2 个项目目录")).toBeVisible();
   delayCurrentTaskRefresh = true;
   await picker.getByRole("button", { name: "添加此文件夹" }).evaluate((button) => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -322,7 +331,7 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
     await expect(picker).toBeHidden({ timeout: 500 });
     await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
     expect(addProjectRequestCount).toBe(1);
-    expect(addedRootPath).toBe("/workspace/AddedProject");
+    expect(addedRootPaths).toEqual(["/workspace/AddedProject", "/workspace/superwork"]);
     await expect(
       page.getByRole("complementary", { name: "项目侧栏" }).getByText("AddedProject", {
         exact: true,
@@ -331,6 +340,40 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
   } finally {
     releaseCurrentTaskRefresh();
   }
+});
+
+test("switches every project view to the selected aggregate root", async ({ page }) => {
+  const scopedRequests: URL[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (/^\/v1\/projects\/superwork\/(?:git\/status|files\/tree)$/u.test(url.pathname)) {
+      scopedRequests.push(url);
+    }
+  });
+  await page.goto("/p/superwork");
+
+  const rootSelector = page.getByRole("combobox", { name: "选择项目目录" });
+  const projectPath = page.getByRole("button", { name: "在系统文件夹中打开" });
+  await expect(rootSelector).toContainText("superwork");
+  await expect(projectPath).toContainText("/workspace/superwork");
+
+  await rootSelector.click();
+  await page.getByRole("option", { name: /shared/u }).click();
+
+  await expect(rootSelector).toContainText("shared");
+  await expect(projectPath).toContainText("/workspace/shared");
+  await expect(page.getByRole("button", { name: "切换分支，当前分支 shared-main" })).toBeVisible();
+  await expect
+    .poll(() =>
+      [
+        ...new Set(
+          scopedRequests
+            .filter((url) => url.searchParams.get("rootPath") === "/workspace/shared")
+            .map((url) => url.pathname),
+        ),
+      ].sort(),
+    )
+    .toEqual(["/v1/projects/superwork/files/tree", "/v1/projects/superwork/git/status"]);
 });
 
 test("navigates absolute paths and toggles hidden folders in the project directory picker", async ({

@@ -63,7 +63,7 @@ export type ProjectDataContextValue = Readonly<{
 }>;
 
 export type ProjectActionsContextValue = Readonly<{
-  addProject: (rootPath: string) => Promise<Project | undefined>;
+  addProject: (rootPaths: readonly string[]) => Promise<Project | undefined>;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
   forgetTask: (projectId: string, taskId: string) => void;
   markTaskRunning: (projectId: string, taskId: string) => void;
@@ -72,7 +72,7 @@ export type ProjectActionsContextValue = Readonly<{
   reorderProjects: (projectIds: readonly string[]) => Promise<boolean>;
   removeProject: (projectId: string) => Promise<readonly Project[] | undefined>;
   renameProject: (projectId: string, name: string) => Promise<boolean>;
-  refreshProjectGitStatus: (projectId: string) => Promise<void>;
+  refreshProjectGitStatus: (projectId: string, rootPath: string) => Promise<void>;
   retry: () => Promise<void>;
   setExpandedProjectTaskIds: (projectIds: ReadonlySet<string>) => void;
   viewTask: (projectId: string, taskId?: string) => void;

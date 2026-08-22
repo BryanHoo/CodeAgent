@@ -234,13 +234,13 @@ export const projects = [
     createdAt: "2026-07-22T06:00:00.000Z",
     id: "code-agent",
     name: "CodeAgent",
-    rootPath: "~/Develop/person/CodeAgent",
+    roots: [{ path: "/workspace/CodeAgent" }],
   },
   {
     createdAt: "2026-07-22T06:30:00.000Z",
     id: "superwork",
     name: "superwork",
-    rootPath: "~/Develop/person/superwork",
+    roots: [{ path: "/workspace/superwork" }, { path: "/workspace/shared" }],
   },
 ];
 
@@ -987,15 +987,22 @@ export async function mockAppShellApi(
           : (listing ?? ({ entries: [], parentPath: "/workspace", path, roots: [] } as const));
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
       const request = parseRequestRecord(route.request().postData());
-      const rootPath = request["rootPath"];
-      if (rootPath !== "/workspace/AddedProject") {
+      const roots = request["roots"];
+      if (
+        !Array.isArray(roots) ||
+        roots.length !== 2 ||
+        !isRequestRecord(roots[0]) ||
+        !isRequestRecord(roots[1]) ||
+        roots[0]["path"] !== "/workspace/AddedProject" ||
+        roots[1]["path"] !== "/workspace/superwork"
+      ) {
         throw new Error("Invalid add project request");
       }
       const addedProject = {
         createdAt: "2026-07-25T00:00:00.000Z",
         id: "added-project",
         name: "AddedProject",
-        rootPath,
+        roots,
       };
       routedProjects = [...routedProjects, addedProject];
       body = { project: addedProject };
@@ -1073,7 +1080,7 @@ export async function mockAppShellApi(
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-composer-worktree",
         name: "CodeAgent-composer-worktree",
-        rootPath: worktree.path,
+        roots: [{ path: worktree.path }],
       };
       routedProjectGitWorktrees.push(worktree);
       routedProjects = [...routedProjects, project];
@@ -1091,7 +1098,7 @@ export async function mockAppShellApi(
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-worktree-review",
         name: "CodeAgent-worktree-review",
-        rootPath: worktree.path,
+        roots: [{ path: worktree.path }],
       };
       if (!routedProjects.some((candidate) => candidate.id === project.id)) {
         routedProjects = [...routedProjects, project];
@@ -1147,8 +1154,11 @@ export async function mockAppShellApi(
         snapshot: "c".repeat(64),
       };
       body = routedProjectGitStatus;
-    } else if (url.pathname === "/v1/projects/code-agent/git/status") {
-      body = routedProjectGitStatus;
+    } else if (/^\/v1\/projects\/[^/]+\/git\/status$/u.test(url.pathname)) {
+      body =
+        url.searchParams.get("rootPath") === "/workspace/shared"
+          ? { ...routedProjectGitStatus, branch: "shared-main" }
+          : routedProjectGitStatus;
     } else if (defaultsMatch !== null) {
       const projectId = defaultsMatch[1] ?? "";
       if (route.request().method() === "PUT") {

@@ -23,6 +23,7 @@ type CommitChangesControllerProps = Readonly<{
   gitStatus: ProjectGitStatus;
   onOpenFileDiff: (change: AgentFileChange) => void;
   projectId: string;
+  rootPath: string;
 }>;
 
 function getCommitSuccessMessageKey(result: CommitProjectChangesResponse): string | null {
@@ -39,12 +40,15 @@ export function CommitChangesController({
   gitStatus,
   onOpenFileDiff,
   projectId,
+  rootPath,
 }: CommitChangesControllerProps) {
   const { t } = useTranslation("workbench");
   const queryClient = useQueryClient();
-  const messageMutation = useMutation(projectCommitMessageMutationOptions(projectId, client));
+  const messageMutation = useMutation(
+    projectCommitMessageMutationOptions(projectId, rootPath, client),
+  );
   const commitMutation = useMutation({
-    ...projectCommitChangesMutationOptions(projectId, client),
+    ...projectCommitChangesMutationOptions(projectId, rootPath, client),
     meta: { actionNotification: { successMessage: false } },
   });
   const repositories = useMemo(() => collectCommitRepositories(gitStatus), [gitStatus]);
@@ -60,6 +64,7 @@ export function CommitChangesController({
   const repositoryStatusQuery = useQuery(
     projectGitRepositoryStatusQueryOptions(
       projectId,
+      rootPath,
       effectiveRepository,
       gitStatus.repositoryMode === "children",
       client,
@@ -81,10 +86,10 @@ export function CommitChangesController({
         const response = await commitMutation.mutateAsync(request);
         setResultState({ result: response, snapshot: submittedSnapshot });
         void queryClient.invalidateQueries({
-          queryKey: ["projects", projectId, "git-status"],
+          queryKey: ["projects", projectId, rootPath, "git-status"],
         });
         void queryClient.invalidateQueries({
-          queryKey: ["projects", projectId, "git-history"],
+          queryKey: ["projects", projectId, rootPath, "git-history"],
         });
         const successMessageKey = getCommitSuccessMessageKey(response);
         if (successMessageKey !== null) {

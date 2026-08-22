@@ -34,6 +34,7 @@ type ProjectFileTreeDataLoaderOptions = Readonly<{
   projectId: string;
   projectName: string;
   queryClient: QueryClient;
+  rootPath: string;
 }>;
 
 function getProjectFileName(path: string): string {
@@ -66,6 +67,7 @@ export function createProjectFileTreeDataLoader({
   projectId,
   projectName,
   queryClient,
+  rootPath,
 }: ProjectFileTreeDataLoaderOptions) {
   const items = new Map<string, ProjectFileTreeItem>();
   const rootItem: ProjectFileTreeItem = { kind: "root", name: projectName, type: "directory" };
@@ -83,7 +85,7 @@ export function createProjectFileTreeDataLoader({
 
       try {
         const listing = await queryClient.fetchQuery(
-          projectFileTreeQueryOptions(projectId, directoryPath, client),
+          projectFileTreeQueryOptions(projectId, rootPath, directoryPath, client),
         );
         if (listing.entries.length === 0) {
           const id = getStatusItemId(directoryPath, "empty");

@@ -81,6 +81,9 @@ function mapCodexProject(value: unknown): MappedCodexProject {
     throw new CodexProtocolMappingError("Codex project roots must contain at least one root");
   }
   const rootPaths = roots.map(mapProjectRoot);
+  if (new Set(rootPaths).size !== rootPaths.length) {
+    throw new CodexProtocolMappingError("Codex project roots must not contain duplicates");
+  }
   validateMetadata(nativeProject["metadata"]);
   // updatedAt 当前不进入公共 Project，但仍需在外部边界拒绝漂移字段。
   mapUnixSeconds(nativeProject["updatedAt"], "Codex project updatedAt");
@@ -90,7 +93,7 @@ function mapCodexProject(value: unknown): MappedCodexProject {
       createdAt: mapUnixSeconds(nativeProject["createdAt"], "Codex project createdAt"),
       id: expectNonEmptyString(nativeProject["id"], "Codex project id"),
       name: expectNonEmptyString(nativeProject["name"], "Codex project name"),
-      rootPath: rootPaths[0] ?? "",
+      roots: rootPaths.map((path) => ({ path })),
     },
   };
 }
@@ -141,6 +144,14 @@ function unassignedMigrationKey(rootPath: string): string {
   return `code-agent:unassigned-vscode:${createHash("sha256").update(rootPath).digest("hex")}`;
 }
 
+function primaryRootPath(project: Project): string {
+  const primary = project.roots[0];
+  if (primary === undefined) {
+    throw new CodexProtocolMappingError("Project roots must contain a primary root");
+  }
+  return primary.path;
+}
+
 export class CodexProjectRepository implements ProjectRepository {
   readonly #client: Pick<CodexRpcClient, "request">;
   readonly #projection: ProjectProjectionStore;
@@ -157,7 +168,7 @@ export class CodexProjectRepository implements ProjectRepository {
   public async migrateLegacyProjects(options: LegacyProjectMigrationOptions): Promise<void> {
     const localProjects = await this.#projection.list();
     const upstreamProjects = await this.#listCodexProjects();
-    const localRoots = [...new Set(localProjects.map((project) => project.rootPath))];
+    const localRoots = [...new Set(localProjects.map(primaryRootPath))];
     if (localRoots.length === 0 && !options.recoverUnassigned) {
       return;
     }
@@ -173,12 +184,13 @@ export class CodexProjectRepository implements ProjectRepository {
 
     const handledRoots = new Set<string>();
     for (const localProject of localProjects) {
-      handledRoots.add(localProject.rootPath);
-      const threads = threadsByRoot.get(localProject.rootPath) ?? [];
+      const localRootPath = primaryRootPath(localProject);
+      handledRoots.add(localRootPath);
+      const threads = threadsByRoot.get(localRootPath) ?? [];
       // 同一路径允许存在多个上游 Project；已有 Codex ID 必须优先于迁移期路径回退。
       const upstream =
         upstreamProjects.find((project) => project.project.id === localProject.id) ??
-        upstreamProjects.find((project) => project.project.rootPath === localProject.rootPath);
+        upstreamProjects.find((project) => primaryRootPath(project.project) === localRootPath);
       if (upstream !== undefined) {
         await this.#assignThreads(upstream.project.id, threads);
         if (upstream.project.id !== localProject.id) {
@@ -191,7 +203,7 @@ export class CodexProjectRepository implements ProjectRepository {
           idempotencyKey: `code-agent:legacy-project:${localProject.id}`,
           metadata: { codeAgentMigration: "legacy-project-v1" },
           name: localProject.name,
-          roots: [{ path: localProject.rootPath }],
+          roots: [{ path: localRootPath }],
           threads: threads.map((thread) => thread.id),
         }),
         "project/import",
@@ -207,7 +219,9 @@ export class CodexProjectRepository implements ProjectRepository {
       if (handledRoots.has(rootPath)) {
         continue;
       }
-      const upstream = upstreamProjects.find((project) => project.project.rootPath === rootPath);
+      const upstream = upstreamProjects.find(
+        (project) => primaryRootPath(project.project) === rootPath,
+      );
       if (upstream !== undefined) {
         await this.#assignThreads(upstream.project.id, threads);
         continue;
@@ -249,7 +263,7 @@ export class CodexProjectRepository implements ProjectRepository {
         idempotencyKey: input.idempotencyKey,
         metadata: {},
         name: input.name,
-        roots: [{ path: input.rootPath }],
+        roots: input.roots,
       }),
       "project/create",
     );

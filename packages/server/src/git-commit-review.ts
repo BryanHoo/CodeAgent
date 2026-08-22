@@ -75,7 +75,7 @@ async function resolveRepository(projectRoot: string, repository: string | undef
 
 export async function readProjectGitCommitFiles(
   projectRoot: string,
-  query: ProjectGitCommitFilesQuery,
+  query: Omit<ProjectGitCommitFilesQuery, "rootPath">,
   gitCommandExecutor: GitCommandExecutor = executeGit,
 ): Promise<ProjectGitCommitFilesPage> {
   const offset = parseCursor(query.cursor);
@@ -124,7 +124,7 @@ function truncateUtf8(value: string): ProjectGitCommitFileDiff {
 
 export async function readProjectGitCommitFileDiff(
   projectRoot: string,
-  query: ProjectGitCommitFileDiffQuery,
+  query: Omit<ProjectGitCommitFileDiffQuery, "rootPath">,
   gitCommandExecutor: GitCommandExecutor = executeGit,
 ): Promise<ProjectGitCommitFileDiff> {
   const repositoryRoot = await resolveRepository(projectRoot, query.repository);

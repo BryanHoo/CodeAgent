@@ -406,7 +406,7 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
 
 test("opens the project from the center toolbar quick action", async ({ page }) => {
   const openRequests: Record<string, unknown>[] = [];
-  await page.route("**/v1/projects/code-agent/open", async (route) => {
+  await page.route("**/v1/projects/code-agent/open?*", async (route) => {
     openRequests.push(parseRequestRecord(route.request().postData()));
     await route.fallback();
   });
@@ -689,7 +689,7 @@ test("项目文件夹操作支持重命名和删除且不修改磁盘目录", as
   expect(parseRequestRecord(renameRequest.postData())).toEqual({ name: "本地工作台" });
   expect(renameRequest.headers()["idempotency-key"]).toBeTruthy();
   await expect(renameResponse.json()).resolves.toMatchObject({
-    project: { name: "本地工作台", rootPath: "~/Develop/person/CodeAgent" },
+    project: { name: "本地工作台", roots: [{ path: "/workspace/CodeAgent" }] },
   });
   await expect(sidebar.getByRole("button", { name: "切换项目 本地工作台" })).toBeVisible();
   await expect(page).toHaveURL(/\/p\/code-agent$/u);
@@ -965,7 +965,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(main.locator("header").getByText("CodeAgent", { exact: true })).toHaveCount(0);
   await expect(page.getByText("本地离线", { exact: true })).toHaveCount(0);
   const projectPathButton = page.getByRole("button", { name: "在系统文件夹中打开" });
-  await expect(projectPathButton).toHaveText("~/Develop/person/CodeAgent");
+  await expect(projectPathButton).toHaveText("/workspace/CodeAgent");
   const projectPathSizing = await projectPathButton.evaluate((element) => ({
     buttonWidth: element.getBoundingClientRect().width,
     footerWidth: element.parentElement?.getBoundingClientRect().width ?? 0,

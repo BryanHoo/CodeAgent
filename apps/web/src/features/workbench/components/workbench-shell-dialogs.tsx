@@ -42,6 +42,7 @@ export function WorkbenchShellDialogs({
     selectedFileChange,
     selectedFileReview,
     selectedSourceFile,
+    selectedRootPath,
     selectedSubagent,
     setFileDiffSelection,
     setFileReviewSelection,
@@ -78,6 +79,7 @@ export function WorkbenchShellDialogs({
           projectId={projectId}
           previewKind={selectedSourceFile.kind}
           reference={selectedSourceFile.reference}
+          {...(selectedRootPath === undefined ? {} : { rootPath: selectedRootPath })}
         />
       )}
       <SubagentOutputDialog

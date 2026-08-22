@@ -21,12 +21,28 @@ type CommitDiffContentProps = Readonly<{
   client: CodeAgentGitCommitReviewClient;
   projectId: string;
   repository?: string;
+  rootPath: string;
   sha: string;
 }>;
 
-function CommitDiffContent({ change, client, projectId, repository, sha }: CommitDiffContentProps) {
+function CommitDiffContent({
+  change,
+  client,
+  projectId,
+  repository,
+  rootPath,
+  sha,
+}: CommitDiffContentProps) {
   const query = useQuery(
-    projectGitCommitFileDiffQueryOptions(projectId, repository, sha, change.path, true, client),
+    projectGitCommitFileDiffQueryOptions(
+      projectId,
+      rootPath,
+      repository,
+      sha,
+      change.path,
+      true,
+      client,
+    ),
   );
 
   if (query.isPending) {
@@ -85,6 +101,7 @@ type GitCommitReviewProps = Readonly<{
   onClose: () => void;
   projectId: string;
   repository?: string;
+  rootPath: string;
 }>;
 
 export function GitCommitReview({
@@ -93,11 +110,19 @@ export function GitCommitReview({
   onClose,
   projectId,
   repository,
+  rootPath,
 }: GitCommitReviewProps) {
   useTranslation("conversation");
   const [currentIndex, setCurrentIndex] = useState(0);
   const filesQuery = useInfiniteQuery(
-    projectGitCommitFilesInfiniteQueryOptions(projectId, repository, commit.sha, true, client),
+    projectGitCommitFilesInfiniteQueryOptions(
+      projectId,
+      rootPath,
+      repository,
+      commit.sha,
+      true,
+      client,
+    ),
   );
   const files = useMemo(
     () => filesQuery.data?.pages.flatMap((page) => page.files) ?? [],
@@ -198,6 +223,7 @@ export function GitCommitReview({
                 change={change}
                 client={client}
                 projectId={projectId}
+                rootPath={rootPath}
                 {...(repository === undefined ? {} : { repository })}
                 sha={commit.sha}
               />

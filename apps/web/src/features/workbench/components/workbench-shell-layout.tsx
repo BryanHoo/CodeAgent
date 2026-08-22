@@ -21,6 +21,7 @@ import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
+import { ProjectRootSelector } from "./project-root-selector.js";
 
 type WorkbenchShellStyle = CSSProperties &
   Readonly<{ "--inspector-open-width": string; "--sidebar-open-width": string }>;
@@ -74,6 +75,7 @@ export function WorkbenchShellLayout({
     projectDefaultsQuery,
     projectFolderOpenDisabled,
     projectName,
+    projectRoots,
     projectOpenCapabilitiesQuery,
     projectPath,
     projectPathOpenLockRef,
@@ -86,6 +88,7 @@ export function WorkbenchShellLayout({
     requestNotificationPermission,
     retry,
     runtime,
+    selectedRootPath,
     setFileTreeExpansion,
     setGlobalSettingsSection,
     setInspectorOpen,
@@ -93,6 +96,7 @@ export function WorkbenchShellLayout({
     setInspectorWidth,
     setSidebarOpen,
     setSidebarWidth,
+    setSelectedRootPath,
     setSubagentDialogSelection,
     setTaskRenameOpen,
     sidebarConnectionState,
@@ -108,7 +112,15 @@ export function WorkbenchShellLayout({
     t,
   } = context;
   const openProjectFileDiff = (change: AgentFileChange) => {
-    void loadProjectGitFileDiff(queryClient, client, projectId, gitStatusQuery.data, change)
+    if (selectedRootPath === undefined) return;
+    void loadProjectGitFileDiff(
+      queryClient,
+      client,
+      projectId,
+      selectedRootPath,
+      gitStatusQuery.data,
+      change,
+    )
       .then(openFileDiff)
       .catch((error: unknown) => {
         notifyActionError(error instanceof Error ? error : new Error("Git diff is unavailable"));
@@ -221,6 +233,13 @@ export function WorkbenchShellLayout({
               )}
             </h1>
           </div>
+          {selectedRootPath === undefined ? null : (
+            <ProjectRootSelector
+              onChange={setSelectedRootPath}
+              roots={projectRoots}
+              value={selectedRootPath}
+            />
+          )}
           <div className="flex shrink-0 items-center gap-1">
             <ProjectQuickOpenMenu
               apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
@@ -405,7 +424,10 @@ export function WorkbenchShellLayout({
           key={`${projectId}:${taskId ?? "draft"}`}
           onClose={closeInspector}
           onFileTreeExpandedChange={(nextExpandedPaths) => {
-            setFileTreeExpansion({ paths: new Set(nextExpandedPaths), projectId });
+            setFileTreeExpansion({
+              paths: new Set(nextExpandedPaths),
+              scope: `${projectId}:${selectedRootPath ?? "temporary"}`,
+            });
           }}
           onReloadMcpServers={() => {
             mcpServersReloadMutation.mutate();
@@ -429,9 +451,15 @@ export function WorkbenchShellLayout({
             composerRef.current?.referenceProjectPath(entry);
           }}
           onRefreshGitStatus={() => {
-            void refreshProjectGitStatus(projectId);
+            if (selectedRootPath !== undefined) {
+              void refreshProjectGitStatus(projectId, selectedRootPath);
+            }
           }}
-          onRefreshProject={() => refreshProjectGitStatus(projectId)}
+          onRefreshProject={() =>
+            selectedRootPath === undefined
+              ? Promise.resolve()
+              : refreshProjectGitStatus(projectId, selectedRootPath)
+          }
           onCommitChanges={() => {
             setInspectorTab("changes");
             setInspectorOpen(true);

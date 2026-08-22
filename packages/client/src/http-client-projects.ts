@@ -181,10 +181,15 @@ export class ProjectHttpClient extends CodeAgentTransport {
   }
 
   public async addProject(
-    rootPath: string,
+    rootPaths: readonly string[],
     options: MutationOptions = {},
   ): Promise<AddProjectResponse> {
-    return this.mutation("/v1/projects", { rootPath }, AddProjectResponseSchema, options);
+    return this.mutation(
+      "/v1/projects",
+      { roots: rootPaths.map((path) => ({ path })) },
+      AddProjectResponseSchema,
+      options,
+    );
   }
 
   public async renameProject(
@@ -225,11 +230,12 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async openProject(
     projectId: string,
+    rootPath: string | undefined,
     request: OpenProjectRequest,
     options: MutationOptions = {},
   ): Promise<OpenProjectResponse> {
     return this.mutation(
-      `${projectPath(projectId)}/open`,
+      appendQuery(`${projectPath(projectId)}/open`, { rootPath }),
       request,
       OpenProjectResponseSchema,
       options,
@@ -238,13 +244,14 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async getProjectGitStatus(
     projectId: string,
-    query: ProjectGitStatusQuery = {},
+    query: ProjectGitStatusQuery,
     options: ReadOptions = {},
   ): Promise<ProjectGitStatus> {
     return this.read(
       appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/git/status`, {
         includeDiff: query.includeDiff === true ? "true" : undefined,
         repository: query.repository,
+        rootPath: query.rootPath,
       }),
       ProjectGitStatusSchema,
       options,
@@ -253,13 +260,14 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async getProjectGitHistory(
     projectId: string,
-    query: ProjectGitHistoryQuery = {},
+    query: ProjectGitHistoryQuery,
     options: ReadOptions = {},
   ): Promise<ProjectGitHistoryPage> {
     return this.read(
       appendQuery(`${projectPath(projectId)}/git/history`, {
         cursor: query.cursor,
         repository: query.repository,
+        rootPath: query.rootPath,
       }),
       ProjectGitHistoryPageSchema,
       options,
@@ -275,6 +283,7 @@ export class ProjectHttpClient extends CodeAgentTransport {
       appendQuery(`${projectPath(projectId)}/git/commit-files`, {
         cursor: query.cursor,
         repository: query.repository,
+        rootPath: query.rootPath,
         sha: query.sha,
       }),
       ProjectGitCommitFilesPageSchema,
@@ -291,6 +300,7 @@ export class ProjectHttpClient extends CodeAgentTransport {
       appendQuery(`${projectPath(projectId)}/git/commit-diff`, {
         path: query.path,
         repository: query.repository,
+        rootPath: query.rootPath,
         sha: query.sha,
       }),
       ProjectGitCommitFileDiffSchema,
@@ -300,11 +310,12 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async switchProjectBranch(
     projectId: string,
+    rootPath: string,
     request: SwitchProjectBranchRequest,
     options: MutationOptions = {},
   ): Promise<ProjectGitStatus> {
     return this.mutation(
-      `${projectPath(projectId)}/git/branch`,
+      appendQuery(`${projectPath(projectId)}/git/branch`, { rootPath }),
       request,
       ProjectGitStatusSchema,
       options,
@@ -313,11 +324,12 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async createProjectBranch(
     projectId: string,
+    rootPath: string,
     request: CreateProjectBranchRequest,
     options: MutationOptions = {},
   ): Promise<ProjectGitStatus> {
     return this.mutation(
-      `${projectPath(projectId)}/git/branches`,
+      appendQuery(`${projectPath(projectId)}/git/branches`, { rootPath }),
       request,
       ProjectGitStatusSchema,
       options,
@@ -326,10 +338,11 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async listProjectWorktrees(
     projectId: string,
+    rootPath: string,
     options: ReadOptions = {},
   ): Promise<ProjectGitWorktreePage> {
     return this.read(
-      `${projectPath(projectId)}/git/worktrees`,
+      appendQuery(`${projectPath(projectId)}/git/worktrees`, { rootPath }),
       ProjectGitWorktreePageSchema,
       options,
     );
@@ -337,11 +350,12 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async createProjectWorktree(
     projectId: string,
+    rootPath: string,
     request: CreateProjectWorktreeRequest,
     options: MutationOptions = {},
   ): Promise<ProjectWorktreeMutationResponse> {
     return this.mutation(
-      `${projectPath(projectId)}/git/worktrees`,
+      appendQuery(`${projectPath(projectId)}/git/worktrees`, { rootPath }),
       request,
       ProjectWorktreeMutationResponseSchema,
       options,
@@ -350,11 +364,12 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async switchProjectWorktree(
     projectId: string,
+    rootPath: string,
     request: SwitchProjectWorktreeRequest,
     options: MutationOptions = {},
   ): Promise<ProjectWorktreeMutationResponse> {
     return this.mutation(
-      `${projectPath(projectId)}/git/worktree`,
+      appendQuery(`${projectPath(projectId)}/git/worktree`, { rootPath }),
       request,
       ProjectWorktreeMutationResponseSchema,
       options,
@@ -363,11 +378,12 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async generateCommitMessage(
     projectId: string,
+    rootPath: string,
     request: GenerateCommitMessageRequest,
     options: MutationOptions = {},
   ): Promise<GenerateCommitMessageResponse> {
     return this.mutation(
-      `${projectPath(projectId)}/git/commit-message`,
+      appendQuery(`${projectPath(projectId)}/git/commit-message`, { rootPath }),
       request,
       GenerateCommitMessageResponseSchema,
       options,
@@ -376,11 +392,12 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async commitProjectChanges(
     projectId: string,
+    rootPath: string,
     request: CommitProjectChangesRequest,
     options: MutationOptions = {},
   ): Promise<CommitProjectChangesResponse> {
     return this.mutation(
-      `${projectPath(projectId)}/git/commits`,
+      appendQuery(`${projectPath(projectId)}/git/commits`, { rootPath }),
       request,
       CommitProjectChangesResponseSchema,
       options,
@@ -389,28 +406,33 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async listProjectFiles(
     projectId: string,
+    rootPath: string,
     directoryPath: string | null,
     options: ReadOptions = {},
   ): Promise<ProjectFileTree> {
     const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/tree`, {
       path: directoryPath ?? undefined,
+      rootPath,
     });
     return this.read(requestPath, ProjectFileTreeSchema, options);
   }
 
   public async searchProjectFiles(
     projectId: string,
+    rootPath: string,
     query: string,
     options: ReadOptions = {},
   ): Promise<ProjectFileSearchPage> {
     const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/search`, {
       query,
+      rootPath,
     });
     return this.read(requestPath, ProjectFileSearchPageSchema, options);
   }
 
   public async readProjectSourceFile(
     projectId: string,
+    rootPath: string | undefined,
     path: string,
     cursor?: number,
     options: ReadOptions = {},
@@ -418,6 +440,7 @@ export class ProjectHttpClient extends CodeAgentTransport {
     const requestPath = appendQuery(`${projectPath(projectId)}/files/source`, {
       cursor,
       path,
+      rootPath,
     });
     return this.read(requestPath, ProjectSourceFileSchema, options);
   }

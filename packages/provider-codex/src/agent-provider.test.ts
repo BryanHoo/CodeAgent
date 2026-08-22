@@ -142,12 +142,20 @@ class FakeRpcClient {
   }
 }
 
+const projectRootPath = "/workspace/CodeAgent";
+
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
   id: "code-agent",
   kind: "project",
   name: "CodeAgent",
-  rootPath: "/workspace/CodeAgent",
+  roots: [{ path: projectRootPath }],
+} as const;
+
+const projectTaskScope = {
+  id: project.id,
+  kind: "project",
+  rootPath: projectRootPath,
 } as const;
 
 const PINNED_THREAD_SECTION = {
@@ -163,7 +171,7 @@ function createCodexAgentProvider(options: {
 }): CodexAgentProvider {
   return new CodexAgentProvider(
     options.client,
-    { id: options.project.id, kind: "project", rootPath: options.project.rootPath },
+    { id: options.project.id, kind: "project", rootPath: options.project.roots[0]?.path ?? "" },
     {
       ...(options.logger === undefined ? {} : { logger: options.logger }),
     },
@@ -194,6 +202,27 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("uses the first aggregate project root as the task cwd", async () => {
+    const aggregateProject = {
+      createdAt: project.createdAt,
+      id: project.id,
+      name: project.name,
+      roots: [{ path: "/workspace/primary" }, { path: "/workspace/secondary" }],
+    } as Project;
+    const rpc = new FakeRpcClient([{ thread: nativeThread({ cwd: "/workspace/primary" }) }]);
+
+    await createCodexRuntimeProvider({ client: rpc }).forProject(aggregateProject).startTask();
+
+    expect(rpc.calls[0]).toEqual({
+      method: "thread/start",
+      params: {
+        cwd: "/workspace/primary",
+        historyMode: "paginated",
+        projectId: project.id,
+      },
+    });
+  });
+
   it("reads only the newest bounded task turn page", async () => {
     const turn = {
       completedAt: 1_753_232_400,
@@ -853,7 +882,7 @@ describe("CodexAgentProvider", () => {
       {
         method: "thread/start",
         params: {
-          cwd: project.rootPath,
+          cwd: projectRootPath,
           ephemeral: true,
           historyMode: "paginated",
           projectId: project.id,
@@ -876,6 +905,7 @@ describe("CodexAgentProvider", () => {
       id: "temporary",
       name: "Temporary",
       rootPath: "/workspace/temporary",
+      roots: [{ path: "/workspace/temporary" }],
     };
     const rpc = new FakeRpcClient([
       {
@@ -948,6 +978,7 @@ describe("CodexAgentProvider", () => {
       id: "other",
       name: "Other",
       rootPath: "/workspace/Other",
+      roots: [{ path: "/workspace/Other" }],
     };
     const rpc = new FakeRpcClient([
       { data: [nativeThread()], nextCursor: null },
@@ -1014,9 +1045,12 @@ describe("CodexAgentProvider", () => {
     ]);
     await expect(projectProvider.readTask("task-2")).resolves.toBeUndefined();
     expect(rpc.calls).toHaveLength(3);
-    expect(() => runtime.forProject({ ...project, rootPath: "/workspace/Conflicting" })).toThrow(
-      "project identity belongs to another cwd",
-    );
+    expect(() =>
+      runtime.forProject({
+        ...project,
+        roots: [{ path: "/workspace/Conflicting" }],
+      }),
+    ).toThrow("project identity belongs to another cwd");
   });
 
   it("publishes task state and skill invalidation notifications", async () => {
@@ -1041,7 +1075,7 @@ describe("CodexAgentProvider", () => {
       { payload: {}, taskId: project.id, type: "skills.changed" },
       { payload: { reason: "archived" }, taskId: "task-1", type: "task.removed" },
     ]);
-    expect(runtime.isTaskOwner(project, "task-1")).toBe(false);
+    expect(runtime.isTaskOwner(projectTaskScope, "task-1")).toBe(false);
   });
 
   it("validates background terminal ownership only on the first query", async () => {
@@ -1209,12 +1243,12 @@ describe("CodexAgentProvider", () => {
       await runtime.releaseProject(project.id);
 
       expect(vi.getTimerCount()).toBe(0);
-      expect(runtime.isTaskOwner(project, "task-1")).toBe(false);
-      runtime.claimTask(project, "task-1");
+      expect(runtime.isTaskOwner(projectTaskScope, "task-1")).toBe(false);
+      runtime.claimTask(projectTaskScope, "task-1");
       await expect(provider.readTaskAttachment("task-1", attachmentId)).resolves.toBeUndefined();
       const replacement = runtime.forProject({
         ...project,
-        rootPath: "/workspace/RecreatedCodeAgent",
+        roots: [{ path: "/workspace/RecreatedCodeAgent" }],
       });
       expect(replacement).not.toBe(provider);
     } finally {
@@ -1223,7 +1257,11 @@ describe("CodexAgentProvider", () => {
   });
 
   it("matches Windows project paths without case sensitivity", async () => {
-    const windowsProject = { ...project, rootPath: "C:\\Users\\Test\\CodeAgent" };
+    const windowsProject = {
+      ...project,
+      rootPath: "C:\\Users\\Test\\CodeAgent",
+      roots: [{ path: "C:\\Users\\Test\\CodeAgent" }],
+    };
     const rpc = new FakeRpcClient([
       {
         data: [nativeThread({ cwd: "c:\\users\\test\\codeagent" })],
@@ -1246,7 +1284,7 @@ describe("CodexAgentProvider", () => {
       try {
         await mkdir(projectRoot);
         await symlink(projectRoot, projectAlias);
-        const linkedProject = { ...project, rootPath: projectRoot };
+        const linkedProject = { ...project, roots: [{ path: projectRoot }] };
         const rpc = new FakeRpcClient([
           { data: [nativeThread({ cwd: projectAlias })], nextCursor: null },
         ]);
@@ -2652,7 +2690,7 @@ describe("CodexAgentProvider", () => {
       {
         data: [
           {
-            cwd: project.rootPath,
+            cwd: projectRootPath,
             errors: [],
             skills: [
               {
@@ -2751,12 +2789,12 @@ describe("CodexAgentProvider", () => {
     expect(rpc.calls).toEqual([
       {
         method: "skills/list",
-        params: { cwds: [project.rootPath], forceReload: false },
+        params: { cwds: [projectRootPath], forceReload: false },
       },
       {
         method: "thread/start",
         params: {
-          cwd: project.rootPath,
+          cwd: projectRootPath,
           historyMode: "paginated",
           projectId: project.id,
         },
@@ -2854,9 +2892,9 @@ describe("CodexAgentProvider", () => {
     await expect(provider.readSandboxMode()).resolves.toBe("workspace-write");
     await expect(provider.readSandboxMode()).rejects.toThrow("config/read sandbox_mode is invalid");
     expect(rpc.calls).toEqual([
-      { method: "config/read", params: { cwd: project.rootPath } },
-      { method: "config/read", params: { cwd: project.rootPath } },
-      { method: "config/read", params: { cwd: project.rootPath } },
+      { method: "config/read", params: { cwd: projectRootPath } },
+      { method: "config/read", params: { cwd: projectRootPath } },
+      { method: "config/read", params: { cwd: projectRootPath } },
     ]);
   });
 
@@ -2988,7 +3026,7 @@ describe("CodexAgentProvider", () => {
       {
         method: "thread/start",
         params: {
-          cwd: project.rootPath,
+          cwd: projectRootPath,
           historyMode: "paginated",
           projectId: project.id,
         },
@@ -4603,7 +4641,7 @@ describe("CodexAgentProvider", () => {
           );
         return {
           thread: nativeThread({
-            cwd: project.rootPath,
+            cwd: projectRootPath,
             id: "task-foreign",
             projectId: "foreign-project",
           }),
@@ -5427,7 +5465,7 @@ describe("CodexAgentProvider", () => {
 
   it("returns undefined for another project id even when the thread cwd matches", async () => {
     const rpc = new FakeRpcClient([
-      { thread: nativeThread({ cwd: project.rootPath, projectId: "other-project" }) },
+      { thread: nativeThread({ cwd: projectRootPath, projectId: "other-project" }) },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
 

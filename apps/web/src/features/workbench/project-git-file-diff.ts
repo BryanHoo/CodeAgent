@@ -11,6 +11,7 @@ export async function loadProjectGitFileDiff(
   queryClient: QueryClient,
   client: CodeAgentGitStatusClient,
   projectId: string,
+  rootPath: string,
   summary: ProjectGitStatus | undefined,
   change: AgentFileChange,
 ): Promise<AgentFileChange> {
@@ -18,7 +19,7 @@ export async function loadProjectGitFileDiff(
 
   const location = summary.unstaged.includes(change) ? "unstaged" : "staged";
   const details = await queryClient.fetchQuery(
-    projectGitDetailedStatusQueryOptions(projectId, null, summary.snapshot, true, client),
+    projectGitDetailedStatusQueryOptions(projectId, rootPath, null, summary.snapshot, true, client),
   );
   return (
     details[location].find(

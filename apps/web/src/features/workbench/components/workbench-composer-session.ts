@@ -55,6 +55,7 @@ type ComposerSessionOptions = Readonly<{
   models: readonly AgentModel[];
   onSubmissionStateChange: WorkbenchComposerProps["onSubmissionStateChange"];
   projectId: string;
+  projectPath: string;
   projectToolsEnabled: boolean;
   runtime: TaskRuntimeView | undefined;
   settings: AgentTaskSettings;
@@ -71,13 +72,15 @@ export function useComposerSession({
   models,
   onSubmissionStateChange,
   projectId,
+  projectPath,
   projectToolsEnabled,
   runtime,
   settings,
   skills,
   taskId,
 }: ComposerSessionOptions) {
-  const routeScope = `${projectId}:${taskId ?? "draft"}`;
+  // Git 与文件异步操作绑定当前根；切换根后旧请求不得更新新根的 Composer 状态。
+  const routeScope = `${projectId}:${taskId ?? "draft"}:${projectPath}`;
   const composerScope = createComposerDraftScope(projectId, taskId);
   const composerDraftStore = useComposerDraftStore();
   const initialComposerDraft = composerDraftStore.read(composerScope);
@@ -160,6 +163,7 @@ export function useComposerSession({
   const fileSearch = useProjectFileSearch(
     client,
     projectId,
+    projectPath,
     fileQuery,
     fileMenuOpen && projectToolsEnabled && !turnControlsDisabled,
   );

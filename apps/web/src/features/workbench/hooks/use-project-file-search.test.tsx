@@ -7,13 +7,30 @@ describe("projectFileSearchQueryOptions", () => {
     const controller = new AbortController();
     const page = { data: [{ name: "main.tsx", path: "src/main.tsx" }] };
     const client = { searchProjectFiles: vi.fn(() => Promise.resolve(page)) };
-    const options = projectFileSearchQueryOptions(client, "code-agent", "main", true);
+    const options = projectFileSearchQueryOptions(
+      client,
+      "code-agent",
+      "/workspace/CodeAgent",
+      "main",
+      true,
+    );
 
-    expect(options.queryKey).toEqual(["projects", "code-agent", "file-search", "main"]);
+    expect(options.queryKey).toEqual([
+      "projects",
+      "code-agent",
+      "/workspace/CodeAgent",
+      "file-search",
+      "main",
+    ]);
     expect(options.enabled).toBe(true);
     await expect(options.queryFn?.({ signal: controller.signal } as never)).resolves.toEqual(page);
-    expect(client.searchProjectFiles).toHaveBeenCalledWith("code-agent", "main", {
-      signal: controller.signal,
-    });
+    expect(client.searchProjectFiles).toHaveBeenCalledWith(
+      "code-agent",
+      "/workspace/CodeAgent",
+      "main",
+      {
+        signal: controller.signal,
+      },
+    );
   });
 });

@@ -6,6 +6,7 @@ import {
   ProjectRelativePathSchema,
   ProjectSchema,
 } from "./project-files.js";
+import { ProjectRootPathSchema } from "./project-root.js";
 
 export const AgentFileChangeSchema = Type.Object(
   {
@@ -62,6 +63,7 @@ export const ProjectGitStatusQuerySchema = Type.Object(
   {
     includeDiff: Type.Optional(Type.Boolean()),
     repository: Type.Optional(GitChildRepositorySchema),
+    rootPath: ProjectRootPathSchema,
   },
   { additionalProperties: false },
 );
@@ -87,6 +89,7 @@ export const ProjectGitHistoryQuerySchema = Type.Object(
   {
     cursor: Type.Optional(GitHistoryCursorSchema),
     repository: Type.Optional(ProjectRelativePathSchema),
+    rootPath: ProjectRootPathSchema,
   },
   { additionalProperties: false },
 );
@@ -118,6 +121,7 @@ export const ProjectGitCommitFilesQuerySchema = Type.Object(
   {
     cursor: Type.Optional(GitCommitFilesCursorSchema),
     repository: Type.Optional(ProjectRelativePathSchema),
+    rootPath: ProjectRootPathSchema,
     sha: GitCommitShaSchema,
   },
   { additionalProperties: false },
@@ -146,6 +150,7 @@ export const ProjectGitCommitFileDiffQuerySchema = Type.Object(
   {
     path: ProjectRelativePathSchema,
     repository: Type.Optional(ProjectRelativePathSchema),
+    rootPath: ProjectRootPathSchema,
     sha: GitCommitShaSchema,
   },
   { additionalProperties: false },
@@ -290,6 +295,7 @@ export type ProjectFileTreeEntry = Readonly<Static<typeof ProjectFileTreeEntrySc
 export const ProjectFileTreeQuerySchema = Type.Object(
   {
     path: Type.Optional(ProjectRelativePathSchema),
+    rootPath: Type.Optional(ProjectRootPathSchema),
   },
   { additionalProperties: false },
 );
@@ -310,6 +316,7 @@ export const ProjectSourceFileQuerySchema = Type.Object(
   {
     cursor: Type.Optional(Type.Integer({ minimum: 0 })),
     path: ProjectFileReferencePathSchema,
+    rootPath: Type.Optional(ProjectRootPathSchema),
   },
   { additionalProperties: false },
 );

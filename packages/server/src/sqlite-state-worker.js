@@ -11,7 +11,8 @@ import {
   hasTable,
   initializeProjectSourceMigration,
   projectDefaultsFromRow,
-  projectFromRow,
+  projectFromRows,
+  projectsFromRows,
   providerConnectionFromRow,
   readMigrationVersion,
   runMigrations,
@@ -26,44 +27,55 @@ function serializeError(error) {
 }
 
 function createOperations(database) {
-  const statements = hasTable(database, "projects")
-    ? {
-        upsertProject: database.prepare(
-          `INSERT INTO projects (id, name, root_path, created_at, sort_order, kind)
-           VALUES (?, ?, ?, ?, (
+  const statements =
+    hasTable(database, "projects") && hasTable(database, "project_roots")
+      ? {
+          upsertProject: database.prepare(
+            `INSERT INTO projects (id, name, created_at, sort_order, kind)
+           VALUES (?, ?, ?, (
              SELECT COALESCE(MAX(sort_order) + 1, 0) FROM projects WHERE kind = 'user'
            ), 'user')
            ON CONFLICT(id) DO UPDATE SET
              name = excluded.name,
-             root_path = excluded.root_path,
              created_at = excluded.created_at
            WHERE projects.kind = 'user'`,
-        ),
-        upsertProjectAtOrder: database.prepare(
-          `INSERT INTO projects (id, name, root_path, created_at, sort_order, kind)
-           VALUES (?, ?, ?, ?, ?, 'user')
+          ),
+          upsertProjectAtOrder: database.prepare(
+            `INSERT INTO projects (id, name, created_at, sort_order, kind)
+           VALUES (?, ?, ?, ?, 'user')
            ON CONFLICT(id) DO UPDATE SET
              name = excluded.name,
-             root_path = excluded.root_path,
              created_at = excluded.created_at,
              sort_order = excluded.sort_order
            WHERE projects.kind = 'user'`,
-        ),
-        listProjects: database.prepare(
-          "SELECT id, name, root_path, created_at FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
-        ),
-        listProjectIds: database.prepare(
-          "SELECT id FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
-        ),
-        readProject: database.prepare(
-          "SELECT id, name, root_path, created_at FROM projects WHERE id = ?",
-        ),
-        readProjectWithOrder: database.prepare(
-          "SELECT id, name, root_path, created_at, sort_order FROM projects WHERE id = ? AND kind = 'user'",
-        ),
-        removeProject: database.prepare("DELETE FROM projects WHERE id = ? AND kind = 'user'"),
-        copyProjectDefaults: database.prepare(
-          `INSERT INTO project_defaults
+          ),
+          listProjects: database.prepare(
+            "SELECT id, name, created_at FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
+          ),
+          listProjectRoots: database.prepare(
+            `SELECT project_roots.project_id, project_roots.path
+           FROM project_roots
+           JOIN projects ON projects.id = project_roots.project_id
+           WHERE projects.kind = 'user'
+           ORDER BY projects.sort_order, projects.created_at, projects.id, project_roots.position`,
+          ),
+          listProjectIds: database.prepare(
+            "SELECT id FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
+          ),
+          readProject: database.prepare("SELECT id, name, created_at FROM projects WHERE id = ?"),
+          readProjectWithOrder: database.prepare(
+            "SELECT id, name, created_at, sort_order FROM projects WHERE id = ? AND kind = 'user'",
+          ),
+          readProjectRoots: database.prepare(
+            "SELECT project_id, path FROM project_roots WHERE project_id = ? ORDER BY position",
+          ),
+          removeProjectRoots: database.prepare("DELETE FROM project_roots WHERE project_id = ?"),
+          writeProjectRoot: database.prepare(
+            "INSERT INTO project_roots (project_id, position, path) VALUES (?, ?, ?)",
+          ),
+          removeProject: database.prepare("DELETE FROM projects WHERE id = ? AND kind = 'user'"),
+          copyProjectDefaults: database.prepare(
+            `INSERT INTO project_defaults
              (project_id, model, reasoning_effort, updated_at, sandbox_mode)
            SELECT ?, model, reasoning_effort, updated_at, sandbox_mode
            FROM project_defaults WHERE project_id = ?
@@ -72,9 +84,9 @@ function createOperations(database) {
              reasoning_effort = excluded.reasoning_effort,
              updated_at = excluded.updated_at,
              sandbox_mode = excluded.sandbox_mode`,
-        ),
-        copyTaskSettings: database.prepare(
-          `INSERT INTO task_settings
+          ),
+          copyTaskSettings: database.prepare(
+            `INSERT INTO task_settings
              (project_id, task_id, approval_policy, model, reasoning_effort, updated_at,
               sandbox_mode, approvals_reviewer)
            SELECT ?, task_id, approval_policy, model, reasoning_effort, updated_at,
@@ -87,27 +99,27 @@ function createOperations(database) {
              updated_at = excluded.updated_at,
              sandbox_mode = excluded.sandbox_mode,
              approvals_reviewer = excluded.approvals_reviewer`,
-        ),
-        writeProjectSortOrder: database.prepare(
-          "UPDATE projects SET sort_order = ? WHERE id = ? AND kind = 'user'",
-        ),
-        readProjectDefaults: database.prepare(
-          "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
-        ),
-        readGlobalSettings: database.prepare(
-          `SELECT approval_policy, approvals_reviewer, commit_message_model,
+          ),
+          writeProjectSortOrder: database.prepare(
+            "UPDATE projects SET sort_order = ? WHERE id = ? AND kind = 'user'",
+          ),
+          readProjectDefaults: database.prepare(
+            "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
+          ),
+          readGlobalSettings: database.prepare(
+            `SELECT approval_policy, approvals_reviewer, commit_message_model,
                   commit_message_prompt, model, reasoning_effort, sandbox_mode,
                   default_open_app_id, fast_mode, follow_up_behavior
            FROM global_settings WHERE id = 1`,
-        ),
-        readProviderConnection: database.prepare(
-          `SELECT mode, custom_base_url, custom_models_json, updated_at
+          ),
+          readProviderConnection: database.prepare(
+            `SELECT mode, custom_base_url, custom_models_json, updated_at
            FROM provider_connection WHERE id = 1`,
-        ),
-        readTaskSettings: database.prepare(
-          "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
-        ),
-        writeProjectDefaults: database.prepare(`
+          ),
+          readTaskSettings: database.prepare(
+            "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
+          ),
+          writeProjectDefaults: database.prepare(`
       INSERT INTO project_defaults (project_id, model, reasoning_effort, sandbox_mode, updated_at)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(project_id) DO UPDATE SET
@@ -116,7 +128,7 @@ function createOperations(database) {
         sandbox_mode = excluded.sandbox_mode,
         updated_at = excluded.updated_at
     `),
-        writeGlobalSettings: database.prepare(`
+          writeGlobalSettings: database.prepare(`
       INSERT INTO global_settings (
         id, approval_policy, approvals_reviewer, commit_message_model, commit_message_prompt,
         model, reasoning_effort, sandbox_mode, default_open_app_id, fast_mode,
@@ -135,7 +147,7 @@ function createOperations(database) {
         follow_up_behavior = excluded.follow_up_behavior,
         updated_at = excluded.updated_at
     `),
-        writeProviderConnection: database.prepare(`
+          writeProviderConnection: database.prepare(`
       INSERT INTO provider_connection (
         id, mode, custom_base_url, custom_models_json, updated_at
       ) VALUES (1, ?, ?, ?, ?)
@@ -145,7 +157,7 @@ function createOperations(database) {
         custom_models_json = excluded.custom_models_json,
         updated_at = excluded.updated_at
     `),
-        writeTaskSettings: database.prepare(`
+          writeTaskSettings: database.prepare(`
       INSERT INTO task_settings (
         project_id, task_id, approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -157,14 +169,48 @@ function createOperations(database) {
         sandbox_mode = excluded.sandbox_mode,
         updated_at = excluded.updated_at
         `),
-      }
-    : undefined;
+        }
+      : undefined;
 
   function requireStatements() {
     if (statements === undefined) {
       throw new Error("SQLite state tables are unavailable");
     }
     return statements;
+  }
+
+  function readStoredProject(projectId) {
+    const stateStatements = requireStatements();
+    return projectFromRows(
+      stateStatements.readProject.get(projectId),
+      stateStatements.readProjectRoots.all(projectId),
+    );
+  }
+
+  function readStoredProjects() {
+    const stateStatements = requireStatements();
+    return projectsFromRows(
+      stateStatements.listProjects.all(),
+      stateStatements.listProjectRoots.all(),
+    );
+  }
+
+  function replaceStoredRoots(project) {
+    const stateStatements = requireStatements();
+    if (!Array.isArray(project.roots) || project.roots.length === 0) {
+      throw new Error("Project roots must contain a primary root");
+    }
+    const paths = project.roots.map((root) => root.path);
+    if (paths.some((path) => typeof path !== "string" || path.length === 0)) {
+      throw new Error("Project root paths must be non-empty strings");
+    }
+    if (new Set(paths).size !== paths.length) {
+      throw new Error("Project root paths must be unique");
+    }
+    stateStatements.removeProjectRoots.run(project.id);
+    paths.forEach((path, position) => {
+      stateStatements.writeProjectRoot.run(project.id, position, path);
+    });
   }
 
   const reorderProjects = database.transaction((projectIds) => {
@@ -183,7 +229,7 @@ function createOperations(database) {
     projectIds.forEach((projectId, sortOrder) => {
       stateStatements.writeProjectSortOrder.run(sortOrder, projectId);
     });
-    return stateStatements.listProjects.all().map(projectFromRow);
+    return readStoredProjects();
   });
 
   const replaceProjects = database.transaction((projects) => {
@@ -201,12 +247,12 @@ function createOperations(database) {
       stateStatements.upsertProjectAtOrder.run(
         project.id,
         project.name,
-        project.rootPath,
         project.createdAt,
         sortOrder,
       );
+      replaceStoredRoots(project);
     });
-    return stateStatements.listProjects.all().map(projectFromRow);
+    return readStoredProjects();
   });
 
   const migrateProject = database.transaction((legacyProjectId, project) => {
@@ -216,16 +262,16 @@ function createOperations(database) {
     stateStatements.upsertProjectAtOrder.run(
       project.id,
       project.name,
-      project.rootPath,
       project.createdAt,
       sortOrder,
     );
+    replaceStoredRoots(project);
     if (legacyProjectId !== project.id && legacy !== undefined) {
       stateStatements.copyProjectDefaults.run(project.id, legacyProjectId);
       stateStatements.copyTaskSettings.run(project.id, legacyProjectId);
       stateStatements.removeProject.run(legacyProjectId);
     }
-    const stored = projectFromRow(stateStatements.readProject.get(project.id));
+    const stored = readStoredProject(project.id);
     if (stored === undefined) {
       throw new Error("Migrated Project projection could not be stored");
     }
@@ -276,10 +322,10 @@ function createOperations(database) {
       return null;
     },
     listProjects() {
-      return requireStatements().listProjects.all().map(projectFromRow);
+      return readStoredProjects();
     },
     readProject(payload) {
-      return projectFromRow(requireStatements().readProject.get(payload.projectId));
+      return readStoredProject(payload.projectId);
     },
     readProjectSourceMigration() {
       if (projectSourceMigrationStatements === undefined) {
@@ -298,19 +344,16 @@ function createOperations(database) {
       return replaceProjects(payload.projects);
     },
     upsertProject(payload) {
-      const stateStatements = requireStatements();
-      const project = payload.project;
-      stateStatements.upsertProject.run(
-        project.id,
-        project.name,
-        project.rootPath,
-        project.createdAt,
-      );
-      const stored = projectFromRow(stateStatements.readProject.get(project.id));
-      if (stored === undefined) {
-        throw new Error("Project projection could not be stored");
-      }
-      return stored;
+      return database.transaction((project) => {
+        const stateStatements = requireStatements();
+        stateStatements.upsertProject.run(project.id, project.name, project.createdAt);
+        replaceStoredRoots(project);
+        const stored = readStoredProject(project.id);
+        if (stored === undefined) {
+          throw new Error("Project projection could not be stored");
+        }
+        return stored;
+      })(payload.project);
     },
     migrateProject(payload) {
       return migrateProject(payload.legacyProjectId, payload.project);

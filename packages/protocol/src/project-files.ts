@@ -1,5 +1,7 @@
 import { FormatRegistry, Type, type Static } from "@sinclair/typebox";
 
+import { ProjectRootPathSchema, ProjectRootsSchema, type ProjectRoots } from "./project-root.js";
+
 if (!FormatRegistry.Has("date-time")) {
   // HTTP 边界统一使用可解析的 ISO 时间，避免各层重复实现时间格式校验。
   FormatRegistry.Set("date-time", (value) => !Number.isNaN(Date.parse(value)));
@@ -16,7 +18,7 @@ export const ProjectRelativePathSchema = Type.String({
 export type ProjectRelativePath = Static<typeof ProjectRelativePathSchema>;
 
 export const ProjectFileSearchQuerySchema = Type.Object(
-  { query: Type.String({ maxLength: 256 }) },
+  { query: Type.String({ maxLength: 256 }), rootPath: Type.Optional(ProjectRootPathSchema) },
   { additionalProperties: false },
 );
 
@@ -52,18 +54,15 @@ export const ProjectSchema = Type.Object(
     createdAt: DateTimeSchema,
     id: Type.String({ minLength: 1 }),
     name: Type.String({ minLength: 1 }),
-    rootPath: Type.String({ minLength: 1 }),
+    roots: ProjectRootsSchema,
   },
   { additionalProperties: false },
 );
 
-export type Project = Readonly<Static<typeof ProjectSchema>>;
+type ProjectValue = Static<typeof ProjectSchema>;
+export type Project = Readonly<Omit<ProjectValue, "roots"> & { roots: ProjectRoots }>;
 
-export const ProjectDirectoryPathSchema = Type.String({
-  maxLength: 32_768,
-  minLength: 1,
-  pattern: "^(?!.*[\\u0000\\r\\n])(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\/]+[\\\\/][^\\\\/]+).*$",
-});
+export const ProjectDirectoryPathSchema = ProjectRootPathSchema;
 
 export type ProjectDirectoryPath = Static<typeof ProjectDirectoryPathSchema>;
 
@@ -157,7 +156,7 @@ export type ImportHostAttachmentRequest = Readonly<
 >;
 
 export const AddProjectRequestSchema = Type.Object(
-  { rootPath: ProjectDirectoryPathSchema },
+  { roots: ProjectRootsSchema },
   { additionalProperties: false },
 );
 

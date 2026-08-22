@@ -208,6 +208,7 @@ type GitHistoryListProps = Readonly<{
   panelId: string;
   projectId: string;
   repository?: string;
+  rootPath: string;
   showBranch?: boolean;
 }>;
 
@@ -222,11 +223,12 @@ export function GitHistoryList({
   panelId,
   projectId,
   repository,
+  rootPath,
   showBranch = false,
 }: GitHistoryListProps) {
   useTranslation("conversation");
   const query = useInfiniteQuery(
-    projectGitHistoryInfiniteQueryOptions(projectId, repository, enabled, client),
+    projectGitHistoryInfiniteQueryOptions(projectId, rootPath, repository, enabled, client),
   );
   const branch = query.data?.pages[0]?.branch;
 

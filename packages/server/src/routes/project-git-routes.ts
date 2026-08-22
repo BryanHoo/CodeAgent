@@ -13,6 +13,7 @@ import {
   ProjectGitCommitFilesQuerySchema,
   ProjectGitStatusSchema,
   ProjectGitStatusQuerySchema,
+  ProjectRootQuerySchema,
   SwitchProjectBranchRequestSchema,
   type AgentTaskSettings,
   type CommitProjectChangesRequest,
@@ -22,6 +23,7 @@ import {
   type ProjectGitCommitFileDiffQuery,
   type ProjectGitCommitFilesQuery,
   type ProjectGitStatusQuery,
+  type ProjectRootQuery,
   type SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
 import { GitBranchError } from "../git-branch.js";
@@ -34,6 +36,11 @@ import { resolveProjectDefaults } from "../server-runtime.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 import { registerProjectGitWorktreeRoutes } from "./project-git-worktree-routes.js";
+import {
+  omitGitRootPath,
+  resolveGitMutationRoot,
+  resolveGitReadRoot,
+} from "./project-git-route-scope.js";
 
 import type { FastifyInstance, FastifyReply } from "fastify";
 
@@ -68,6 +75,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     generateCommitMessageWithCodex,
     getProjectContext,
     listModels,
+    projectRepository,
     readEffectiveGlobalSettings,
     readProjectGitHistory,
     readProjectGitCommitFiles,
@@ -79,8 +87,8 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
   } = context;
   registerProjectGitWorktreeRoutes(app, context);
 
-  const assertGitMutationAvailable = (projectId: string) => {
-    if (activeGitMutations.has(projectId)) {
+  const assertGitMutationAvailable = (mutationScope: string) => {
+    if (activeGitMutations.has(mutationScope)) {
       throw new MutationHttpError(
         "GIT_MUTATION_IN_PROGRESS",
         "Another Git mutation is already in progress",
@@ -105,12 +113,15 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveGitReadRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        return await readProjectGitStatus(context.scope.rootPath, request.query);
+        return await readProjectGitStatus(rootPath, omitGitRootPath(request.query));
       } catch (error) {
         if (error instanceof GitRepositorySelectionError) {
           return reply.code(404).send({
@@ -141,12 +152,15 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       },
     },
     async (request, reply) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveGitReadRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        return await readProjectGitHistory(projectContext.scope.rootPath, request.query);
+        return await readProjectGitHistory(rootPath, omitGitRootPath(request.query));
       } catch (error) {
         if (error instanceof GitHistoryError && error.code === "INVALID_CURSOR") {
           return reply.code(400).send({ code: "INVALID_REQUEST", message: error.message });
@@ -190,12 +204,15 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       },
     },
     async (request, reply) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveGitReadRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        return await readProjectGitCommitFiles(projectContext.scope.rootPath, request.query);
+        return await readProjectGitCommitFiles(rootPath, omitGitRootPath(request.query));
       } catch (error) {
         return sendCommitReviewError(error, reply);
       }
@@ -217,12 +234,15 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       },
     },
     async (request, reply) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveGitReadRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        return await readProjectGitCommitFileDiff(projectContext.scope.rootPath, request.query);
+        return await readProjectGitCommitFileDiff(rootPath, omitGitRootPath(request.query));
       } catch (error) {
         return sendCommitReviewError(error, reply);
       }
@@ -233,6 +253,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     Body: SwitchProjectBranchRequest;
     Headers: { "idempotency-key": string };
     Params: { projectId: string };
+    Querystring: ProjectRootQuery;
   }>(
     "/v1/projects/:projectId/git/branch",
     {
@@ -240,6 +261,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         body: SwitchProjectBranchRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           200: ProjectGitStatusSchema,
           400: AgentMutationErrorSchema,
@@ -251,19 +273,21 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       },
     },
     async (request) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-      }
+      const rootPath = await resolveGitMutationRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+      );
+      const mutationScope = `${request.params.projectId}\0${rootPath}`;
       return runIdempotent(
-        ["switch-project-branch", request.params.projectId],
+        ["switch-project-branch", mutationScope],
         request.headers["idempotency-key"],
-        request.body,
+        { request: request.body, rootPath },
         async () => {
-          assertGitMutationAvailable(request.params.projectId);
-          activeGitMutations.add(request.params.projectId);
+          assertGitMutationAvailable(mutationScope);
+          activeGitMutations.add(mutationScope);
           try {
-            return await switchProjectBranch(projectContext.scope.rootPath, request.body);
+            return await switchProjectBranch(rootPath, request.body);
           } catch (error) {
             if (error instanceof GitBranchError) {
               throw toGitBranchHttpError(error);
@@ -275,7 +299,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
               true,
             );
           } finally {
-            activeGitMutations.delete(request.params.projectId);
+            activeGitMutations.delete(mutationScope);
           }
         },
       );
@@ -286,6 +310,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     Body: CreateProjectBranchRequest;
     Headers: { "idempotency-key": string };
     Params: { projectId: string };
+    Querystring: ProjectRootQuery;
   }>(
     "/v1/projects/:projectId/git/branches",
     {
@@ -293,6 +318,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         body: CreateProjectBranchRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           200: ProjectGitStatusSchema,
           400: AgentMutationErrorSchema,
@@ -304,19 +330,21 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       },
     },
     async (request) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-      }
+      const rootPath = await resolveGitMutationRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+      );
+      const mutationScope = `${request.params.projectId}\0${rootPath}`;
       return runIdempotent(
-        ["create-project-branch", request.params.projectId],
+        ["create-project-branch", mutationScope],
         request.headers["idempotency-key"],
-        request.body,
+        { request: request.body, rootPath },
         async () => {
-          assertGitMutationAvailable(request.params.projectId);
-          activeGitMutations.add(request.params.projectId);
+          assertGitMutationAvailable(mutationScope);
+          activeGitMutations.add(mutationScope);
           try {
-            return await createProjectBranch(projectContext.scope.rootPath, request.body);
+            return await createProjectBranch(rootPath, request.body);
           } catch (error) {
             if (error instanceof GitBranchError) {
               throw toGitBranchHttpError(error);
@@ -328,7 +356,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
               true,
             );
           } finally {
-            activeGitMutations.delete(request.params.projectId);
+            activeGitMutations.delete(mutationScope);
           }
         },
       );
@@ -339,6 +367,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     Body: GenerateCommitMessageRequest;
     Headers: { "idempotency-key": string };
     Params: { projectId: string };
+    Querystring: ProjectRootQuery;
   }>(
     "/v1/projects/:projectId/git/commit-message",
     {
@@ -346,6 +375,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         body: GenerateCommitMessageRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           200: GenerateCommitMessageResponseSchema,
           400: AgentMutationErrorSchema,
@@ -361,12 +391,17 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       if (context === undefined) {
         throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
       }
+      const rootPath = await resolveGitMutationRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+      );
       return runIdempotent(
-        ["generate-commit-message", request.params.projectId],
+        ["generate-commit-message", request.params.projectId, rootPath],
         request.headers["idempotency-key"],
-        request.body,
+        { request: request.body, rootPath },
         async () => {
-          const status = await readProjectGitStatus(context.scope.rootPath, {
+          const status = await readProjectGitStatus(rootPath, {
             includeDiff: true,
             ...(request.body.repository === undefined
               ? {}
@@ -406,6 +441,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     Body: CommitProjectChangesRequest;
     Headers: { "idempotency-key": string };
     Params: { projectId: string };
+    Querystring: ProjectRootQuery;
   }>(
     "/v1/projects/:projectId/git/commits",
     {
@@ -413,6 +449,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         body: CommitProjectChangesRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           201: CommitProjectChangesResponseSchema,
           400: AgentMutationErrorSchema,
@@ -424,19 +461,21 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
       },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-      }
+      const rootPath = await resolveGitMutationRoot(
+        projectRepository,
+        request.params.projectId,
+        request.query.rootPath,
+      );
+      const mutationScope = `${request.params.projectId}\0${rootPath}`;
       const result = await runIdempotent(
-        ["commit-project-changes", request.params.projectId],
+        ["commit-project-changes", mutationScope],
         request.headers["idempotency-key"],
-        request.body,
+        { request: request.body, rootPath },
         async () => {
-          assertGitMutationAvailable(request.params.projectId);
-          activeGitMutations.add(request.params.projectId);
+          assertGitMutationAvailable(mutationScope);
+          activeGitMutations.add(mutationScope);
           try {
-            return await commitProjectChanges(context.scope.rootPath, request.body);
+            return await commitProjectChanges(rootPath, request.body);
           } catch (error) {
             if (error instanceof GitCommitError) {
               throw toGitCommitHttpError(error);
@@ -447,7 +486,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
               502,
             );
           } finally {
-            activeGitMutations.delete(request.params.projectId);
+            activeGitMutations.delete(mutationScope);
           }
         },
       );

@@ -138,7 +138,11 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
   }
 
   public forProject(project: Project): AgentProvider {
-    return this.#forScope({ id: project.id, kind: "project", rootPath: project.rootPath });
+    const primaryRoot = project.roots[0];
+    if (primaryRoot === undefined) {
+      throw new CodexProtocolMappingError("Codex project roots must contain a primary root");
+    }
+    return this.#forScope({ id: project.id, kind: "project", rootPath: primaryRoot.path });
   }
 
   public forTemporary(rootPath: string): AgentProvider {

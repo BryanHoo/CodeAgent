@@ -29,6 +29,8 @@ import {
   switchComposerWorktree,
 } from "../hooks/use-workbench-branch-switch.js";
 
+const rootPath = "/workspace/CodeAgent";
+
 const task = {
   contextUsage: null,
   id: "task-1",
@@ -467,18 +469,20 @@ describe("WorkbenchComposer", () => {
     const cancelQueries = vi.spyOn(queryClient, "cancelQueries");
 
     await expect(
-      switchComposerBranch(client, queryClient, "code-agent", currentStatus, "main"),
+      switchComposerBranch(client, queryClient, "code-agent", rootPath, currentStatus, "main"),
     ).resolves.toBe(true);
 
-    expect(client.switchProjectBranch).toHaveBeenCalledWith("code-agent", {
+    expect(client.switchProjectBranch).toHaveBeenCalledWith("code-agent", rootPath, {
       branch: "main",
       expectedSnapshot: currentStatus.snapshot,
     });
     expect(cancelQueries).toHaveBeenCalledWith({
       exact: true,
-      queryKey: ["projects", "code-agent", "git-status"],
+      queryKey: ["projects", "code-agent", rootPath, "git-status"],
     });
-    expect(queryClient.getQueryData(["projects", "code-agent", "git-status"])).toEqual(nextStatus);
+    expect(queryClient.getQueryData(["projects", "code-agent", rootPath, "git-status"])).toEqual(
+      nextStatus,
+    );
   });
 
   it("does not switch unavailable or already active branches", async () => {
@@ -495,10 +499,10 @@ describe("WorkbenchComposer", () => {
     };
 
     await expect(
-      switchComposerBranch(client, queryClient, "code-agent", status, "main"),
+      switchComposerBranch(client, queryClient, "code-agent", rootPath, status, "main"),
     ).resolves.toBe(false);
     await expect(
-      switchComposerBranch(client, queryClient, "code-agent", status, "missing"),
+      switchComposerBranch(client, queryClient, "code-agent", rootPath, status, "missing"),
     ).resolves.toBe(false);
     expect(client.switchProjectBranch).not.toHaveBeenCalled();
   });
@@ -524,18 +528,27 @@ describe("WorkbenchComposer", () => {
     const cancelQueries = vi.spyOn(queryClient, "cancelQueries");
 
     await expect(
-      createComposerBranch(client, queryClient, "code-agent", currentStatus, "feat/new-branch"),
+      createComposerBranch(
+        client,
+        queryClient,
+        "code-agent",
+        rootPath,
+        currentStatus,
+        "feat/new-branch",
+      ),
     ).resolves.toBe(true);
 
-    expect(client.createProjectBranch).toHaveBeenCalledWith("code-agent", {
+    expect(client.createProjectBranch).toHaveBeenCalledWith("code-agent", rootPath, {
       branch: "feat/new-branch",
       expectedSnapshot: currentStatus.snapshot,
     });
     expect(cancelQueries).toHaveBeenCalledWith({
       exact: true,
-      queryKey: ["projects", "code-agent", "git-status"],
+      queryKey: ["projects", "code-agent", rootPath, "git-status"],
     });
-    expect(queryClient.getQueryData(["projects", "code-agent", "git-status"])).toEqual(nextStatus);
+    expect(queryClient.getQueryData(["projects", "code-agent", rootPath, "git-status"])).toEqual(
+      nextStatus,
+    );
   });
 
   it("does not create empty, duplicate, or read-only branches", async () => {
@@ -551,17 +564,18 @@ describe("WorkbenchComposer", () => {
       unstaged: [],
     };
 
-    await expect(createComposerBranch(client, queryClient, "code-agent", status, "")).resolves.toBe(
-      false,
-    );
     await expect(
-      createComposerBranch(client, queryClient, "code-agent", status, "main"),
+      createComposerBranch(client, queryClient, "code-agent", rootPath, status, ""),
+    ).resolves.toBe(false);
+    await expect(
+      createComposerBranch(client, queryClient, "code-agent", rootPath, status, "main"),
     ).resolves.toBe(false);
     await expect(
       createComposerBranch(
         client,
         queryClient,
         "code-agent",
+        rootPath,
         { ...status, repositoryMode: "children" },
         "feat/new",
       ),
@@ -585,7 +599,7 @@ describe("WorkbenchComposer", () => {
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-worktree",
         name: "CodeAgent-feat-review",
-        rootPath: "/workspace/CodeAgent-feat-review",
+        roots: [{ path: "/workspace/CodeAgent-feat-review" }],
       },
       worktree: {
         branch: "feat/review",
@@ -596,10 +610,10 @@ describe("WorkbenchComposer", () => {
     const client = { createProjectWorktree: vi.fn(() => Promise.resolve(response)) };
 
     await expect(
-      createComposerWorktree(client, queryClient, "code-agent", status, " feat/review "),
+      createComposerWorktree(client, queryClient, "code-agent", rootPath, status, " feat/review "),
     ).resolves.toEqual(response.project);
 
-    expect(client.createProjectWorktree).toHaveBeenCalledWith("code-agent", {
+    expect(client.createProjectWorktree).toHaveBeenCalledWith("code-agent", rootPath, {
       branch: "feat/review",
       expectedSnapshot: status.snapshot,
     });
@@ -607,9 +621,11 @@ describe("WorkbenchComposer", () => {
       data: [response.project],
       nextCursor: null,
     });
-    expect(queryClient.getQueryData(["projects", "code-agent", "git-worktrees"])).toEqual({
-      worktrees: [response.worktree],
-    });
+    expect(queryClient.getQueryData(["projects", "code-agent", rootPath, "git-worktrees"])).toEqual(
+      {
+        worktrees: [response.worktree],
+      },
+    );
   });
 
   it("switches only to a listed non-current worktree", async () => {
@@ -624,21 +640,35 @@ describe("WorkbenchComposer", () => {
         createdAt: "2026-08-18T00:00:00.000Z",
         id: "code-agent-worktree",
         name: "CodeAgent-feat-review",
-        rootPath: worktree.path,
+        roots: [{ path: worktree.path }],
       },
       worktree,
     };
     const client = { switchProjectWorktree: vi.fn(() => Promise.resolve(response)) };
 
     await expect(
-      switchComposerWorktree(client, queryClient, "code-agent", [worktree], worktree.path),
+      switchComposerWorktree(
+        client,
+        queryClient,
+        "code-agent",
+        rootPath,
+        [worktree],
+        worktree.path,
+      ),
     ).resolves.toEqual(response.project);
     await expect(
-      switchComposerWorktree(client, queryClient, "code-agent", [worktree], "/workspace/missing"),
+      switchComposerWorktree(
+        client,
+        queryClient,
+        "code-agent",
+        rootPath,
+        [worktree],
+        "/workspace/missing",
+      ),
     ).resolves.toBeUndefined();
 
     expect(client.switchProjectWorktree).toHaveBeenCalledOnce();
-    expect(client.switchProjectWorktree).toHaveBeenCalledWith("code-agent", {
+    expect(client.switchProjectWorktree).toHaveBeenCalledWith("code-agent", rootPath, {
       path: worktree.path,
     });
   });

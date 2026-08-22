@@ -33,6 +33,7 @@ type ProjectSourceDialogProps = Readonly<{
   previewKind: "image" | "source";
   projectId: string;
   reference: MessageFileReference | null;
+  rootPath?: string;
 }>;
 
 function getFileName(path: string): string {
@@ -168,6 +169,7 @@ export function ProjectSourceDialog({
   previewKind,
   projectId,
   reference,
+  rootPath,
 }: ProjectSourceDialogProps) {
   const { t } = useTranslation("workbench");
   const contentRef = useRef<HTMLDivElement>(null);
@@ -186,9 +188,17 @@ export function ProjectSourceDialog({
       if (reference === null) {
         throw new Error("Source file reference is required");
       }
-      return client.readProjectSourceFile(projectId, reference.path, pageParam, { signal });
+      return client.readProjectSourceFile(projectId, rootPath, reference.path, pageParam, {
+        signal,
+      });
     },
-    queryKey: ["projects", projectId, "source-file", reference?.path ?? null] as const,
+    queryKey: [
+      "projects",
+      projectId,
+      rootPath ?? null,
+      "source-file",
+      reference?.path ?? null,
+    ] as const,
     staleTime: 30_000,
   });
   const sourcePages = sourceQuery.data?.pages;
@@ -243,7 +253,7 @@ export function ProjectSourceDialog({
   const sourcePath = sourceData?.path ?? reference.path;
   const sourceContent = sourceData?.content ?? "";
   const fileName = getFileName(sourcePath);
-  const imageUrl = buildProjectImageFileUrl("", projectId, reference.path);
+  const imageUrl = buildProjectImageFileUrl("", projectId, reference.path, rootPath);
   const sourceLanguage = getCodeLanguage(sourcePath);
   const isMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
   const canRenderMarkdown = isMarkdown && sourceData?.nextCursor === null;

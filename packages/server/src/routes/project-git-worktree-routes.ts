@@ -2,9 +2,11 @@ import {
   AgentMutationErrorSchema,
   CreateProjectWorktreeRequestSchema,
   ProjectGitWorktreePageSchema,
+  ProjectRootQuerySchema,
   ProjectWorktreeMutationResponseSchema,
   SwitchProjectWorktreeRequestSchema,
   type CreateProjectWorktreeRequest,
+  type ProjectRootQuery,
   type SwitchProjectWorktreeRequest,
 } from "@code-agent/protocol";
 import type { FastifyInstance } from "fastify";
@@ -12,6 +14,7 @@ import { basename } from "node:path";
 
 import { originalErrorMessage } from "../error-message.js";
 import { GitWorktreeError } from "../git-worktree.js";
+import { ProjectRootScopeError, resolveProjectRoot } from "../project-root-scope.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
@@ -39,14 +42,13 @@ export function registerProjectGitWorktreeRoutes(
   const {
     activeGitMutations,
     createProjectWorktree,
-    getProjectContext,
     projectRepository,
     readProjectWorktrees,
     resolveProjectWorktree,
     runIdempotent,
   } = context;
-  const assertGitMutationAvailable = (projectId: string) => {
-    if (activeGitMutations.has(projectId)) {
+  const assertGitMutationAvailable = (mutationScope: string) => {
+    if (activeGitMutations.has(mutationScope)) {
       throw new MutationHttpError(
         "GIT_MUTATION_IN_PROGRESS",
         "Another Git mutation is already in progress",
@@ -55,27 +57,48 @@ export function registerProjectGitWorktreeRoutes(
       );
     }
   };
+  const resolveMutationRoot = async (projectId: string, rootPath: string): Promise<string> => {
+    try {
+      return await resolveProjectRoot(projectRepository, projectId, rootPath);
+    } catch (error) {
+      if (error instanceof ProjectRootScopeError) {
+        throw new MutationHttpError(
+          error.code === "PROJECT_NOT_FOUND" ? "PROJECT_NOT_FOUND" : "INVALID_REQUEST",
+          error.message,
+          error.code === "PROJECT_NOT_FOUND" ? 404 : 400,
+        );
+      }
+      throw error;
+    }
+  };
 
-  app.get<{ Params: { projectId: string } }>(
+  app.get<{ Params: { projectId: string }; Querystring: ProjectRootQuery }>(
     "/v1/projects/:projectId/git/worktrees",
     {
       schema: {
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           200: ProjectGitWorktreePageSchema,
+          400: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
       try {
-        return await readProjectWorktrees(projectContext.scope.rootPath);
+        const rootPath = await resolveProjectRoot(
+          projectRepository,
+          request.params.projectId,
+          request.query.rootPath,
+        );
+        return await readProjectWorktrees(rootPath);
       } catch (error) {
+        if (error instanceof ProjectRootScopeError) {
+          const status = error.code === "PROJECT_NOT_FOUND" ? 404 : 400;
+          return reply.code(status).send({ code: error.code, message: error.message });
+        }
         return reply.code(500).send({
           code: "GIT_WORKTREE_LIST_FAILED",
           message: originalErrorMessage(error, "Git worktree list failed"),
@@ -88,6 +111,7 @@ export function registerProjectGitWorktreeRoutes(
     Body: CreateProjectWorktreeRequest;
     Headers: { "idempotency-key": string };
     Params: { projectId: string };
+    Querystring: ProjectRootQuery;
   }>(
     "/v1/projects/:projectId/git/worktrees",
     {
@@ -95,6 +119,7 @@ export function registerProjectGitWorktreeRoutes(
         body: CreateProjectWorktreeRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           200: ProjectWorktreeMutationResponseSchema,
           400: AgentMutationErrorSchema,
@@ -106,27 +131,22 @@ export function registerProjectGitWorktreeRoutes(
       },
     },
     async (request) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-      }
+      const rootPath = await resolveMutationRoot(request.params.projectId, request.query.rootPath);
+      const mutationScope = `${request.params.projectId}\0${rootPath}`;
       return runIdempotent(
-        ["create-project-worktree", request.params.projectId],
+        ["create-project-worktree", mutationScope],
         request.headers["idempotency-key"],
-        request.body,
+        { request: request.body, rootPath },
         async () => {
-          assertGitMutationAvailable(request.params.projectId);
-          activeGitMutations.add(request.params.projectId);
+          assertGitMutationAvailable(mutationScope);
+          activeGitMutations.add(mutationScope);
           try {
-            const worktree = await createProjectWorktree(
-              projectContext.scope.rootPath,
-              request.body,
-            );
+            const worktree = await createProjectWorktree(rootPath, request.body);
             // 每个 worktree 形成独立 Project，避免当前 Task Runtime 被静默换目录。
             const project = await projectRepository.register({
               idempotencyKey: request.headers["idempotency-key"],
               name: basename(worktree.path),
-              rootPath: worktree.path,
+              roots: [{ path: worktree.path }],
             });
             return { project, worktree };
           } catch (error) {
@@ -138,7 +158,7 @@ export function registerProjectGitWorktreeRoutes(
               true,
             );
           } finally {
-            activeGitMutations.delete(request.params.projectId);
+            activeGitMutations.delete(mutationScope);
           }
         },
       );
@@ -149,6 +169,7 @@ export function registerProjectGitWorktreeRoutes(
     Body: SwitchProjectWorktreeRequest;
     Headers: { "idempotency-key": string };
     Params: { projectId: string };
+    Querystring: ProjectRootQuery;
   }>(
     "/v1/projects/:projectId/git/worktree",
     {
@@ -156,6 +177,7 @@ export function registerProjectGitWorktreeRoutes(
         body: SwitchProjectWorktreeRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           200: ProjectWorktreeMutationResponseSchema,
           400: AgentMutationErrorSchema,
@@ -167,24 +189,18 @@ export function registerProjectGitWorktreeRoutes(
       },
     },
     async (request) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-      }
+      const rootPath = await resolveMutationRoot(request.params.projectId, request.query.rootPath);
       return runIdempotent(
-        ["switch-project-worktree", request.params.projectId],
+        ["switch-project-worktree", request.params.projectId, rootPath],
         request.headers["idempotency-key"],
-        request.body,
+        { request: request.body, rootPath },
         async () => {
           try {
-            const worktree = await resolveProjectWorktree(
-              projectContext.scope.rootPath,
-              request.body.path,
-            );
+            const worktree = await resolveProjectWorktree(rootPath, request.body.path);
             const project = await projectRepository.register({
               idempotencyKey: request.headers["idempotency-key"],
               name: basename(worktree.path),
-              rootPath: worktree.path,
+              roots: [{ path: worktree.path }],
             });
             return { project, worktree };
           } catch (error) {

@@ -233,6 +233,10 @@ export const workbench = {
     sourcePartial: "部分内容",
   },
   projectPicker: {
+    primaryRoot: "主目录",
+    selectedRoots: "已选择 {{count}} 个项目目录",
+    makePrimary: "将 {{path}} 设为主目录",
+    removeRoot: "移除 {{path}}",
     add: "添加此文件夹",
     addError: "无法添加所选文件夹",
     adding: "正在添加",
@@ -286,6 +290,7 @@ export const workbench = {
     title: "子代理输出",
   },
   shell: {
+    selectProjectRoot: "选择项目目录",
     closeInspector: "关闭上下文面板",
     closeSidebar: "关闭项目侧栏",
     collapseInspector: "收起上下文面板",

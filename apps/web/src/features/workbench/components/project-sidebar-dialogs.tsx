@@ -11,7 +11,7 @@ type ProjectSidebarDialogsProps = Readonly<{
   isProjectActionPending: boolean;
   isProjectAddPending: boolean;
   isProjectPickerOpen: boolean;
-  onAddProject: (rootPath: string) => Promise<void>;
+  onAddProject: (rootPaths: readonly string[]) => Promise<void>;
   onCloseProjectDialog: (projectId: string) => void;
   onCloseProjectPicker: () => void;
   onCloseTaskRename: () => void;

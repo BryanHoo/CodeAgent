@@ -134,7 +134,7 @@ async function readRepositoryPage(
 
 export async function readProjectGitHistory(
   projectRoot: string,
-  query: ProjectGitHistoryQuery = {},
+  query: Omit<ProjectGitHistoryQuery, "rootPath"> = {},
   gitCommandExecutor: GitCommandExecutor = executeGit,
 ): Promise<ProjectGitHistoryPage> {
   if (!isAbsolute(projectRoot)) {

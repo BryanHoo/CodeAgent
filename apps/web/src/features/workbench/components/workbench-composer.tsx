@@ -77,6 +77,7 @@ export function WorkbenchComposer({
     models,
     onSubmissionStateChange,
     projectId,
+    projectPath,
     projectToolsEnabled,
     runtime,
     settings,
@@ -157,6 +158,7 @@ export function WorkbenchComposer({
     gitStatus,
     isCurrentScope,
     projectId,
+    rootPath: projectPath,
     routeScope,
   });
 

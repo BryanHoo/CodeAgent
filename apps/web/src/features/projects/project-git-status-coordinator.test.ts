@@ -28,6 +28,7 @@ const nonGitStatus: ProjectGitStatus = {
   staged: [],
   unstaged: [],
 };
+const rootPath = "/workspace/project-1";
 
 function createHarness(isPageVisible: () => boolean = () => true) {
   const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
@@ -58,22 +59,22 @@ describe("ProjectGitStatusCoordinator", () => {
     vi.useFakeTimers();
     const { coordinator, getProjectGitStatus } = createHarness();
 
-    coordinator.handleActivity("project-1", "task-1", "turn_started");
-    coordinator.handleActivity("project-1", "task-1", "turn_started");
-    coordinator.handleActivity("project-1", "task-2", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-2", "turn_started");
     await vi.advanceTimersByTimeAsync(0);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
 
-    coordinator.handleActivity("project-1", "task-1", "turn_completed");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_completed");
     await vi.advanceTimersByTimeAsync(0);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(4);
 
-    coordinator.handleActivity("project-1", "task-2", "turn_completed");
+    coordinator.handleActivity("project-1", rootPath, "task-2", "turn_completed");
     await vi.advanceTimersByTimeAsync(0);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(5);
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
@@ -94,9 +95,9 @@ describe("ProjectGitStatusCoordinator", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const coordinator = new ProjectGitStatusCoordinator(queryClient, { getProjectGitStatus });
 
-    coordinator.handleActivity("project-1", "task-1", "turn_started");
-    coordinator.handleActivity("project-1", "task-1", "file_changed");
-    coordinator.handleActivity("project-1", "task-1", "file_changed");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "file_changed");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "file_changed");
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
 
@@ -110,12 +111,12 @@ describe("ProjectGitStatusCoordinator", () => {
     vi.useFakeTimers();
     const { coordinator, getProjectGitStatus } = createHarness(() => false);
 
-    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_started");
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
 
-    coordinator.handleActivity("project-1", "task-1", "turn_completed");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_completed");
     await vi.advanceTimersByTimeAsync(0);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
     coordinator.dispose();
@@ -131,20 +132,22 @@ describe("ProjectGitStatusCoordinator", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const coordinator = new ProjectGitStatusCoordinator(queryClient, { getProjectGitStatus });
 
-    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_started");
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
-    coordinator.handleActivity("project-1", "task-1", "file_changed");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "file_changed");
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
 
-    await coordinator.refreshProject("project-1");
+    await coordinator.refreshProject("project-1", rootPath);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
-    expect(queryClient.getQueryData(["projects", "project-1", "git-status"])).toEqual(nonGitStatus);
+    expect(queryClient.getQueryData(["projects", "project-1", rootPath, "git-status"])).toEqual(
+      nonGitStatus,
+    );
     coordinator.dispose();
   });
 
@@ -162,14 +165,17 @@ describe("ProjectGitStatusCoordinator", () => {
       { random: () => 0.5 },
     );
 
-    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_started");
     await vi.advanceTimersByTimeAsync(0);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
-    expect(queryClient.getQueryState(["projects", "project-1", "git-status"])).toBeUndefined();
+    expect(
+      queryClient.getQueryState(["projects", "project-1", rootPath, "git-status"]),
+    ).toBeUndefined();
     expect(warn).toHaveBeenCalledWith("CodeAgent internal warning", {
       diagnosticCode: "git_status_poll_failed",
       errorMessage: "Git unavailable",
       projectId: "project-1",
+      rootPath,
     });
 
     await vi.advanceTimersByTimeAsync(1_000);
@@ -194,7 +200,7 @@ describe("ProjectGitStatusCoordinator", () => {
       { random: () => 1, retryBaseMs: 100, retryMaxMs: 250 },
     );
 
-    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    coordinator.handleActivity("project-1", rootPath, "task-1", "turn_started");
     await vi.advanceTimersByTimeAsync(119);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);

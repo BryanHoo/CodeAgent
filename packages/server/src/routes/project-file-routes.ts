@@ -13,9 +13,12 @@ import {
   type ProjectFileTreeQuery,
   type ProjectFileSearchQuery,
   type ProjectSourceFileQuery,
+  TEMPORARY_TASK_SCOPE_ID,
 } from "@code-agent/protocol";
+import type { ProjectRepository } from "@code-agent/core";
 import { AttachmentNotFoundError, type StoredAttachmentUpload } from "../attachment-store.js";
 import { HostFileBrowserError } from "../host-file-browser.js";
+import { ProjectRootScopeError, resolveProjectRoot } from "../project-root-scope.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import {
   ErrorResponseSchema,
@@ -24,10 +27,34 @@ import {
   ProjectHostAttachmentParamsSchema,
   ProjectParamsSchema,
   ProjectStoredAttachmentParamsSchema,
-  SourceFileQuerySchema,
 } from "./schemas.js";
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
+
+async function resolveReadRoot(
+  repository: ProjectRepository,
+  getProjectContext: ServerRouteContext["getProjectContext"],
+  projectId: string,
+  rootPath: string | undefined,
+  reply: FastifyReply,
+): Promise<string | undefined> {
+  try {
+    if (projectId === TEMPORARY_TASK_SCOPE_ID) {
+      return (await getProjectContext(projectId))?.scope.rootPath;
+    }
+    if (rootPath === undefined) {
+      throw new ProjectRootScopeError("PROJECT_ROOT_INVALID", "Project root is required");
+    }
+    return await resolveProjectRoot(repository, projectId, rootPath);
+  } catch (error) {
+    if (error instanceof ProjectRootScopeError) {
+      const status = error.code === "PROJECT_NOT_FOUND" ? 404 : 400;
+      await reply.code(status).send({ code: error.code, message: error.message });
+      return undefined;
+    }
+    throw error;
+  }
+}
 
 export function registerProjectFileRoutes(app: FastifyInstance, context: ServerRouteContext): void {
   const {
@@ -35,6 +62,7 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
     getProjectContext,
     maximumAttachmentBytes,
     multipartEnvelopeBytes,
+    projectRepository,
     readFileTree,
     readFileSearch,
     readImageFile,
@@ -51,18 +79,23 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         querystring: ProjectFileTreeQuerySchema,
         response: {
           200: ProjectFileTreeSchema,
+          400: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveReadRoot(
+        projectRepository,
+        getProjectContext,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        return await readFileTree(context.scope.rootPath, request.query.path);
+        return await readFileTree(rootPath, request.query.path);
       } catch {
         // 文件系统错误在交付边界收敛，响应不泄露 Project 的本机路径。
         return reply.code(500).send({
@@ -81,18 +114,23 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         querystring: ProjectFileSearchQuerySchema,
         response: {
           200: ProjectFileSearchPageSchema,
+          400: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveReadRoot(
+        projectRepository,
+        getProjectContext,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        return await readFileSearch(context.scope.rootPath, request.query.query, request.signal);
+        return await readFileSearch(rootPath, request.query.query, request.signal);
       } catch (error) {
         if (request.signal.aborted) {
           throw error;
@@ -105,22 +143,26 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
     },
   );
 
-  app.get<{ Params: { projectId: string }; Querystring: { path: string } }>(
+  app.get<{ Params: { projectId: string }; Querystring: ProjectSourceFileQuery }>(
     "/v1/projects/:projectId/files/image",
     {
       schema: {
         params: ProjectParamsSchema,
-        querystring: SourceFileQuerySchema,
-        response: { 404: ErrorResponseSchema },
+        querystring: ProjectSourceFileQuerySchema,
+        response: { 400: ErrorResponseSchema, 404: ErrorResponseSchema },
       },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveReadRoot(
+        projectRepository,
+        getProjectContext,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        const image = await readImageFile(context.scope.rootPath, request.query.path);
+        const image = await readImageFile(rootPath, request.query.path);
         return await reply
           .header("cache-control", "private, max-age=60")
           .header("x-content-type-options", "nosniff")
@@ -144,21 +186,22 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         querystring: ProjectSourceFileQuerySchema,
         response: {
           200: ProjectSourceFileSchema,
+          400: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
+      const rootPath = await resolveReadRoot(
+        projectRepository,
+        getProjectContext,
+        request.params.projectId,
+        request.query.rootPath,
+        reply,
+      );
+      if (rootPath === undefined) return;
       try {
-        return await readSourceFile(
-          context.scope.rootPath,
-          request.query.path,
-          request.query.cursor ?? 0,
-        );
+        return await readSourceFile(rootPath, request.query.path, request.query.cursor ?? 0);
       } catch {
         // 路径不可读、文件不存在和二进制内容统一隐藏为不可预览。
         return reply.code(404).send({

@@ -233,6 +233,10 @@ export const workbench = {
     sourcePartial: "Partial content",
   },
   projectPicker: {
+    primaryRoot: "Primary",
+    selectedRoots: "{{count}} project folders selected",
+    makePrimary: "Make {{path}} primary",
+    removeRoot: "Remove {{path}}",
     add: "Add this folder",
     addError: "Unable to add the selected folder",
     adding: "Adding",
@@ -286,6 +290,7 @@ export const workbench = {
     title: "Subagent output",
   },
   shell: {
+    selectProjectRoot: "Select project folder",
     closeInspector: "Close context panel",
     closeSidebar: "Close project sidebar",
     collapseInspector: "Collapse context panel",

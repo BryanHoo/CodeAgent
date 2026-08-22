@@ -27,6 +27,7 @@ describe("project file tree performance", () => {
       projectId: "performance-project",
       projectName: "Performance Project",
       queryClient,
+      rootPath: "/workspace/Performance",
     });
 
     globalThis.gc?.();

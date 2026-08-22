@@ -77,19 +77,19 @@ export interface CreateCodeAgentServerOptions {
   ) => Promise<ProjectGitWorktree>;
   readProjectGitStatus?: (
     projectRoot: string,
-    query?: ProjectGitStatusQuery,
+    query?: Omit<ProjectGitStatusQuery, "rootPath">,
   ) => Promise<ProjectGitStatus>;
   readProjectGitHistory?: (
     projectRoot: string,
-    query: ProjectGitHistoryQuery,
+    query: Omit<ProjectGitHistoryQuery, "rootPath">,
   ) => Promise<ProjectGitHistoryPage>;
   readProjectGitCommitFiles?: (
     projectRoot: string,
-    query: ProjectGitCommitFilesQuery,
+    query: Omit<ProjectGitCommitFilesQuery, "rootPath">,
   ) => Promise<ProjectGitCommitFilesPage>;
   readProjectGitCommitFileDiff?: (
     projectRoot: string,
-    query: ProjectGitCommitFileDiffQuery,
+    query: Omit<ProjectGitCommitFileDiffQuery, "rootPath">,
   ) => Promise<ProjectGitCommitFileDiff>;
   switchProjectBranch?: (
     projectRoot: string,

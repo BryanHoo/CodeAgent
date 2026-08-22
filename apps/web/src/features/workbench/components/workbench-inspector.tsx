@@ -272,6 +272,7 @@ export function WorkbenchInspector({
                   client={gitClient ?? codeAgentClient}
                   expandedPaths={expandedFileTreePaths}
                   fileChangesByPath={fileChangesByPath}
+                  key={`${projectId ?? projectName}:${projectPath}`}
                   onExpandedPathsChange={onFileTreeExpandedChange}
                   onOpenFileDiff={onOpenFileDiff}
                   onOpenProjectFile={onOpenProjectFile}
@@ -299,6 +300,7 @@ export function WorkbenchInspector({
               gitStatusError={gitStatusError}
               onOpenFileDiff={onOpenFileDiff}
               projectId={projectId}
+              rootPath={projectPath}
             />
           </Suspense>
         ) : activeTab === "history" && projectId !== undefined ? (
@@ -306,6 +308,7 @@ export function WorkbenchInspector({
             <LazyGitHistoryPanel
               {...(gitClient === undefined ? {} : { client: gitClient })}
               projectId={projectId}
+              rootPath={projectPath}
             />
           </Suspense>
         ) : (

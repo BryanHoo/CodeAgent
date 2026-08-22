@@ -12,6 +12,7 @@ import {
   ProjectDirectoryListingSchema,
   ProjectDirectoryQuerySchema,
   ProjectOpenCapabilitiesResponseSchema,
+  ProjectRootQuerySchema,
   OpenProjectRequestSchema,
   OpenProjectResponseSchema,
   RenameProjectRequestSchema,
@@ -25,6 +26,7 @@ import {
   type HostFileQuery,
   type ProjectDirectoryQuery,
   type OpenProjectRequest,
+  type ProjectRootQuery,
   type RenameProjectRequest,
   type ReorderProjectsRequest,
   type RemoveProjectRequest,
@@ -33,6 +35,7 @@ import type { FastifyPluginCallback } from "fastify";
 import { HostFileBrowserError } from "../host-file-browser.js";
 import { ProjectOpenAppUnavailableError, ProjectOpenTargetInvalidError } from "../project-open.js";
 import { ProjectDirectoryBrowserError } from "../project-directory-browser.js";
+import { ProjectRootScopeError, resolveProjectRoot } from "../project-root-scope.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
@@ -133,6 +136,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     Body: OpenProjectRequest;
     Headers: { "idempotency-key": string };
     Params: { projectId: string };
+    Querystring: ProjectRootQuery;
   }>(
     "/v1/projects/:projectId/open",
     {
@@ -140,6 +144,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         body: OpenProjectRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
+        querystring: ProjectRootQuerySchema,
         response: {
           200: OpenProjectResponseSchema,
           400: AgentMutationErrorSchema,
@@ -154,14 +159,27 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
       runIdempotent(
         ["open-project", request.params.projectId],
         request.headers["idempotency-key"],
-        request.body,
+        { request: request.body, rootPath: request.query.rootPath },
         async () => {
-          const project = await projectRepository.read(request.params.projectId);
-          if (project === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          let rootPath: string;
+          try {
+            rootPath = await resolveProjectRoot(
+              projectRepository,
+              request.params.projectId,
+              request.query.rootPath,
+            );
+          } catch (error) {
+            if (error instanceof ProjectRootScopeError) {
+              throw new MutationHttpError(
+                error.code === "PROJECT_NOT_FOUND" ? "PROJECT_NOT_FOUND" : "INVALID_REQUEST",
+                error.message,
+                error.code === "PROJECT_NOT_FOUND" ? 404 : 400,
+              );
+            }
+            throw error;
           }
           try {
-            await projectOpenService.open(project.rootPath, request.body.appId, request.body.path);
+            await projectOpenService.open(rootPath, request.body.appId, request.body.path);
           } catch (error) {
             if (error instanceof ProjectOpenAppUnavailableError) {
               throw new MutationHttpError(
@@ -318,9 +336,11 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     },
     async (request) =>
       runIdempotent(["add-project"], request.headers["idempotency-key"], request.body, async () => {
-        let selectedPath: string;
+        let selectedPaths: string[];
         try {
-          selectedPath = await resolveProjectDirectory(request.body.rootPath);
+          selectedPaths = await Promise.all(
+            request.body.roots.map((root) => resolveProjectDirectory(root.path)),
+          );
         } catch (error) {
           if (error instanceof ProjectDirectoryBrowserError) {
             throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
@@ -329,8 +349,8 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         }
         const project = await projectRepository.register({
           idempotencyKey: request.headers["idempotency-key"],
-          name: basename(selectedPath),
-          rootPath: selectedPath,
+          name: basename(selectedPaths[0] ?? ""),
+          roots: selectedPaths.map((path) => ({ path })),
         });
         return { project };
       }),

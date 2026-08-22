@@ -111,6 +111,7 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
+  const rootPath = "/workspace/CodeAgent";
   it("validates the complete task queue contract", () => {
     const input = { attachments: [], skills: [], text: "继续实现", type: "prompt" } as const;
     const queuedSubmission = {
@@ -164,16 +165,19 @@ describe("project protocol", () => {
     expect(TEMPORARY_TASK_API_PATH).toBe("/v1/temporary");
   });
 
-  it("requires an absolute directory when adding a project", () => {
+  it("requires ordered absolute roots when adding a project", () => {
     const project = {
       createdAt: "2026-07-25T00:00:00.000Z",
       id: "code-agent",
       name: "CodeAgent",
-      rootPath: "/workspace/CodeAgent",
+      roots: [{ path: "/workspace/CodeAgent" }, { path: "/workspace/superwork" }],
     };
 
-    expect(Value.Check(AddProjectRequestSchema, { rootPath: project.rootPath })).toBe(true);
-    expect(Value.Check(AddProjectRequestSchema, { rootPath: "workspace/CodeAgent" })).toBe(false);
+    expect(Value.Check(AddProjectRequestSchema, { roots: project.roots })).toBe(true);
+    expect(Value.Check(AddProjectRequestSchema, { roots: [] })).toBe(false);
+    expect(Value.Check(AddProjectRequestSchema, { roots: [{ path: "workspace/CodeAgent" }] })).toBe(
+      false,
+    );
     expect(Value.Check(AddProjectResponseSchema, { project })).toBe(true);
     expect(Value.Check(AddProjectResponseSchema, { project: null })).toBe(false);
   });
@@ -265,18 +269,18 @@ describe("project protocol", () => {
     ).toBe(false);
   });
 
-  it("defines a public project with its local root path", () => {
+  it("defines a public project with ordered roots", () => {
     expect(ProjectSchema).toMatchObject({
       additionalProperties: false,
       properties: {
         createdAt: { format: "date-time", type: "string" },
         id: { minLength: 1, type: "string" },
         name: { minLength: 1, type: "string" },
-        rootPath: { minLength: 1, type: "string" },
+        roots: { minItems: 1, type: "array", uniqueItems: true },
       },
       type: "object",
     });
-    expect(ProjectSchema.required).toEqual(["createdAt", "id", "name", "rootPath"]);
+    expect(ProjectSchema.required).toEqual(["createdAt", "id", "name", "roots"]);
   });
 
   it("requires a complete non-duplicated project order", () => {
@@ -304,7 +308,7 @@ describe("project protocol", () => {
             createdAt: "2026-07-23T00:00:00.000Z",
             id: "code-agent",
             name: "CodeAgent",
-            rootPath: "/workspace/CodeAgent",
+            roots: [{ path: "/workspace/CodeAgent" }],
           },
         ],
         nextCursor: null,
@@ -322,7 +326,7 @@ describe("project protocol", () => {
           createdAt: "2026-07-25T00:00:00.000Z",
           id: "code-agent",
           name: "工作区别名",
-          rootPath: "/workspace/CodeAgent",
+          roots: [{ path: "/workspace/CodeAgent" }],
         },
       }),
     ).toBe(true);
@@ -532,7 +536,7 @@ describe("project protocol", () => {
       createdAt: "2026-08-18T00:00:00.000Z",
       id: "code-agent-feat-worktree",
       name: "CodeAgent-feat-worktree",
-      rootPath: worktree.path,
+      roots: [{ path: worktree.path }],
     };
 
     expect(Value.Check(ProjectGitWorktreePageSchema, { worktrees: [worktree] })).toBe(true);
@@ -689,7 +693,7 @@ describe("project protocol", () => {
             createdAt: "2026-07-23T00:00:00.000Z",
             id: "code-agent",
             name: "CodeAgent",
-            rootPath: "/workspace/CodeAgent",
+            roots: [{ path: "/workspace/CodeAgent" }],
           },
         ],
         nextCursor: null,
@@ -771,13 +775,21 @@ describe("project protocol", () => {
   });
 
   it("validates Git status detail and repository selectors", () => {
-    expect(Value.Check(ProjectGitStatusQuerySchema, {})).toBe(true);
+    expect(Value.Check(ProjectGitStatusQuerySchema, {})).toBe(false);
     expect(
-      Value.Check(ProjectGitStatusQuerySchema, { includeDiff: true, repository: "frontend" }),
+      Value.Check(ProjectGitStatusQuerySchema, {
+        includeDiff: true,
+        repository: "frontend",
+        rootPath,
+      }),
     ).toBe(true);
-    expect(Value.Check(ProjectGitStatusQuerySchema, { includeDiff: "true" })).toBe(false);
-    expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "packages/server" })).toBe(false);
-    expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "../server" })).toBe(false);
+    expect(Value.Check(ProjectGitStatusQuerySchema, { includeDiff: "true", rootPath })).toBe(false);
+    expect(
+      Value.Check(ProjectGitStatusQuerySchema, { repository: "packages/server", rootPath }),
+    ).toBe(false);
+    expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "../server", rootPath })).toBe(
+      false,
+    );
   });
 
   it("strictly validates paginated Git history contracts", () => {
@@ -789,15 +801,18 @@ describe("project protocol", () => {
       title: "feat(git): 添加历史记录",
     };
 
-    expect(Value.Check(ProjectGitHistoryQuerySchema, {})).toBe(true);
+    expect(Value.Check(ProjectGitHistoryQuerySchema, {})).toBe(false);
     expect(
       Value.Check(ProjectGitHistoryQuerySchema, {
         cursor: "20",
         repository: "packages/server",
+        rootPath,
       }),
     ).toBe(true);
-    expect(Value.Check(ProjectGitHistoryQuerySchema, { cursor: "sha-20" })).toBe(false);
-    expect(Value.Check(ProjectGitHistoryQuerySchema, { repository: "../server" })).toBe(false);
+    expect(Value.Check(ProjectGitHistoryQuerySchema, { cursor: "sha-20", rootPath })).toBe(false);
+    expect(Value.Check(ProjectGitHistoryQuerySchema, { repository: "../server", rootPath })).toBe(
+      false,
+    );
     expect(
       Value.Check(ProjectGitHistoryPageSchema, {
         branch: "feat/apps-web",
@@ -878,19 +893,22 @@ describe("project protocol", () => {
       Value.Check(ProjectGitCommitFilesQuerySchema, {
         cursor: "100",
         repository: "packages/server",
+        rootPath,
         sha,
       }),
     ).toBe(true);
-    expect(Value.Check(ProjectGitCommitFilesQuerySchema, { sha: "HEAD" })).toBe(false);
+    expect(Value.Check(ProjectGitCommitFilesQuerySchema, { rootPath, sha: "HEAD" })).toBe(false);
     expect(
       Value.Check(ProjectGitCommitFileDiffQuerySchema, {
         path: "src/index.ts",
+        rootPath,
         sha,
       }),
     ).toBe(true);
     expect(
       Value.Check(ProjectGitCommitFileDiffQuerySchema, {
         path: "../secret.txt",
+        rootPath,
         sha,
       }),
     ).toBe(false);

@@ -8,7 +8,7 @@ const project: Project = {
   createdAt: "2026-08-18T00:00:00.000Z",
   id: "code-agent",
   name: "CodeAgent",
-  rootPath: "/workspace/CodeAgent",
+  roots: [{ path: "/workspace/CodeAgent" }],
 };
 
 describe("Codex permission server request mapping", () => {

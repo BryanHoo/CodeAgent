@@ -3,7 +3,6 @@ import type {
   AgentGlobalSettings,
   AgentMcpServerPage,
   AgentProjectDefaults,
-  AgentTaskPage,
   AgentTaskSettings,
   CommitProjectChangesRequest,
   GenerateCommitMessageRequest,
@@ -13,11 +12,7 @@ import type {
 import { infiniteQueryOptions, mutationOptions, queryOptions } from "@tanstack/react-query";
 
 import {
-  PROJECT_TASK_PAGE_SIZE,
-  TASK_SNAPSHOT_GC_TIME_MS,
   codeAgentClient,
-  type ProjectTaskInfiniteData,
-  type CodeAgentSnapshotClient,
   type CodeAgentCapabilitiesClient,
   type CodeAgentAppUpdateClient,
   type CodeAgentModelsClient,
@@ -25,12 +20,12 @@ import {
   type CodeAgentSkillsClient,
   type CodeAgentMcpServersClient,
   type CodeAgentMcpServersMutationClient,
-  type CodeAgentReadClient,
   type CodeAgentGitStatusClient,
   type CodeAgentGitHistoryClient,
   type CodeAgentGitCommitReviewClient,
   type CodeAgentFileTreeClient,
   type CodeAgentProjectOpenClient,
+  type CodeAgentReadClient,
 } from "./project-query-contracts.js";
 
 type TaskPinMutationInput = Readonly<{
@@ -261,13 +256,14 @@ export function projectReorderMutationOptions(
 
 export function projectGitStatusQueryOptions(
   projectId: string,
+  rootPath: string,
   client: CodeAgentGitStatusClient = codeAgentClient,
   enabled = true,
 ) {
   return queryOptions({
     enabled,
-    queryFn: ({ signal }) => client.getProjectGitStatus(projectId, {}, { signal }),
-    queryKey: ["projects", projectId, "git-status"] as const,
+    queryFn: ({ signal }) => client.getProjectGitStatus(projectId, { rootPath }, { signal }),
+    queryKey: ["projects", projectId, rootPath, "git-status"] as const,
     // Project 级协调器负责刷新生命周期，Query 只维护共享服务端状态。
     retry: 1,
   });
@@ -275,6 +271,7 @@ export function projectGitStatusQueryOptions(
 
 export function projectGitDetailedStatusQueryOptions(
   projectId: string,
+  rootPath: string,
   repository: string | null,
   snapshot: string,
   enabled: boolean,
@@ -287,18 +284,20 @@ export function projectGitDetailedStatusQueryOptions(
         projectId,
         {
           includeDiff: true,
+          rootPath,
           ...(repository === null ? {} : { repository }),
         },
         { signal },
       ),
     // 详情只服务触发它的仓库快照，状态变化后不会复用旧 Diff。
-    queryKey: ["projects", projectId, "git-status-detail", repository, snapshot] as const,
+    queryKey: ["projects", projectId, rootPath, "git-status-detail", repository, snapshot] as const,
     retry: 1,
   });
 }
 
 export function projectGitRepositoryStatusQueryOptions(
   projectId: string,
+  rootPath: string,
   repository: string | null,
   enabled: boolean,
   client: CodeAgentGitStatusClient = codeAgentClient,
@@ -308,14 +307,19 @@ export function projectGitRepositoryStatusQueryOptions(
     queryFn: ({ signal }) =>
       repository === null
         ? Promise.reject(new Error("Git repository is not selected"))
-        : client.getProjectGitStatus(projectId, { includeDiff: true, repository }, { signal }),
-    queryKey: ["projects", projectId, "git-status", repository] as const,
+        : client.getProjectGitStatus(
+            projectId,
+            { includeDiff: true, repository, rootPath },
+            { signal },
+          ),
+    queryKey: ["projects", projectId, rootPath, "git-status", repository] as const,
     retry: 1,
   });
 }
 
 export function projectGitHistoryInfiniteQueryOptions(
   projectId: string,
+  rootPath: string,
   repository: string | undefined,
   enabled: boolean,
   client: CodeAgentGitHistoryClient = codeAgentClient,
@@ -324,7 +328,7 @@ export function projectGitHistoryInfiniteQueryOptions(
     ProjectGitHistoryPage,
     Error,
     { pageParams: (string | undefined)[]; pages: ProjectGitHistoryPage[] },
-    readonly ["projects", string, "git-history", string | null],
+    readonly ["projects", string, string, "git-history", string | null],
     string | undefined
   >({
     enabled,
@@ -339,15 +343,17 @@ export function projectGitHistoryInfiniteQueryOptions(
         {
           ...(pageParam === undefined ? {} : { cursor: pageParam }),
           ...(repository === undefined ? {} : { repository }),
+          rootPath,
         },
         { signal },
       ),
-    queryKey: ["projects", projectId, "git-history", repository ?? null] as const,
+    queryKey: ["projects", projectId, rootPath, "git-history", repository ?? null] as const,
   });
 }
 
 export function projectGitCommitFilesInfiniteQueryOptions(
   projectId: string,
+  rootPath: string,
   repository: string | undefined,
   sha: string,
   enabled: boolean,
@@ -357,7 +363,7 @@ export function projectGitCommitFilesInfiniteQueryOptions(
     ProjectGitCommitFilesPage,
     Error,
     { pageParams: (string | undefined)[]; pages: ProjectGitCommitFilesPage[] },
-    readonly ["projects", string, "git-commit-files", string | null, string],
+    readonly ["projects", string, string, "git-commit-files", string | null, string],
     string | undefined
   >({
     enabled,
@@ -372,16 +378,25 @@ export function projectGitCommitFilesInfiniteQueryOptions(
         {
           ...(pageParam === undefined ? {} : { cursor: pageParam }),
           ...(repository === undefined ? {} : { repository }),
+          rootPath,
           sha,
         },
         { signal },
       ),
-    queryKey: ["projects", projectId, "git-commit-files", repository ?? null, sha] as const,
+    queryKey: [
+      "projects",
+      projectId,
+      rootPath,
+      "git-commit-files",
+      repository ?? null,
+      sha,
+    ] as const,
   });
 }
 
 export function projectGitCommitFileDiffQueryOptions(
   projectId: string,
+  rootPath: string,
   repository: string | undefined,
   sha: string,
   path: string,
@@ -397,98 +412,64 @@ export function projectGitCommitFileDiffQueryOptions(
         {
           path,
           ...(repository === undefined ? {} : { repository }),
+          rootPath,
           sha,
         },
         { signal },
       ),
-    queryKey: ["projects", projectId, "git-commit-diff", repository ?? null, sha, path] as const,
+    queryKey: [
+      "projects",
+      projectId,
+      rootPath,
+      "git-commit-diff",
+      repository ?? null,
+      sha,
+      path,
+    ] as const,
     staleTime: Number.POSITIVE_INFINITY,
   });
 }
 
 export function projectCommitMessageMutationOptions(
   projectId: string,
+  rootPath: string,
   client: Pick<CodeAgentClient, "generateCommitMessage"> = codeAgentClient,
 ) {
   return mutationOptions({
     // 生成结果会直接回填提交信息，仅失败时需要额外通知。
     meta: { actionNotification: { successMessage: false } },
     mutationFn: (request: GenerateCommitMessageRequest) =>
-      client.generateCommitMessage(projectId, request),
-    mutationKey: ["projects", projectId, "git", "commit-message"] as const,
-    scope: { id: `project-git-message:${projectId}` },
+      client.generateCommitMessage(projectId, rootPath, request),
+    mutationKey: ["projects", projectId, rootPath, "git", "commit-message"] as const,
+    scope: { id: `project-git-message:${projectId}:${rootPath}` },
   });
 }
 
 export function projectCommitChangesMutationOptions(
   projectId: string,
+  rootPath: string,
   client: Pick<CodeAgentClient, "commitProjectChanges"> = codeAgentClient,
 ) {
   return mutationOptions({
     mutationFn: (request: CommitProjectChangesRequest) =>
-      client.commitProjectChanges(projectId, request),
-    mutationKey: ["projects", projectId, "git", "commit"] as const,
-    scope: { id: `project-git-mutation:${projectId}` },
+      client.commitProjectChanges(projectId, rootPath, request),
+    mutationKey: ["projects", projectId, rootPath, "git", "commit"] as const,
+    scope: { id: `project-git-mutation:${projectId}:${rootPath}` },
   });
 }
 
 export function projectFileTreeQueryOptions(
   projectId: string,
+  rootPath: string,
   directoryPath: string | null,
   client: CodeAgentFileTreeClient = codeAgentClient,
   enabled = true,
 ) {
   return queryOptions({
     enabled,
-    queryFn: ({ signal }) => client.listProjectFiles(projectId, directoryPath, { signal }),
-    queryKey: ["projects", projectId, "file-tree", directoryPath] as const,
+    queryFn: ({ signal }) =>
+      client.listProjectFiles(projectId, rootPath, directoryPath, { signal }),
+    queryKey: ["projects", projectId, rootPath, "file-tree", directoryPath] as const,
     staleTime: 30_000,
-  });
-}
-
-export function projectTasksInfiniteQueryOptions(
-  projectId: string,
-  client: CodeAgentReadClient = codeAgentClient,
-) {
-  return infiniteQueryOptions<
-    AgentTaskPage,
-    Error,
-    ProjectTaskInfiniteData,
-    readonly ["projects", string, "tasks"],
-    string | undefined
-  >({
-    getNextPageParam: (
-      lastPage: AgentTaskPage,
-      _allPages: AgentTaskPage[],
-      lastPageParam: string | undefined,
-    ) => {
-      if (lastPage.nextCursor === null || lastPage.nextCursor === lastPageParam) {
-        return undefined;
-      }
-      return lastPage.nextCursor;
-    },
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-      client.listTasks(
-        projectId,
-        {
-          ...(pageParam === undefined ? {} : { cursor: pageParam }),
-          limit: PROJECT_TASK_PAGE_SIZE,
-        },
-        { signal },
-      ),
-    queryKey: ["projects", projectId, "tasks"] as const,
-  });
-}
-
-export function taskSnapshotQueryOptions(
-  projectId: string,
-  taskId: string,
-  client: CodeAgentSnapshotClient = codeAgentClient,
-) {
-  return queryOptions({
-    gcTime: TASK_SNAPSHOT_GC_TIME_MS,
-    queryFn: ({ signal }) => client.readTask(projectId, taskId, { signal }),
-    queryKey: ["projects", projectId, "tasks", taskId] as const,
   });
 }

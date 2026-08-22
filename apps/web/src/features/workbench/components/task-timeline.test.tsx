@@ -187,7 +187,7 @@ describe("TaskTimeline", () => {
               createdAt: "2026-07-22T06:00:00.000Z",
               id: "项目-alpha",
               name: "项目-alpha",
-              rootPath: "/workspace/项目-alpha",
+              roots: [{ path: "/workspace/项目-alpha" }],
             },
           ]}
           submissionStartedAt="2026-07-24T00:00:00.000Z"
@@ -308,7 +308,7 @@ describe("TaskTimeline", () => {
             createdAt: "2026-07-22T06:00:00.000Z",
             id: "code-agent",
             name: "CodeAgent",
-            rootPath: "/workspace/CodeAgent",
+            roots: [{ path: "/workspace/CodeAgent" }],
           },
         ]}
         submissionStartedAt="2026-07-24T00:00:00.000Z"
@@ -508,13 +508,13 @@ describe("TaskTimeline", () => {
             createdAt: "2026-07-22T06:00:00.000Z",
             id: "code-agent",
             name: "CodeAgent",
-            rootPath: "/workspace/CodeAgent",
+            roots: [{ path: "/workspace/CodeAgent" }],
           },
           {
             createdAt: "2026-07-22T06:30:00.000Z",
             id: "superwork",
             name: "superwork",
-            rootPath: "/workspace/superwork",
+            roots: [{ path: "/workspace/superwork" }],
           },
         ]}
       />,

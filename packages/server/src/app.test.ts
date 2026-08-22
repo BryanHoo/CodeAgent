@@ -43,11 +43,13 @@ import { GitWorktreeError } from "./git-worktree.js";
 import type { ProjectOpenService } from "./project-open.js";
 import { normalizeAllowedHost } from "./server-delivery.js";
 
+const projectRootPath = "/workspace/CodeAgent";
+const encodedProjectRootPath = "%2Fworkspace%2FCodeAgent";
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
   id: "code-agent",
   name: "CodeAgent",
-  rootPath: "/workspace/CodeAgent",
+  roots: [{ path: projectRootPath }],
 } as const;
 
 const temporaryProject = {
@@ -55,6 +57,7 @@ const temporaryProject = {
   id: "temporary",
   name: "Temporary",
   rootPath: "/code-agent/temporary-workspace",
+  roots: [{ path: "/code-agent/temporary-workspace" }],
 } as const;
 
 const pixelDataUrl =
@@ -1332,7 +1335,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "open-project-key" },
       method: "POST" as const,
       payload: { appId: "zed", path: "src/components/app.tsx" },
-      url: "/v1/projects/code-agent/open",
+      url: `/v1/projects/code-agent/open?rootPath=${encodedProjectRootPath}`,
     };
     const firstResponse = await app.inject(request);
     const repeatedResponse = await app.inject(request);
@@ -1358,7 +1361,7 @@ describe("CodeAgent Server", () => {
       createdAt: "2026-07-23T00:01:00.000Z",
       id: "superwork",
       name: "superwork",
-      rootPath: "/workspace/superwork",
+      roots: [{ path: "/workspace/superwork" }],
     };
     let orderedProjects = [project, secondProject];
     const reorder = vi.fn((projectIds: readonly string[]) => {
@@ -1412,7 +1415,7 @@ describe("CodeAgent Server", () => {
   it("browses host directories and adds the explicitly selected project", async () => {
     const { provider } = createProvider();
     const selectedPath = "/Users/bryan/Develop/CodeAgent";
-    const selectedProject = { ...project, rootPath: selectedPath };
+    const selectedProject = { ...project, roots: [{ path: selectedPath }] };
     const register = vi.fn(() => Promise.resolve(selectedProject));
     const readProjectDirectory = vi.fn(() =>
       Promise.resolve({
@@ -1443,7 +1446,7 @@ describe("CodeAgent Server", () => {
     const response = await app.inject({
       headers: { "idempotency-key": "add-project" },
       method: "POST",
-      payload: { rootPath: selectedPath },
+      payload: { roots: [{ path: selectedPath }] },
       url: "/v1/projects",
     });
 
@@ -1458,7 +1461,7 @@ describe("CodeAgent Server", () => {
     expect(register).toHaveBeenCalledWith({
       idempotencyKey: "add-project",
       name: "CodeAgent",
-      rootPath: selectedPath,
+      roots: [{ path: selectedPath }],
     });
   });
 
@@ -1733,11 +1736,11 @@ describe("CodeAgent Server", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/git/status?repository=frontend",
+      url: `/v1/projects/code-agent/git/status?repository=frontend&rootPath=${encodedProjectRootPath}`,
     });
     const missingProjectResponse = await app.inject({
       method: "GET",
-      url: "/v1/projects/other/git/status",
+      url: `/v1/projects/other/git/status?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -1747,7 +1750,7 @@ describe("CodeAgent Server", () => {
       staged: [{ path: "staged.ts" }],
       unstaged: [],
     });
-    expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath, {
+    expect(readProjectGitStatus).toHaveBeenCalledWith(projectRootPath, {
       repository: "frontend",
     });
     expect(missingProjectResponse.statusCode).toBe(404);
@@ -1780,20 +1783,20 @@ describe("CodeAgent Server", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/git/history?repository=packages%2Fserver&cursor=20",
+      url: `/v1/projects/code-agent/git/history?repository=packages%2Fserver&cursor=20&rootPath=${encodedProjectRootPath}`,
     });
     const missingProjectResponse = await app.inject({
       method: "GET",
-      url: "/v1/projects/other/git/history",
+      url: `/v1/projects/other/git/history?rootPath=${encodedProjectRootPath}`,
     });
     const invalidQueryResponse = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/git/history?cursor=sha",
+      url: `/v1/projects/code-agent/git/history?cursor=sha&rootPath=${encodedProjectRootPath}`,
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(historyPage);
-    expect(readProjectGitHistory).toHaveBeenCalledWith(project.rootPath, {
+    expect(readProjectGitHistory).toHaveBeenCalledWith(projectRootPath, {
       cursor: "20",
       repository: "packages/server",
     });
@@ -1824,19 +1827,19 @@ describe("CodeAgent Server", () => {
 
     const filesResponse = await app.inject({
       method: "GET",
-      url: `/v1/projects/code-agent/git/commit-files?sha=${sha}&repository=packages%2Fserver&cursor=100`,
+      url: `/v1/projects/code-agent/git/commit-files?sha=${sha}&repository=packages%2Fserver&cursor=100&rootPath=${encodedProjectRootPath}`,
     });
     const diffResponse = await app.inject({
       method: "GET",
-      url: `/v1/projects/code-agent/git/commit-diff?sha=${sha}&path=src%2Findex.ts&repository=packages%2Fserver`,
+      url: `/v1/projects/code-agent/git/commit-diff?sha=${sha}&path=src%2Findex.ts&repository=packages%2Fserver&rootPath=${encodedProjectRootPath}`,
     });
     const invalidResponse = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/git/commit-files?sha=HEAD",
+      url: `/v1/projects/code-agent/git/commit-files?sha=HEAD&rootPath=${encodedProjectRootPath}`,
     });
     const missingProjectResponse = await app.inject({
       method: "GET",
-      url: `/v1/projects/missing/git/commit-files?sha=${sha}`,
+      url: `/v1/projects/missing/git/commit-files?sha=${sha}&rootPath=${encodedProjectRootPath}`,
     });
 
     expect(filesResponse.statusCode).toBe(200);
@@ -1848,12 +1851,12 @@ describe("CodeAgent Server", () => {
     expect(diffResponse.json()).toMatchObject({ truncated: false });
     expect(invalidResponse.statusCode).toBe(400);
     expect(missingProjectResponse.statusCode).toBe(404);
-    expect(readProjectGitCommitFiles).toHaveBeenCalledWith(project.rootPath, {
+    expect(readProjectGitCommitFiles).toHaveBeenCalledWith(projectRootPath, {
       cursor: "100",
       repository: "packages/server",
       sha,
     });
-    expect(readProjectGitCommitFileDiff).toHaveBeenCalledWith(project.rootPath, {
+    expect(readProjectGitCommitFileDiff).toHaveBeenCalledWith(projectRootPath, {
       path: "src/index.ts",
       repository: "packages/server",
       sha,
@@ -1881,19 +1884,19 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "switch-main" },
       method: "POST",
       payload: request,
-      url: "/v1/projects/code-agent/git/branch",
+      url: `/v1/projects/code-agent/git/branch?rootPath=${encodedProjectRootPath}`,
     });
     const repeated = await app.inject({
       headers: { "idempotency-key": "switch-main" },
       method: "POST",
       payload: request,
-      url: "/v1/projects/code-agent/git/branch",
+      url: `/v1/projects/code-agent/git/branch?rootPath=${encodedProjectRootPath}`,
     });
     const invalid = await app.inject({
       headers: { "idempotency-key": "switch-invalid" },
       method: "POST",
       payload: { ...request, branch: "" },
-      url: "/v1/projects/code-agent/git/branch",
+      url: `/v1/projects/code-agent/git/branch?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(first.statusCode).toBe(200);
@@ -1901,7 +1904,7 @@ describe("CodeAgent Server", () => {
     expect(repeated.json()).toEqual(switchedStatus);
     expect(invalid.statusCode).toBe(400);
     expect(switchProjectBranch).toHaveBeenCalledOnce();
-    expect(switchProjectBranch).toHaveBeenCalledWith(project.rootPath, request);
+    expect(switchProjectBranch).toHaveBeenCalledWith(projectRootPath, request);
   });
 
   it("maps branch-switch conflicts and command failures to bounded mutation errors", async () => {
@@ -1919,13 +1922,13 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "switch-stale" },
       method: "POST",
       payload: { branch: "main", expectedSnapshot: "a".repeat(64) },
-      url: "/v1/projects/code-agent/git/branch",
+      url: `/v1/projects/code-agent/git/branch?rootPath=${encodedProjectRootPath}`,
     });
     const failed = await app.inject({
       headers: { "idempotency-key": "switch-failed" },
       method: "POST",
       payload: { branch: "main", expectedSnapshot: "b".repeat(64) },
-      url: "/v1/projects/code-agent/git/branch",
+      url: `/v1/projects/code-agent/git/branch?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(stale.statusCode).toBe(409);
@@ -1959,20 +1962,20 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "create-new-branch" },
       method: "POST",
       payload: request,
-      url: "/v1/projects/code-agent/git/branches",
+      url: `/v1/projects/code-agent/git/branches?rootPath=${encodedProjectRootPath}`,
     });
     const repeated = await app.inject({
       headers: { "idempotency-key": "create-new-branch" },
       method: "POST",
       payload: request,
-      url: "/v1/projects/code-agent/git/branches",
+      url: `/v1/projects/code-agent/git/branches?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(first.statusCode).toBe(200);
     expect(first.json()).toEqual(createdStatus);
     expect(repeated.json()).toEqual(createdStatus);
     expect(createProjectBranch).toHaveBeenCalledOnce();
-    expect(createProjectBranch).toHaveBeenCalledWith(project.rootPath, request);
+    expect(createProjectBranch).toHaveBeenCalledWith(projectRootPath, request);
   });
 
   it("lists, creates, registers, and switches project worktrees idempotently", async () => {
@@ -1986,7 +1989,7 @@ describe("CodeAgent Server", () => {
       createdAt: "2026-08-18T00:00:00.000Z",
       id: "code-agent-feat-worktree",
       name: "CodeAgent-feat-worktree",
-      rootPath: worktree.path,
+      roots: [{ path: worktree.path }],
     };
     const readProjectWorktrees = vi.fn(() => Promise.resolve({ worktrees: [worktree] }));
     const createProjectWorktree = vi.fn(() => Promise.resolve(worktree));
@@ -2009,25 +2012,25 @@ describe("CodeAgent Server", () => {
 
     const listed = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/git/worktrees",
+      url: `/v1/projects/code-agent/git/worktrees?rootPath=${encodedProjectRootPath}`,
     });
     const created = await app.inject({
       headers: { "idempotency-key": "create-worktree" },
       method: "POST",
       payload: createRequest,
-      url: "/v1/projects/code-agent/git/worktrees",
+      url: `/v1/projects/code-agent/git/worktrees?rootPath=${encodedProjectRootPath}`,
     });
     const repeated = await app.inject({
       headers: { "idempotency-key": "create-worktree" },
       method: "POST",
       payload: createRequest,
-      url: "/v1/projects/code-agent/git/worktrees",
+      url: `/v1/projects/code-agent/git/worktrees?rootPath=${encodedProjectRootPath}`,
     });
     const switched = await app.inject({
       headers: { "idempotency-key": "switch-worktree" },
       method: "POST",
       payload: { path: worktree.path },
-      url: "/v1/projects/code-agent/git/worktree",
+      url: `/v1/projects/code-agent/git/worktree?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(listed.json()).toEqual({ worktrees: [worktree] });
@@ -2035,8 +2038,8 @@ describe("CodeAgent Server", () => {
     expect(repeated.json()).toEqual({ project: targetProject, worktree });
     expect(switched.json()).toEqual({ project: targetProject, worktree });
     expect(createProjectWorktree).toHaveBeenCalledOnce();
-    expect(createProjectWorktree).toHaveBeenCalledWith(project.rootPath, createRequest);
-    expect(resolveProjectWorktree).toHaveBeenCalledWith(project.rootPath, worktree.path);
+    expect(createProjectWorktree).toHaveBeenCalledWith(projectRootPath, createRequest);
+    expect(resolveProjectWorktree).toHaveBeenCalledWith(projectRootPath, worktree.path);
     expect(register).toHaveBeenCalledTimes(2);
   });
 
@@ -2057,13 +2060,13 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "create-worktree-failed" },
       method: "POST",
       payload: { branch: "feat/worktree", expectedSnapshot: "a".repeat(64) },
-      url: "/v1/projects/code-agent/git/worktrees",
+      url: `/v1/projects/code-agent/git/worktrees?rootPath=${encodedProjectRootPath}`,
     });
     const switched = await app.inject({
       headers: { "idempotency-key": "switch-worktree-missing" },
       method: "POST",
       payload: { path: "/workspace/missing" },
-      url: "/v1/projects/code-agent/git/worktree",
+      url: `/v1/projects/code-agent/git/worktree?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(created.statusCode).toBe(502);
@@ -2141,7 +2144,7 @@ describe("CodeAgent Server", () => {
         paths: ["src/app.ts"],
         repository: "frontend",
       },
-      url: "/v1/projects/code-agent/git/commit-message",
+      url: `/v1/projects/code-agent/git/commit-message?rootPath=${encodedProjectRootPath}`,
     });
     await vi.waitFor(() => {
       expect(providerHarness.startTurn).toHaveBeenCalledOnce();
@@ -2179,7 +2182,7 @@ describe("CodeAgent Server", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ message: "feat(git): 生成提交信息", snapshot });
-    expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath, {
+    expect(readProjectGitStatus).toHaveBeenCalledWith(projectRootPath, {
       includeDiff: true,
       repository: "frontend",
     });
@@ -2236,7 +2239,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "stale-message" },
       method: "POST",
       payload: { expectedSnapshot: "e".repeat(64), paths: ["src/app.ts"] },
-      url: "/v1/projects/code-agent/git/commit-message",
+      url: `/v1/projects/code-agent/git/commit-message?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(response.statusCode).toBe(409);
@@ -2284,7 +2287,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "failed-message" },
       method: "POST",
       payload: { expectedSnapshot: snapshot, paths: oversizedChanges.map((change) => change.path) },
-      url: "/v1/projects/code-agent/git/commit-message",
+      url: `/v1/projects/code-agent/git/commit-message?rootPath=${encodedProjectRootPath}`,
     });
     await vi.waitFor(() => {
       expect(providerHarness.startTurn).toHaveBeenCalledOnce();
@@ -2345,20 +2348,20 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "commit-selected" },
       method: "POST",
       payload: request,
-      url: "/v1/projects/code-agent/git/commits",
+      url: `/v1/projects/code-agent/git/commits?rootPath=${encodedProjectRootPath}`,
     });
     const repeated = await app.inject({
       headers: { "idempotency-key": "commit-selected" },
       method: "POST",
       payload: request,
-      url: "/v1/projects/code-agent/git/commits",
+      url: `/v1/projects/code-agent/git/commits?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(first.statusCode).toBe(201);
     expect(first.json()).toMatchObject({ pushStatus: "failed" });
     expect(repeated.json()).toEqual(first.json());
     expect(commitProjectChanges).toHaveBeenCalledOnce();
-    expect(commitProjectChanges).toHaveBeenCalledWith(project.rootPath, request);
+    expect(commitProjectChanges).toHaveBeenCalledWith(projectRootPath, request);
   });
 
   it("rejects concurrent Git mutations for the same project", async () => {
@@ -2397,7 +2400,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "first-commit" },
       method: "POST",
       payload,
-      url: "/v1/projects/code-agent/git/commits",
+      url: `/v1/projects/code-agent/git/commits?rootPath=${encodedProjectRootPath}`,
     });
     await vi.waitFor(() => {
       expect(commitProjectChanges).toHaveBeenCalledOnce();
@@ -2406,7 +2409,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "concurrent-commit" },
       method: "POST",
       payload,
-      url: "/v1/projects/code-agent/git/commits",
+      url: `/v1/projects/code-agent/git/commits?rootPath=${encodedProjectRootPath}`,
     });
     resolveCommit({
       branch: "feat/commit",
@@ -2446,15 +2449,15 @@ describe("CodeAgent Server", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/files/source?path=%2Fhome%2Ftest%2Freports%2Farchitecture-design.md",
+      url: `/v1/projects/code-agent/files/source?path=%2Fhome%2Ftest%2Freports%2Farchitecture-design.md&rootPath=${encodedProjectRootPath}`,
     });
     const missingProjectResponse = await app.inject({
       method: "GET",
-      url: "/v1/projects/other/files/source?path=docs%2Farchitecture-design.md",
+      url: `/v1/projects/other/files/source?path=docs%2Farchitecture-design.md&rootPath=${encodedProjectRootPath}`,
     });
     const nextPageResponse = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/files/source?cursor=24&path=%2Fhome%2Ftest%2Freports%2Farchitecture-design.md",
+      url: `/v1/projects/code-agent/files/source?cursor=24&path=%2Fhome%2Ftest%2Freports%2Farchitecture-design.md&rootPath=${encodedProjectRootPath}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -2464,7 +2467,7 @@ describe("CodeAgent Server", () => {
       path: "/home/test/reports/architecture-design.md",
     });
     expect(readProjectSourceFile).toHaveBeenCalledWith(
-      project.rootPath,
+      projectRootPath,
       "/home/test/reports/architecture-design.md",
       0,
     );
@@ -2476,7 +2479,7 @@ describe("CodeAgent Server", () => {
       path: "/home/test/reports/architecture-design.md",
     });
     expect(readProjectSourceFile).toHaveBeenLastCalledWith(
-      project.rootPath,
+      projectRootPath,
       "/home/test/reports/architecture-design.md",
       24,
     );
@@ -2500,7 +2503,7 @@ describe("CodeAgent Server", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/files/image?path=%2Fworkspace%2FCodeAgent%2Fdesign%2Fresult.png",
+      url: `/v1/projects/code-agent/files/image?path=%2Fworkspace%2FCodeAgent%2Fdesign%2Fresult.png&rootPath=${encodedProjectRootPath}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -2508,7 +2511,7 @@ describe("CodeAgent Server", () => {
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.rawPayload).toEqual(imageContent);
     expect(readProjectImageFile).toHaveBeenCalledWith(
-      project.rootPath,
+      projectRootPath,
       "/workspace/CodeAgent/design/result.png",
     );
   });
@@ -2526,11 +2529,11 @@ describe("CodeAgent Server", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/files/tree?path=src",
+      url: `/v1/projects/code-agent/files/tree?path=src&rootPath=${encodedProjectRootPath}`,
     });
     const missingProjectResponse = await app.inject({
       method: "GET",
-      url: "/v1/projects/other/files/tree",
+      url: `/v1/projects/other/files/tree?rootPath=${encodedProjectRootPath}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -2538,7 +2541,7 @@ describe("CodeAgent Server", () => {
       entries: [{ path: "src/main.tsx", type: "file" }],
       path: "src",
     });
-    expect(readProjectFileTree).toHaveBeenCalledWith(project.rootPath, "src");
+    expect(readProjectFileTree).toHaveBeenCalledWith(projectRootPath, "src");
     expect(missingProjectResponse.statusCode).toBe(404);
     expect(readProjectFileTree).toHaveBeenCalledTimes(1);
   });
@@ -2555,11 +2558,11 @@ describe("CodeAgent Server", () => {
 
     const search = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/files/search?query=main",
+      url: `/v1/projects/code-agent/files/search?query=main&rootPath=${encodedProjectRootPath}`,
     });
     expect(search.statusCode).toBe(200);
     expect(search.json()).toEqual({ data: [{ name: "main.tsx", path: "src/main.tsx" }] });
-    expect(readProjectFileSearch.mock.calls[0]?.slice(0, 2)).toEqual([project.rootPath, "main"]);
+    expect(readProjectFileSearch.mock.calls[0]?.slice(0, 2)).toEqual([projectRootPath, "main"]);
   });
 
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
@@ -2881,7 +2884,7 @@ describe("CodeAgent Server", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ attachmentId: attachment.id, status: "opened" });
-    expect(open).toHaveBeenCalledWith(project.rootPath, "system-default", expect.any(String));
+    expect(open).toHaveBeenCalledWith(projectRootPath, "system-default", expect.any(String));
   });
 
   it("lists project tasks with validated pagination", async () => {

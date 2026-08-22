@@ -15,13 +15,13 @@ const projects = [
     createdAt: "2026-08-02T00:00:00.000Z",
     id: "project-1",
     name: "Project 1",
-    rootPath: "/workspace/project-1",
+    roots: [{ path: "/workspace/project-1" }],
   },
   {
     createdAt: "2026-08-02T00:00:00.000Z",
     id: "project-2",
     name: "Project 2",
-    rootPath: "/workspace/project-2",
+    roots: [{ path: "/workspace/project-2" }],
   },
 ] as const;
 

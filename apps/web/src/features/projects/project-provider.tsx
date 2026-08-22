@@ -61,7 +61,13 @@ export function ProjectProvider({
       },
       onProjectGitActivity(projectId, taskId, reason) {
         if (projectId !== TEMPORARY_TASK_SCOPE_ID) {
-          gitStatusCoordinator.handleActivity(projectId, taskId, reason);
+          const project = queryClient
+            .getQueryData<ProjectPage>(["projects"])
+            ?.data.find((candidate) => candidate.id === projectId);
+          const primaryRoot = project?.roots[0];
+          if (primaryRoot !== undefined) {
+            gitStatusCoordinator.handleActivity(projectId, primaryRoot.path, taskId, reason);
+          }
         }
       },
       onQueueChanged(projectId, taskId) {
@@ -258,11 +264,11 @@ export function ProjectProvider({
     void projectRuntime.requestNotificationPermission();
   }, [projectRuntime]);
   const addProject = useCallback(
-    (rootPath: string) =>
+    (rootPaths: readonly string[]) =>
       addProjectLockRef.current.run(async () => {
         setIsProjectAddPending(true);
         try {
-          const response = await client.addProject(rootPath);
+          const response = await client.addProject(rootPaths);
           // 注册响应已包含完整 Project，直接写入精确缓存，避免重取当前 Task 等无关查询。
           queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) => {
             if (currentPage === undefined) {
@@ -364,9 +370,9 @@ export function ProjectProvider({
     [gitStatusCoordinator, mutateProjectRemove, projectRuntime, queryClient],
   );
   const refreshProjectGitStatus = useCallback(
-    async (projectId: string) => {
+    async (projectId: string, rootPath: string) => {
       try {
-        await gitStatusCoordinator.refreshProject(projectId);
+        await gitStatusCoordinator.refreshProject(projectId, rootPath);
         notifyActionSuccess();
       } catch (error) {
         notifyActionError(error);

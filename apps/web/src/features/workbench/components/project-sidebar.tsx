@@ -207,8 +207,8 @@ export function ProjectSidebar({
     });
   };
 
-  const addSelectedProject = async (rootPath: string) => {
-    const project = await addProject(rootPath);
+  const addSelectedProject = async (rootPaths: readonly string[]) => {
+    const project = await addProject(rootPaths);
     if (project !== undefined) {
       setIsProjectPickerOpen(false);
       updateExpandedProjects((current) => new Set(current).add(project.id));

@@ -18,7 +18,7 @@ type RepositoryTestOptions = Readonly<{
 const repositories: SqliteStateRepository[] = [];
 
 function createProject(id: string, name: string, rootPath: string): Project {
-  return { createdAt: "2026-08-21T00:00:00.000Z", id, name, rootPath };
+  return { createdAt: "2026-08-21T00:00:00.000Z", id, name, roots: [{ path: rootPath }] };
 }
 
 async function createWorkspace(): Promise<string> {
@@ -48,7 +48,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 17,
+      migrationVersion: 18,
       synchronous: "normal",
       writable: true,
     });
@@ -140,13 +140,13 @@ describe("SqliteStateRepository", () => {
       createdAt: "2026-08-21T01:00:00.000Z",
       id: "codex-project-1",
       name: "First",
-      rootPath: sharedRoot,
+      roots: [{ path: sharedRoot }, { path: otherRoot }],
     };
     const second = {
       createdAt: "2026-08-21T02:00:00.000Z",
       id: "codex-project-2",
       name: "Second",
-      rootPath: sharedRoot,
+      roots: [{ path: sharedRoot }],
     };
 
     await expect(repository.replaceProjects([first, second])).resolves.toEqual([first, second]);
@@ -156,7 +156,11 @@ describe("SqliteStateRepository", () => {
       sandboxMode: "workspace-write",
     });
 
-    const updatedFirst = { ...first, name: "Updated First", rootPath: otherRoot };
+    const updatedFirst = {
+      ...first,
+      name: "Updated First",
+      roots: [{ path: otherRoot }, { path: sharedRoot }],
+    };
     await expect(repository.replaceProjects([second, updatedFirst])).resolves.toEqual([
       second,
       updatedFirst,
@@ -176,13 +180,13 @@ describe("SqliteStateRepository", () => {
       createdAt: "2026-08-21T01:00:00.000Z",
       id: "codex-project-1",
       name: "First",
-      rootPath: firstRoot,
+      roots: [{ path: firstRoot }, { path: secondRoot }],
     };
     const second = {
       createdAt: "2026-08-21T02:00:00.000Z",
       id: "codex-project-2",
       name: "Second",
-      rootPath: secondRoot,
+      roots: [{ path: secondRoot }],
     };
 
     await repository.upsertProject(first);
@@ -347,7 +351,7 @@ describe("SqliteStateRepository", () => {
     const renamed = await repository.upsertProject({ ...project, name: "工作区别名" });
 
     expect(renamed).toEqual({ ...project, name: "工作区别名" });
-    expect(renamed.rootPath).toBe(project.rootPath);
+    expect(renamed.roots).toEqual(project.roots);
     await expect(repository.deleteProject("missing")).resolves.toBe(false);
     await expect(repository.deleteProject(project.id)).resolves.toBe(true);
     await expect(repository.read(project.id)).resolves.toBeUndefined();

@@ -14,6 +14,7 @@ export function WorkbenchInspectorChanges({
   gitStatusError,
   onOpenFileDiff,
   projectId,
+  rootPath,
 }: Readonly<{
   client: CodeAgentWorkbenchClient | undefined;
   detailsError: Error | null;
@@ -23,6 +24,7 @@ export function WorkbenchInspectorChanges({
   gitStatusError: Error | null;
   onOpenFileDiff: (change: AgentFileChange) => void;
   projectId: string | undefined;
+  rootPath: string;
 }>) {
   if (projectId !== undefined && client !== undefined && gitStatus !== undefined) {
     return (
@@ -33,6 +35,7 @@ export function WorkbenchInspectorChanges({
         gitStatus={detailsStatus ?? gitStatus}
         onOpenFileDiff={onOpenFileDiff}
         projectId={projectId}
+        rootPath={rootPath}
       />
     );
   }

@@ -22,6 +22,7 @@ import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { providerConnectionQueryOptions } from "../../provider-connection/provider-connection-queries.js";
 import { useProjectActions, useProjectData } from "../../projects/project-context.js";
+import { resolveSelectedProjectRoot } from "../../projects/project-root-selection.js";
 import {
   appInfoQueryOptions,
   appUpdateMutationOptions,
@@ -111,6 +112,10 @@ export function useWorkbenchShellRuntime({
   const access = useAccess();
   const { capabilities, client, error, isPending, projects, projectTaskStates, tasks } =
     useProjectData();
+  const project = projects.find((item) => item.id === projectId);
+  const [rootSelection, setRootSelection] = useState<{ path: string; projectId: string }>();
+  const selectedRoot = resolveSelectedProjectRoot(project, rootSelection);
+  const selectedRootPath = temporary ? undefined : selectedRoot?.path;
   const {
     markTaskRunning,
     projectRuntime,
@@ -142,7 +147,14 @@ export function useWorkbenchShellRuntime({
   // 标签选择绑定当前路由身份；Task 首屏进入上下文，草稿页仍以项目浏览为主。
   const inspectorTab =
     inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : defaultInspectorTab;
-  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client, !temporary));
+  const gitStatusQuery = useQuery(
+    projectGitStatusQueryOptions(
+      projectId,
+      selectedRootPath ?? "",
+      client,
+      !temporary && selectedRootPath !== undefined,
+    ),
+  );
   const inspectorActivation = deriveWorkbenchInspectorActivation({
     contextOnly: temporary,
     gitStatus: gitStatusQuery.data,
@@ -182,7 +194,11 @@ export function useWorkbenchShellRuntime({
       appId,
       path,
     }: Readonly<{ appId: ProjectOpenAppId; path: string | undefined }>) =>
-      client.openProject(projectId, path === undefined ? { appId } : { appId, path }),
+      client.openProject(
+        projectId,
+        selectedRootPath,
+        path === undefined ? { appId } : { appId, path },
+      ),
   });
   const taskAttachmentOpenMutation = useMutation({
     meta: { actionNotification: { successMessage: false } },
@@ -274,12 +290,13 @@ export function useWorkbenchShellRuntime({
     isTaskRunning,
     inspectorActivation.context,
   );
+  const fileTreeScope = `${projectId}:${selectedRootPath ?? "temporary"}`;
   const [fileTreeExpansion, setFileTreeExpansion] = useState(() => ({
     paths: new Set<string>(),
-    projectId,
+    scope: fileTreeScope,
   }));
   const expandedFileTreePaths =
-    fileTreeExpansion.projectId === projectId
+    fileTreeExpansion.scope === fileTreeScope
       ? fileTreeExpansion.paths
       : emptyExpandedFileTreePaths;
   const {
@@ -314,10 +331,21 @@ export function useWorkbenchShellRuntime({
     projectId: string;
     selection: SubagentSelection;
   } | null>(null);
+  const setSelectedRootPath = useCallback(
+    (path: string) => {
+      setRootSelection({ path, projectId });
+      // 根切换后关闭旧根派生的详情，避免相同相对路径被误解为新根文件。
+      setFileDiffSelection(null);
+      setFileReviewSelection(null);
+      setSourceFileSelection(null);
+    },
+    [projectId],
+  );
 
   const gitStatusDetailsQuery = useQuery(
     projectGitDetailedStatusQueryOptions(
       projectId,
+      selectedRootPath ?? "",
       null,
       gitStatusQuery.data?.snapshot ?? "",
       shouldEnableProjectGitDetails({
@@ -340,9 +368,8 @@ export function useWorkbenchShellRuntime({
     // 路由提交后、页面绘制前消费提醒，避免实时终态与被动 Effect 形成竞态。
     viewTask(projectId, taskId);
   }, [projectId, taskId, viewTask]);
-  const project = projects.find((item) => item.id === projectId);
   const projectName = temporary ? t("shell.temporaryTask") : (project?.name ?? projectId);
-  const projectPath = temporary ? "" : (project?.rootPath ?? projectId);
+  const projectPath = selectedRootPath ?? "";
   const title =
     tasks.find((task) => task.projectId === projectId && task.id === taskId)?.title ??
     runtime.snapshot?.title ??
@@ -414,6 +441,7 @@ export function useWorkbenchShellRuntime({
     projectDefaultsMutation,
     projectDefaultsQuery,
     projectName,
+    projectRoots: project?.roots ?? [],
     projectOpenCapabilitiesQuery,
     providerConnectionQuery,
     projectFolderOpenDisabled:
@@ -434,6 +462,7 @@ export function useWorkbenchShellRuntime({
     runtime,
     selectedFileChange,
     selectedFileReview,
+    selectedRootPath,
     selectedSourceFile,
     selectedSubagent,
     setFileDiffSelection,
@@ -447,6 +476,7 @@ export function useWorkbenchShellRuntime({
     setSidebarOpen,
     setSidebarWidth,
     setSourceFileSelection,
+    setSelectedRootPath,
     setSubagentDialogSelection,
     setTaskRenameOpen,
     sidebarConnectionState,

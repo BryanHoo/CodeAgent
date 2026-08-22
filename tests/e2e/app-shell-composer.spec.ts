@@ -128,6 +128,7 @@ test("creates and switches to a worktree from the composer footer", async ({ pag
 });
 
 test("opens current-branch Git history from the inspector tab", async ({ page }) => {
+  const encodedRootPath = "%2Fworkspace%2FCodeAgent";
   const historyRequests: string[] = [];
   const commitFileRequests: string[] = [];
   const commitDiffRequests: string[] = [];
@@ -216,7 +217,7 @@ test("opens current-branch Git history from the inspector tab", async ({ page })
     "true",
   );
   const initialInspectorBox = await inspector.boundingBox();
-  expect(historyRequests).toEqual([""]);
+  expect(historyRequests).toEqual([`?rootPath=${encodedRootPath}`]);
 
   await inspector.getByRole("button", { name: /^apps\/web commit 1 /u }).click();
   const reviewDialog = page.locator('[data-slot="dialog-content"]');
@@ -224,15 +225,17 @@ test("opens current-branch Git history from the inspector tab", async ({ page })
   await expect(inspector.getByText("apps/web commit 1", { exact: true })).toBeVisible();
   await expect(reviewDialog.getByText("Diff 过长，仅展示前 512 KiB")).toBeVisible();
   await expect(reviewDialog.locator(".file-diff-renderer")).toContainText("new");
-  expect(commitFileRequests).toEqual([`?repository=apps%2Fweb&sha=${"0".repeat(40)}`]);
+  expect(commitFileRequests).toEqual([
+    `?repository=apps%2Fweb&rootPath=${encodedRootPath}&sha=${"0".repeat(40)}`,
+  ]);
   expect(commitDiffRequests).toEqual([
-    `?path=src%2Freview-0.ts&repository=apps%2Fweb&sha=${"0".repeat(40)}`,
+    `?path=src%2Freview-0.ts&repository=apps%2Fweb&rootPath=${encodedRootPath}&sha=${"0".repeat(40)}`,
   ]);
   await reviewDialog.getByRole("button", { name: "加载更多文件" }).click();
   await expect(reviewDialog.getByText("review-100.ts")).toBeVisible();
   expect(commitFileRequests).toEqual([
-    `?repository=apps%2Fweb&sha=${"0".repeat(40)}`,
-    `?cursor=100&repository=apps%2Fweb&sha=${"0".repeat(40)}`,
+    `?repository=apps%2Fweb&rootPath=${encodedRootPath}&sha=${"0".repeat(40)}`,
+    `?cursor=100&repository=apps%2Fweb&rootPath=${encodedRootPath}&sha=${"0".repeat(40)}`,
   ]);
   expect(commitDiffRequests).toHaveLength(1);
   await reviewDialog.getByRole("button", { name: "关闭文件审核" }).click();
@@ -253,12 +256,18 @@ test("opens current-branch Git history from the inspector tab", async ({ page })
   const loadedInspectorBox = await inspector.boundingBox();
   expect(loadedInspectorBox?.height).toBe(initialInspectorBox?.height);
   expect(loadedInspectorBox?.y).toBe(initialInspectorBox?.y);
-  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver"]);
+  expect(historyRequests).toEqual([
+    `?rootPath=${encodedRootPath}`,
+    `?repository=packages%2Fserver&rootPath=${encodedRootPath}`,
+  ]);
 
   await inspector.getByRole("tab", { name: "apps/web" }).click();
   await expect(inspector.getByRole("listitem")).toHaveCount(20);
   await expect(inspector.getByText("当前分支：feat/apps-web")).toBeVisible();
-  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver"]);
+  expect(historyRequests).toEqual([
+    `?rootPath=${encodedRootPath}`,
+    `?repository=packages%2Fserver&rootPath=${encodedRootPath}`,
+  ]);
 
   await inspector.getByRole("tab", { name: "项目" }).click();
   await expect(inspector.locator('[data-slot="git-history-panel"]')).toHaveCount(0);
@@ -285,7 +294,11 @@ test("opens current-branch Git history from the inspector tab", async ({ page })
   for (const box of touchBoxes) expect(box?.height).toBeGreaterThanOrEqual(44);
   await inspector.getByRole("button", { name: "加载更多" }).click();
   await expect(inspector.getByRole("listitem")).toHaveCount(21);
-  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver", "?cursor=20"]);
+  expect(historyRequests).toEqual([
+    `?rootPath=${encodedRootPath}`,
+    `?repository=packages%2Fserver&rootPath=${encodedRootPath}`,
+    `?cursor=20&rootPath=${encodedRootPath}`,
+  ]);
 });
 
 test("paginates a single repository inside the history content", async ({ page }) => {
@@ -1216,7 +1229,7 @@ test("routes assistant links, images, and system files by Markdown file rules", 
   await expect(imageDialog).toBeVisible();
   await expect(imageDialog.getByRole("img", { name: "result.png" })).toHaveAttribute(
     "src",
-    "/v1/projects/code-agent/files/image?path=%2Fworkspace%2FCodeAgent%2Fdesign%2Fresult.png",
+    "/v1/projects/code-agent/files/image?path=%2Fworkspace%2FCodeAgent%2Fdesign%2Fresult.png&rootPath=%2Fworkspace%2FCodeAgent",
   );
   await page.keyboard.press("Escape");
   await expect(imageDialog).toBeHidden();
@@ -1380,7 +1393,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   await rootRefresh.click();
   await Promise.all([rootTreeRefreshRequest, gitRefreshRequest]);
   await rootTreeItem.click({ button: "right" });
-  const rootMenu = page.getByRole("menu", { name: "~/Develop/person/CodeAgent 的操作" });
+  const rootMenu = page.getByRole("menu", { name: "/workspace/CodeAgent 的操作" });
   await expect(rootMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
   await expect(rootMenu.getByRole("menuitem", { name: "复制相对路径" })).toBeVisible();
   await expect(rootMenu.getByRole("menuitem", { name: "复制绝对路径" })).toBeVisible();
@@ -1394,7 +1407,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   await rootMenu.getByRole("menuitem", { name: "复制绝对路径" }).click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-    .toBe("~/Develop/person/CodeAgent");
+    .toBe("/workspace/CodeAgent");
   await rootTreeItem.click({ button: "right" });
   await rootMenu.getByRole("menuitem", { name: "打开" }).click();
   await selectOpenApp("Finder");
@@ -1426,7 +1439,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   await folderMenu.getByRole("menuitem", { name: "复制绝对路径" }).click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-    .toBe("~/Develop/person/CodeAgent/docs");
+    .toBe("/workspace/CodeAgent/docs");
   await docsTreeItem.click({ button: "right" });
   await folderMenu.getByRole("menuitem", { name: "打开" }).click();
   await expect(page.getByRole("menuitem", { name: "系统默认应用" })).toHaveCount(0);
@@ -2154,14 +2167,14 @@ test("generates a message and commits only selected files", async ({ page }) => 
       },
     });
   });
-  await page.route("**/v1/projects/code-agent/git/commit-message", async (route) => {
+  await page.route("**/v1/projects/code-agent/git/commit-message?*", async (route) => {
     messageRequest = parseRequestRecord(route.request().postData());
     await route.fulfill({
       contentType: "application/json",
       json: { message: "feat(git): 生成选中文件提交", snapshot },
     });
   });
-  await page.route("**/v1/projects/code-agent/git/commits", async (route) => {
+  await page.route("**/v1/projects/code-agent/git/commits?*", async (route) => {
     commitRequest = parseRequestRecord(route.request().postData());
     commitIdempotencyKey = route.request().headers()["idempotency-key"];
     await route.fulfill({
@@ -2395,7 +2408,7 @@ for (const scenario of [
     await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
       await route.fulfill({ contentType: "application/json", json: projectGitStatus });
     });
-    await page.route("**/v1/projects/code-agent/git/commits", async (route) => {
+    await page.route("**/v1/projects/code-agent/git/commits?*", async (route) => {
       const request = parseRequestRecord(route.request().postData());
       await route.fulfill({
         contentType: "application/json",

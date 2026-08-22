@@ -28,6 +28,7 @@ interface ProjectPollingState {
   isGitProject: boolean | undefined;
   pollingTimer: ReturnType<typeof setInterval> | undefined;
   projectId: string;
+  rootPath: string;
   refreshPending: "background" | "manual" | undefined;
   retryTimer: ReturnType<typeof setTimeout> | undefined;
 }
@@ -76,19 +77,23 @@ export class ProjectGitStatusCoordinator {
   }
 
   public forgetProject(projectId: string): void {
-    const state = this.#projects.get(projectId);
-    if (state === undefined) {
-      return;
+    for (const [key, state] of this.#projects) {
+      if (state.projectId !== projectId) continue;
+      this.#closeState(state);
+      this.#projects.delete(key);
     }
-    this.#closeState(state);
-    this.#projects.delete(projectId);
   }
 
-  public handleActivity(projectId: string, taskId: string, reason: ProjectGitActivityReason): void {
+  public handleActivity(
+    projectId: string,
+    rootPath: string,
+    taskId: string,
+    reason: ProjectGitActivityReason,
+  ): void {
     if (this.#disposed) {
       return;
     }
-    const state = this.#getOrCreateState(projectId);
+    const state = this.#getOrCreateState(projectId, rootPath);
     if (reason === "turn_started") {
       const wasInactive = state.activeTaskIds.size === 0;
       const wasRecovering = state.consecutiveFailures > 0 || state.retryTimer !== undefined;
@@ -123,7 +128,7 @@ export class ProjectGitStatusCoordinator {
     }
     if (state.isGitProject === false) {
       if (state.activeTaskIds.size === 0) {
-        this.#projects.delete(state.projectId);
+        this.#projects.delete(this.#stateKey(state.projectId, state.rootPath));
       }
       return;
     }
@@ -131,11 +136,11 @@ export class ProjectGitStatusCoordinator {
     this.#requestBackgroundRefresh(state);
   }
 
-  public async refreshProject(projectId: string): Promise<void> {
+  public async refreshProject(projectId: string, rootPath: string): Promise<void> {
     if (this.#disposed) {
       return;
     }
-    const state = this.#getOrCreateState(projectId);
+    const state = this.#getOrCreateState(projectId, rootPath);
     this.#clearRetryTimer(state);
     await this.#requestRefresh(state, "manual");
   }
@@ -187,8 +192,9 @@ export class ProjectGitStatusCoordinator {
     }, this.#pollIntervalMs);
   }
 
-  #getOrCreateState(projectId: string): ProjectPollingState {
-    const current = this.#projects.get(projectId);
+  #getOrCreateState(projectId: string, rootPath: string): ProjectPollingState {
+    const key = this.#stateKey(projectId, rootPath);
+    const current = this.#projects.get(key);
     if (current !== undefined) {
       return current;
     }
@@ -201,11 +207,16 @@ export class ProjectGitStatusCoordinator {
       isGitProject: undefined,
       pollingTimer: undefined,
       projectId,
+      rootPath,
       refreshPending: undefined,
       retryTimer: undefined,
     };
-    this.#projects.set(projectId, state);
+    this.#projects.set(key, state);
     return state;
+  }
+
+  #stateKey(projectId: string, rootPath: string): string {
+    return `${projectId}\u0000${rootPath}`;
   }
 
   #requestRefresh(state: ProjectPollingState, source: "background" | "manual"): Promise<void> {
@@ -219,9 +230,13 @@ export class ProjectGitStatusCoordinator {
       return state.inFlight;
     }
 
-    const queryOptions = projectGitStatusQueryOptions(state.projectId, this.#client);
+    const queryOptions = projectGitStatusQueryOptions(
+      state.projectId,
+      state.rootPath,
+      this.#client,
+    );
     const refresh = this.#client
-      .getProjectGitStatus(state.projectId)
+      .getProjectGitStatus(state.projectId, { rootPath: state.rootPath })
       .then((status) => {
         this.#queryClient.setQueryData(queryOptions.queryKey, status);
         state.consecutiveFailures = 0;
@@ -262,7 +277,7 @@ export class ProjectGitStatusCoordinator {
           return;
         }
         if (state.activeTaskIds.size === 0 && state.fileChangeTimer === undefined) {
-          this.#projects.delete(state.projectId);
+          this.#projects.delete(this.#stateKey(state.projectId, state.rootPath));
         }
       });
     state.inFlight = refresh;
@@ -274,7 +289,10 @@ export class ProjectGitStatusCoordinator {
     source: "background" | "manual" = "background",
   ): void {
     void this.#requestRefresh(state, source).catch((error: unknown) => {
-      recordInternalWarning("git_status_poll_failed", error, { projectId: state.projectId });
+      recordInternalWarning("git_status_poll_failed", error, {
+        projectId: state.projectId,
+        rootPath: state.rootPath,
+      });
     });
   }
 

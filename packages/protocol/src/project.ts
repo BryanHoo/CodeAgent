@@ -5,4 +5,5 @@ export * from "./agent-task.js";
 export * from "./mcp-elicitation.js";
 export * from "./project-files.js";
 export * from "./project-git.js";
+export * from "./project-root.js";
 export * from "./project-settings.js";

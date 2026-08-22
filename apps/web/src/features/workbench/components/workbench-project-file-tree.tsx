@@ -48,12 +48,8 @@ import {
   pruneCollapsedProjectFileTreePaths,
 } from "./project-file-tree-changes.js";
 import { ProjectFileTreeRootActions } from "./workbench-inspector-file-tree.js";
-import {
-  getProjectTargetAbsolutePath,
-  ProjectOpenContextMenu,
-  ProjectOpenDropdownMenu,
-  type ProjectOpenContextMenuTarget,
-} from "./project-open-menu.js";
+import { ProjectOpenContextMenu, ProjectOpenDropdownMenu } from "./project-open-menu.js";
+import { createProjectFileTreeOpenTarget } from "./project-file-tree-open-target.js";
 
 export const PROJECT_FILE_TREE_ROW_HEIGHT_PX = 28;
 const PROJECT_FILE_TREE_INDENT_PX = 16;
@@ -88,28 +84,6 @@ function getItemName(item: ProjectFileTreeItem): string {
   return i18n.t("inspector.readFolderError", { name: item.name, ns: "conversation" });
 }
 
-function createTarget(
-  item: ProjectFileTreeItem,
-  projectPath: string,
-): ProjectOpenContextMenuTarget | null {
-  if (item.kind === "status") return null;
-  if (item.kind === "root") {
-    return {
-      absolutePath: projectPath,
-      path: projectPath,
-      relativePath: ".",
-      type: "directory",
-    };
-  }
-  return {
-    absolutePath: getProjectTargetAbsolutePath(projectPath, item.path),
-    path: item.path,
-    relativePath: item.path,
-    ...(item.type === "file" ? { reference: { name: item.name, path: item.path } } : {}),
-    type: item.type,
-  };
-}
-
 type ProjectFileTreeRowProps = Readonly<{
   changeStatsByPath: ReturnType<typeof collectVisibleProjectFileTreeChangeStats>;
   item: ItemInstance<ProjectFileTreeItem>;
@@ -139,7 +113,7 @@ const ProjectFileTreeRow = memo(function ProjectFileTreeRow({
 }: ProjectFileTreeRowProps) {
   const data = item.getItemData();
   const name = getItemName(data);
-  const target = createTarget(data, projectPath);
+  const target = createProjectFileTreeOpenTarget(data, projectPath);
   const openTarget =
     data.kind === "root"
       ? (appId: ProjectOpenAppId) => {
@@ -334,8 +308,15 @@ export function WorkbenchProjectFileTree({
   const [rootExpanded, setRootExpanded] = useState(true);
   const [selectedItems, setSelectedItemsState] = useState<string[]>([]);
   const dataLoader = useMemo(
-    () => createProjectFileTreeDataLoader({ client, projectId, projectName, queryClient }),
-    [client, projectId, projectName, queryClient],
+    () =>
+      createProjectFileTreeDataLoader({
+        client,
+        projectId,
+        projectName,
+        queryClient,
+        rootPath: projectPath,
+      }),
+    [client, projectId, projectName, projectPath, queryClient],
   );
   const expandedItems = useMemo(
     () => [...(rootExpanded ? [PROJECT_FILE_TREE_PROJECT_ROOT_ID] : []), ...expandedPaths],
@@ -417,13 +398,13 @@ export function WorkbenchProjectFileTree({
     async (directoryPath: string | null, optimistic = false) => {
       await queryClient.invalidateQueries({
         exact: true,
-        queryKey: ["projects", projectId, "file-tree", directoryPath],
+        queryKey: ["projects", projectId, projectPath, "file-tree", directoryPath],
         refetchType: "none",
       });
       const itemId = directoryPath ?? PROJECT_FILE_TREE_PROJECT_ROOT_ID;
       await tree.getItemInstance(itemId).invalidateChildrenIds(optimistic);
     },
-    [projectId, queryClient, tree],
+    [projectId, projectPath, queryClient, tree],
   );
   const refreshProject = useCallback(
     () =>

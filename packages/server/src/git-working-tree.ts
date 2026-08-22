@@ -437,7 +437,7 @@ export async function readGitWorkingTreeStatus(
 
 export async function readProjectGitStatus(
   projectRoot: string,
-  query: ProjectGitStatusQuery = {},
+  query: Omit<ProjectGitStatusQuery, "rootPath"> = {},
   gitCommandExecutor: GitCommandExecutor = executeGit,
 ): Promise<ProjectGitStatus> {
   const repositoryRoot = await resolveProjectGitRepositoryRoot(projectRoot, query.repository);

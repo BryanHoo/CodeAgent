@@ -19,20 +19,22 @@ import type { WorkbenchComposerProps } from "../components/workbench-composer-co
 import { upsertProjectInPage } from "../../projects/project-query-cache.js";
 import { useProjectData } from "../../projects/project-context.js";
 
-const gitStatusQueryKey = (projectId: string) => ["projects", projectId, "git-status"] as const;
-const gitWorktreesQueryKey = (projectId: string) =>
-  ["projects", projectId, "git-worktrees"] as const;
+const gitStatusQueryKey = (projectId: string, rootPath: string) =>
+  ["projects", projectId, rootPath, "git-status"] as const;
+const gitWorktreesQueryKey = (projectId: string, rootPath: string) =>
+  ["projects", projectId, rootPath, "git-worktrees"] as const;
 
 function cacheProjectWorktreeMutation(
   queryClient: QueryClient,
   projectId: string,
+  rootPath: string,
   response: ProjectWorktreeMutationResponse,
 ) {
   queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) =>
     upsertProjectInPage(currentPage, response.project),
   );
   queryClient.setQueryData<ProjectGitWorktreePage>(
-    gitWorktreesQueryKey(projectId),
+    gitWorktreesQueryKey(projectId, rootPath),
     (currentPage) => {
       const worktrees = currentPage?.worktrees ?? [];
       const existingIndex = worktrees.findIndex(
@@ -54,6 +56,7 @@ export async function switchComposerBranch(
   client: Pick<WorkbenchComposerProps["client"], "switchProjectBranch">,
   queryClient: QueryClient,
   projectId: string,
+  rootPath: string,
   gitStatus: ProjectGitStatus,
   branch: string,
 ): Promise<boolean> {
@@ -64,10 +67,10 @@ export async function switchComposerBranch(
   ) {
     return false;
   }
-  const queryKey = gitStatusQueryKey(projectId);
+  const queryKey = gitStatusQueryKey(projectId, rootPath);
   // 先取消旧状态轮询，避免切换成功后被较早发出的响应覆盖回旧分支。
   await queryClient.cancelQueries({ exact: true, queryKey });
-  const nextStatus = await client.switchProjectBranch(projectId, {
+  const nextStatus = await client.switchProjectBranch(projectId, rootPath, {
     branch,
     expectedSnapshot: gitStatus.snapshot,
   });
@@ -79,6 +82,7 @@ export async function createComposerBranch(
   client: Pick<WorkbenchComposerProps["client"], "createProjectBranch">,
   queryClient: QueryClient,
   projectId: string,
+  rootPath: string,
   gitStatus: ProjectGitStatus,
   branch: string,
 ): Promise<boolean> {
@@ -90,9 +94,9 @@ export async function createComposerBranch(
   ) {
     return false;
   }
-  const queryKey = gitStatusQueryKey(projectId);
+  const queryKey = gitStatusQueryKey(projectId, rootPath);
   await queryClient.cancelQueries({ exact: true, queryKey });
-  const nextStatus = await client.createProjectBranch(projectId, {
+  const nextStatus = await client.createProjectBranch(projectId, rootPath, {
     branch: normalizedBranch,
     expectedSnapshot: gitStatus.snapshot,
   });
@@ -104,19 +108,20 @@ export async function createComposerWorktree(
   client: Pick<WorkbenchComposerProps["client"], "createProjectWorktree">,
   queryClient: QueryClient,
   projectId: string,
+  rootPath: string,
   gitStatus: ProjectGitStatus,
   branch: string,
 ): Promise<Project | undefined> {
   const normalizedBranch = branch.trim();
   if (gitStatus.repositoryMode !== "root" || normalizedBranch.length === 0) return undefined;
-  const response = await client.createProjectWorktree(projectId, {
+  const response = await client.createProjectWorktree(projectId, rootPath, {
     branch: normalizedBranch,
     expectedSnapshot: gitStatus.snapshot,
   });
-  cacheProjectWorktreeMutation(queryClient, projectId, response);
+  cacheProjectWorktreeMutation(queryClient, projectId, rootPath, response);
   await queryClient.invalidateQueries({
     exact: true,
-    queryKey: gitStatusQueryKey(projectId),
+    queryKey: gitStatusQueryKey(projectId, rootPath),
     refetchType: "none",
   });
   return response.project;
@@ -126,13 +131,14 @@ export async function switchComposerWorktree(
   client: Pick<WorkbenchComposerProps["client"], "switchProjectWorktree">,
   queryClient: QueryClient,
   projectId: string,
+  rootPath: string,
   worktrees: readonly ProjectGitWorktree[],
   path: string,
 ): Promise<Project | undefined> {
   const worktree = worktrees.find((candidate) => candidate.path === path && !candidate.current);
   if (worktree === undefined) return undefined;
-  const response = await client.switchProjectWorktree(projectId, { path });
-  cacheProjectWorktreeMutation(queryClient, projectId, response);
+  const response = await client.switchProjectWorktree(projectId, rootPath, { path });
+  cacheProjectWorktreeMutation(queryClient, projectId, rootPath, response);
   return response.project;
 }
 
@@ -142,6 +148,7 @@ type WorkbenchBranchSwitchOptions = Readonly<{
   isCurrentScope: (scope: string) => boolean;
   projectId: string;
   routeScope: string;
+  rootPath: string;
 }>;
 
 export function useWorkbenchBranchSwitch({
@@ -150,6 +157,7 @@ export function useWorkbenchBranchSwitch({
   isCurrentScope,
   projectId,
   routeScope,
+  rootPath,
 }: WorkbenchBranchSwitchOptions) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -169,8 +177,8 @@ export function useWorkbenchBranchSwitch({
     switchingWorktree !== undefined;
   const worktreesQuery = useQuery({
     enabled: gitStatus?.repositoryMode === "root",
-    queryFn: ({ signal }) => client.listProjectWorktrees(projectId, { signal }),
-    queryKey: gitWorktreesQueryKey(projectId),
+    queryFn: ({ signal }) => client.listProjectWorktrees(projectId, rootPath, { signal }),
+    queryKey: gitWorktreesQueryKey(projectId, rootPath),
     staleTime: 5_000,
   });
   const worktrees = worktreesQuery.data?.worktrees ?? [];
@@ -208,13 +216,15 @@ export function useWorkbenchBranchSwitch({
     await branchSwitchLockRef.current.run(async () => {
       setSwitchingBranch(branch);
       try {
-        if (await switchComposerBranch(client, queryClient, projectId, gitStatus, branch)) {
+        if (
+          await switchComposerBranch(client, queryClient, projectId, rootPath, gitStatus, branch)
+        ) {
           notifyActionSuccess();
         }
       } catch (error) {
         notifyActionError(error);
         await queryClient
-          .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId) })
+          .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId, rootPath) })
           .catch(() => undefined);
       } finally {
         if (isCurrentScope(requestScope)) {
@@ -236,6 +246,7 @@ export function useWorkbenchBranchSwitch({
           client,
           queryClient,
           projectId,
+          rootPath,
           gitStatus,
           branch,
         );
@@ -246,7 +257,7 @@ export function useWorkbenchBranchSwitch({
       } catch (error) {
         notifyActionError(error);
         await queryClient
-          .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId) })
+          .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId, rootPath) })
           .catch(() => undefined);
         return false;
       } finally {
@@ -270,6 +281,7 @@ export function useWorkbenchBranchSwitch({
           client,
           queryClient,
           projectId,
+          rootPath,
           gitStatus,
           branch,
         );
@@ -280,7 +292,7 @@ export function useWorkbenchBranchSwitch({
       } catch (error) {
         notifyActionError(error);
         await queryClient
-          .invalidateQueries({ exact: true, queryKey: gitWorktreesQueryKey(projectId) })
+          .invalidateQueries({ exact: true, queryKey: gitWorktreesQueryKey(projectId, rootPath) })
           .catch(() => undefined);
         return false;
       } finally {
@@ -302,6 +314,7 @@ export function useWorkbenchBranchSwitch({
           client,
           queryClient,
           projectId,
+          rootPath,
           worktrees,
           path,
         );
@@ -311,7 +324,7 @@ export function useWorkbenchBranchSwitch({
       } catch (error) {
         notifyActionError(error);
         await queryClient
-          .invalidateQueries({ exact: true, queryKey: gitWorktreesQueryKey(projectId) })
+          .invalidateQueries({ exact: true, queryKey: gitWorktreesQueryKey(projectId, rootPath) })
           .catch(() => undefined);
       } finally {
         if (isCurrentScope(requestScope)) setSwitchingWorktree(undefined);

@@ -1,13 +1,29 @@
-export function projectFromRow(row) {
+export function projectFromRows(row, rootRows) {
   if (row === undefined) {
     return undefined;
+  }
+  const roots = rootRows.map((root) => ({ path: root.path }));
+  if (roots.length === 0) {
+    throw new Error(`Project ${row.id} has no stored roots`);
   }
   return {
     createdAt: row.created_at,
     id: row.id,
     name: row.name,
-    rootPath: row.root_path,
+    roots,
   };
+}
+
+export function projectsFromRows(projectRows, rootRows) {
+  const rootsByProject = new Map();
+  for (const root of rootRows) {
+    const roots = rootsByProject.get(root.project_id) ?? [];
+    roots.push(root);
+    rootsByProject.set(root.project_id, roots);
+  }
+  return projectRows.map((project) =>
+    projectFromRows(project, rootsByProject.get(project.id) ?? []),
+  );
 }
 
 export function projectDefaultsFromRow(row) {

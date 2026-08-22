@@ -28,7 +28,7 @@ const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
   id: "code-agent",
   name: "CodeAgent",
-  rootPath: "/workspace/CodeAgent",
+  roots: [{ path: "/workspace/CodeAgent" }],
 } as const;
 
 const pixelDataUrl =
