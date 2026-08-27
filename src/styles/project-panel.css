@@ -1,0 +1,110 @@
+.project-panel {
+  display: grid;
+  grid-template-rows: 54px minmax(0, 1fr);
+  background: #fbfbfa;
+}
+
+.project-tabs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 9px 7px;
+}
+
+.project-tab {
+  display: flex;
+  height: 31px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  color: #696a6f;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.project-tab:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.project-tab-active {
+  color: #333438;
+  background: #ededeb;
+}
+
+.project-tab svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
+}
+
+.file-tree {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 7px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: #d5d5d2 transparent;
+}
+
+.tree-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  grid-template-columns: 14px 17px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px 0 6px;
+  color: #4c4d52;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: left;
+}
+
+.tree-row[data-depth="1"] {
+  padding-left: 22px;
+}
+
+.tree-row:hover {
+  color: #232428;
+  background: var(--surface-hover);
+}
+
+.tree-row > svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.6;
+}
+
+.tree-row-folder > svg:nth-child(2) {
+  color: #2d79e8;
+}
+
+.tree-row-file > svg:nth-child(2) {
+  color: #76777b;
+}
+
+.tree-row > .tree-chevron {
+  width: 13px;
+  height: 13px;
+  color: #818287;
+  stroke-width: 1.8;
+}
+
+.tree-chevron-placeholder {
+  width: 13px;
+  height: 13px;
+}
+
+.tree-row > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
