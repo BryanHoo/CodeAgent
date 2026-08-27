@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::sync::Arc;
 
 use tauri::ipc::Channel;
 use tokio::sync::Mutex;
@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use super::error::AppError;
 use crate::{
     domain::runtime::{AppEvent, ProviderKind, RuntimeSnapshot, RuntimeStatus},
-    infrastructure::codex::CodexProcess,
+    infrastructure::codex::{AppServerConnection, CodexProcess},
 };
 
 #[derive(Default)]
@@ -30,7 +30,7 @@ impl AppState {
         runtime.snapshot
     }
 
-    pub async fn start_codex(&self, codex_home: &Path) -> Result<RuntimeSnapshot, AppError> {
+    pub async fn start_codex(&self) -> Result<RuntimeSnapshot, AppError> {
         {
             let mut runtime = self.runtime.lock().await;
             if matches!(
@@ -43,7 +43,7 @@ impl AppState {
             runtime.publish(event)?;
         }
 
-        let process = CodexProcess::start(codex_home).await;
+        let process = CodexProcess::start().await;
         let mut runtime = self.runtime.lock().await;
 
         match process {
@@ -60,6 +60,16 @@ impl AppState {
                 Err(AppError::CodexRuntimeStartFailed)
             }
         }
+    }
+
+    pub async fn codex_connection(&self) -> Result<Arc<AppServerConnection>, AppError> {
+        self.runtime
+            .lock()
+            .await
+            .codex_process
+            .as_ref()
+            .map(CodexProcess::connection)
+            .ok_or(AppError::CodexRuntimeUnavailable)
     }
 }
 

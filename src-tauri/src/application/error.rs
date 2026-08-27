@@ -7,10 +7,16 @@ pub enum AppError {
     RuntimeChannelUnavailable,
     #[error("failed to deliver runtime event")]
     RuntimeEventDeliveryFailed,
-    #[error("failed to resolve application data directory")]
-    AppDataDirectoryUnavailable,
     #[error("failed to start Codex runtime")]
     CodexRuntimeStartFailed,
+    #[error("Codex runtime is unavailable")]
+    CodexRuntimeUnavailable,
+    #[error("Codex request failed")]
+    CodexRequestFailed,
+    #[error("filesystem request failed")]
+    FilesystemRequestFailed,
+    #[error("failed to resolve user home directory")]
+    HomeDirectoryUnavailable,
 }
 
 impl Serialize for AppError {

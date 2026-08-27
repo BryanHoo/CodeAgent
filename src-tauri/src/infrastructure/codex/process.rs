@@ -1,8 +1,8 @@
 use std::{
     env,
     ffi::{OsStr, OsString},
-    path::Path,
     process::Stdio,
+    sync::Arc,
     time::Duration,
 };
 
@@ -20,8 +20,6 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Error)]
 pub enum ProcessError {
-    #[error("failed to prepare isolated Codex runtime directory")]
-    RuntimeDirectory(#[source] std::io::Error),
     #[error("failed to spawn codex app-server")]
     Spawn(#[source] std::io::Error),
     #[error("codex app-server did not expose required stdio pipes")]
@@ -34,18 +32,14 @@ pub enum ProcessError {
 
 pub struct CodexProcess {
     _child: Child,
-    _connection: AppServerConnection,
+    connection: Arc<AppServerConnection>,
     stderr_task: JoinHandle<()>,
 }
 
 impl CodexProcess {
-    pub async fn start(codex_home: &Path) -> Result<Self, ProcessError> {
-        tokio::fs::create_dir_all(codex_home)
-            .await
-            .map_err(ProcessError::RuntimeDirectory)?;
-
+    pub async fn start() -> Result<Self, ProcessError> {
         let program = configured_binary();
-        let mut child = build_app_server_command(&program, codex_home)
+        let mut child = build_app_server_command(&program)
             .spawn()
             .map_err(ProcessError::Spawn)?;
         let stdin = child.stdin.take().ok_or(ProcessError::MissingPipe)?;
@@ -56,7 +50,7 @@ impl CodexProcess {
         let stderr_task = tokio::spawn(async move {
             let _ = io::copy(&mut stderr, &mut io::sink()).await;
         });
-        let connection = AppServerConnection::new(stdout, stdin);
+        let connection = Arc::new(AppServerConnection::new(stdout, stdin));
         let metadata = connection
             .initialize(STARTUP_TIMEOUT)
             .await
@@ -72,9 +66,13 @@ impl CodexProcess {
 
         Ok(Self {
             _child: child,
-            _connection: connection,
+            connection,
             stderr_task,
         })
+    }
+
+    pub fn connection(&self) -> Arc<AppServerConnection> {
+        Arc::clone(&self.connection)
     }
 }
 
@@ -88,11 +86,11 @@ fn configured_binary() -> OsString {
     env::var_os(CODEX_BINARY_ENV).unwrap_or_else(|| OsString::from("codex"))
 }
 
-fn build_app_server_command(program: &OsStr, codex_home: &Path) -> Command {
+fn build_app_server_command(program: &OsStr) -> Command {
     let mut command = Command::new(program);
+    // 不设置 CODEX_HOME，让官方逻辑继承用户配置或回退到默认 ~/.codex。
     command
         .args(["app-server", "--listen", "stdio://"])
-        .env("CODEX_HOME", codex_home)
         .env("LOG_FORMAT", "json")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -103,16 +101,13 @@ fn build_app_server_command(program: &OsStr, codex_home: &Path) -> Command {
 
 #[cfg(test)]
 mod tests {
-    use std::{ffi::OsStr, path::Path};
+    use std::ffi::OsStr;
 
     use super::build_app_server_command;
 
     #[test]
-    fn command_should_use_stdio_and_isolated_codex_home() {
-        let command = build_app_server_command(
-            OsStr::new("codex-test"),
-            Path::new("/app-data/providers/codex/runtime"),
-        );
+    fn command_should_use_stdio_and_inherit_official_codex_home() {
+        let command = build_app_server_command(OsStr::new("codex-test"));
         let command = command.as_std();
 
         assert_eq!(command.get_program(), "codex-test");
@@ -120,8 +115,6 @@ mod tests {
             command.get_args().collect::<Vec<_>>(),
             ["app-server", "--listen", "stdio://"]
         );
-        assert!(command.get_envs().any(|(key, value)| {
-            key == "CODEX_HOME" && value == Some(OsStr::new("/app-data/providers/codex/runtime"))
-        }));
+        assert!(command.get_envs().all(|(key, _)| key != "CODEX_HOME"));
     }
 }

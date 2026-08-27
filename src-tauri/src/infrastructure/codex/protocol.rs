@@ -93,7 +93,7 @@ mod tests {
                 version: "0.1.0",
             },
             capabilities: InitializeCapabilities {
-                experimental_api: false,
+                experimental_api: true,
             },
         };
 
@@ -111,7 +111,7 @@ mod tests {
                         "version": "0.1.0"
                     },
                     "capabilities": {
-                        "experimentalApi": false
+                        "experimentalApi": true
                     }
                 }
             })

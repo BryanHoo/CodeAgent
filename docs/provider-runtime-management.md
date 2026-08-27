@@ -28,19 +28,18 @@ appData/
     │   ├── bin/
     │   │   └── 0.149.0/
     │   ├── active.json
-    │   ├── runtime/
     │   └── logs/
     └── claude/
         ├── bin/
         │   └── <version>/
         ├── active.json
-        ├── runtime/
         └── logs/
 ```
 
 `bin/<version>/` 保存应用按需安装的原生运行时，`active.json` 记录当前选定版本和已验证路径。
-该文件通过同目录临时文件原子替换，避免依赖 Windows 符号链接权限。`runtime/` 保存 Provider
-配置、认证和会话数据，两者生命周期必须分离。
+该文件通过同目录临时文件原子替换，避免依赖 Windows 符号链接权限。CodeAgent 不覆盖 Provider
+官方状态目录；Codex 继承进程环境中的 `CODEX_HOME`，未配置时由官方逻辑读取默认 `~/.codex`。
+因此 Codex CLI 与 CodeAgent 共享认证、项目、会话和配置。
 
 ## 发现与兼容性检查
 
@@ -91,7 +90,7 @@ CodeAgent 版本与 Provider 适配器共同声明已验证的运行时版本。
 - 不使用登录 shell 查找可执行文件，不向 WebView 授予通用 shell 权限。
 - 日志不得记录认证信息、完整环境变量或下载凭据。
 - 只启动已完成版本和能力验证的绝对路径。
-- 不同 Provider 的进程、配置、认证、日志和缓存必须完全隔离。
+- 不同 Provider 的进程、应用日志和可重建缓存必须隔离；Codex 状态统一由官方 `CODEX_HOME` 管理。
 
 ## 运行时状态
 

@@ -2,8 +2,7 @@ import { CodexlyClient } from "@/client/index.js";
 import type { AgentTaskPage, AgentTaskSnapshot } from "@/protocol/index.js";
 import type { InfiniteData } from "@tanstack/react-query";
 
-import { createMockFetch } from "../../mock/mock-fetch.js";
-import { createMockWebSocket } from "../../mock/mock-websocket.js";
+import { TauriSidebarClient } from "../../platform/tauri/sidebar-client.js";
 
 export type CodexlyReadClient = Pick<CodexlyClient, "listProjects" | "listTasks" | "readTask">;
 export type CodexlyArchivedTaskClient = Pick<
@@ -139,11 +138,8 @@ export function taskQueueQueryKey(projectId: string, taskId: string) {
   return ["projects", projectId, "tasks", taskId, "queue"] as const;
 }
 
-// 后端接入前统一使用内存实现，页面层无需保留临时分支。
-export const codexlyClient = new CodexlyClient({
-  fetch: createMockFetch(),
-  webSocketFactory: createMockWebSocket,
-});
+// 左栏运行时直接调用 Rust/Tauri，保留现有视图 Client 契约以避免组件交互漂移。
+export const codexlyClient = new TauriSidebarClient();
 
 export type ProjectTaskInfiniteData = InfiniteData<AgentTaskPage, string | undefined>;
 export type TaskTitleSnapshot = Pick<

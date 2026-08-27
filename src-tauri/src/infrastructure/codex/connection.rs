@@ -88,7 +88,7 @@ impl AppServerConnection {
                 version: env!("CARGO_PKG_VERSION"),
             },
             capabilities: InitializeCapabilities {
-                experimental_api: false,
+                experimental_api: true,
             },
         };
         let response = self.request("initialize", &params, request_timeout).await?;
@@ -262,6 +262,7 @@ mod tests {
             let request: Value = serde_json::from_str(&request).expect("request should be JSON");
             assert_eq!(request["method"], "initialize");
             assert_eq!(request["params"]["clientInfo"]["name"], "codeagent");
+            assert_eq!(request["params"]["capabilities"]["experimentalApi"], true);
 
             server_writer
                 .write_all(

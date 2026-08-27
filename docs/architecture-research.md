@@ -25,7 +25,7 @@ stdio JSONL
 - Rust 到 WebView 使用长生命周期 Tauri `Channel`，WebView 到 Rust 使用窄接口 `invoke`。
 - UI 使用 AI Elements 的源码组件，但不使用 Next.js、`useChat` 或 AI SDK HTTP 传输层。
 - Web 层只维护面向渲染的状态投影，线程、审批、认证和执行状态仍以 `app-server` 为准。
-- Codex 和 Claude Code 使用完全独立的进程、目录、配置及数据。应用启动时选择 provider，本次运行期间不混合启动或动态切换。
+- Codex 和 Claude Code 使用独立进程与应用缓存；Codex 继承官方 `CODEX_HOME`，与 CLI 共享项目、会话、认证和配置。
 - 不将 Provider 可执行文件作为 Tauri Sidecar 打包；优先复用本机兼容版本，缺失时应用私有按需安装。
 
 纯 Rust 原生 UI 理论上可以进一步降低渲染损耗，但会失去 AI Elements 和 Web 生态的开发效率。在 Tauri 与 AI Elements 的既定条件下，本方案是性能、可靠性和开发效率之间的最佳平衡。
@@ -244,7 +244,6 @@ appData/
 ├── providers/
 │   ├── codex/
 │   │   ├── bin/           # 应用私有的版本化 Codex 运行时
-│   │   ├── runtime/       # CODEX_HOME
 │   │   ├── logs/
 │   │   └── ui.sqlite
 │   └── claude/
@@ -254,6 +253,9 @@ appData/
 │       └── ui.sqlite
 └── app.json               # 仅保存启动 provider 等全局设置
 ```
+
+Codex 的状态数据不写入 `appData/providers/codex/`。启动 `codex app-server` 时不覆盖
+`CODEX_HOME`；存在用户配置时继承该值，否则使用官方默认 `~/.codex`。
 
 `app.json` 只保存 provider 选择、窗口状态和通用外观设置。Provider 启动后，本次应用运行期间不再创建另一个 provider 的运行时。
 
@@ -287,7 +289,7 @@ appData/
 
 以下项目不是官方规范，但其实现验证了若干值得采用的工程实践：
 
-- [codex-webui](https://github.com/seo-rii/codex-webui)：直接持有 `codex app-server`、隔离 `CODEX_HOME`、延迟进程激活、渐进加载历史和轻量会话索引。
+- [codex-webui](https://github.com/seo-rii/codex-webui)：直接持有 `codex app-server`、延迟进程激活、渐进加载历史和轻量会话索引；本项目不采用其隔离 `CODEX_HOME` 的做法。
 - [lezi-fun/codex-webui](https://github.com/lezi-fun/codex-webui)：通过真实 App Server 审批事件实现命令、文件和权限确认，并覆盖真实审批流程测试。
 - [CodexHarbor](https://github.com/adondada/codexharbor)：保持 App Server `stdio` 通信，拆分握手、模型、线程和认证诊断，并处理不同服务端版本能力。
 - [Tauri Stable Channel discussion](https://github.com/orgs/tauri-apps/discussions/14765)：使用稳定的模块级 Channel 和订阅器，规避 React 重挂载造成的消息竞争。
