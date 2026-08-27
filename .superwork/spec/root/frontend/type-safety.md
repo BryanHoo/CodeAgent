@@ -3,7 +3,7 @@
 ## 规则
 
 - 保持 TypeScript `strict` 检查通过，不使用 `any` 绕过边界
-- IPC 类型集中定义在 `src/domain/`，组件不得重复声明对应结构
-- Rust `serde(rename_all = "camelCase")` 与 TypeScript 字段保持一致
-- 可辨识联合的 `type` 标签与 Rust `serde(tag = "type", content = "data")` 保持一致
+- 传输契约集中定义在 `packages/protocol/`，组件不得重复声明对应结构
+- `packages/client/` 的每个响应都使用协议 Schema 校验，mock 响应也必须满足同一契约
+- 可辨识联合的 `type` 标签、事件 envelope 与 HTTP 响应字段保持一致
 - 捕获外部错误时使用 `unknown`，在边界内完成收窄或转换

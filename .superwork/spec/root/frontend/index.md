@@ -2,7 +2,7 @@
 
 ## 范围
 
-适用于根包 `src/` 下的 React WebView。入口装配、UI、领域视图模型、状态投影与 Tauri 适配必须保持目录边界。
+适用于根包 `src/` 下的 React 桌面工作台。路由装配、功能域、共享组件、协议客户端与 mock 传输必须保持目录边界。
 
 ## 规格索引
 
@@ -17,5 +17,5 @@
 ## 开发前检查
 
 - 阅读 [.superwork/spec/guides/index.md](../../guides/index.md)
-- 涉及 IPC 时同步阅读 [Tauri 后端开发规格](../../src-tauri/backend/index.md)
-- 确认变更属于应用装配、组件、领域、平台适配或状态投影中的单一职责
+- 涉及真实后端接入时同步阅读 [Tauri 后端开发规格](../../src-tauri/backend/index.md)
+- 确认变更属于应用装配、功能域、共享基础设施、协议契约或 mock 传输中的单一职责

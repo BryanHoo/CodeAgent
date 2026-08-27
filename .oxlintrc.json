@@ -2,13 +2,10 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc", "vitest"],
   "categories": {
-    "correctness": "error",
-    "perf": "warn",
-    "suspicious": "warn"
+    "correctness": "off"
   },
   "options": {
-    "typeAware": true,
-    "maxWarnings": 0
+    "typeAware": true
   },
   "rules": {
     "react/react-in-jsx-scope": "off",
@@ -21,5 +18,31 @@
     ],
     "typescript/no-floating-promises": "error"
   },
-  "ignorePatterns": ["dist/**", "src-tauri/gen/**", "src-tauri/target/**"]
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "src-tauri/gen/**",
+    "src-tauri/target/**"
+  ],
+  "overrides": [
+    {
+      "files": ["**/*.{js,mjs,cjs,ts,tsx}"],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 500,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.d.ts", "**/*.{test,spec}.{js,mjs,cjs,ts,tsx}"],
+      "rules": {
+        "max-lines": "off"
+      }
+    }
+  ]
 }

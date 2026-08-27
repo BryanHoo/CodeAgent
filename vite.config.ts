@@ -9,9 +9,27 @@ const tauriDevHost = process.env.TAURI_DEV_HOST;
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+      {
+        find: /^shiki$/u,
+        replacement: fileURLToPath(
+          new URL("./src/shared/components/agent/shiki-bundle.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^shiki\/wasm$/u,
+        replacement: fileURLToPath(
+          new URL("./src/shared/components/agent/shiki-bundle.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^@pierre\/theming\/themes$/u,
+        replacement: fileURLToPath(
+          new URL("./src/shared/components/agent/pierre-themes.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   clearScreen: false,
   server: {
@@ -30,7 +48,28 @@ export default defineConfig({
     },
   },
   build: {
-    target: "es2022",
+    chunkSizeWarningLimit: 512,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              // 宏与专用支持 Grammar 独立加载，避免继续放大主 C++ Chunk。
+              includeDependenciesRecursively: false,
+              name: "grammar-cpp-support",
+              test: /@shikijs[\\/]langs[\\/]dist[\\/](?:cpp-macro|regexp|glsl)\.mjs$/u,
+            },
+            {
+              // React 运行时保持自包含，降低工作台主入口的首屏解析体积。
+              includeDependenciesRecursively: false,
+              name: "react-runtime",
+              test: /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/u,
+            },
+          ],
+        },
+      },
+    },
+    target: ["chrome116", "firefox124", "safari17.4"],
     sourcemap: process.env.TAURI_ENV_DEBUG === "true",
   },
   test: {

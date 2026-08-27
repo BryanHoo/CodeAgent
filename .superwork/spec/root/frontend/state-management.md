@@ -2,12 +2,12 @@
 
 ## 状态流
 
-`src/platform/tauri/runtime-channel.ts` 建立唯一模块级 Channel，`src/stores/runtime-reducer.ts` 将归一化事件投影到渲染状态，组件通过 `src/stores/runtime-store.ts` 订阅。
+`packages/client/` 读取 HTTP 快照并订阅 WebSocket 事件，`src/features/conversation/runtime/` 将事件投影到任务 Store，TanStack Query 管理项目和设置等服务端状态。
 
 ## 规则
 
-- 模块级 Channel 只初始化一次，不在 React 生命周期中重复连接
-- Provider 进程只在模块级 Channel 连接成功且运行时为 `stopped` 后启动
-- Reducer 保持纯函数，并根据事件序号拒绝陈旧事件
+- 每个项目 Runtime 只维持一条事件订阅，并使用 checkpoint/session 信息恢复连接
+- Query Key、失效和乐观更新集中在对应功能域的 query options/cache 模块
+- 事件投影按序列处理并拒绝陈旧会话事件；快照恢复不得覆盖更新的本地状态
 - 短暂且仅由单组件使用的 UI 状态保留在组件内部
 - 新增共享状态前先定义事件来源、初始值、错误状态与清理行为

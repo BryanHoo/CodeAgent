@@ -2,15 +2,17 @@
 
 ## 目录职责
 
-- `src/app/`：应用装配与页面外壳
-- `src/components/`：通用 UI 和按需引入的 AI Elements 源码；`ai-elements/` 承载可复用的 Agent 对话与开发工具视图
-- `src/domain/`：Provider 无关的稳定视图模型与 IPC 类型
-- `src/platform/tauri/`：`invoke`、`Channel` 等 Tauri API 适配
-- `src/stores/`：后端事件到 WebView 渲染状态的投影
-- `src/styles/`：Tailwind 主题与全局样式
+- `src/app/`：Provider、TanStack Router 与路由级页面装配
+- `src/features/`：按 access、conversation、projects、settings、workbench 等功能域组织业务组件与状态
+- `src/shared/`：跨功能域复用的 Agent 组件、基础控件、样式和无业务工具
+- `src/mock/`：按协议提供本地 HTTP/WebSocket 传输，实现无需后端的完整工作台交互
+- `src/i18n/`：语言偏好、资源注册与中英文文案
+- `packages/client/`：类型安全的 HTTP/WebSocket 客户端
+- `packages/protocol/`：跨传输共享的 TypeBox 协议与 TypeScript 类型
 
 ## 依赖规则
 
-- 组件通过 Store 或平台适配层获取运行时状态，不直接调用 Tauri API
-- `src/domain/` 不依赖 React、Store 或平台实现
-- 应用装配可以组合各层，但不承载可独立测试的领域逻辑
+- 组件通过 Query、功能域 Runtime 或 Context 获取状态，不直接发起原始网络请求
+- `packages/protocol/` 不依赖 React 或具体传输实现，`packages/client/` 仅消费公开协议
+- `src/shared/` 不反向依赖具体功能域；应用装配可以组合各层，但不承载领域逻辑
+- 后端尚未接入时，客户端必须注入 `src/mock/` 的 fetch 与 WebSocket 工厂，禁止回退到真实网络

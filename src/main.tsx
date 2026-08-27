@@ -1,21 +1,27 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "@/app/App";
-import { initializeRuntimeStore } from "@/stores/runtime-store";
-import "@/styles/globals.css";
+import { App } from "./App.js";
+import { AppProviders } from "./app/providers.js";
+import { initializeThemePreference } from "./features/settings/theme-preference.js";
+import "./i18n/i18n.js";
+import "./shared/styles/globals.css";
+import "./shared/styles/workbench.css";
 
-// 应用级 Channel 必须早于组件挂载初始化，避免 StrictMode 重挂载造成重复订阅。
-initializeRuntimeStore();
+const rootElement = document.querySelector("#root");
 
-const rootElement = document.getElementById("root");
-
-if (!rootElement) {
-  throw new Error("root element was not found");
+if (!(rootElement instanceof HTMLElement)) {
+  throw new Error("Missing #root element");
 }
 
+// React 挂载前应用持久主题，避免首帧先使用错误配色。
+initializeThemePreference();
+
+// 应用装配集中在唯一入口，避免功能模块直接控制 React 根节点。
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <AppProviders>
+      <App />
+    </AppProviders>
   </StrictMode>,
 );
