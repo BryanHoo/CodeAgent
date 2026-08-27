@@ -19,6 +19,8 @@ provider runtime（待实现）
 - `src/stores` 只保存可重建的渲染投影，输入框等瞬时状态留在组件本地。
 - `src-tauri/src/application` 负责命令注册、Channel 生命周期和错误序列化。
 - provider 运行时、JSONL 请求路由和进程管理应放入后续新增的 Rust infrastructure 模块。
+- Provider 可执行文件不作为 Sidecar 打包；发现、版本检查和应用私有安装由 Rust infrastructure
+  中的 Provider Runtime Manager 统一编排。
 
 ## 新增功能顺序
 
@@ -27,6 +29,16 @@ provider runtime（待实现）
 3. 在 Web domain 定义对应视图类型，通过纯 reducer 更新 Store。
 4. feature 只通过 selector 和平台适配器访问状态，不直接调用原始协议。
 5. 使用功能后再复制对应 AI Elements 组件，并裁剪不需要的依赖和分支。
+
+## Provider 运行时
+
+- WebView 不得传入任意程序、下载地址或安装参数。
+- 首版使用精确版本匹配，并在版本检查后执行 Provider 专属能力探测。
+- 缺失版本只能在用户确认后安装到应用私有目录，禁止调用全局包管理器。
+- 下载必须校验官方来源、目标平台、架构、版本、SHA-256 和可用签名。
+- 安装和升级必须原子完成，并保留上一个已验证版本用于回退。
+
+详细设计见 [Provider Runtime Manager](./provider-runtime-management.md)。
 
 ## AI Elements
 

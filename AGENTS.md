@@ -1,0 +1,2 @@
+- Codex 149 版本源码位置：/Users/bryanhu/Develop/person/codex
+- 项目实现必须保证高性能、运行低占用

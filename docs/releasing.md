@@ -33,7 +33,19 @@ Windows 暂不生成 MSI，因为 WiX 构建依赖 Windows 的 VBSCRIPT 可选�
 
 无签名应用会触发 Windows SmartScreen 和 macOS Gatekeeper 警告，Linux 包也没有可验证的发行者
 签名。这是当前阶段的明确限制，不应引导用户关闭系统安全机制。正式公开发布前必须补齐各平台
-签名、公证、真实品牌图标、许可证、sidecar 供应链校验和原生系统实机回归。
+签名、公证、真实品牌图标、许可证、Provider 运行时供应链校验和原生系统实机回归。
+
+## Provider 运行时完整性
+
+CodeAgent 发布包不得包含 Codex、Claude Code 等 Provider 可执行文件。正式发布前必须验证：
+
+- 每个平台都能发现系统安装和应用私有安装，并正确拒绝不兼容版本。
+- 按需安装只访问 Provider 官方分发源，不调用全局包管理器或修改系统 `PATH`。
+- 下载产物的平台、架构、版本、SHA-256 和 Provider 提供的官方签名全部通过校验。
+- 安装使用临时目录和原子切换，中断或失败不会破坏现有可用版本。
+- 应用升级后能够提示安装新的兼容版本，并能回退到上一个已验证版本。
+
+完整流程见 [Provider Runtime Manager](./provider-runtime-management.md)。
 
 ## 参考
 

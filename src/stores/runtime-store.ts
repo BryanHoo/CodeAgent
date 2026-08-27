@@ -1,7 +1,7 @@
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/shim/with-selector";
 
 import type { AppEvent, RuntimeSnapshot } from "@/domain/runtime";
-import { connectRuntimeChannel } from "@/platform/tauri/runtime-channel";
+import { initializeRuntimeChannel } from "@/platform/tauri/runtime-channel";
 import {
   INITIAL_RUNTIME_STATE,
   reduceRuntimeEvent,
@@ -50,7 +50,9 @@ export function initializeRuntimeStore() {
 
   initialized = true;
   emitChange({ ...state, connection: "connecting" });
-  void connectRuntimeChannel(handleRuntimeEvent).then(handleConnected).catch(handleConnectionError);
+  void initializeRuntimeChannel(handleRuntimeEvent)
+    .then(handleConnected)
+    .catch(handleConnectionError);
 }
 
 export function subscribeRuntimeStore(listener: Listener) {

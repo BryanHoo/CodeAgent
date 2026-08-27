@@ -14,11 +14,10 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.149", features = ["raw_value"] }
 tauri = { version = "2.11.5", features = [] }
 thiserror = "2.0.20"
-
-[dev-dependencies]
-serde_json = "1.0.149"
+tokio = { version = "1.50.0", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
 
 [lints.rust]
 unsafe_code = "forbid"

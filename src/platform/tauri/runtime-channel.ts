@@ -36,3 +36,16 @@ export function connectRuntimeChannel(
 
   return connectionPromise;
 }
+
+export async function initializeRuntimeChannel(
+  onEvent: (event: AppEvent) => void,
+): Promise<RuntimeSnapshot> {
+  const snapshot = await connectRuntimeChannel(onEvent);
+
+  if (!isTauri() || snapshot.status !== "stopped") {
+    return snapshot;
+  }
+
+  // Provider 进程只在模块级 Channel 就绪后启动，保证首个状态事件有稳定消费者。
+  return invoke<RuntimeSnapshot>("start_runtime");
+}

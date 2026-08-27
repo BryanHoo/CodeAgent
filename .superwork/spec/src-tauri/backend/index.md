@@ -8,6 +8,7 @@
 
 - `src-tauri/src/application/`：命令入口、应用状态与错误转换
 - `src-tauri/src/domain/`：稳定的 Rust 领域模型和序列化契约
+- `src-tauri/src/infrastructure/`：Provider 专属的外部进程、传输与协议适配
 - `src-tauri/src/lib.rs`：Tauri Builder 装配与命令注册
 - `src-tauri/src/main.rs`：桌面二进制入口
 
@@ -16,6 +17,7 @@
 | 文档 | 内容 |
 |---|---|
 | [IPC 契约](./ipc-contracts.md) | 命令、Channel 与序列化约束 |
+| [Provider 运行时](../../../../docs/provider-runtime-management.md) | 发现、版本检查、按需安装、升级与回退 |
 | [质量规范](./quality-guidelines.md) | Rust 测试、格式化与静态检查 |
 
 ## 开发前检查

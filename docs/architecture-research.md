@@ -26,6 +26,7 @@ stdio JSONL
 - UI 使用 AI Elements 的源码组件，但不使用 Next.js、`useChat` 或 AI SDK HTTP 传输层。
 - Web 层只维护面向渲染的状态投影，线程、审批、认证和执行状态仍以 `app-server` 为准。
 - Codex 和 Claude Code 使用完全独立的进程、目录、配置及数据。应用启动时选择 provider，本次运行期间不混合启动或动态切换。
+- 不将 Provider 可执行文件作为 Tauri Sidecar 打包；优先复用本机兼容版本，缺失时应用私有按需安装。
 
 纯 Rust 原生 UI 理论上可以进一步降低渲染损耗，但会失去 AI Elements 和 Web 生态的开发效率。在 Tauri 与 AI Elements 的既定条件下，本方案是性能、可靠性和开发效率之间的最佳平衡。
 
@@ -77,9 +78,25 @@ codex app-server generate-ts --out ./schemas
 codex app-server generate-json-schema --out ./schemas
 ```
 
-生产环境优先将固定版本的 Codex 二进制作为 Tauri sidecar 打包。发布前需要确认对应版本的分发许可、各平台签名以及自动更新策略。开发环境可以额外支持显式配置本机 Codex 路径，但不能依赖不可控的全局版本作为生产默认值。
+生产环境由 Provider Runtime Manager 选择已验证的绝对路径。系统安装版本满足适配器要求时直接
+复用；缺失或不兼容时，经用户确认后将指定版本安装到应用私有目录。不得覆盖、降级或修改用户的
+全局安装。
 
-### 3.2 协议处理
+### 3.2 Provider Runtime Manager
+
+Provider Runtime Manager 负责运行时发现、版本解析、能力探测、按需安装、升级和回退：
+
+- 按用户指定路径、应用私有目录、`PATH` 和平台常见目录的顺序发现候选项。
+- 使用短超时和输出上限执行官方版本命令，首版按适配器要求的精确版本匹配。
+- 版本匹配后执行 Provider 专属能力探测，Codex 必须完成 `app-server` 初始化握手。
+- 未找到兼容版本时，由用户确认后从官方分发源下载到应用私有目录。
+- 校验版本、平台、架构、SHA-256 和官方签名，验证通过后原子切换。
+- 保留上一个可用版本；安装、校验或启动失败时不影响当前版本。
+
+应用不得静默安装，不得执行全局 `npm install -g`、Homebrew、WinGet 或系统包管理器命令，也
+不得通过登录 shell 发现程序。详细约束见 [Provider Runtime Manager](./provider-runtime-management.md)。
+
+### 3.3 协议处理
 
 Rust 层不能把原始 JSONL 无条件透传给前端。每行消息至少需要完成以下处理：
 
@@ -91,7 +108,7 @@ Rust 层不能把原始 JSONL 无条件透传给前端。每行消息至少需�
 
 可以在完成最小信封解析后使用 `serde_json::value::RawValue` 保留未消费字段，降低重复序列化和协议升级成本。但进入 Web 层的数据必须经过归一化，避免 UI 与 Codex 协议细节直接耦合。
 
-### 3.3 队列与背压
+### 3.4 队列与背压
 
 推荐采用有界 Tokio `mpsc` 队列：
 
@@ -101,7 +118,7 @@ Rust 层不能把原始 JSONL 无条件透传给前端。每行消息至少需�
 - WebView 消费过慢时限制内存增长，并记录背压诊断信息。
 - 通过 `seq` 检测缺失、重复或乱序事件。
 
-### 3.4 Tauri 边界
+### 3.5 Tauri 边界
 
 WebView 到 Rust 使用职责明确的 `invoke` 命令，例如：
 
@@ -226,10 +243,12 @@ AI Elements 的 `Conversation` 提供自动滚动，但没有长列表虚拟化�
 appData/
 ├── providers/
 │   ├── codex/
+│   │   ├── bin/           # 应用私有的版本化 Codex 运行时
 │   │   ├── runtime/       # CODEX_HOME
 │   │   ├── logs/
 │   │   └── ui.sqlite
 │   └── claude/
+│       ├── bin/           # 应用私有的版本化 Claude Code 运行时
 │       ├── runtime/       # CLAUDE_CONFIG_DIR
 │       ├── logs/
 │       └── ui.sqlite
@@ -256,6 +275,8 @@ appData/
 | WebSocket 连接 `app-server` | 官方仍标记为实验能力，本地 `stdio` 更短且更稳定 |
 | 本地 HTTP Server | 增加端口、安全、序列化和生命周期管理成本 |
 | Node.js 协议 sidecar | Codex 首版没有必要增加第三个运行时和一次 IPC |
+| 打包全部 Provider Sidecar | 安装包会随 Provider 数量线性增长，用户也会获得未使用的大型运行时 |
+| 调用全局包管理器按需安装 | 需要额外权限、污染系统环境，且无法稳定控制路径和版本 |
 | Next.js | Tauri 不需要 SSR，生产运行时和构建复杂度更高 |
 | AI SDK `useChat` | 其 HTTP 消息协议与 Codex App Server 协议不一致 |
 | 前端直接持有原始协议 | UI 与 Codex 版本强耦合，审批及错误处理难以集中控制 |
@@ -283,7 +304,7 @@ appData/
 ### 阶段一：Codex 最小闭环
 
 - 建立 Tauri 2、React 19 和 Vite 工程。
-- 启动固定版本 `codex app-server` 并完成初始化握手。
+- 从显式路径或 `PATH` 启动 Codex `0.149.0`，并完成 `app-server` 初始化握手。
 - 实现线程创建、用户输入、流式文本和取消执行。
 - 建立稳定 `Channel`、请求路由和基础日志。
 - 使用 AI Elements 完成会话、消息和输入区域。
@@ -298,14 +319,16 @@ appData/
 ### 阶段三：跨平台发布
 
 - 分别在 Windows、macOS 和 Ubuntu 原生 CI 中构建。
-- 为每个平台打包匹配目标架构的 Codex sidecar。
+- 实现 Provider 运行时发现、精确版本匹配和能力探测。
+- 实现官方来源下载、完整性校验、应用私有安装、原子升级和回退。
 - 完成 macOS 签名与公证、Windows 签名及 Linux 依赖验证。
 - 对真实流式响应、审批、取消、崩溃恢复执行端到端测试。
 
 ### 阶段四：Claude Code
 
 - 将 provider 选择提升为启动配置。
-- 为 Claude Code 建立独立 sidecar、配置目录和数据目录。
+- 为 Claude Code 增加独立的发现、版本解析、能力探测和应用私有安装策略。
+- 为 Claude Code 建立独立配置目录和数据目录。
 - 实现 Claude Code 官方协议到 `AgentItemView` 的适配层。
 - 复用 UI 组件，不复用运行时、认证、会话和协议状态。
 
@@ -320,6 +343,6 @@ appData/
 - 10MB 以上命令输出时的背压和内存上限。
 - 审批请求、取消和最终状态是否严格有序且不丢失。
 - Codex 异常退出后能否提供明确诊断并安全恢复。
-- Windows、macOS、Ubuntu 的认证、sandbox、sidecar 和升级行为是否一致。
+- Windows、macOS、Ubuntu 的认证、sandbox、运行时发现、按需安装和升级行为是否一致。
 
 性能验收应以端到端时间戳和实际长会话数据为准，避免只依据开发环境中的 React 渲染次数判断。

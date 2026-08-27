@@ -1,7 +1,7 @@
 # CodeAgent
 
-CodeAgent 桌面端脚手架。当前仅提供可编译、可测试的工程基础，不包含会话、审批、认证、
-`codex app-server` 进程管理或其他业务实现。
+CodeAgent 桌面端客户端。当前已实现 `codex app-server` 的隔离启动、stdio JSONL 初始化握手、
+请求关联和运行时状态通道；会话、审批与认证仍待后续阶段实现。
 
 ## 技术栈
 
@@ -16,6 +16,13 @@ CodeAgent 桌面端脚手架。当前仅提供可编译、可测试的工程基�
 - pnpm 11+
 - Rust 1.97+
 - 对应平台的 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+
+开发环境默认从 `PATH` 启动 `codex`，也可通过 `CODEAGENT_CODEX_BIN` 指定本机 Codex
+可执行文件。运行时使用应用数据目录下独立的 `providers/codex/runtime` 作为 `CODEX_HOME`。
+
+生产版本不将 Codex、Claude Code 等 Provider 可执行文件作为 Sidecar 打包。应用优先复用
+本机兼容版本，缺失时由用户确认后安装指定版本到应用私有目录。完整方案见
+[Provider Runtime Manager](docs/provider-runtime-management.md)。
 
 ## 常用命令
 

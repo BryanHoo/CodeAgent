@@ -1,13 +1,13 @@
 use serde::Serialize;
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProviderKind {
     Codex,
     Claude,
 }
 
-#[derive(Clone, Copy, Debug, Default, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RuntimeStatus {
     #[default]
@@ -17,7 +17,7 @@ pub enum RuntimeStatus {
     Failed,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSnapshot {
     pub schema_version: u16,
