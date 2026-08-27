@@ -9,7 +9,7 @@ import type {
   ProjectGitStatus,
   ProjectGitWorktree,
   ProjectRoot,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
 import type {

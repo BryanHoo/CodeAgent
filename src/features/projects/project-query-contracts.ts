@@ -1,5 +1,5 @@
-import { CodexlyClient } from "@codexly/client";
-import type { AgentTaskPage, AgentTaskSnapshot } from "@codexly/protocol";
+import { CodexlyClient } from "@/client/index.js";
+import type { AgentTaskPage, AgentTaskSnapshot } from "@/protocol/index.js";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import { createMockFetch } from "../../mock/mock-fetch.js";

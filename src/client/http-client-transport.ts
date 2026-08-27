@@ -34,7 +34,7 @@ import {
   type StartOfficialProviderLoginResponse,
   type WorkbenchPetCatalogResponse,
   type WorkbenchPetDownloadResponse,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { v4 as createUuid } from "uuid";

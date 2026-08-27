@@ -1,4 +1,4 @@
-import type { ProjectGitStatus } from "@codexly/protocol";
+import type { ProjectGitStatus } from "@/protocol/index.js";
 import { FileMinus2, FilePenLine, FilePlus2 } from "lucide-react";
 import { useMemo, type MouseEvent } from "react";
 

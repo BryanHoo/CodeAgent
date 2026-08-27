@@ -1,5 +1,5 @@
-import { buildProjectAttachmentUrl } from "@codexly/client";
-import type { HostFileKind, HostFileListing } from "@codexly/protocol";
+import { buildProjectAttachmentUrl } from "@/client/index.js";
+import type { HostFileKind, HostFileListing } from "@/protocol/index.js";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useRef, useState } from "react";

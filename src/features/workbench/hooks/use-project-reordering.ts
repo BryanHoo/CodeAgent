@@ -1,4 +1,4 @@
-import type { Project } from "@codexly/protocol";
+import type { Project } from "@/protocol/index.js";
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent } from "react";
 

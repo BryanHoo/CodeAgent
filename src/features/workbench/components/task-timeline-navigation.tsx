@@ -1,4 +1,4 @@
-import type { AgentItem } from "@codexly/protocol";
+import type { AgentItem } from "@/protocol/index.js";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useCallback,

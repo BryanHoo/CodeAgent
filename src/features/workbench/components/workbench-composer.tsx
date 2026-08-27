@@ -1,4 +1,4 @@
-import type { AgentTaskSettings } from "@codexly/protocol";
+import type { AgentTaskSettings } from "@/protocol/index.js";
 import { useEffect, useImperativeHandle, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";

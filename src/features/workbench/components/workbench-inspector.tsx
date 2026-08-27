@@ -7,7 +7,7 @@ import type {
   ProjectGitStatus,
   ProjectOpenApp,
   ProjectOpenAppId,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { RefreshCw } from "lucide-react";
 import { lazy, Suspense, useMemo } from "react";
 

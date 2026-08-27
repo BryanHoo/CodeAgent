@@ -6,7 +6,7 @@ import type {
   AgentSkill,
   AgentTask,
   AgentTaskSettings,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import type { RefObject } from "react";
 import { v4 as createUuid } from "uuid";
 

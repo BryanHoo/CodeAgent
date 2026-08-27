@@ -60,7 +60,7 @@ import {
   type UnsubscribeAgentTaskResponse,
   type UploadAgentFeedbackRequest,
   type UploadAgentFeedbackResponse,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { v4 as createUuid } from "uuid";
 
 import {

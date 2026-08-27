@@ -9,7 +9,7 @@ import type {
   AgentTurn,
   AgentTurnOptions,
   EventCheckpoint,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { v4 as createUuid } from "uuid";
 
 import { i18n } from "../../i18n/i18n.js";

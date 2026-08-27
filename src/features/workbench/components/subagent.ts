@@ -1,4 +1,4 @@
-import type { AgentItem, AgentItemStatus } from "@codexly/protocol";
+import type { AgentItem, AgentItemStatus } from "@/protocol/index.js";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { TaskStatus } from "../../../shared/components/agent/task.js";

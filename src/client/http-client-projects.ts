@@ -69,7 +69,7 @@ import {
   type RenameProjectFileResponse,
   type ReloadAgentMcpServersResponse,
   type ReorderProjectsResponse,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 
 import {
   CodexlyTransport,

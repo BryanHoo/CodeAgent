@@ -28,8 +28,8 @@
 **Files:**
 
 - Replace: `src/`
-- Add: `packages/client/`
-- Add: `packages/protocol/`
+- Add: `src/client/`
+- Add: `src/protocol/`
 - Modify: `package.json`
 - Modify: `pnpm-workspace.yaml`
 - Modify: `vite.config.ts`

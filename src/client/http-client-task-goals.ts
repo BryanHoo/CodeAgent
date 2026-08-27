@@ -4,7 +4,7 @@ import {
   type ClearAgentGoalResponse,
   type UpdateAgentGoalRequest,
   type UpdateAgentGoalResponse,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 
 import { taskPath, type MutationOptions } from "./http-client-transport.js";
 import { TaskArchiveHttpClient } from "./http-client-task-archive.js";

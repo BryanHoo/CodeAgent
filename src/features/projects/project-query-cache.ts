@@ -1,5 +1,5 @@
-import type { CodexlyClient } from "@codexly/client";
-import type { AgentTask, Project, ProjectPage } from "@codexly/protocol";
+import type { CodexlyClient } from "@/client/index.js";
+import type { AgentTask, Project, ProjectPage } from "@/protocol/index.js";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { i18n } from "../../i18n/i18n.js";

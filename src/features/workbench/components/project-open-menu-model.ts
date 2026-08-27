@@ -1,4 +1,4 @@
-import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppKind } from "@codexly/protocol";
+import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppKind } from "@/protocol/index.js";
 import { Code2, ExternalLink, FolderOpen, Terminal, Wrench } from "lucide-react";
 
 type ProjectOpenTargetType = "directory" | "file";

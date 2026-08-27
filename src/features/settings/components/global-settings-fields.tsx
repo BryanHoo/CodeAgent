@@ -1,4 +1,4 @@
-import type { AgentModel } from "@codexly/protocol";
+import type { AgentModel } from "@/protocol/index.js";
 import {
   Bot,
   ChevronDown,

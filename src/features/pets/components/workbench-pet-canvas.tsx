@@ -1,5 +1,5 @@
-import { buildWorkbenchPetAssetUrl } from "@codexly/client";
-import type { WorkbenchPetDescriptor } from "@codexly/protocol";
+import { buildWorkbenchPetAssetUrl } from "@/client/index.js";
+import type { WorkbenchPetDescriptor } from "@/protocol/index.js";
 import { useEffect, useRef, useState } from "react";
 
 import { PetAnimationController } from "../pet-animation-controller.js";

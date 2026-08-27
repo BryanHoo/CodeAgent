@@ -1,11 +1,11 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { AgentEventConnectionState } from "@codexly/client";
+import type { AgentEventConnectionState } from "@/client/index.js";
 import {
   TEMPORARY_TASK_SCOPE_ID,
   type AgentTask,
   type AppInfoResponse,
   type Project,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PanelLeftClose, Search, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

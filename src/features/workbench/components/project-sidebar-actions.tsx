@@ -1,5 +1,5 @@
-import type { AgentEventConnectionState } from "@codexly/client";
-import type { AppInfoResponse, Project } from "@codexly/protocol";
+import type { AgentEventConnectionState } from "@/client/index.js";
+import type { AppInfoResponse, Project } from "@/protocol/index.js";
 import {
   CircleArrowUp,
   Archive,

@@ -1,4 +1,4 @@
-import type { CodexlyClient } from "@codexly/client";
+import type { CodexlyClient } from "@/client/index.js";
 import type {
   AgentGlobalSettings,
   AgentMcpServerPage,
@@ -8,7 +8,7 @@ import type {
   GenerateCommitMessageRequest,
   ProjectGitHistoryPage,
   ProjectGitCommitFilesPage,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { infiniteQueryOptions, mutationOptions, queryOptions } from "@tanstack/react-query";
 
 import {

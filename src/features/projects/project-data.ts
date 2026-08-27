@@ -1,4 +1,4 @@
-import type { AgentTask } from "@codexly/protocol";
+import type { AgentTask } from "@/protocol/index.js";
 
 export const PROJECT_TASK_PREVIEW_LIMIT = 5;
 

@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { buildProjectImageFileUrl } from "@codexly/client";
-import type { ProjectSourceFile } from "@codexly/protocol";
+import { buildProjectImageFileUrl } from "@/client/index.js";
+import type { ProjectSourceFile } from "@/protocol/index.js";
 import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
 

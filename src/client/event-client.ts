@@ -5,7 +5,7 @@ import {
   type AgentEvent,
   type EventStreamMessage,
   type ResyncRequired,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { Value } from "@sinclair/typebox/value";
 
 export type AgentEventConnectionState = "closed" | "connected" | "connecting" | "reconnecting";

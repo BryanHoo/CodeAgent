@@ -1,4 +1,4 @@
-import type { AgentBackgroundTerminal, AgentMcpServer } from "@codexly/protocol";
+import type { AgentBackgroundTerminal, AgentMcpServer } from "@/protocol/index.js";
 import {
   Bot,
   CheckCircle2,

@@ -1,4 +1,4 @@
-import type { PendingRequest } from "@codexly/protocol";
+import type { PendingRequest } from "@/protocol/index.js";
 
 // 集中维护 HTTP client 的协议响应样本与 JSON 工具。
 export const task = {

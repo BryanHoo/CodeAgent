@@ -1,4 +1,4 @@
-import type { ProjectGitCommit } from "@codexly/protocol";
+import type { ProjectGitCommit } from "@/protocol/index.js";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { LoaderCircle, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";

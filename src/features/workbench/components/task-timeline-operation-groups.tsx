@@ -1,4 +1,4 @@
-import type { AgentItem } from "@codexly/protocol";
+import type { AgentItem } from "@/protocol/index.js";
 import { CheckCircle, ChevronRight, CircleX, ListChecks } from "lucide-react";
 import {
   Fragment,

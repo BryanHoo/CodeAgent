@@ -1,4 +1,4 @@
-import type { AgentItem, AgentTurn } from "@codexly/protocol";
+import type { AgentItem, AgentTurn } from "@/protocol/index.js";
 
 import {
   readTaskItem,

@@ -14,7 +14,7 @@ import type {
   ProjectGitStatus,
   ProjectFileSearchEntry,
   ProjectRoot,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import type { Ref } from "react";
 
 import type {

@@ -1,4 +1,4 @@
-import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppId } from "@codexly/protocol";
+import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppId } from "@/protocol/index.js";
 import { RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 

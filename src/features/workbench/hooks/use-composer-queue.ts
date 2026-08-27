@@ -1,4 +1,4 @@
-import type { AgentPromptInput, AgentQueuedSubmission, AgentSkill } from "@codexly/protocol";
+import type { AgentPromptInput, AgentQueuedSubmission, AgentSkill } from "@/protocol/index.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { v4 as createUuid } from "uuid";

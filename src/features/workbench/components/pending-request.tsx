@@ -1,4 +1,4 @@
-import type { PendingApprovalDecision, PendingRequest } from "@codexly/protocol";
+import type { PendingApprovalDecision, PendingRequest } from "@/protocol/index.js";
 import { useEffect, useRef, useState } from "react";
 
 import {

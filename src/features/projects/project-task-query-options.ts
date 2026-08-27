@@ -1,4 +1,4 @@
-import type { AgentTaskPage } from "@codexly/protocol";
+import type { AgentTaskPage } from "@/protocol/index.js";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import {

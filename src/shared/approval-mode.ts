@@ -1,4 +1,4 @@
-import type { AgentApprovalsReviewer, AgentTurnApprovalPolicy } from "@codexly/protocol";
+import type { AgentApprovalsReviewer, AgentTurnApprovalPolicy } from "@/protocol/index.js";
 
 type ApprovalSettings = Readonly<{
   approvalPolicy: AgentTurnApprovalPolicy;

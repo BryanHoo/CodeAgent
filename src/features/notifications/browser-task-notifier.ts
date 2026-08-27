@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@codexly/protocol";
+import type { AgentEvent } from "@/protocol/index.js";
 
 import { i18n } from "../../i18n/i18n.js";
 import { recordInternalWarning } from "./internal-diagnostics.js";

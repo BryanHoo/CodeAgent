@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TEMPORARY_TASK_SCOPE_ID } from "@codexly/protocol";
+import { TEMPORARY_TASK_SCOPE_ID } from "@/protocol/index.js";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 

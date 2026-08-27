@@ -1,4 +1,4 @@
-import type { PendingRequest } from "@codexly/protocol";
+import type { PendingRequest } from "@/protocol/index.js";
 import { AlertTriangle, Info } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useStore } from "zustand";

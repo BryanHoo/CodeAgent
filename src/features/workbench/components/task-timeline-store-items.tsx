@@ -1,4 +1,4 @@
-import type { AgentItem, AgentTurn } from "@codexly/protocol";
+import type { AgentItem, AgentTurn } from "@/protocol/index.js";
 import { useStore } from "zustand";
 
 import { i18n } from "../../../i18n/i18n.js";

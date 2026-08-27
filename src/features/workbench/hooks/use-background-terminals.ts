@@ -1,4 +1,4 @@
-import type { AgentBackgroundTerminal } from "@codexly/protocol";
+import type { AgentBackgroundTerminal } from "@/protocol/index.js";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import { v4 as createUuid } from "uuid";

@@ -1,4 +1,4 @@
-import type { AgentCommandOutputOmission } from "@codexly/protocol";
+import type { AgentCommandOutputOmission } from "@/protocol/index.js";
 
 import type { ChunkedText, TextChunk } from "../../../shared/lib/chunked-text.js";
 

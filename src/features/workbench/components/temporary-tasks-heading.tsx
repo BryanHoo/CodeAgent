@@ -1,4 +1,4 @@
-import { TEMPORARY_TASK_SCOPE_ID } from "@codexly/protocol";
+import { TEMPORARY_TASK_SCOPE_ID } from "@/protocol/index.js";
 import { Archive, MessageSquareText, Plus } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";

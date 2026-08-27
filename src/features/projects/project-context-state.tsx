@@ -4,7 +4,7 @@ import {
   type AgentTask,
   type AgentTaskPage,
   type Project,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import type { ProjectRuntimeManager } from "../conversation/runtime/project-runtime.js";

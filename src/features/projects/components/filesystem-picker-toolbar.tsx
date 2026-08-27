@@ -1,4 +1,4 @@
-import type { ProjectDirectoryListing } from "@codexly/protocol";
+import type { ProjectDirectoryListing } from "@/protocol/index.js";
 import { ArrowRight, ArrowUp, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "../../../shared/components/core/button.js";

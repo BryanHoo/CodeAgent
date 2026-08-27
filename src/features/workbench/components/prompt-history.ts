@@ -1,4 +1,4 @@
-import type { AgentItem, AgentSkill, AgentTurn } from "@codexly/protocol";
+import type { AgentItem, AgentSkill, AgentTurn } from "@/protocol/index.js";
 
 import type { TaskStoreState } from "../../conversation/runtime/task-store.js";
 import {

@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentItem } from "@codexly/protocol";
+import type { AgentEvent, AgentItem } from "@/protocol/index.js";
 
 import {
   MAX_RETAINED_TASK_NOTICES,

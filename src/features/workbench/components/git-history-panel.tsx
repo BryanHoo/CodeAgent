@@ -1,4 +1,4 @@
-import type { ProjectGitCommit } from "@codexly/protocol";
+import type { ProjectGitCommit } from "@/protocol/index.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 

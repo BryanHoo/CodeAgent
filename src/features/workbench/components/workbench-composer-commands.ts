@@ -1,4 +1,4 @@
-import type { AgentReviewTarget, AgentSkill } from "@codexly/protocol";
+import type { AgentReviewTarget, AgentSkill } from "@/protocol/index.js";
 
 import type { CodexlyMutationClient } from "../../projects/project-queries.js";
 import { notifyActionSuccess } from "../../notifications/action-notifications.js";

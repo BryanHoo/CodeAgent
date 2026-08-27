@@ -1,4 +1,4 @@
-import type { AgentGoal } from "@codexly/protocol";
+import type { AgentGoal } from "@/protocol/index.js";
 import { Clock3, Pause, Play, Target, Trash2 } from "lucide-react";
 import { useState } from "react";
 

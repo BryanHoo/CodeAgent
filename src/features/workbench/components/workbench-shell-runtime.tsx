@@ -7,7 +7,7 @@ import type {
   AgentTurn,
   EventCheckpoint,
   ProjectOpenAppId,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";

@@ -1,4 +1,4 @@
-import type { AgentTask, AgentTaskSnapshotResponse, EventCheckpoint } from "@codexly/protocol";
+import type { AgentTask, AgentTaskSnapshotResponse, EventCheckpoint } from "@/protocol/index.js";
 import {
   createBrowserTaskNotifier,
   type TaskNotifier,

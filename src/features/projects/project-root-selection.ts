@@ -1,4 +1,4 @@
-import type { Project, ProjectRoot } from "@codexly/protocol";
+import type { Project, ProjectRoot } from "@/protocol/index.js";
 
 export type ProjectRootSelection = Readonly<{
   projectId: string;

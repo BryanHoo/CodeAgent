@@ -1,4 +1,4 @@
-import type { AgentSkill, ProjectFileSearchEntry } from "@codexly/protocol";
+import type { AgentSkill, ProjectFileSearchEntry } from "@/protocol/index.js";
 
 import type { PromptSlashCommand } from "./prompt-command.js";
 

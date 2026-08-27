@@ -1,4 +1,4 @@
-import { TEMPORARY_TASK_SCOPE_ID, type AgentTask, type Project } from "@codexly/protocol";
+import { TEMPORARY_TASK_SCOPE_ID, type AgentTask, type Project } from "@/protocol/index.js";
 
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
 

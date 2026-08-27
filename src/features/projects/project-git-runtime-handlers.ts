@@ -1,4 +1,4 @@
-import { TEMPORARY_TASK_SCOPE_ID, type Project } from "@codexly/protocol";
+import { TEMPORARY_TASK_SCOPE_ID, type Project } from "@/protocol/index.js";
 
 import type {
   ProjectGitActivityReason,

@@ -1,4 +1,4 @@
-import type { WorkbenchPetAnimation } from "@codexly/protocol";
+import type { WorkbenchPetAnimation } from "@/protocol/index.js";
 
 type PetAnimations = Readonly<Record<string, WorkbenchPetAnimation>>;
 

@@ -1,5 +1,5 @@
-import type { AgentEventConnectionState } from "@codexly/client";
-import type { AgentTask } from "@codexly/protocol";
+import type { AgentEventConnectionState } from "@/client/index.js";
+import type { AgentTask } from "@/protocol/index.js";
 
 import { i18n } from "../../../i18n/i18n.js";
 

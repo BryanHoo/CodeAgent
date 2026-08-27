@@ -1,5 +1,5 @@
-import type { CodexlyClient } from "@codexly/client";
-import type { WorkbenchPetCatalogResponse, WorkbenchPetDescriptor } from "@codexly/protocol";
+import type { CodexlyClient } from "@/client/index.js";
+import type { WorkbenchPetCatalogResponse, WorkbenchPetDescriptor } from "@/protocol/index.js";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { codexlyClient } from "../projects/project-query-contracts.js";

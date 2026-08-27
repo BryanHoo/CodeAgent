@@ -1,4 +1,4 @@
-import type { CommitProjectChangesResponse, ProjectGitStatus } from "@codexly/protocol";
+import type { CommitProjectChangesResponse, ProjectGitStatus } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 

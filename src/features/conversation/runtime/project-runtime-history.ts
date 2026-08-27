@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTaskSnapshotResponse } from "@codexly/protocol";
+import type { AgentEvent, AgentTaskSnapshotResponse } from "@/protocol/index.js";
 import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
 import type { TaskNotifier } from "../../notifications/browser-task-notifier.js";
 

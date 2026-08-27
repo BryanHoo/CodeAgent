@@ -1,5 +1,5 @@
-import { buildTaskAttachmentUrl } from "@codexly/client";
-import type { AgentMessageAttachment, AgentSkill, AgentTurn } from "@codexly/protocol";
+import { buildTaskAttachmentUrl } from "@/client/index.js";
+import type { AgentMessageAttachment, AgentSkill, AgentTurn } from "@/protocol/index.js";
 import { Files, Paperclip, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 

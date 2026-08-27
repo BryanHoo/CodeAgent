@@ -1,4 +1,4 @@
-import type { AgentGoal } from "@codexly/protocol";
+import type { AgentGoal } from "@/protocol/index.js";
 import { Bug, CircleGauge, FilePlus2, GitFork, Lightbulb, Target, X, Zap } from "lucide-react";
 import type { PromptCommandAction } from "./prompt-command.js";
 import type { ComposerMode } from "./workbench-composer-contracts.js";

@@ -1,4 +1,4 @@
-import type { FilesystemRoot } from "@codexly/protocol";
+import type { FilesystemRoot } from "@/protocol/index.js";
 
 export function findActiveFilesystemRoot(
   roots: readonly FilesystemRoot[],

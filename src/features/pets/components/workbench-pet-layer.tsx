@@ -1,4 +1,4 @@
-import type { WorkbenchPetDescriptor, WorkbenchPetSettings } from "@codexly/protocol";
+import type { WorkbenchPetDescriptor, WorkbenchPetSettings } from "@/protocol/index.js";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {

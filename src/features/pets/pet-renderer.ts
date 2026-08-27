@@ -1,4 +1,4 @@
-import type { WorkbenchPetFrame } from "@codexly/protocol";
+import type { WorkbenchPetFrame } from "@/protocol/index.js";
 
 export async function loadPetBitmap(assetUrl: string, signal: AbortSignal): Promise<ImageBitmap> {
   const response = await fetch(assetUrl, { credentials: "same-origin", signal });

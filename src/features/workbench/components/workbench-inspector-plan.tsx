@@ -1,4 +1,4 @@
-import type { AgentPlan } from "@codexly/protocol";
+import type { AgentPlan } from "@/protocol/index.js";
 import { ListTodo } from "lucide-react";
 
 import { i18n } from "../../../i18n/i18n.js";

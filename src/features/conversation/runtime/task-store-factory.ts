@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@codexly/protocol";
+import type { AgentEvent } from "@/protocol/index.js";
 import { createStore } from "zustand/vanilla";
 
 import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";

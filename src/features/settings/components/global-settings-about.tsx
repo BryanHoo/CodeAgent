@@ -1,4 +1,4 @@
-import type { AppInfoResponse } from "@codexly/protocol";
+import type { AppInfoResponse } from "@/protocol/index.js";
 import { BookOpen, Download, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 

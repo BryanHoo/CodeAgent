@@ -1,4 +1,4 @@
-import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppId } from "@codexly/protocol";
+import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppId } from "@/protocol/index.js";
 import { AtSign, ChevronDown, Copy, ExternalLink, FolderOpen } from "lucide-react";
 import type { ReactElement } from "react";
 

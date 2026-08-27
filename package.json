@@ -30,8 +30,6 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@codexly/client": "workspace:*",
-    "@codexly/protocol": "workspace:*",
     "@headless-tree/core": "^1.7.0",
     "@headless-tree/react": "^1.7.0",
     "@pierre/diffs": "1.2.12",

@@ -1,4 +1,4 @@
-import type { ProjectFileSearchEntry, ProjectRoot } from "@codexly/protocol";
+import type { ProjectFileSearchEntry, ProjectRoot } from "@/protocol/index.js";
 
 import type { ProjectFileTreeItem } from "./project-file-tree-model.js";
 import {

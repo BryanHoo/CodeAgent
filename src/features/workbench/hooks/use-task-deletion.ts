@@ -1,4 +1,4 @@
-import { TEMPORARY_TASK_SCOPE_ID, type AgentTask } from "@codexly/protocol";
+import { TEMPORARY_TASK_SCOPE_ID, type AgentTask } from "@/protocol/index.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";

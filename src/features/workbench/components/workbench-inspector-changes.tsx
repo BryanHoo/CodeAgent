@@ -1,4 +1,4 @@
-import type { ProjectGitStatus } from "@codexly/protocol";
+import type { ProjectGitStatus } from "@/protocol/index.js";
 
 import { i18n } from "../../../i18n/i18n.js";
 import type { AgentFileChange } from "../../diff/file-change.js";

@@ -1,7 +1,7 @@
 import type {
   AgentProviderConnectionStatus,
   ConfigureCustomProviderRequest,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,

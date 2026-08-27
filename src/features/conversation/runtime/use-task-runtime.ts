@@ -1,4 +1,4 @@
-import type { AgentTaskSnapshotResponse } from "@codexly/protocol";
+import type { AgentTaskSnapshotResponse } from "@/protocol/index.js";
 import { type QueryClient, type QueryKey, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";

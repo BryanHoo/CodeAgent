@@ -1,4 +1,4 @@
-import type { AgentEventConnectionState } from "@codexly/client";
+import type { AgentEventConnectionState } from "@/client/index.js";
 import type {
   AgentEvent,
   AgentItem,
@@ -7,7 +7,7 @@ import type {
   AgentTurn,
   EventCheckpoint,
   PendingRequest,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import { estimateRetainedBytes, getUtf8ByteLength } from "../../../shared/memory/byte-lru.js";

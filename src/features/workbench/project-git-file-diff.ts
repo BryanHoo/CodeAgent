@@ -1,4 +1,4 @@
-import type { ProjectGitStatus } from "@codexly/protocol";
+import type { ProjectGitStatus } from "@/protocol/index.js";
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { AgentFileChange } from "../diff/file-change.js";

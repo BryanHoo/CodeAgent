@@ -1,4 +1,4 @@
-import { TEMPORARY_TASK_SCOPE_ID, type Project, type ProjectPage } from "@codexly/protocol";
+import { TEMPORARY_TASK_SCOPE_ID, type Project, type ProjectPage } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { i18n } from "../../i18n/i18n.js";

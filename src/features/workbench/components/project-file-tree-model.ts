@@ -1,4 +1,4 @@
-import type { ProjectFileTreeEntry } from "@codexly/protocol";
+import type { ProjectFileTreeEntry } from "@/protocol/index.js";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { i18n } from "../../../i18n/i18n.js";

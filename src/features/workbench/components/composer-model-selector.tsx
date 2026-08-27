@@ -1,4 +1,4 @@
-import type { AgentModel, AgentTaskSettings } from "@codexly/protocol";
+import type { AgentModel, AgentTaskSettings } from "@/protocol/index.js";
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 

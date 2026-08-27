@@ -1,4 +1,4 @@
-import type { AccessStatusResponse } from "@codexly/protocol";
+import type { AccessStatusResponse } from "@/protocol/index.js";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createContext,

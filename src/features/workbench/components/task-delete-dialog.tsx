@@ -1,4 +1,4 @@
-import type { AgentTask } from "@codexly/protocol";
+import type { AgentTask } from "@/protocol/index.js";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";

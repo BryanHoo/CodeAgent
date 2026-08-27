@@ -1,9 +1,9 @@
-import type { CodexlyClient } from "@codexly/client";
+import type { CodexlyClient } from "@/client/index.js";
 import type {
   AgentProviderConnectionStatus,
   ConfigureCustomProviderRequest,
   ConfigureCustomProviderResponse,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { codexlyClient } from "../projects/project-query-contracts.js";

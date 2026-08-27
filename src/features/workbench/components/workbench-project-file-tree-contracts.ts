@@ -1,4 +1,4 @@
-import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppId } from "@codexly/protocol";
+import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppId } from "@/protocol/index.js";
 
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodexlyFileTreeClient } from "../../projects/project-query-contracts.js";

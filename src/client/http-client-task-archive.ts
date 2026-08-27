@@ -5,7 +5,7 @@ import {
   type ArchiveAgentTaskResponse,
   type DeleteAgentTaskResponse,
   type UnarchiveAgentTaskResponse,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 
 import { taskPath, type MutationOptions } from "./http-client-transport.js";
 import { ProjectHttpClient } from "./http-client-projects.js";

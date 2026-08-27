@@ -1,4 +1,4 @@
-import type { ProjectGitCommit, ProjectGitHistoryPage } from "@codexly/protocol";
+import type { ProjectGitCommit, ProjectGitHistoryPage } from "@/protocol/index.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Copy, GitCommitHorizontal, LoaderCircle } from "lucide-react";
 import { useEffect, useMemo } from "react";

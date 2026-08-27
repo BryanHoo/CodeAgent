@@ -1,4 +1,4 @@
-import type { AgentTask, AgentTaskPage, Project } from "@codexly/protocol";
+import type { AgentTask, AgentTaskPage, Project } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveRestore,

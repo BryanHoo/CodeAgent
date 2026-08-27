@@ -1,4 +1,4 @@
-import type { WorkbenchPetDescriptor, WorkbenchPetSettings } from "@codexly/protocol";
+import type { WorkbenchPetDescriptor, WorkbenchPetSettings } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, PawPrint, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";

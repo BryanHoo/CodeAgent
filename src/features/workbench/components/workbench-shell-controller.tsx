@@ -8,7 +8,7 @@ import {
   type AgentTaskSettings,
   type AgentTurn,
   type EventCheckpoint,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { classifyProjectFileReference } from "../project-file-reference.js";
 import { openProjectFileInNewWindow } from "../project-file-popup.js";

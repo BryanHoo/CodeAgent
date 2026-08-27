@@ -11,7 +11,7 @@ import type {
   PendingRequest,
   ProjectGitStatus,
   ProjectRoot,
-} from "@codexly/protocol";
+} from "@/protocol/index.js";
 import { useMutation } from "@tanstack/react-query";
 import { memo, useEffect, useState, type RefObject } from "react";
 

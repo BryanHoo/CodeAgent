@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { AgentAttachment } from "@codexly/protocol";
+import type { AgentAttachment } from "@/protocol/index.js";
 import type { AttachmentData } from "./attachments.js";
 
 export type PromptInputAttachment = AttachmentData &
