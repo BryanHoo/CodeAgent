@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
-import type { CodexlyAccessClient } from "../projects/project-queries.js";
+import type { NativeAccessClient } from "../projects/project-queries.js";
 import { notifyActionError, notifyActionSuccess } from "../notifications/action-notifications.js";
 
 export type AccessError = "load" | null;
@@ -36,14 +36,14 @@ const INITIAL_ACCESS_STATE: AccessState = {
 };
 
 export class AccessSessionController {
-  readonly #client: CodexlyAccessClient;
+  readonly #client: NativeAccessClient;
   readonly #listeners = new Set<() => void>();
   readonly #queryClient: QueryClient;
   #generation = 0;
   #state: AccessState = INITIAL_ACCESS_STATE;
   #unsubscribeUnauthorized: (() => void) | undefined;
 
-  public constructor(client: CodexlyAccessClient, queryClient: QueryClient) {
+  public constructor(client: NativeAccessClient, queryClient: QueryClient) {
     this.#client = client;
     this.#queryClient = queryClient;
   }
@@ -112,7 +112,7 @@ export class AccessSessionController {
   }
 
   #clearAuthenticatedState(): void {
-    // 清空服务端数据后，顶层门禁会立即卸载 Project、WebSocket 与草稿 Runtime。
+    // 清空本地访问状态后，顶层门禁会立即卸载 Project、运行时订阅与草稿 Runtime。
     this.#queryClient.clear();
     this.#setState({
       error: null,
@@ -138,7 +138,7 @@ export function AccessProvider({
   queryClient,
 }: Readonly<{
   children: ReactNode;
-  client: CodexlyAccessClient;
+  client: NativeAccessClient;
   queryClient: QueryClient;
 }>) {
   const [controller] = useState(() => new AccessSessionController(client, queryClient));

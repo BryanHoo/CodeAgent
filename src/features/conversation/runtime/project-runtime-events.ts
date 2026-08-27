@@ -1,7 +1,7 @@
-import type { AgentEventConnectionState } from "@/client/index.js";
+import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import type { AgentEvent, AgentTaskSnapshotResponse, EventCheckpoint } from "@/protocol/index.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
-import type { CodexlyRuntimeClient } from "../../projects/project-queries.js";
+import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 import {
   getActiveProjectTaskIds,
   hasActiveProjectTask,
@@ -30,7 +30,7 @@ type ProjectRuntimeCallbacks = Readonly<{
 
 export class ProjectEventRuntime {
   readonly #callbacks: ProjectRuntimeCallbacks;
-  readonly #client: CodexlyRuntimeClient;
+  readonly #client: NativeRuntimeClient;
   readonly #eventHistory: ProjectEventHistory;
   readonly #idleTimeoutMs: number;
   readonly #projectId: string;
@@ -48,7 +48,7 @@ export class ProjectEventRuntime {
 
   public constructor(
     projectId: string,
-    client: CodexlyRuntimeClient,
+    client: NativeRuntimeClient,
     callbacks: ProjectRuntimeCallbacks,
     options: ProjectEventRuntimeOptions,
   ) {

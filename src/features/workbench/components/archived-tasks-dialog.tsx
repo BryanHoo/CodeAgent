@@ -30,7 +30,7 @@ import {
   taskDeleteMutationOptions,
   taskUnarchiveMutationOptions,
   upsertProjectTaskInInfiniteData,
-  type CodexlyArchivedTaskClient,
+  type NativeArchivedTaskClient,
   type ProjectTaskInfiniteData,
 } from "../../projects/project-queries.js";
 import { archivedProjectTasksQueryOptions } from "../../projects/project-task-query-options.js";
@@ -204,7 +204,7 @@ export function ArchivedTasksDialog({
   onClose,
   project,
 }: Readonly<{
-  client: CodexlyArchivedTaskClient;
+  client: NativeArchivedTaskClient;
   onClose: () => void;
   project: ArchivedTaskScope;
 }>) {

@@ -30,7 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
-import type { CodexlyFileTreeClient } from "../../projects/project-query-contracts.js";
+import type { NativeFileTreeClient } from "../../projects/project-query-contracts.js";
 import {
   createProjectFileTreeDataLoader,
   getProjectFileTreeItemName,
@@ -58,7 +58,7 @@ const PROJECT_FILE_TREE_INITIAL_RECT = { height: 600, width: 320 };
 type TreeItemProps = HTMLAttributes<HTMLDivElement> & Readonly<{ ref?: RefCallback<HTMLElement> }>;
 type ProjectFileTreeRowProps = Readonly<{
   changeStatsByPath: ReturnType<typeof collectVisibleProjectFileTreeChangeStats>;
-  client: CodexlyFileTreeClient;
+  client: NativeFileTreeClient;
   item: ItemInstance<ProjectFileTreeItem>;
   onOpenProjectPath: (appId: ProjectOpenAppId, path?: string) => void;
   onReferenceProjectPath: (entry: ProjectFileSearchEntry) => void;

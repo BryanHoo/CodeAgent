@@ -4,7 +4,7 @@ import {
   type TaskNotifier,
 } from "../../notifications/browser-task-notifier.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
-import type { CodexlyRuntimeClient } from "../../projects/project-queries.js";
+import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 import {
   clearTaskAttention,
   getTaskActivity,
@@ -56,9 +56,9 @@ export class ProjectRuntimeManager {
   readonly #titleRefreshedRunningTurns = new Set<string>();
   #viewedTask: Readonly<{ projectId: string; taskId: string }> | undefined;
 
-  public readonly client: CodexlyRuntimeClient;
+  public readonly client: NativeRuntimeClient;
 
-  public constructor(client: CodexlyRuntimeClient, options: ProjectRuntimeManagerOptions = {}) {
+  public constructor(client: NativeRuntimeClient, options: ProjectRuntimeManagerOptions = {}) {
     this.client = client;
     this.#idleTimeoutMs = options.idleTimeoutMs ?? PROJECT_RUNTIME_IDLE_TIMEOUT_MS;
     this.#maxEventHistoryBytes = options.maxEventHistoryBytes ?? MAX_PROJECT_EVENT_HISTORY_BYTES;
@@ -373,7 +373,7 @@ export class ProjectRuntimeManager {
 }
 
 export function createProjectRuntimeManager(
-  client: CodexlyRuntimeClient,
+  client: NativeRuntimeClient,
   options: ProjectRuntimeManagerOptions = {},
 ): ProjectRuntimeManager {
   return new ProjectRuntimeManager(client, options);

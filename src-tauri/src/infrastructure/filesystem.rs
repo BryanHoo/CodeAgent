@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use crate::domain::sidebar::{FilesystemRoot, ProjectDirectoryEntry, ProjectDirectoryListing};
+use crate::domain::sidebar::{
+    FilesystemRoot, HostFileEntry, HostFileListing, ProjectDirectoryEntry, ProjectDirectoryListing,
+};
 
 pub async fn list_project_directories(
     default_path: &Path,
@@ -46,6 +48,74 @@ pub async fn list_project_directories(
         path: path.to_string_lossy().into_owned(),
         roots,
     })
+}
+
+pub async fn list_host_files(
+    default_path: &Path,
+    requested_path: Option<&str>,
+    kind: &str,
+    include_hidden: bool,
+) -> Result<HostFileListing, std::io::Error> {
+    if !matches!(kind, "file" | "image") {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid host file kind",
+        ));
+    }
+    let requested = requested_path.map_or_else(|| default_path.to_path_buf(), PathBuf::from);
+    let path = tokio::fs::canonicalize(requested).await?;
+    if !tokio::fs::metadata(&path).await?.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "path is not a directory",
+        ));
+    }
+    let mut reader = tokio::fs::read_dir(&path).await?;
+    let mut entries = Vec::new();
+    while let Some(entry) = reader.next_entry().await? {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let file_type = entry.file_type().await?;
+        if file_type.is_symlink() || (!include_hidden && name.starts_with('.')) {
+            continue;
+        }
+        let is_directory = file_type.is_dir();
+        if !is_directory && (kind == "image") != is_image_path(&entry.path()) {
+            continue;
+        }
+        entries.push(HostFileEntry {
+            name,
+            path: tokio::fs::canonicalize(entry.path())
+                .await?
+                .to_string_lossy()
+                .into_owned(),
+            kind: if is_directory { "directory" } else { "file" },
+        });
+    }
+    entries.sort_unstable_by(|left, right| {
+        left.kind
+            .cmp(right.kind)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    Ok(HostFileListing {
+        entries,
+        parent_path: path
+            .parent()
+            .map(|parent| parent.to_string_lossy().into_owned()),
+        path: path.to_string_lossy().into_owned(),
+        roots: filesystem_roots(),
+    })
+}
+
+fn is_image_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp"
+            )
+        })
 }
 
 #[cfg(not(target_os = "windows"))]

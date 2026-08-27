@@ -3,7 +3,7 @@ export const settings = {
     available: "发现新版本 {{version}}",
     check: "检查更新",
     checking: "正在检查",
-    codexlyVersion: "CodeAgent 版本",
+    codeagentVersion: "CodeAgent 版本",
     codexVersion: "Codex 版本",
     current: "已是最新版本",
     github: "项目 GitHub",

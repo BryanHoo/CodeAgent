@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { v4 as createUuid } from "uuid";
 import { useRef, useState } from "react";
 
-import type { CodexlyFileTreeClient } from "../../projects/project-query-contracts.js";
+import type { NativeFileTreeClient } from "../../projects/project-query-contracts.js";
 import {
   ProjectFileDeleteDialog,
   ProjectFileRenameDialog,
@@ -24,7 +24,7 @@ export function useProjectFileMutations({
   projectPath,
   targetType,
 }: Readonly<{
-  client: CodexlyFileTreeClient;
+  client: NativeFileTreeClient;
   name: string;
   onRefreshDirectory: (path: string | null) => void;
   path: string | null;

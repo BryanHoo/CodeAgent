@@ -8,7 +8,7 @@ import { Button } from "../../../shared/components/core/button.js";
 import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { FileReviewWorkspace } from "../../diff/file-review-dialog.js";
-import type { CodexlyGitCommitReviewClient } from "../../projects/project-queries.js";
+import type { NativeGitCommitReviewClient } from "../../projects/project-queries.js";
 import {
   projectGitCommitFileDiffQueryOptions,
   projectGitCommitFilesInfiniteQueryOptions,
@@ -18,7 +18,7 @@ const PatchDiffViewer = lazy(() => import("../../diff/patch-diff-viewer.js"));
 
 type CommitDiffContentProps = Readonly<{
   change: AgentFileChange;
-  client: CodexlyGitCommitReviewClient;
+  client: NativeGitCommitReviewClient;
   projectId: string;
   repository?: string;
   rootPath: string;
@@ -96,7 +96,7 @@ function CommitDiffContent({
 }
 
 type GitCommitReviewProps = Readonly<{
-  client: CodexlyGitCommitReviewClient;
+  client: NativeGitCommitReviewClient;
   commit: ProjectGitCommit;
   onClose: () => void;
   projectId: string;

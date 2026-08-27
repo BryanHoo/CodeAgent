@@ -1,85 +1,188 @@
-# Codexly Workbench Migration Plan
+# Codexly Workbench Rust Migration Plan
 
-**Goal:** 在 CodeAgent 中完整运行 Codexly Web 工作台，并且不依赖现有 HTTP 或 WebSocket 后端。
-**Scope:** 完整替换根包 `src/` Web 实现；迁入 Codexly 前端生产代码与协议类型；仅保留本地 mock 连接边界。
-**Acceptance:** `pnpm check:web` 通过，桌面浏览器中可使用项目、任务、会话、检查器、Git、设置及相关弹窗交互。
+**Goal:** 在保持现有桌面 UI 交互的前提下，以 Rust/Tauri 直接对接 Codex 0.149 app-server，完整覆盖 Codexly 工作台能力。
+**Scope:** 修改 `src/` 与 `src-tauri/`；协议以本地 `rust-v0.149.0` 源码为准；移除 Codexly HTTP、WebSocket 和 mock 运行时对接。
+**Acceptance:** 左栏、中栏、右栏及设置联动均由 Tauri IPC 驱动，源码不再包含运行时 HTTP/mock 传输，`pnpm check` 与桌面端关键流程验证通过。
 
-### Task 1: 建立无后端前端数据边界
-
-**Files:**
-
-- Add: `src/mock/`
-- Test: `src/mock/mock-fetch.test.ts`
-
-**Behavior:**
-
-- 提供确定性的认证、项目、任务和工作台数据，禁止请求真实后端。
-
-**Proof:** `pnpm vitest run src/mock/mock-fetch.test.ts`
-
-**Stop Conditions:**
-
-- Mock 响应无法满足 Codexly Client 的协议校验。
-
-- [ ] **Task Status:** pending
-
-### Task 2: 完整替换 Web 工作台
+### Task 1: 接入真实会话快照
 
 **Files:**
 
-- Replace: `src/`
-- Add: `src/client/`
-- Add: `src/protocol/`
-- Modify: `package.json`
-- Modify: `pnpm-workspace.yaml`
-- Modify: `vite.config.ts`
+- Add: `src-tauri/src/domain/conversation.rs`
+- Add: `src-tauri/src/infrastructure/codex/conversation.rs`
+- Modify: `src-tauri/src/application/sidebar_commands.rs`
+- Modify: `src-tauri/src/lib.rs`
+- Modify: `src/platform/tauri/sidebar-client.ts`
+- Test: `src-tauri/src/infrastructure/codex/conversation_tests.rs`
 
 **Behavior:**
 
-- 迁入 Codexly Web 的全部生产页面、组件、状态、样式、国际化及桌面交互，并删除旧工作台实现。
+- 使用 `thread/read(includeTurns: true)` 返回真实任务状态、设置、回合与消息/推理/命令/文件变更/工具项，替换前端空快照。
 
-**Proof:** `pnpm typecheck && pnpm build`
+**Interfaces:**
+
+- Tauri command: `read_task(project_id, task_id) -> AgentTaskSnapshotResponse`
+
+**Proof:** `cargo test --manifest-path src-tauri/Cargo.toml conversation --locked && pnpm vitest run src/platform/tauri/sidebar-client.test.ts`
 
 **Stop Conditions:**
 
-- 源工作台存在无法从前端隔离的服务端执行依赖。
+- Codex 0.149 `thread/read` 数据无法稳定映射到现有 `AgentTaskSnapshot` 契约。
 
-- [ ] **Task Status:** pending
+- [x] **Task Status:** completed
 
-### Task 3: 完成本地交互闭环
+### Task 2: 接入回合提交与流式事件
 
 **Files:**
 
-- Modify: `src/mock/`
-- Modify: `src/features/projects/project-queries.ts`
-- Modify: `src/app/providers.tsx`
+- Modify: `src-tauri/src/infrastructure/codex/connection.rs`
+- Modify: `src-tauri/src/infrastructure/codex/conversation.rs`
+- Add: `src-tauri/src/infrastructure/codex/conversation_commands.rs`
+- Add: `src-tauri/src/infrastructure/codex/conversation_events.rs`
+- Modify: `src-tauri/src/application/state.rs`
+- Modify: `src-tauri/src/application/sidebar_commands.rs`
+- Modify: `src/platform/tauri/runtime.ts`
+- Modify: `src/platform/tauri/sidebar-client.ts`
+- Test: `src-tauri/src/infrastructure/codex/conversation_tests.rs`
+- Test: `src/platform/tauri/sidebar-client.test.ts`
 
 **Behavior:**
 
-- 项目与任务增删改、会话提交、设置、文件树、Git 与检查器在 mock 数据上产生可见结果。
+- 实现 `thread/start`、`thread/resume`、`turn/start`、`turn/steer`、`turn/interrupt`，并通过唯一长生命周期 Tauri `Channel` 投递带单调序号的归一化事件。
 
-**Proof:** `pnpm test:run && pnpm build`
+**Proof:** `cargo test --manifest-path src-tauri/Cargo.toml conversation --locked && pnpm vitest run src/platform/tauri/sidebar-client.test.ts`
 
 **Stop Conditions:**
 
-- 新增交互需要真实文件系统或 Agent 执行结果且无法合理 mock。
+- 事件背压或顺序保证需要改变已确认的单 Channel 架构。
 
-- [ ] **Task Status:** pending
+- [x] **Task Status:** completed
 
-### Task 4: 验证完整桌面工作台
+### Task 3: 完整映射中栏事件与审批
 
 **Files:**
 
-- Modify: `src/` only when verification exposes a migration defect
+- Modify: `src-tauri/src/domain/conversation.rs`
+- Modify: `src-tauri/src/infrastructure/codex/conversation.rs`
+- Modify: `src-tauri/src/application/sidebar_commands.rs`
+- Modify: `src/platform/tauri/sidebar-client.ts`
+- Test: `src-tauri/src/infrastructure/codex/conversation_tests.rs`
 
 **Behavior:**
 
-- 桌面视口中工作台无空白、遮挡或运行时错误，主要导航与弹窗均可操作。
+- 覆盖计划、用量、错误、命令输出、Diff、MCP、审批与用户输入请求，并将前端处理结果回写 app-server。
 
-**Proof:** `pnpm check:web` 加桌面浏览器截图与交互检查
+**Proof:** `cargo test --manifest-path src-tauri/Cargo.toml conversation --locked && pnpm check:web`
 
 **Stop Conditions:**
 
-- 构建或浏览器错误来自仓库外不可用依赖。
+- Codex 0.149 服务端请求类型与现有 UI 无法形成无损交互。
 
-- [ ] **Task Status:** pending
+- [x] **Task Status:** completed
+
+### Task 4: 完成任务高级能力
+
+**Files:**
+
+- Modify: `src-tauri/src/infrastructure/codex/conversation.rs`
+- Modify: `src-tauri/src/application/sidebar_commands.rs`
+- Modify: `src/platform/tauri/sidebar-client.ts`
+- Test: `src-tauri/src/infrastructure/codex/conversation_tests.rs`
+
+**Behavior:**
+
+- 实现历史分页、任务设置、review、compact、fork、goal、排队提交、后台终端和 temporary task 工作流。
+
+**Proof:** `cargo test --manifest-path src-tauri/Cargo.toml conversation --locked && pnpm check:web`
+
+**Stop Conditions:**
+
+- 某项 Codexly 能力在 Codex 0.149 中没有对应协议或可由 Rust 安全实现的本地能力。
+
+- [x] **Task Status:** completed
+
+### Task 5: 接入文件、附件与 Git 工作流
+
+**Files:**
+
+- Add: `src-tauri/src/infrastructure/workspace/`
+- Modify: `src-tauri/src/application/commands.rs`
+- Modify: `src/platform/tauri/sidebar-client.ts`
+- Test: `src-tauri/src/infrastructure/workspace/`
+
+**Behavior:**
+
+- 以受限 Rust 文件系统和 Git 子进程实现文件树、搜索、读取、重命名、删除、附件、状态、历史、Diff、分支、worktree 与提交，并驱动右栏检查器联动。
+
+**Proof:** `cargo test --manifest-path src-tauri/Cargo.toml workspace --locked && pnpm check:web`
+
+**Stop Conditions:**
+
+- 实现需要向 WebView 暴露通用 shell 权限或越过项目根目录边界。
+
+- [x] **Task Status:** completed
+
+### Task 6: 接入模型、认证、设置、Skills 与 MCP
+
+**Files:**
+
+- Add: `src-tauri/src/infrastructure/codex/catalogs.rs`
+- Add: `src-tauri/src/infrastructure/settings/`
+- Modify: `src-tauri/src/application/commands.rs`
+- Modify: `src/platform/tauri/sidebar-client.ts`
+- Test: `src-tauri/src/infrastructure/`
+
+**Behavior:**
+
+- 通过 Codex 0.149 协议和应用私有配置实现模型、认证、Provider 连接、全局/项目设置、Skills、MCP 与诊断能力。
+
+**Proof:** `cargo test --manifest-path src-tauri/Cargo.toml infrastructure --locked && pnpm check:web`
+
+**Stop Conditions:**
+
+- 认证信息必须进入 WebView 持久化状态才能继续。
+
+- [x] **Task Status:** completed
+
+### Task 7: 移除 Codexly 旧对接逻辑
+
+**Files:**
+
+- Delete: `src/mock/`
+- Delete: `src/client/event-client.ts`
+- Delete: `src/client/http-client-*.ts`
+- Modify: `src/platform/tauri/`
+- Modify: `src/features/`
+
+**Behavior:**
+
+- 使用独立 Tauri 客户端替换 `CodexlyClient` 继承关系，删除运行时 HTTP、WebSocket、mock 和不可达兼容分支。
+
+**Proof:** `! rg -n "MockWebSocket|mockFetch|new WebSocket|/v1/projects" src && pnpm check`
+
+**Stop Conditions:**
+
+- 仍有 UI 功能依赖未迁移的 Codexly 客户端方法。
+
+- [x] **Task Status:** completed
+
+### Task 8: 验证完整桌面能力
+
+**Files:**
+
+- Modify: `src/` or `src-tauri/` only when verification exposes a defect
+- Modify: `.superwork/plans/codexly-workbench-migration.md`
+
+**Behavior:**
+
+- 以 `architecture-research.md`、Codexly 功能清单、Codex 0.149 源码和官方 App Server 文档建立逐项能力矩阵。
+- 使用真实 Codex 0.149 app-server 验证项目、任务、会话、审批、文件、Git、检查器和设置联动。
+- 验证桌面视口无空白、遮挡和运行时错误，并记录空实现、降级分支、残留 Node 后端依赖及性能证据。
+
+**Proof:** 能力矩阵全部具备源码与运行证据；`pnpm check`、真实 Codex 0.149 集成测试、Tauri 桌面流程与性能检查全部通过
+
+**Stop Conditions:**
+
+- 验证失败来自仓库外不可用的签名、账号或网络依赖。
+
+- [x] **Task Status:** completed

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { AgentEventConnectionState } from "@/client/index.js";
+import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import {
   TEMPORARY_TASK_SCOPE_ID,
   type AgentTask,

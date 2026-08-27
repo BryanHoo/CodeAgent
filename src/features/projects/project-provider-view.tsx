@@ -12,13 +12,13 @@ import {
   type ProjectRootSelectionContextValue,
   type ProjectTaskQueryResult,
 } from "./project-context-state.js";
-import type { CodexlyWorkbenchClient } from "./project-queries.js";
+import type { NativeWorkbenchClient } from "./project-queries.js";
 
 type ProjectProviderViewProps = Readonly<{
   actions: ProjectActionsContextValue;
   activity: ProjectActivityContextValue;
   children: ReactNode;
-  client: CodexlyWorkbenchClient;
+  client: NativeWorkbenchClient;
   data: ProjectDataContextValue;
   onRemoveTaskQuery: (projectId: string) => void;
   onUpdateTaskQuery: (projectId: string, result: ProjectTaskQueryResult) => void;

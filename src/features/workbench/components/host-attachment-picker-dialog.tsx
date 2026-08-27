@@ -1,4 +1,4 @@
-import { buildProjectAttachmentUrl } from "@/client/index.js";
+import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
 import type { HostFileKind, HostFileListing } from "@/protocol/index.js";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../shared/components/core/dialog.js";
-import type { CodexlyHostAttachmentClient } from "../../projects/project-queries.js";
+import type { NativeHostAttachmentClient } from "../../projects/project-queries.js";
 import { FilesystemPickerToolbar } from "../../projects/components/filesystem-picker-toolbar.js";
 import { resolveIdempotencyAttempt, type IdempotencyAttempt } from "../composer-state.js";
 
@@ -143,7 +143,7 @@ export function HostFileTree({
 }
 
 type HostAttachmentPickerDialogProps = Readonly<{
-  client: CodexlyHostAttachmentClient;
+  client: NativeHostAttachmentClient;
   kind: HostFileKind;
   onAdd: (attachment: PromptInputAttachment) => void;
   onClose: () => void;
@@ -252,7 +252,7 @@ export function HostAttachmentPickerDialog({
         attachment: response.attachment,
         ...response.attachment,
         previewUrl:
-          kind === "image" ? buildProjectAttachmentUrl("", projectId, response.attachment.id) : "",
+          kind === "image" ? buildNativeAssetUrl(response.attachment.id) : "",
         source: "host",
       });
       importAttemptRef.current = undefined;

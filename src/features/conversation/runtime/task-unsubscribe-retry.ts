@@ -1,4 +1,4 @@
-import type { CodexlyRuntimeClient } from "../../projects/project-queries.js";
+import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 
 const INITIAL_RETRY_DELAY_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -9,7 +9,7 @@ interface RetryEntry {
 }
 
 export class TaskUnsubscribeRetryController {
-  readonly #client: CodexlyRuntimeClient;
+  readonly #client: NativeRuntimeClient;
   readonly #entries = new Map<string, RetryEntry>();
   readonly #onError: (error: unknown, taskId: string) => void;
   readonly #projectId: string;
@@ -17,7 +17,7 @@ export class TaskUnsubscribeRetryController {
 
   public constructor(
     projectId: string,
-    client: CodexlyRuntimeClient,
+    client: NativeRuntimeClient,
     onError: (error: unknown, taskId: string) => void,
   ) {
     this.#client = client;

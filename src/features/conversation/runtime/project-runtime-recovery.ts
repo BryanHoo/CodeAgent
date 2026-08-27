@@ -1,4 +1,4 @@
-import type { AgentEventConnectionState } from "@/client/index.js";
+import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@/protocol/index.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import { AgentEventBuffer } from "./task-runtime.js";

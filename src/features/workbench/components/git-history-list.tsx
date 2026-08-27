@@ -12,7 +12,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../../../shared/components/core/context-menu.js";
-import type { CodexlyGitHistoryClient } from "../../projects/project-queries.js";
+import type { NativeGitHistoryClient } from "../../projects/project-queries.js";
 import { projectGitHistoryInfiniteQueryOptions } from "../../projects/project-queries.js";
 
 export type GitHistoryQueryState = Readonly<{
@@ -267,7 +267,7 @@ export function GitHistoryContent({
 
 type GitHistoryListProps = Readonly<{
   active?: boolean;
-  client: CodexlyGitHistoryClient;
+  client: NativeGitHistoryClient;
   compact?: boolean;
   dateFormatter: Intl.DateTimeFormat;
   enabled?: boolean;

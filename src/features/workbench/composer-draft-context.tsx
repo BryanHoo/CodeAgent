@@ -20,7 +20,7 @@ type ComposerDraftStore = Readonly<{
 }>;
 
 type DraftStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
-const DRAFT_STORAGE_PREFIX = "codexly:composer-draft:v1:";
+const DRAFT_STORAGE_PREFIX = "codeagent:composer-draft:v1:";
 
 const ComposerDraftContext = createContext<ComposerDraftStore | undefined>(undefined);
 

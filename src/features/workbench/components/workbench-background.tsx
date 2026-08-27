@@ -1,5 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 
+import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
+import { nativeClient } from "../../projects/project-queries.js";
+
 import {
   DEFAULT_WORKBENCH_BACKGROUND,
   readCustomBackgroundImage,
@@ -61,9 +64,21 @@ function formatDatePart(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-export function createBingWallpaperUrl(date: Date): string {
-  const day = `${String(date.getFullYear())}-${formatDatePart(date.getMonth() + 1)}-${formatDatePart(date.getDate())}`;
-  return `/v1/workbench-background/bing?day=${day}`;
+export function formatBingWallpaperDay(date: Date): string {
+  return `${String(date.getFullYear())}-${formatDatePart(date.getMonth() + 1)}-${formatDatePart(date.getDate())}`;
+}
+
+type WorkbenchBackgroundClient = Readonly<{
+  getWorkbenchBackground: (day: string) => Promise<Readonly<{ assetPath: string }>>;
+}>;
+
+export async function loadBingWallpaperSource(
+  date: Date,
+  client: WorkbenchBackgroundClient = nativeClient,
+  toAssetUrl: (path: string) => string = buildNativeAssetUrl,
+): Promise<string> {
+  const response = await client.getWorkbenchBackground(formatBingWallpaperDay(date));
+  return toAssetUrl(response.assetPath);
 }
 
 export function getMillisecondsUntilNextLocalDay(date: Date): number {
@@ -143,7 +158,7 @@ export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode
       : readWorkbenchBackgroundPreference(window.localStorage),
   );
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
-  const [bingImageUrl, setBingImageUrl] = useState(() => createBingWallpaperUrl(new Date()));
+  const [bingImageUrl, setBingImageUrl] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
@@ -188,18 +203,29 @@ export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode
   }, [preference.mode, preference.selectedCustomImageId]);
 
   useEffect(() => {
-    // 使用浏览器本地午夜作为换日边界，避免长时间打开工作台后继续显示昨日壁纸。
-    if (preference.mode !== "bing") return;
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const scheduleNextDay = () => {
-      timeoutId = setTimeout(() => {
-        setBingImageUrl(createBingWallpaperUrl(new Date()));
-        scheduleNextDay();
-      }, getMillisecondsUntilNextLocalDay(new Date()));
+    if (preference.mode !== "bing") {
+      setBingImageUrl(null);
+      return;
+    }
+    let disposed = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      const now = new Date();
+      setBingImageUrl(null);
+      // 使用本地日期作为缓存键；下载失败时保留纯色背景，不让网络错误阻断工作台。
+      void loadBingWallpaperSource(now)
+        .then((source) => {
+          if (!disposed) setBingImageUrl(source);
+        })
+        .catch(() => {
+          if (!disposed) setBingImageUrl(null);
+        });
+      timeoutId = setTimeout(refresh, getMillisecondsUntilNextLocalDay(now));
     };
-    scheduleNextDay();
+    refresh();
     return () => {
-      clearTimeout(timeoutId);
+      disposed = true;
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
   }, [preference.mode]);
 

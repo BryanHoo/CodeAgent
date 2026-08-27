@@ -3,7 +3,7 @@ export const settings = {
     available: "Version {{version}} is available",
     check: "Check for updates",
     checking: "Checking",
-    codexlyVersion: "CodeAgent version",
+    codeagentVersion: "CodeAgent version",
     codexVersion: "Codex version",
     current: "CodeAgent is up to date",
     github: "Project GitHub",

@@ -13,19 +13,22 @@ use serde_json::value::RawValue;
 use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
-    sync::{Mutex as AsyncMutex, oneshot},
+    sync::{Mutex as AsyncMutex, mpsc, oneshot},
     task::JoinHandle,
-    time::timeout,
+    time::{sleep, timeout},
 };
 
 use super::protocol::{
-    ClientInfo, IncomingMessage, InitializeCapabilities, InitializeParams, InitializeResponse,
-    RpcError, encode_notification, encode_request,
+    ClientInfo, IGNORED_NOTIFICATION_METHODS, IncomingMessage, InitializeCapabilities,
+    InitializeParams, InitializeResponse, RpcError, encode_notification, encode_request,
+    encode_response,
 };
 
 type PendingResult = Result<Box<RawValue>, PendingError>;
 type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<PendingResult>>>>;
 type AsyncWriter = Pin<Box<dyn AsyncWrite + Send>>;
+const OVERLOAD_RETRY_DELAYS: [Duration; 2] =
+    [Duration::from_millis(25), Duration::from_millis(100)];
 
 #[derive(Clone, Debug)]
 enum PendingError {
@@ -55,8 +58,16 @@ pub enum ConnectionError {
 pub struct AppServerConnection {
     writer: AsyncMutex<AsyncWriter>,
     pending: PendingRequests,
+    server_messages: AsyncMutex<Option<mpsc::Receiver<ServerMessage>>>,
     next_id: AtomicU64,
     reader_task: JoinHandle<()>,
+}
+
+#[derive(Debug)]
+pub struct ServerMessage {
+    pub id: Option<u64>,
+    pub method: String,
+    pub params: Box<RawValue>,
 }
 
 impl AppServerConnection {
@@ -67,14 +78,26 @@ impl AppServerConnection {
     {
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let reader_pending = Arc::clone(&pending);
-        let reader_task = tokio::spawn(read_responses(reader, reader_pending));
+        let (message_sender, message_receiver) = mpsc::channel(256);
+        let reader_task = tokio::spawn(read_responses(reader, reader_pending, message_sender));
 
         Self {
             writer: AsyncMutex::new(Box::pin(writer)),
             pending,
+            server_messages: AsyncMutex::new(Some(message_receiver)),
             next_id: AtomicU64::new(1),
             reader_task,
         }
+    }
+
+    pub async fn take_server_messages(
+        &self,
+    ) -> Result<mpsc::Receiver<ServerMessage>, ConnectionError> {
+        self.server_messages
+            .lock()
+            .await
+            .take()
+            .ok_or(ConnectionError::StateUnavailable)
     }
 
     pub async fn initialize(
@@ -89,6 +112,7 @@ impl AppServerConnection {
             },
             capabilities: InitializeCapabilities {
                 experimental_api: true,
+                opt_out_notification_methods: IGNORED_NOTIFICATION_METHODS,
             },
         };
         let response = self.request("initialize", &params, request_timeout).await?;
@@ -97,6 +121,25 @@ impl AppServerConnection {
     }
 
     pub async fn request<P, R>(
+        &self,
+        method: &str,
+        params: &P,
+        request_timeout: Duration,
+    ) -> Result<R, ConnectionError>
+    where
+        P: Serialize,
+        R: DeserializeOwned,
+    {
+        for delay in OVERLOAD_RETRY_DELAYS {
+            match self.request_once(method, params, request_timeout).await {
+                Err(ConnectionError::Request { code: -32001, .. }) => sleep(delay).await,
+                result => return result,
+            }
+        }
+        self.request_once(method, params, request_timeout).await
+    }
+
+    async fn request_once<P, R>(
         &self,
         method: &str,
         params: &P,
@@ -145,6 +188,11 @@ impl AppServerConnection {
         self.write_message(&message).await
     }
 
+    pub async fn respond<R: Serialize>(&self, id: u64, result: &R) -> Result<(), ConnectionError> {
+        let message = encode_response(id, result)?;
+        self.write_message(&message).await
+    }
+
     async fn write_message(&self, message: &[u8]) -> Result<(), ConnectionError> {
         let mut writer = self.writer.lock().await;
         writer.write_all(message).await?;
@@ -167,8 +215,11 @@ impl Drop for AppServerConnection {
     }
 }
 
-async fn read_responses<R>(reader: R, pending: PendingRequests)
-where
+async fn read_responses<R>(
+    reader: R,
+    pending: PendingRequests,
+    server_messages: mpsc::Sender<ServerMessage>,
+) where
     R: AsyncRead + Unpin,
 {
     let mut reader = BufReader::new(reader);
@@ -192,13 +243,28 @@ where
         }
 
         // 只解析响应信封，result 保持 RawValue，避免大响应在路由阶段重复建树。
-        let message = match serde_json::from_slice::<IncomingMessage>(&line) {
+        let mut message = match serde_json::from_slice::<IncomingMessage>(&line) {
             Ok(message) => message,
             Err(_) => {
                 fail_pending(&pending, PendingError::InvalidMessage);
                 return;
             }
         };
+        if let Some(method) = message.method.take() {
+            let Some(params) = message.params else {
+                fail_pending(&pending, PendingError::InvalidMessage);
+                return;
+            };
+            // 有界队列为 WebView 短暂卡顿提供背压，同时不丢弃会改变状态的通知。
+            let _ = server_messages
+                .send(ServerMessage {
+                    id: message.id,
+                    method,
+                    params,
+                })
+                .await;
+            continue;
+        }
         route_response(&pending, message);
     }
 }
@@ -263,6 +329,15 @@ mod tests {
             assert_eq!(request["method"], "initialize");
             assert_eq!(request["params"]["clientInfo"]["name"], "codeagent");
             assert_eq!(request["params"]["capabilities"]["experimentalApi"], true);
+            let opt_out = request["params"]["capabilities"]["optOutNotificationMethods"]
+                .as_array()
+                .expect("ignored notifications should be negotiated");
+            assert!(opt_out.iter().any(|method| method == "turn/diff/updated"));
+            assert!(
+                !opt_out
+                    .iter()
+                    .any(|method| method == "thread/status/changed")
+            );
 
             server_writer
                 .write_all(
@@ -320,6 +395,50 @@ mod tests {
 
         assert_eq!(first.unwrap()["value"], "first");
         assert_eq!(second.unwrap()["value"], "second");
+        server_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn notifications_should_be_available_without_blocking_responses() {
+        let (client, server) = duplex(4096);
+        let (client_reader, client_writer) = split(client);
+        let (server_reader, mut server_writer) = split(server);
+        let connection = AppServerConnection::new(client_reader, client_writer);
+        let mut messages = connection
+            .take_server_messages()
+            .await
+            .expect("message receiver should be available once");
+
+        let server_task = tokio::spawn(async move {
+            let mut lines = BufReader::new(server_reader).lines();
+            let request: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            server_writer
+                .write_all(
+                    format!(
+                        "{{\"method\":\"item/agentMessage/delta\",\"params\":{{\"threadId\":\"thread-a\",\"turnId\":\"turn-a\",\"itemId\":\"item-a\",\"delta\":\"ok\"}}}}\n{{\"id\":{},\"result\":{{\"done\":true}}}}\n",
+                        request["id"]
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+
+        let response: Value = connection
+            .request("test/request", &json!({}), Duration::from_secs(1))
+            .await
+            .expect("response should not wait for notification consumption");
+        assert_eq!(response["done"], true);
+        let message = messages
+            .recv()
+            .await
+            .expect("notification should be routed");
+        assert_eq!(message.method, "item/agentMessage/delta");
+        assert_eq!(
+            serde_json::from_str::<Value>(message.params.get()).unwrap()["delta"],
+            "ok"
+        );
         server_task.await.unwrap();
     }
 

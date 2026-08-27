@@ -1,7 +1,8 @@
 # CodeAgent
 
-CodeAgent 桌面端客户端。当前已实现 `codex app-server` 的隔离启动、stdio JSONL 初始化握手、
-请求关联和运行时状态通道；会话、审批与认证仍待后续阶段实现。
+CodeAgent 是直接连接 `codex app-server` 的桌面工作台。左栏项目与任务、中心会话、审批、
+认证、设置、文件与 Git 工作流均通过 Tauri `invoke` / `Channel` 和 Rust stdio JSONL 链路运行，
+不需要本地 HTTP、WebSocket 或 Node.js 服务。
 
 ## 技术栈
 
@@ -17,11 +18,12 @@ CodeAgent 桌面端客户端。当前已实现 `codex app-server` 的隔离启�
 - Rust 1.97+
 - 对应平台的 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-开发环境默认从 `PATH` 启动 `codex`，也可通过 `CODEAGENT_CODEX_BIN` 指定本机 Codex
-可执行文件。运行时使用应用数据目录下独立的 `providers/codex/runtime` 作为 `CODEX_HOME`。
+开发环境默认从 `PATH` 和平台常见目录查找 `codex`，也可通过 `CODEAGENT_CODEX_BIN` 指定
+绝对路径。当前适配器严格要求 `codex-cli 0.149.0`，并继承用户的 `CODEX_HOME`；未配置时由
+Codex 使用官方默认目录，因此 CLI 与 CodeAgent 共享认证、配置和会话。
 
-生产版本不将 Codex、Claude Code 等 Provider 可执行文件作为 Sidecar 打包。应用优先复用
-本机兼容版本，缺失时由用户确认后安装指定版本到应用私有目录。完整方案见
+生产版本不将 Codex、Claude Code 等 Provider 可执行文件作为 Sidecar 打包。当前版本只复用
+本机兼容运行时；正式分发前的应用私有按需安装、校验和回退方案见
 [Provider Runtime Manager](docs/provider-runtime-management.md)。
 
 ## 常用命令
@@ -53,7 +55,8 @@ src-tauri/src/
 ```
 
 模块级 Channel 在 React 挂载前只初始化一次。Web 层不直接接触 Codex JSON-RPC，Tauri 也不
-授予通用 shell 或 opener 权限。后续实现约束见 [scaffold-guide.md](docs/scaffold-guide.md)。
+授予通用 shell 或 opener 权限。完整能力和验证索引见
+[Codexly 工作台能力矩阵](docs/codexly-capability-matrix.md)。
 
 ## 跨平台构建
 

@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import { recordInternalWarning } from "../notifications/internal-diagnostics.js";
-import { type CodexlyGitStatusClient, projectGitStatusQueryOptions } from "./project-queries.js";
+import { type NativeGitStatusClient, projectGitStatusQueryOptions } from "./project-queries.js";
 
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 300_000;
 export const PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS = 300;
@@ -38,7 +38,7 @@ function defaultPageVisibility(): boolean {
 }
 
 export class ProjectGitStatusCoordinator {
-  readonly #client: CodexlyGitStatusClient;
+  readonly #client: NativeGitStatusClient;
   readonly #fileChangeDebounceMs: number;
   readonly #isPageVisible: () => boolean;
   readonly #pollIntervalMs: number;
@@ -51,7 +51,7 @@ export class ProjectGitStatusCoordinator {
 
   public constructor(
     queryClient: QueryClient,
-    client: CodexlyGitStatusClient,
+    client: NativeGitStatusClient,
     options: ProjectGitStatusCoordinatorOptions = {},
   ) {
     this.#queryClient = queryClient;

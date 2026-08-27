@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../shared/components/core/dialog.js";
-import type { CodexlyProjectDirectoryClient } from "../project-queries.js";
+import type { NativeProjectDirectoryClient } from "../project-queries.js";
 import { resolveProjectDirectoryAddPaths } from "../project-directory-add-target.js";
 import { setProjectRootPathChecked } from "../project-root-selection.js";
 import { FilesystemPickerToolbar } from "./filesystem-picker-toolbar.js";
@@ -162,7 +162,7 @@ export function ProjectDirectoryTree({
 }
 
 type ProjectDirectoryPickerDialogProps = Readonly<{
-  client: CodexlyProjectDirectoryClient;
+  client: NativeProjectDirectoryClient;
   isAdding: boolean;
   onAdd: (paths: readonly string[]) => Promise<void> | void;
   onClose: () => void;

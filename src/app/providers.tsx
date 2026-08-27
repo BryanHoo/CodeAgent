@@ -10,7 +10,7 @@ import {
   type AccessContextValue,
 } from "../features/access/access-context.js";
 import { PairingGate } from "../features/access/pairing-gate.js";
-import { codexlyClient } from "../features/projects/project-queries.js";
+import { nativeClient } from "../features/projects/project-queries.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
 import { createActionMutationCache } from "../features/notifications/action-notifications.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
@@ -105,7 +105,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     <I18nextProvider i18n={i18n}>
       <TooltipProvider>
         <QueryClientProvider client={queryClient}>
-          <AccessProvider client={codexlyClient} queryClient={queryClient}>
+          <AccessProvider client={nativeClient} queryClient={queryClient}>
             <AppProviderContent>{children}</AppProviderContent>
           </AccessProvider>
         </QueryClientProvider>

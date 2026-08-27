@@ -2,7 +2,7 @@ import type { ProjectGitStatus } from "@/protocol/index.js";
 
 import { i18n } from "../../../i18n/i18n.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
-import type { CodexlyWorkbenchClient } from "../../projects/project-queries.js";
+import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
 import { CommitChangesController } from "./commit-changes-controller.js";
 
 export function WorkbenchInspectorChanges({
@@ -16,7 +16,7 @@ export function WorkbenchInspectorChanges({
   projectId,
   rootPath,
 }: Readonly<{
-  client: CodexlyWorkbenchClient | undefined;
+  client: NativeWorkbenchClient | undefined;
   detailsError: Error | null;
   detailsPending: boolean;
   detailsStatus: ProjectGitStatus | undefined;

@@ -1,10 +1,10 @@
 import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
-import type { CodexlyWorkbenchClient } from "../../projects/project-queries.js";
+import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
 import { ProjectSourcePanel } from "./project-source-panel.js";
 
 type ProjectSourceDialogProps = Readonly<{
-  client: CodexlyWorkbenchClient;
+  client: NativeWorkbenchClient;
   onClose: () => void;
   previewKind: "image" | "source";
   projectId: string;

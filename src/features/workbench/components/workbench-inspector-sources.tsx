@@ -1,4 +1,4 @@
-import { buildTaskAttachmentUrl } from "@/client/index.js";
+import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
 import type { AgentMessageAttachment, AgentSkill, AgentTurn } from "@/protocol/index.js";
 import { Files, Paperclip, Sparkles } from "lucide-react";
 import { useMemo } from "react";
@@ -205,12 +205,7 @@ export function InspectorSources({
             <InspectorSourceRow
               {...(source.kind === "attachment" && projectId !== undefined && taskId !== undefined
                 ? {
-                    attachmentUrl: buildTaskAttachmentUrl(
-                      "",
-                      projectId,
-                      taskId,
-                      source.attachment.id,
-                    ),
+                    attachmentUrl: buildNativeAssetUrl(source.attachment.id),
                   }
                 : {})}
               onOpenAttachment={onOpenAttachment}

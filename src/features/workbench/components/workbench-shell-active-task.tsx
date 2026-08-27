@@ -22,7 +22,7 @@ import {
 } from "../../conversation/runtime/task-runtime.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
-import type { CodexlyWorkbenchClient } from "../../projects/project-queries.js";
+import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
 import { taskSettingsMutationOptions } from "../../projects/project-queries.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { TaskTimeline } from "./task-timeline.js";
@@ -62,7 +62,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   onReviewFileChanges,
 }: Readonly<{
   capabilities: AgentCapabilities | undefined;
-  client: CodexlyWorkbenchClient;
+  client: NativeWorkbenchClient;
   composerRef: RefObject<WorkbenchComposerHandle | null>;
   fallbackSettings: AgentTaskSettings;
   fastModeAvailable: boolean;

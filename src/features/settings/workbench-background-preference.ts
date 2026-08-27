@@ -26,11 +26,11 @@ export const DEFAULT_WORKBENCH_BACKGROUND: WorkbenchBackgroundPreference = {
   selectedCustomImageId: null,
 };
 
-export const WORKBENCH_BACKGROUND_CHANGED_EVENT = "codexly:workbench-background-changed";
+export const WORKBENCH_BACKGROUND_CHANGED_EVENT = "codeagent:workbench-background-changed";
 
-const BACKGROUND_STORAGE_KEY = "codexly.workbench-background-preference";
+const BACKGROUND_STORAGE_KEY = "codeagent.workbench-background-preference";
 const BACKGROUND_STORAGE_VERSION = 3;
-const BACKGROUND_DATABASE_NAME = "codexly-workbench";
+const BACKGROUND_DATABASE_NAME = "codeagent-workbench";
 const BACKGROUND_DATABASE_VERSION = 2;
 const BACKGROUND_OBJECT_STORE = "background-images";
 const MAX_CUSTOM_BACKGROUND_BYTES = 20 * 1024 * 1024;

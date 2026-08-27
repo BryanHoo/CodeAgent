@@ -1,4 +1,4 @@
-const MARKDOWN_PREVIEW_STORAGE_KEY = "codexly:workbench:markdown-preview:v1";
+const MARKDOWN_PREVIEW_STORAGE_KEY = "codeagent:workbench:markdown-preview:v1";
 
 type MarkdownPreviewStorage = Readonly<{
   getItem: (key: string) => string | null;

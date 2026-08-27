@@ -13,9 +13,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
+futures-util = "0.3.32"
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "stream"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.149", features = ["raw_value"] }
-tauri = { version = "2.11.5", features = [] }
+sha2 = "0.10.9"
+tauri = { version = "2.11.5", features = ["protocol-asset"] }
 thiserror = "2.0.20"
 tokio = { version = "1.50.0", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
 

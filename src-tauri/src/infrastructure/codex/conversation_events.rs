@@ -1,0 +1,426 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::Deserialize;
+use serde_json::{Map, Value, json};
+
+use super::{
+    connection::{ConnectionError, ServerMessage},
+    conversation::{NativeTurn, RUNTIME_SESSION_ID, map_item, map_turn},
+    conversation_advanced::{NativeGoal, map_native_goal},
+    conversation_runtime_events::map_runtime_notification,
+    sidebar::unix_seconds_to_rfc3339,
+};
+
+const MAX_REALTIME_DIFF_BYTES: usize = 512 * 1_024;
+const MAX_REALTIME_FILE_CHANGES: usize = 100;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TurnNotification {
+    thread_id: String,
+    turn: NativeTurn,
+}
+
+pub fn map_server_message(
+    message: ServerMessage,
+    sequence: u64,
+    timestamp: &str,
+) -> Result<Option<Value>, ConnectionError> {
+    // 带 id 的服务端请求由审批切片处理，不能误当成普通通知。
+    if message.id.is_some() {
+        return Ok(None);
+    }
+    let params: Value = serde_json::from_str(message.params.get())?;
+    let Some(params_object) = params.as_object() else {
+        return Err(ConnectionError::InvalidMessage);
+    };
+    if let Some(event) =
+        map_runtime_notification(&message.method, params_object, sequence, timestamp)?
+    {
+        return Ok(Some(event));
+    }
+
+    let event = match message.method.as_str() {
+        "turn/started" | "turn/completed" => {
+            let native: TurnNotification = serde_json::from_value(params)?;
+            let turn = map_turn(native.turn)?;
+            let event_type = if message.method == "turn/started" {
+                "turn.started"
+            } else {
+                "turn.completed"
+            };
+            envelope(
+                sequence,
+                timestamp,
+                &native.thread_id,
+                json!({
+                    "payload": {"turn": turn},
+                    "turnId": turn.id,
+                    "type": event_type,
+                }),
+            )
+        }
+        "item/agentMessage/delta" => {
+            delta_event(params_object, sequence, timestamp, "message.delta", None)?
+        }
+        "item/reasoning/textDelta" => delta_event(
+            params_object,
+            sequence,
+            timestamp,
+            "reasoning.delta",
+            Some(json!({"field": "content"})),
+        )?,
+        "item/reasoning/summaryTextDelta" => delta_event(
+            params_object,
+            sequence,
+            timestamp,
+            "reasoning.delta",
+            Some(json!({
+                "field": "summary",
+                "sectionIndex": required_u64(params_object, "summaryIndex")?,
+            })),
+        )?,
+        "item/commandExecution/outputDelta" => delta_event(
+            params_object,
+            sequence,
+            timestamp,
+            "command.output_delta",
+            None,
+        )?,
+        "item/plan/delta" => delta_event(params_object, sequence, timestamp, "plan.delta", None)?,
+        "item/mcpToolCall/progress" => envelope(
+            sequence,
+            timestamp,
+            required_string(params_object, "threadId")?,
+            json!({
+                "itemId": required_string(params_object, "itemId")?,
+                "payload": {"message": required_string(params_object, "message")?},
+                "turnId": required_string(params_object, "turnId")?,
+                "type": "tool.progress",
+            }),
+        ),
+        "turn/plan/updated" => plan_updated_event(params_object, sequence, timestamp)?,
+        "thread/tokenUsage/updated" => usage_updated_event(params_object, sequence, timestamp)?,
+        "item/fileChange/patchUpdated" => {
+            file_change_updated_event(params_object, sequence, timestamp)?
+        }
+        "error" => provider_error_event(params_object, sequence, timestamp)?,
+        "warning" | "guardianWarning" => {
+            task_notice_event(params_object, sequence, timestamp, &message.method)?
+        }
+        "autoApprovalReview/strictReviewRequired" => envelope(
+            sequence,
+            timestamp,
+            required_string(params_object, "threadId")?,
+            json!({
+                "payload": {"code": "strict_review_required", "level": "warning", "message": "Codex requires strict review for subsequent commands."},
+                "type": "task.notice",
+            }),
+        ),
+        "thread/goal/updated" => {
+            let task_id = required_string(params_object, "threadId")?;
+            let goal: NativeGoal = serde_json::from_value(
+                params_object
+                    .get("goal")
+                    .cloned()
+                    .ok_or(ConnectionError::InvalidMessage)?,
+            )?;
+            envelope(
+                sequence,
+                timestamp,
+                task_id,
+                json!({
+                    "payload": {"goal": map_native_goal(goal, task_id)?},
+                    "type": "goal.updated",
+                }),
+            )
+        }
+        "thread/goal/cleared" => envelope(
+            sequence,
+            timestamp,
+            required_string(params_object, "threadId")?,
+            json!({"payload": {}, "type": "goal.cleared"}),
+        ),
+        "thread/queue/changed" => envelope(
+            sequence,
+            timestamp,
+            required_string(params_object, "threadId")?,
+            json!({"payload": {}, "type": "queue.changed"}),
+        ),
+        "item/started" | "item/completed" => {
+            let native_item = params_object
+                .get("item")
+                .cloned()
+                .ok_or(ConnectionError::InvalidMessage)?;
+            let item_id = native_item
+                .as_object()
+                .and_then(|item| item.get("id"))
+                .and_then(Value::as_str)
+                .ok_or(ConnectionError::InvalidMessage)?
+                .to_owned();
+            let item = map_item(native_item)?;
+            envelope(
+                sequence,
+                timestamp,
+                required_string(params_object, "threadId")?,
+                json!({
+                    "itemId": item_id,
+                    "payload": {"item": item},
+                    "turnId": required_string(params_object, "turnId")?,
+                    "type": if message.method == "item/started" {"item.started"} else {"item.completed"},
+                }),
+            )
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(event))
+}
+
+fn plan_updated_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+) -> Result<Value, ConnectionError> {
+    let steps = params
+        .get("plan")
+        .and_then(Value::as_array)
+        .ok_or(ConnectionError::InvalidMessage)?
+        .iter()
+        .map(|step| {
+            let step = step.as_object().ok_or(ConnectionError::InvalidMessage)?;
+            let status = match required_string(step, "status")? {
+                "pending" => "pending",
+                "inProgress" => "in_progress",
+                "completed" => "completed",
+                _ => return Err(ConnectionError::InvalidMessage),
+            };
+            Ok(json!({"status": status, "text": required_string(step, "step")?}))
+        })
+        .collect::<Result<Vec<_>, ConnectionError>>()?;
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({
+            "payload": {
+                "plan": {"explanation": params.get("explanation").cloned().unwrap_or(Value::Null), "steps": steps}
+            },
+            "turnId": required_string(params, "turnId")?,
+            "type": "plan.updated",
+        }),
+    ))
+}
+
+fn usage_updated_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+) -> Result<Value, ConnectionError> {
+    let usage = params
+        .get("tokenUsage")
+        .and_then(Value::as_object)
+        .ok_or(ConnectionError::InvalidMessage)?;
+    let total = usage
+        .get("total")
+        .and_then(Value::as_object)
+        .ok_or(ConnectionError::InvalidMessage)?;
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({
+            "payload": {"usage": {
+                "contextWindow": usage.get("modelContextWindow").cloned().unwrap_or(Value::Null),
+                "usedTokens": required_u64(total, "totalTokens")?,
+            }},
+            "turnId": required_string(params, "turnId")?,
+            "type": "usage.updated",
+        }),
+    ))
+}
+
+fn provider_error_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+) -> Result<Value, ConnectionError> {
+    let error = params
+        .get("error")
+        .and_then(Value::as_object)
+        .ok_or(ConnectionError::InvalidMessage)?;
+    let mut payload = json!({
+        "code": "other",
+        "message": required_string(error, "message")?,
+        "willRetry": params.get("willRetry").and_then(Value::as_bool).ok_or(ConnectionError::InvalidMessage)?,
+    });
+    if let Some(status) = error
+        .get("codexErrorInfo")
+        .and_then(Value::as_object)
+        .and_then(|info| info.get("httpStatusCode"))
+        .and_then(Value::as_u64)
+        .filter(|status| (100..=599).contains(status))
+    {
+        payload["httpStatusCode"] = Value::from(status);
+    }
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({
+            "payload": payload,
+            "turnId": required_string(params, "turnId")?,
+            "type": "provider.error",
+        }),
+    ))
+}
+
+fn file_change_updated_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+) -> Result<Value, ConnectionError> {
+    let native_changes = params
+        .get("changes")
+        .and_then(Value::as_array)
+        .ok_or(ConnectionError::InvalidMessage)?;
+    let original_byte_length = native_changes
+        .iter()
+        .filter_map(|change| change.get("diff").and_then(Value::as_str))
+        .map(str::len)
+        .sum::<usize>();
+    let mut remaining = MAX_REALTIME_DIFF_BYTES;
+    let mut changes = Vec::with_capacity(native_changes.len().min(MAX_REALTIME_FILE_CHANGES));
+    for change in native_changes.iter().take(MAX_REALTIME_FILE_CHANGES) {
+        let change = change.as_object().ok_or(ConnectionError::InvalidMessage)?;
+        let kind = change
+            .get("kind")
+            .and_then(Value::as_object)
+            .and_then(|kind| kind.get("type"))
+            .and_then(Value::as_str)
+            .ok_or(ConnectionError::InvalidMessage)?;
+        let diff = truncate_utf8(required_string(change, "diff")?, remaining);
+        remaining = remaining.saturating_sub(diff.len());
+        changes.push(json!({
+            "diff": diff,
+            "kind": match kind {
+                "add" => "create", "delete" => "delete", "update" => "update",
+                _ => return Err(ConnectionError::InvalidMessage),
+            },
+            "path": required_string(change, "path")?,
+        }));
+    }
+    let truncated =
+        native_changes.len() > changes.len() || original_byte_length > MAX_REALTIME_DIFF_BYTES;
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({
+            "itemId": required_string(params, "itemId")?,
+            "payload": {"changes": changes, "originalByteLength": original_byte_length, "truncated": truncated},
+            "turnId": required_string(params, "turnId")?,
+            "type": "file_change.updated",
+        }),
+    ))
+}
+
+fn task_notice_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+    method: &str,
+) -> Result<Value, ConnectionError> {
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({
+            "payload": {
+                "code": if method == "guardianWarning" {"guardian_warning"} else {"runtime_warning"},
+                "level": "warning",
+                "message": required_string(params, "message")?,
+            },
+            "type": "task.notice",
+        }),
+    ))
+}
+
+fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
+    if value.len() <= max_bytes {
+        return value;
+    }
+    let mut end = max_bytes;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
+}
+
+pub fn map_server_message_now(
+    message: ServerMessage,
+    sequence: u64,
+) -> Result<Option<Value>, ConnectionError> {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ConnectionError::StateUnavailable)?
+        .as_secs();
+    let seconds = i64::try_from(seconds).map_err(|_| ConnectionError::StateUnavailable)?;
+    map_server_message(message, sequence, &unix_seconds_to_rfc3339(seconds))
+}
+
+fn delta_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+    event_type: &str,
+    extra_payload: Option<Value>,
+) -> Result<Value, ConnectionError> {
+    let mut payload = json!({"delta": required_string(params, "delta")?});
+    if let (Some(payload), Some(extra)) = (payload.as_object_mut(), extra_payload) {
+        let extra = extra.as_object().ok_or(ConnectionError::InvalidMessage)?;
+        payload.extend(extra.clone());
+    }
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({
+            "itemId": required_string(params, "itemId")?,
+            "payload": payload,
+            "turnId": required_string(params, "turnId")?,
+            "type": event_type,
+        }),
+    ))
+}
+
+pub(super) fn envelope(sequence: u64, timestamp: &str, task_id: &str, fields: Value) -> Value {
+    let mut event = json!({
+        "provider": "codex",
+        "sequence": sequence,
+        "sessionId": RUNTIME_SESSION_ID,
+        "taskId": task_id,
+        "timestamp": timestamp,
+        "version": 2,
+    });
+    if let (Some(event), Some(fields)) = (event.as_object_mut(), fields.as_object()) {
+        event.extend(fields.clone());
+    }
+    event
+}
+
+pub(super) fn required_string<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+) -> Result<&'a str, ConnectionError> {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or(ConnectionError::InvalidMessage)
+}
+
+pub(super) fn required_u64(object: &Map<String, Value>, key: &str) -> Result<u64, ConnectionError> {
+    object
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or(ConnectionError::InvalidMessage)
+}

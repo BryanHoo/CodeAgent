@@ -1,4 +1,4 @@
-import type { AgentEventConnectionState } from "@/client/index.js";
+import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import type { AgentTask } from "@/protocol/index.js";
 
 import { i18n } from "../../../i18n/i18n.js";

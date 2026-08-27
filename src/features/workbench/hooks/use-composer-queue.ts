@@ -5,7 +5,7 @@ import { v4 as createUuid } from "uuid";
 
 import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
-import { taskQueueQueryKey, type CodexlyMutationClient } from "../../projects/project-queries.js";
+import { taskQueueQueryKey, type NativeMutationClient } from "../../projects/project-queries.js";
 import {
   hasQueuedPromptFinishedInStore,
   mapAgentQueuedSubmission,
@@ -34,7 +34,7 @@ type SubmitPrompt = (
 
 type ComposerQueueOptions = Readonly<{
   activeTurnId: string | undefined;
-  client: CodexlyMutationClient;
+  client: NativeMutationClient;
   handleAttachmentsChange: (files: readonly PromptInputAttachment[]) => void;
   projectId: string;
   replacePromptContent: (content: PromptSkillContent, cursorOffset?: number) => void;
@@ -46,7 +46,7 @@ type ComposerQueueOptions = Readonly<{
 }>;
 
 async function listAllQueuedSubmissions(
-  client: CodexlyMutationClient,
+  client: NativeMutationClient,
   projectId: string,
   taskId: string,
   signal: AbortSignal,

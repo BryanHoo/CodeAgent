@@ -1,4 +1,4 @@
-import type { CodexlyClient } from "@/client/index.js";
+import type { NativeClient } from "@/platform/native-client-contract.js";
 import type {
   AgentGlobalSettings,
   AgentMcpServerPage,
@@ -12,20 +12,20 @@ import type {
 import { infiniteQueryOptions, mutationOptions, queryOptions } from "@tanstack/react-query";
 
 import {
-  codexlyClient,
-  type CodexlyCapabilitiesClient,
-  type CodexlyAppUpdateClient,
-  type CodexlyModelsClient,
-  type CodexlySettingsClient,
-  type CodexlySkillsClient,
-  type CodexlyMcpServersClient,
-  type CodexlyMcpServersMutationClient,
-  type CodexlyGitStatusClient,
-  type CodexlyGitHistoryClient,
-  type CodexlyGitCommitReviewClient,
-  type CodexlyFileTreeReadClient,
-  type CodexlyProjectOpenClient,
-  type CodexlyReadClient,
+  nativeClient,
+  type NativeCapabilitiesClient,
+  type NativeAppUpdateClient,
+  type NativeModelsClient,
+  type NativeSettingsClient,
+  type NativeSkillsClient,
+  type NativeMcpServersClient,
+  type NativeMcpServersMutationClient,
+  type NativeGitStatusClient,
+  type NativeGitHistoryClient,
+  type NativeGitCommitReviewClient,
+  type NativeFileTreeReadClient,
+  type NativeProjectOpenClient,
+  type NativeReadClient,
 } from "./project-query-contracts.js";
 
 type TaskPinMutationInput = Readonly<{
@@ -43,7 +43,7 @@ type TaskRenameMutationInput = Readonly<{
 type TaskArchiveMutationInput = Readonly<{ projectId: string; taskId: string }>;
 type ProjectRenameMutationInput = Readonly<{ name: string; projectId: string }>;
 
-export function taskPinMutationOptions(client: Pick<CodexlyClient, "pinTask"> = codexlyClient) {
+export function taskPinMutationOptions(client: Pick<NativeClient, "pinTask"> = nativeClient) {
   return mutationOptions({
     mutationFn: ({ pinned, projectId, taskId }: TaskPinMutationInput) =>
       client.pinTask(projectId, taskId, pinned),
@@ -52,7 +52,7 @@ export function taskPinMutationOptions(client: Pick<CodexlyClient, "pinTask"> = 
 }
 
 export function taskRenameMutationOptions(
-  client: Pick<CodexlyClient, "renameTask"> = codexlyClient,
+  client: Pick<NativeClient, "renameTask"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: ({ projectId, taskId, title }: TaskRenameMutationInput) =>
@@ -62,7 +62,7 @@ export function taskRenameMutationOptions(
 }
 
 export function taskArchiveMutationOptions(
-  client: Pick<CodexlyClient, "archiveTask"> = codexlyClient,
+  client: Pick<NativeClient, "archiveTask"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: ({ projectId, taskId }: TaskArchiveMutationInput) =>
@@ -72,7 +72,7 @@ export function taskArchiveMutationOptions(
 }
 
 export function taskUnarchiveMutationOptions(
-  client: Pick<CodexlyClient, "unarchiveTask"> = codexlyClient,
+  client: Pick<NativeClient, "unarchiveTask"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: ({ projectId, taskId }: TaskArchiveMutationInput) =>
@@ -82,7 +82,7 @@ export function taskUnarchiveMutationOptions(
 }
 
 export function taskDeleteMutationOptions(
-  client: Pick<CodexlyClient, "deleteTask"> = codexlyClient,
+  client: Pick<NativeClient, "deleteTask"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: ({ projectId, taskId }: TaskArchiveMutationInput) =>
@@ -92,7 +92,7 @@ export function taskDeleteMutationOptions(
 }
 
 export function projectRenameMutationOptions(
-  client: Pick<CodexlyClient, "renameProject"> = codexlyClient,
+  client: Pick<NativeClient, "renameProject"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: ({ name, projectId }: ProjectRenameMutationInput) =>
@@ -103,7 +103,7 @@ export function projectRenameMutationOptions(
 }
 
 export function projectRemoveMutationOptions(
-  client: Pick<CodexlyClient, "removeProject"> = codexlyClient,
+  client: Pick<NativeClient, "removeProject"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: (projectId: string) => client.removeProject(projectId),
@@ -112,14 +112,14 @@ export function projectRemoveMutationOptions(
   });
 }
 
-export function capabilitiesQueryOptions(client: CodexlyCapabilitiesClient = codexlyClient) {
+export function capabilitiesQueryOptions(client: NativeCapabilitiesClient = nativeClient) {
   return queryOptions({
     queryFn: ({ signal }) => client.getCapabilities({ signal }),
     queryKey: ["capabilities"] as const,
   });
 }
 
-export function modelsQueryOptions(client: CodexlyModelsClient = codexlyClient) {
+export function modelsQueryOptions(client: NativeModelsClient = nativeClient) {
   return queryOptions({
     queryFn: ({ signal }) => client.listModels({ signal }),
     queryKey: ["models"] as const,
@@ -127,7 +127,7 @@ export function modelsQueryOptions(client: CodexlyModelsClient = codexlyClient) 
   });
 }
 
-export function appInfoQueryOptions(client: CodexlyAppUpdateClient = codexlyClient) {
+export function appInfoQueryOptions(client: NativeAppUpdateClient = nativeClient) {
   return queryOptions({
     queryFn: ({ signal }) => client.getAppInfo({ signal }),
     queryKey: ["app-info"] as const,
@@ -135,7 +135,7 @@ export function appInfoQueryOptions(client: CodexlyAppUpdateClient = codexlyClie
   });
 }
 
-export function appUpdateMutationOptions(client: CodexlyAppUpdateClient = codexlyClient) {
+export function appUpdateMutationOptions(client: NativeAppUpdateClient = nativeClient) {
   return mutationOptions({
     mutationFn: (version: string) => client.installAppUpdate(version),
     mutationKey: ["app-update", "install"] as const,
@@ -143,14 +143,14 @@ export function appUpdateMutationOptions(client: CodexlyAppUpdateClient = codexl
   });
 }
 
-export function globalSettingsQueryOptions(client: CodexlySettingsClient = codexlyClient) {
+export function globalSettingsQueryOptions(client: NativeSettingsClient = nativeClient) {
   return queryOptions({
     queryFn: ({ signal }) => client.getGlobalSettings({ signal }),
     queryKey: ["settings"] as const,
   });
 }
 
-export function globalSettingsMutationOptions(client: CodexlySettingsClient = codexlyClient) {
+export function globalSettingsMutationOptions(client: NativeSettingsClient = nativeClient) {
   return mutationOptions({
     mutationFn: (settings: AgentGlobalSettings) => client.updateGlobalSettings(settings),
     mutationKey: ["settings", "update"] as const,
@@ -160,7 +160,7 @@ export function globalSettingsMutationOptions(client: CodexlySettingsClient = co
 
 export function projectOpenCapabilitiesQueryOptions(
   projectId: string,
-  client: CodexlyProjectOpenClient = codexlyClient,
+  client: NativeProjectOpenClient = nativeClient,
   enabled = true,
 ) {
   return queryOptions({
@@ -173,7 +173,7 @@ export function projectOpenCapabilitiesQueryOptions(
 
 export function skillsQueryOptions(
   projectId: string,
-  client: CodexlySkillsClient = codexlyClient,
+  client: NativeSkillsClient = nativeClient,
   enabled = true,
 ) {
   return queryOptions({
@@ -186,7 +186,7 @@ export function skillsQueryOptions(
 export function mcpServersQueryOptions(
   projectId: string,
   taskId: string | undefined,
-  client: CodexlyMcpServersClient = codexlyClient,
+  client: NativeMcpServersClient = nativeClient,
   enabled = true,
 ) {
   return queryOptions<AgentMcpServerPage>({
@@ -204,7 +204,7 @@ export function mcpServersQueryOptions(
 export function mcpServersReloadMutationOptions(
   projectId: string,
   taskId: string | undefined,
-  client: CodexlyMcpServersMutationClient = codexlyClient,
+  client: NativeMcpServersMutationClient = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: async (): Promise<AgentMcpServerPage> => {
@@ -220,7 +220,7 @@ export function mcpServersReloadMutationOptions(
 
 export function projectDefaultsQueryOptions(
   projectId: string,
-  client: Pick<CodexlyClient, "getProjectDefaults"> = codexlyClient,
+  client: Pick<NativeClient, "getProjectDefaults"> = nativeClient,
   enabled = true,
 ) {
   return queryOptions({
@@ -232,7 +232,7 @@ export function projectDefaultsQueryOptions(
 
 export function projectDefaultsMutationOptions(
   projectId: string,
-  client: Pick<CodexlyClient, "updateProjectDefaults"> = codexlyClient,
+  client: Pick<NativeClient, "updateProjectDefaults"> = nativeClient,
 ) {
   return mutationOptions({
     meta: { actionNotification: { successMessage: false } },
@@ -246,7 +246,7 @@ export function projectDefaultsMutationOptions(
 export function taskSettingsMutationOptions(
   projectId: string,
   taskId: string,
-  client: Pick<CodexlyClient, "updateTaskSettings"> = codexlyClient,
+  client: Pick<NativeClient, "updateTaskSettings"> = nativeClient,
 ) {
   return mutationOptions({
     meta: { actionNotification: { successMessage: false } },
@@ -257,7 +257,7 @@ export function taskSettingsMutationOptions(
   });
 }
 
-export function projectsQueryOptions(client: CodexlyReadClient = codexlyClient) {
+export function projectsQueryOptions(client: NativeReadClient = nativeClient) {
   return queryOptions({
     queryFn: ({ signal }) => client.listProjects({ signal }),
     queryKey: ["projects"] as const,
@@ -265,7 +265,7 @@ export function projectsQueryOptions(client: CodexlyReadClient = codexlyClient) 
 }
 
 export function projectReorderMutationOptions(
-  client: Pick<CodexlyClient, "reorderProjects"> = codexlyClient,
+  client: Pick<NativeClient, "reorderProjects"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: (projectIds: readonly string[]) => client.reorderProjects(projectIds),
@@ -277,7 +277,7 @@ export function projectReorderMutationOptions(
 export function projectGitStatusQueryOptions(
   projectId: string,
   rootPath: string,
-  client: CodexlyGitStatusClient = codexlyClient,
+  client: NativeGitStatusClient = nativeClient,
   enabled = true,
 ) {
   return queryOptions({
@@ -295,7 +295,7 @@ export function projectGitDetailedStatusQueryOptions(
   repository: string | null,
   snapshot: string,
   enabled: boolean,
-  client: CodexlyGitStatusClient = codexlyClient,
+  client: NativeGitStatusClient = nativeClient,
 ) {
   return queryOptions({
     enabled,
@@ -320,7 +320,7 @@ export function projectGitRepositoryStatusQueryOptions(
   rootPath: string,
   repository: string | null,
   enabled: boolean,
-  client: CodexlyGitStatusClient = codexlyClient,
+  client: NativeGitStatusClient = nativeClient,
 ) {
   return queryOptions({
     enabled: enabled && repository !== null,
@@ -342,7 +342,7 @@ export function projectGitHistoryInfiniteQueryOptions(
   rootPath: string,
   repository: string | undefined,
   enabled: boolean,
-  client: CodexlyGitHistoryClient = codexlyClient,
+  client: NativeGitHistoryClient = nativeClient,
 ) {
   return infiniteQueryOptions<
     ProjectGitHistoryPage,
@@ -377,7 +377,7 @@ export function projectGitCommitFilesInfiniteQueryOptions(
   repository: string | undefined,
   sha: string,
   enabled: boolean,
-  client: CodexlyGitCommitReviewClient = codexlyClient,
+  client: NativeGitCommitReviewClient = nativeClient,
 ) {
   return infiniteQueryOptions<
     ProjectGitCommitFilesPage,
@@ -421,7 +421,7 @@ export function projectGitCommitFileDiffQueryOptions(
   sha: string,
   path: string,
   enabled: boolean,
-  client: CodexlyGitCommitReviewClient = codexlyClient,
+  client: NativeGitCommitReviewClient = nativeClient,
 ) {
   return queryOptions({
     enabled,
@@ -453,7 +453,7 @@ export function projectGitCommitFileDiffQueryOptions(
 export function projectCommitMessageMutationOptions(
   projectId: string,
   rootPath: string,
-  client: Pick<CodexlyClient, "generateCommitMessage"> = codexlyClient,
+  client: Pick<NativeClient, "generateCommitMessage"> = nativeClient,
 ) {
   return mutationOptions({
     // 生成结果会直接回填提交信息，仅失败时需要额外通知。
@@ -468,7 +468,7 @@ export function projectCommitMessageMutationOptions(
 export function projectCommitChangesMutationOptions(
   projectId: string,
   rootPath: string,
-  client: Pick<CodexlyClient, "commitProjectChanges"> = codexlyClient,
+  client: Pick<NativeClient, "commitProjectChanges"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: (request: CommitProjectChangesRequest) =>
@@ -482,7 +482,7 @@ export function projectFileTreeQueryOptions(
   projectId: string,
   rootPath: string,
   directoryPath: string | null,
-  client: CodexlyFileTreeReadClient = codexlyClient,
+  client: NativeFileTreeReadClient = nativeClient,
   enabled = true,
 ) {
   return queryOptions({

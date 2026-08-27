@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     connection::{AppServerConnection, ConnectionError},
+    conversation_background::list_background_terminals,
     sidebar::unix_seconds_to_rfc3339,
 };
 use crate::domain::sidebar::{
@@ -40,12 +41,13 @@ struct NativeThreadPage {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct NativeThread {
+pub(super) struct NativeThread {
     id: String,
     name: Option<String>,
     preview: String,
     project_id: Option<String>,
     section: Option<NativeThreadSection>,
+    status: NativeThreadStatus,
     updated_at: i64,
 }
 
@@ -55,8 +57,19 @@ struct NativeThreadSection {
 }
 
 #[derive(Deserialize)]
+struct NativeThreadStatus {
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+#[derive(Deserialize)]
 struct NativeThreadResponse {
     thread: NativeThread,
+}
+
+#[derive(Deserialize)]
+struct NativeThreadUnsubscribeResponse {
+    status: String,
 }
 
 #[derive(Serialize)]
@@ -241,6 +254,48 @@ pub async fn delete_task(
     })
 }
 
+pub async fn unsubscribe_task(
+    connection: &AppServerConnection,
+    project_id: &str,
+    task_id: &str,
+) -> Result<AgentTaskStatusResponse, ConnectionError> {
+    let thread = read_native_task(connection, project_id, task_id).await?;
+    if thread.status.kind == "active"
+        || !list_background_terminals(connection, task_id)
+            .await?
+            .data
+            .is_empty()
+    {
+        return Ok(AgentTaskStatusResponse {
+            status: "busy",
+            task_id: task_id.to_owned(),
+        });
+    }
+    if !matches!(
+        thread.status.kind.as_str(),
+        "idle" | "notLoaded" | "systemError"
+    ) {
+        return Err(ConnectionError::InvalidMessage);
+    }
+    let response: NativeThreadUnsubscribeResponse = connection
+        .request(
+            "thread/unsubscribe",
+            &ThreadIdParams { thread_id: task_id },
+            REQUEST_TIMEOUT,
+        )
+        .await?;
+    let status = match response.status.as_str() {
+        "notLoaded" => "notLoaded",
+        "notSubscribed" => "notSubscribed",
+        "unsubscribed" => "unsubscribed",
+        _ => return Err(ConnectionError::InvalidMessage),
+    };
+    Ok(AgentTaskStatusResponse {
+        status,
+        task_id: task_id.to_owned(),
+    })
+}
+
 async fn read_native_task(
     connection: &AppServerConnection,
     project_id: &str,
@@ -260,7 +315,10 @@ async fn read_native_task(
     Ok(response.thread)
 }
 
-fn validate_task_project(thread: &NativeThread, project_id: &str) -> Result<(), ConnectionError> {
+pub(super) fn validate_task_project(
+    thread: &NativeThread,
+    project_id: &str,
+) -> Result<(), ConnectionError> {
     let expected = (project_id != TEMPORARY_PROJECT_ID).then_some(project_id);
     if thread.project_id.as_deref() != expected {
         return Err(ConnectionError::InvalidMessage);
@@ -277,7 +335,7 @@ async fn request_empty<P: Serialize>(
     Ok(())
 }
 
-fn map_task(thread: NativeThread, project_id: &str) -> AgentTask {
+pub(super) fn map_task(thread: NativeThread, project_id: &str) -> AgentTask {
     let title = thread
         .name
         .as_deref()

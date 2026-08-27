@@ -4,8 +4,8 @@ export type FileNavigationViewMode = "list" | "tree";
 export type FileNavigationViewScope = "changes" | "review";
 
 const STORAGE_KEY_BY_SCOPE: Readonly<Record<FileNavigationViewScope, string>> = {
-  changes: "codexly:workbench:file-navigation-view:changes:v1",
-  review: "codexly:workbench:file-navigation-view:review:v1",
+  changes: "codeagent:workbench:file-navigation-view:changes:v1",
+  review: "codeagent:workbench:file-navigation-view:review:v1",
 };
 
 type FileNavigationViewStorage = Readonly<{

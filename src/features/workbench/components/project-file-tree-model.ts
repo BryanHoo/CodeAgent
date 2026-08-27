@@ -2,7 +2,7 @@ import type { ProjectFileTreeEntry } from "@/protocol/index.js";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { i18n } from "../../../i18n/i18n.js";
-import type { CodexlyFileTreeReadClient } from "../../projects/project-query-contracts.js";
+import type { NativeFileTreeReadClient } from "../../projects/project-query-contracts.js";
 import { projectFileTreeQueryOptions } from "../../projects/project-query-options.js";
 
 export const PROJECT_FILE_TREE_ROOT_ID = "\0project-file-tree-root";
@@ -41,7 +41,7 @@ export function getProjectFileTreeItemName(item: ProjectFileTreeItem): string {
 }
 
 type ProjectFileTreeDataLoaderOptions = Readonly<{
-  client: CodexlyFileTreeReadClient;
+  client: NativeFileTreeReadClient;
   projectId: string;
   projectName: string;
   queryClient: QueryClient;

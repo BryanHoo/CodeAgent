@@ -79,6 +79,25 @@ struct ProjectIdParams {
     project_id: String,
 }
 
+pub async fn read_project(
+    connection: &AppServerConnection,
+    project_id: &str,
+) -> Result<Project, ConnectionError> {
+    let response: NativeProjectResponse = connection
+        .request(
+            "project/read",
+            &ProjectIdParams {
+                project_id: project_id.to_owned(),
+            },
+            REQUEST_TIMEOUT,
+        )
+        .await?;
+    if response.project.id != project_id {
+        return Err(ConnectionError::InvalidMessage);
+    }
+    Ok(map_project(response.project))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectMoveParams<'a> {

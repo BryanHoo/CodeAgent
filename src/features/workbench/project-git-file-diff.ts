@@ -4,12 +4,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { AgentFileChange } from "../diff/file-change.js";
 import {
   projectGitDetailedStatusQueryOptions,
-  type CodexlyGitStatusClient,
+  type NativeGitStatusClient,
 } from "../projects/project-queries.js";
 
 export async function loadProjectGitFileDiff(
   queryClient: QueryClient,
-  client: CodexlyGitStatusClient,
+  client: NativeGitStatusClient,
   projectId: string,
   rootPath: string,
   summary: ProjectGitStatus | undefined,

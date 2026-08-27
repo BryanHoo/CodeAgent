@@ -1,3 +1,4 @@
+use serde_json::{Value, json};
 use tauri::{State, ipc::Channel};
 
 use super::{error::AppError, state::AppState};
@@ -14,4 +15,16 @@ pub async fn connect_runtime(
 #[tauri::command]
 pub async fn start_runtime(state: State<'_, AppState>) -> Result<RuntimeSnapshot, AppError> {
     state.start_codex().await
+}
+
+#[tauri::command]
+pub async fn get_app_info(state: State<'_, AppState>) -> Result<Value, AppError> {
+    Ok(json!({
+        "appVersion": env!("CARGO_PKG_VERSION"),
+        "codexVersion": state.codex_version().await?,
+        "latestVersion": null,
+        "releaseNotes": null,
+        "status": "current",
+        "updateAvailable": false,
+    }))
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { v4 as createUuid } from "uuid";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import type { CodexlyBackgroundTerminalClient } from "../../projects/project-queries.js";
+import type { NativeBackgroundTerminalClient } from "../../projects/project-queries.js";
 
 const BACKGROUND_TERMINAL_POLL_INTERVAL_MS = 1_500;
 
@@ -33,7 +33,7 @@ export type BackgroundTerminalView = Readonly<{
 }>;
 
 export function useBackgroundTerminals(
-  client: CodexlyBackgroundTerminalClient,
+  client: NativeBackgroundTerminalClient,
   projectId: string,
   taskId: string | undefined,
   isTaskRunning: boolean,

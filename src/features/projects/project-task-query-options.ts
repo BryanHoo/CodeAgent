@@ -5,10 +5,10 @@ import {
   PROJECT_TASK_PAGE_SIZE,
   ARCHIVED_TASK_PAGE_SIZE,
   TASK_SNAPSHOT_GC_TIME_MS,
-  codexlyClient,
-  type CodexlyReadClient,
-  type CodexlyArchivedTaskClient,
-  type CodexlySnapshotClient,
+  nativeClient,
+  type NativeReadClient,
+  type NativeArchivedTaskClient,
+  type NativeSnapshotClient,
   type ProjectTaskInfiniteData,
 } from "./project-query-contracts.js";
 
@@ -16,7 +16,7 @@ export function archivedProjectTasksQueryOptions(
   projectId: string,
   cursor: string | undefined,
   searchTerm: string,
-  client: CodexlyArchivedTaskClient = codexlyClient,
+  client: NativeArchivedTaskClient = nativeClient,
 ) {
   return queryOptions({
     queryFn: ({ signal }) =>
@@ -38,7 +38,7 @@ export function archivedProjectTasksQueryOptions(
 
 export function projectTasksInfiniteQueryOptions(
   projectId: string,
-  client: CodexlyReadClient = codexlyClient,
+  client: NativeReadClient = nativeClient,
 ) {
   return infiniteQueryOptions<
     AgentTaskPage,
@@ -68,7 +68,7 @@ export function projectTasksInfiniteQueryOptions(
 export function taskSnapshotQueryOptions(
   projectId: string,
   taskId: string,
-  client: CodexlySnapshotClient = codexlyClient,
+  client: NativeSnapshotClient = nativeClient,
 ) {
   return queryOptions({
     gcTime: TASK_SNAPSHOT_GC_TIME_MS,

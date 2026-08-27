@@ -1,67 +1,77 @@
-import { invoke } from "@tauri-apps/api/core";
 import {
-  CodexlyClient,
   type ListTasksOptions,
+  type ListFilesystemEntriesOptions,
+  type PendingRequestResolution,
+  type ReadTaskOptions,
+  type ReadOptions,
+  type MutationOptions,
   type SubscribeAgentEventsOptions,
-} from "@/client/index.js";
+} from "@/platform/native-client-types.js";
 import type {
-  AccessStatusResponse,
+  AddAgentQueuedSubmissionResponse,
   AddProjectResponse,
-  AgentCapabilities,
-  AgentProviderConnectionStatus,
+  AgentBackgroundTerminalPage,
+  AgentEvent,
+  AgentPromptInput,
+  AgentQueuedSubmissionPage,
+  AgentQueuedSubmissionStatus,
   AgentTaskSnapshotResponse,
   AgentTaskPage,
-  AppInfoResponse,
+  AgentTaskSettings,
+  AgentTaskSettingsResponse,
+  AgentTurnOptions,
   ArchiveAgentTaskResponse,
+  CompactAgentTaskResponse,
+  ClearAgentGoalResponse,
   DeleteAgentTaskResponse,
+  DeleteAgentQueuedSubmissionResponse,
+  ForkAgentTaskRequest,
+  ForkAgentTaskResponse,
+  InterruptAgentTurnResponse,
   PinAgentTaskResponse,
+  PendingRequest,
   ProjectDirectoryListing,
   ProjectPage,
   RemoveProjectResponse,
+  ResolvePendingRequestResponse,
+  ReviewAgentTaskRequest,
+  ReviewAgentTaskResponse,
   RenameAgentTaskResponse,
   RenameProjectResponse,
   ReorderProjectsResponse,
+  ReorderAgentQueuedSubmissionsResponse,
+  StartAgentTaskResponse,
+  StartAgentTurnResponse,
+  StartAgentQueuedSubmissionResponse,
+  SteerAgentTurnResponse,
+  TerminateAgentBackgroundTerminalResponse,
   UnarchiveAgentTaskResponse,
   UnsubscribeAgentTaskResponse,
+  UpdateAgentGoalRequest,
+  UpdateAgentGoalResponse,
+  UpdateAgentQueuedSubmissionResponse,
 } from "@/protocol/index.js";
 
-import { ensureCodexRuntime } from "./runtime.js";
+import type { TauriClientOptions } from "./native-client.js";
+import { TauriRuntimeClient } from "./runtime-client.js";
 
-export type InvokeImplementation = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+export type { InvokeImplementation } from "./native-client.js";
 
-type TauriSidebarClientOptions = Readonly<{
-  ensureRuntime?: () => Promise<unknown>;
-  invoke?: InvokeImplementation;
-}>;
-
-function unavailableFetch(): Promise<Response> {
-  return Promise.reject(new Error("HTTP transport is unavailable in the Tauri runtime"));
-}
-
-export class TauriSidebarClient extends CodexlyClient {
-  readonly #ensureRuntime: () => Promise<unknown>;
-  readonly #invoke: InvokeImplementation;
-
-  public constructor(options: TauriSidebarClientOptions = {}) {
-    super({
-      fetch: unavailableFetch as typeof globalThis.fetch,
-      webSocketFactory: () => {
-        throw new Error("WebSocket transport is unavailable in the Tauri runtime");
-      },
-    });
-    this.#ensureRuntime = options.ensureRuntime ?? ensureCodexRuntime;
-    this.#invoke = options.invoke ?? invoke;
+export class TauriSidebarClient extends TauriRuntimeClient {
+  public constructor(options: TauriClientOptions = {}) {
+    super(options);
   }
 
-  public override async listProjects(): Promise<ProjectPage> {
-    return this.#call("list_projects");
+  public async listProjects(_options: ReadOptions = {}): Promise<ProjectPage> {
+    return this.call("list_projects");
   }
 
-  public override async listTasks(
+  public async listTasks(
     projectId: string,
     options: ListTasksOptions = {},
+    _requestOptions: ReadOptions = {},
   ): Promise<AgentTaskPage> {
-    return this.#call("list_tasks", {
+    const response = await this.call<AgentTaskPage>("list_tasks", {
       input: {
         ...(options.archived === true ? { archived: true } : {}),
         ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
@@ -71,166 +81,343 @@ export class TauriSidebarClient extends CodexlyClient {
         ...(options.searchTerm === undefined ? {} : { searchTerm: options.searchTerm }),
       },
     });
+    for (const task of response.data) this.taskProjects.set(task.id, projectId);
+    return response;
   }
 
-  public override async addProject(rootPaths: readonly string[]): Promise<AddProjectResponse> {
-    return this.#call("add_project", { rootPaths: [...rootPaths] });
+  public async addProject(
+    rootPaths: readonly string[],
+    _options: MutationOptions = {},
+  ): Promise<AddProjectResponse> {
+    return this.call("add_project", { rootPaths: [...rootPaths] });
   }
 
-  public override async listProjectDirectories(
+  public async listProjectDirectories(
     path?: string,
-    options: Readonly<{ includeHidden?: boolean }> = {},
+    options: ListFilesystemEntriesOptions = {},
   ): Promise<ProjectDirectoryListing> {
-    return this.#call("list_project_directories", {
+    return this.call("list_project_directories", {
       includeHidden: options.includeHidden === true,
       path: path ?? null,
     });
   }
 
-  public override async renameProject(
+  public async renameProject(
     projectId: string,
     name: string,
   ): Promise<RenameProjectResponse> {
-    return this.#call("rename_project", { name, projectId });
+    return this.call("rename_project", { name, projectId });
   }
 
-  public override async removeProject(projectId: string): Promise<RemoveProjectResponse> {
-    return this.#call("remove_project", { projectId });
+  public async removeProject(projectId: string): Promise<RemoveProjectResponse> {
+    return this.call("remove_project", { projectId });
   }
 
-  public override async reorderProjects(
+  public async reorderProjects(
     projectIds: readonly string[],
   ): Promise<ReorderProjectsResponse> {
-    return this.#call("reorder_projects", { projectIds: [...projectIds] });
+    return this.call("reorder_projects", { projectIds: [...projectIds] });
   }
 
-  public override async pinTask(
+  public async pinTask(
     projectId: string,
     taskId: string,
     pinned: boolean,
   ): Promise<PinAgentTaskResponse> {
-    return this.#call("pin_task", { pinned, projectId, taskId });
+    return this.call("pin_task", { pinned, projectId, taskId });
   }
 
-  public override async renameTask(
+  public async renameTask(
     projectId: string,
     taskId: string,
     title: string,
   ): Promise<RenameAgentTaskResponse> {
-    return this.#call("rename_task", { projectId, taskId, title });
+    return this.call("rename_task", { projectId, taskId, title });
   }
 
-  public override async archiveTask(
+  public async archiveTask(
     projectId: string,
     taskId: string,
   ): Promise<ArchiveAgentTaskResponse> {
-    return this.#call("archive_task", { projectId, taskId });
+    return this.call("archive_task", { projectId, taskId });
   }
 
-  public override async unarchiveTask(
+  public async unarchiveTask(
     projectId: string,
     taskId: string,
   ): Promise<UnarchiveAgentTaskResponse> {
-    return this.#call("unarchive_task", { projectId, taskId });
+    return this.call("unarchive_task", { projectId, taskId });
   }
 
-  public override async deleteTask(
+  public async deleteTask(
     projectId: string,
     taskId: string,
   ): Promise<DeleteAgentTaskResponse> {
-    return this.#call("delete_task", { projectId, taskId });
+    return this.call("delete_task", { projectId, taskId });
   }
 
-  public override async readTask(
+  public async readTask(
     projectId: string,
     taskId: string,
+    options: ReadTaskOptions = {},
   ): Promise<AgentTaskSnapshotResponse> {
-    const task = await this.#call<AgentTaskPage["data"][number]>("read_task", {
+    const response = await this.call<AgentTaskSnapshotResponse>("read_task", {
+      projectId,
+      taskId,
+      cursor: options.cursor ?? null,
+    });
+    this.taskProjects.set(response.snapshot.id, projectId);
+    return response;
+  }
+
+  public async startTask(
+    projectId: string,
+    _options: MutationOptions = {},
+  ): Promise<StartAgentTaskResponse> {
+    const response = await this.call<StartAgentTaskResponse>("start_task", { projectId });
+    this.taskProjects.set(response.task.id, projectId);
+    return response;
+  }
+
+  public async listQueuedSubmissions(
+    projectId: string,
+    taskId: string,
+    input: Readonly<{ cursor?: string; limit?: number }> = {},
+    _options: ReadOptions = {},
+  ): Promise<AgentQueuedSubmissionPage> {
+    return this.call("list_queued_submissions", {
+      cursor: input.cursor ?? null,
+      limit: input.limit ?? null,
       projectId,
       taskId,
     });
-    return {
-      checkpoint: { sequence: 0, sessionId: "codeagent-runtime" },
-      snapshot: {
-        ...task,
-        contextUsage: null,
-        goal: null,
-        pendingRequests: [],
-        plan: null,
-        settings: {
-          approvalPolicy: "on-request",
-          approvalsReviewer: "user",
-          model: "gpt-5.6-sol",
-          reasoningEffort: "high",
-          sandboxMode: "workspace-write",
-        },
-        status: "idle",
-        turns: [],
-        turnsNextCursor: null,
-      },
-    };
   }
 
-  public override async unsubscribeTask(
+  public async addQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    input: AgentPromptInput,
+    clientUserMessageId: string,
+    _options: MutationOptions = {},
+  ): Promise<AddAgentQueuedSubmissionResponse> {
+    return this.call("add_queued_submission", {
+      clientUserMessageId,
+      input,
+      projectId,
+      taskId,
+    });
+  }
+
+  public async updateQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionId: string,
+    input: AgentPromptInput,
+    status: AgentQueuedSubmissionStatus,
+    _options: MutationOptions = {},
+  ): Promise<UpdateAgentQueuedSubmissionResponse> {
+    return this.call("update_queued_submission", {
+      input,
+      projectId,
+      queuedSubmissionId,
+      status,
+      taskId,
+    });
+  }
+
+  public async deleteQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionId: string,
+    _options: MutationOptions = {},
+  ): Promise<DeleteAgentQueuedSubmissionResponse> {
+    return this.call("delete_queued_submission", { projectId, queuedSubmissionId, taskId });
+  }
+
+  public async reorderQueuedSubmissions(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionIds: readonly string[],
+    _options: MutationOptions = {},
+  ): Promise<ReorderAgentQueuedSubmissionsResponse> {
+    return this.call("reorder_queued_submissions", {
+      projectId,
+      queuedSubmissionIds: [...queuedSubmissionIds],
+      taskId,
+    });
+  }
+
+  public async startQueuedSubmission(
+    projectId: string,
+    taskId: string,
+    queuedSubmissionId?: string,
+    _options: MutationOptions = {},
+  ): Promise<StartAgentQueuedSubmissionResponse> {
+    return this.call("start_queued_submission", {
+      projectId,
+      queuedSubmissionId: queuedSubmissionId ?? null,
+      taskId,
+    });
+  }
+
+  public async startTurn(
+    projectId: string,
+    taskId: string,
+    input: AgentPromptInput,
+    options: AgentTurnOptions,
+    _mutationOptions: MutationOptions = {},
+  ): Promise<StartAgentTurnResponse> {
+    return this.call("start_turn", { input, options, projectId, taskId });
+  }
+
+  public async steerTurn(
     _projectId: string,
     taskId: string,
+    turnId: string,
+    input: AgentPromptInput,
+    _options: MutationOptions = {},
+  ): Promise<SteerAgentTurnResponse> {
+    return this.call("steer_turn", { input, taskId, turnId });
+  }
+
+  public async interruptTurn(
+    _projectId: string,
+    taskId: string,
+    turnId: string,
+    _options: MutationOptions = {},
+  ): Promise<InterruptAgentTurnResponse> {
+    return this.call("interrupt_turn", { taskId, turnId });
+  }
+
+  public async resolvePendingRequest<T extends PendingRequest>(
+    request: T,
+    resolution: PendingRequestResolution<T>,
+    _options: MutationOptions = {},
+  ): Promise<ResolvePendingRequestResponse> {
+    return this.call("resolve_pending_request", {
+      requestId: request.requestId,
+      resolution,
+    });
+  }
+
+  public async startReview(
+    projectId: string,
+    taskId: string,
+    input: ReviewAgentTaskRequest,
+    _options: MutationOptions = {},
+  ): Promise<ReviewAgentTaskResponse> {
+    return this.call("start_review", { input, projectId, taskId });
+  }
+
+  public async getTaskSettings(
+    projectId: string,
+    taskId: string,
+  ): Promise<AgentTaskSettingsResponse> {
+    return this.call("get_task_settings", { projectId, taskId });
+  }
+
+  public async updateTaskSettings(
+    projectId: string,
+    taskId: string,
+    settings: AgentTaskSettings,
+  ): Promise<AgentTaskSettingsResponse> {
+    return this.call("update_task_settings", { projectId, settings, taskId });
+  }
+
+  public async updateTaskGoal(
+    projectId: string,
+    taskId: string,
+    input: UpdateAgentGoalRequest,
+  ): Promise<UpdateAgentGoalResponse> {
+    return this.call("update_task_goal", { projectId, status: input.status, taskId });
+  }
+
+  public async clearTaskGoal(
+    projectId: string,
+    taskId: string,
+  ): Promise<ClearAgentGoalResponse> {
+    return this.call("clear_task_goal", { projectId, taskId });
+  }
+
+  public async listBackgroundTerminals(
+    projectId: string,
+    taskId: string,
+    _options: ReadOptions = {},
+  ): Promise<AgentBackgroundTerminalPage> {
+    return this.call("list_background_terminals", { projectId, taskId });
+  }
+
+  public async terminateBackgroundTerminal(
+    projectId: string,
+    taskId: string,
+    terminalId: string,
+    _options: MutationOptions = {},
+  ): Promise<TerminateAgentBackgroundTerminalResponse> {
+    return this.call("terminate_background_terminal", { projectId, taskId, terminalId });
+  }
+
+  public async compactTask(
+    projectId: string,
+    taskId: string,
+    _options: MutationOptions = {},
+  ): Promise<CompactAgentTaskResponse> {
+    return this.call("compact_task", { projectId, taskId });
+  }
+
+  public async forkTask(
+    projectId: string,
+    taskId: string,
+    input: ForkAgentTaskRequest,
+    _options: MutationOptions = {},
+  ): Promise<ForkAgentTaskResponse> {
+    const response = await this.call<ForkAgentTaskResponse>("fork_task", {
+      lastTurnId: input.lastTurnId ?? null,
+      projectId,
+      taskId,
+    });
+    this.taskProjects.set(response.task.id, projectId);
+    return response;
+  }
+
+  public async unsubscribeTask(
+    projectId: string,
+    taskId: string,
   ): Promise<UnsubscribeAgentTaskResponse> {
-    return { status: "notLoaded", taskId };
+    return this.call("unsubscribe_task", { projectId, taskId });
   }
 
-  public override subscribeEvents(options: SubscribeAgentEventsOptions): () => void {
+  public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {
+    let active = true;
+    let lastSequence = options.afterSequence;
     options.onConnectionState?.("connected");
-    return () => options.onConnectionState?.("closed");
-  }
-
-  public override async getAccessStatus(): Promise<AccessStatusResponse> {
-    return { authenticated: true, mode: "local", version: 1 };
-  }
-
-  public override async pairAccess(_code: string): Promise<AccessStatusResponse> {
-    return this.getAccessStatus();
-  }
-
-  public override async logoutAccess(): Promise<AccessStatusResponse> {
-    return this.getAccessStatus();
-  }
-
-  public override async getProviderConnection(): Promise<AgentProviderConnectionStatus> {
-    await this.#ensureRuntime();
-    return {
-      account: null,
-      customBaseUrl: null,
-      mode: "official",
-      pendingLogin: null,
-      state: "connected",
+    const cleanup = this.subscribeNativeEvents({
+      afterSequence: options.afterSequence,
+      onEvent: (event: AgentEvent) => {
+        if (!active || event.sessionId !== options.sessionId) return;
+        if (this.taskProjects.get(event.taskId) !== options.projectId) return;
+        if (event.sequence <= lastSequence) return;
+        if (event.sequence !== lastSequence + 1) {
+          active = false;
+          options.onResyncRequired({
+            latestSequence: event.sequence,
+            reason: "sequence_gap",
+            sessionId: event.sessionId,
+            type: "resync.required",
+            version: 3,
+          });
+          options.onConnectionState?.("closed");
+          return;
+        }
+        lastSequence = event.sequence;
+        options.onEvent(event);
+      },
+    });
+    return () => {
+      if (!active) return cleanup();
+      active = false;
+      cleanup();
+      options.onConnectionState?.("closed");
     };
   }
 
-  public override async getCapabilities(): Promise<AgentCapabilities> {
-    await this.#ensureRuntime();
-    return {
-      feedback: { upload: false },
-      goals: { clear: false, read: false, update: false },
-      provider: "codex",
-      skills: { list: false, use: false },
-      tasks: { fork: false, list: true, read: true, start: false },
-      turns: { compact: false, interrupt: false, review: false, start: false, steer: false },
-    };
-  }
-
-  public override async getAppInfo(): Promise<AppInfoResponse> {
-    return {
-      appVersion: "0.1.0",
-      codexVersion: "0.149.0",
-      latestVersion: null,
-      releaseNotes: null,
-      status: "current",
-      updateAvailable: false,
-    };
-  }
-
-  async #call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-    await this.#ensureRuntime();
-    return args === undefined ? this.#invoke<T>(command) : this.#invoke<T>(command, args);
-  }
 }

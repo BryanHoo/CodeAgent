@@ -15,7 +15,7 @@ type OpenProjectFileInNewWindowOptions = Readonly<{
   rootPath?: string;
 }>;
 
-const PROJECT_FILE_POPUP_TARGET = "codexly-project-file-popup";
+const PROJECT_FILE_POPUP_TARGET = "codeagent-project-file-popup";
 const PROJECT_FILE_POPUP_FEATURES = "popup,width=1100,height=800,resizable=yes,scrollbars=yes";
 
 function parseLineNumber(value: unknown): number | null {

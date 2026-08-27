@@ -46,6 +46,7 @@ export const WorkbenchPetDescriptorSchema = Type.Object(
   {
     animations: Type.Record(Type.String({ minLength: 1 }), WorkbenchPetAnimationSchema),
     assetId: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+    assetPath: Type.Optional(Type.String({ minLength: 1 })),
     availability: Type.Union([Type.Literal("downloadable"), Type.Literal("ready")]),
     description: Type.String(),
     displayName: Type.String({ minLength: 1 }),

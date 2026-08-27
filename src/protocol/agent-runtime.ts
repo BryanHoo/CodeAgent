@@ -13,7 +13,6 @@ import {
 } from "./project-settings.js";
 
 export const TEMPORARY_TASK_SCOPE_ID = "temporary";
-export const TEMPORARY_TASK_API_PATH = "/v1/temporary";
 
 export * from "./pending-request.js";
 

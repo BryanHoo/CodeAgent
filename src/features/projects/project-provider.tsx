@@ -18,7 +18,7 @@ import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js
 import { createProjectGitRuntimeHandlers } from "./project-git-runtime-handlers.js";
 import {
   capabilitiesQueryOptions,
-  codexlyClient,
+  nativeClient,
   invalidateTaskQueue,
   PROJECT_PINNED_TASKS_KEY,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
@@ -37,7 +37,7 @@ const emptyProjects: readonly Project[] = [];
 
 export function ProjectProvider({
   children,
-  client = codexlyClient,
+  client = nativeClient,
   taskNotifier,
 }: ProjectProviderProps) {
   const queryClient = useQueryClient();

@@ -36,7 +36,7 @@ import {
   WorkbenchInspectorHeader,
   type WorkbenchInspectorTab,
 } from "./workbench-inspector-tabs.js";
-import { codexlyClient, type CodexlyWorkbenchClient } from "../../projects/project-queries.js";
+import { nativeClient, type NativeWorkbenchClient } from "../../projects/project-queries.js";
 import { WorkbenchProjectFileTree } from "./workbench-project-file-tree.js";
 import { ProjectSourcePanel } from "./project-source-panel.js";
 import {
@@ -70,7 +70,7 @@ type WorkbenchInspectorProps = Readonly<{
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
   gitStatusRefreshing?: boolean;
-  gitClient?: CodexlyWorkbenchClient;
+  gitClient?: NativeWorkbenchClient;
   mcpServers?: readonly AgentMcpServer[];
   mcpServersRetryAvailable?: boolean;
   mcpServersRefreshing?: boolean;
@@ -263,7 +263,7 @@ export function WorkbenchInspector({
             <FileDiffPanel change={fileSelection.change} />
           ) : (
             <ProjectSourcePanel
-              client={gitClient ?? codexlyClient}
+              client={gitClient ?? nativeClient}
               previewKind={fileSelection.kind}
               projectId={projectId ?? projectName}
               reference={fileSelection.reference}
@@ -308,7 +308,7 @@ export function WorkbenchInspector({
               ) : null}
               <div className="min-h-0 flex-1 px-2.5 pb-2.5">
                 <WorkbenchProjectFileTree
-                  client={gitClient ?? codexlyClient}
+                  client={gitClient ?? nativeClient}
                   expandedPaths={expandedFileTreePaths}
                   fileChangesByPath={fileChangesByPath}
                   key={`${projectId ?? projectName}:${projectPath}`}

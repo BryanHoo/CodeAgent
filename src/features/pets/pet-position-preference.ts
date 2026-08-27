@@ -1,4 +1,4 @@
-export const PET_POSITION_STORAGE_KEY = "codexly.workbench-pet-position";
+export const PET_POSITION_STORAGE_KEY = "codeagent.workbench-pet-position";
 
 export type PetPositionPreference = Readonly<{
   version: 1;

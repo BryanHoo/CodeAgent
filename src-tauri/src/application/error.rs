@@ -17,6 +17,10 @@ pub enum AppError {
     FilesystemRequestFailed,
     #[error("failed to resolve user home directory")]
     HomeDirectoryUnavailable,
+    #[error("workbench pet asset is unavailable")]
+    PetAssetUnavailable,
+    #[error("workbench background is unavailable")]
+    WorkbenchBackgroundUnavailable,
 }
 
 impl Serialize for AppError {

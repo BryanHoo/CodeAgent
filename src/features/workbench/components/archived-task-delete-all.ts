@@ -1,10 +1,10 @@
-import type { CodexlyArchivedTaskClient } from "../../projects/project-queries.js";
+import type { NativeArchivedTaskClient } from "../../projects/project-queries.js";
 
 const ARCHIVED_TASK_DELETE_BATCH_SIZE = 4;
 const ARCHIVED_TASK_DELETE_LIST_LIMIT = 100;
 
 async function listAllArchivedTaskIds(
-  client: CodexlyArchivedTaskClient,
+  client: NativeArchivedTaskClient,
   projectId: string,
 ): Promise<readonly string[]> {
   const taskIds = new Set<string>();
@@ -30,7 +30,7 @@ async function listAllArchivedTaskIds(
 }
 
 export async function deleteAllArchivedTasks(
-  client: CodexlyArchivedTaskClient,
+  client: NativeArchivedTaskClient,
   projectId: string,
 ): Promise<void> {
   const taskIds = await listAllArchivedTaskIds(client, projectId);

@@ -1,4 +1,5 @@
 use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +46,9 @@ pub enum AppEvent {
         status: RuntimeStatus,
         provider: Option<ProviderKind>,
     },
+    AgentEvent {
+        event: Value,
+    },
 }
 
 #[cfg(test)]
@@ -72,6 +76,21 @@ mod tests {
                     "status": "ready",
                     "provider": "codex"
                 }
+            })
+        );
+    }
+
+    #[test]
+    fn agent_event_should_match_frontend_contract() {
+        let event = AppEvent::AgentEvent {
+            event: json!({"sequence": 8, "type": "message.delta"}),
+        };
+
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            json!({
+                "type": "agentEvent",
+                "data": {"event": {"sequence": 8, "type": "message.delta"}}
             })
         );
     }

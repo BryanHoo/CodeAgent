@@ -1,4 +1,4 @@
-import type { AgentEventConnectionState } from "@/client/index.js";
+import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import type { AppInfoResponse, Project } from "@/protocol/index.js";
 import {
   CircleArrowUp,

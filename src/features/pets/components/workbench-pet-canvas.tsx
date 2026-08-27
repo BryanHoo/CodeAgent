@@ -1,4 +1,4 @@
-import { buildWorkbenchPetAssetUrl } from "@/client/index.js";
+import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
 import type { WorkbenchPetDescriptor } from "@/protocol/index.js";
 import { useEffect, useRef, useState } from "react";
 
@@ -29,7 +29,7 @@ export function WorkbenchPetCanvas({
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
   const [fallback, setFallback] = useState(false);
   const reducedMotion = useReducedMotion();
-  const assetUrl = buildWorkbenchPetAssetUrl(pet.assetId);
+  const assetUrl = buildNativeAssetUrl(pet.assetPath ?? pet.assetId);
 
   useEffect(() => {
     const abortController = new AbortController();

@@ -1,4 +1,4 @@
-import { buildTaskAttachmentUrl } from "@/client/index.js";
+import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
 import type { AgentItem, AgentTurn } from "@/protocol/index.js";
 import { FileText, LoaderCircle } from "lucide-react";
 import { useState } from "react";
@@ -78,8 +78,8 @@ export function TimelineItemContent({
   onBuildPlan,
   onOpenFileDiff,
   onOpenSourceFile,
-  projectId,
-  taskId,
+  projectId: _projectId,
+  taskId: _taskId,
   turnStatus,
 }: Readonly<{
   commandOutput?: CommandOutputView;
@@ -142,7 +142,7 @@ export function TimelineItemContent({
             aria-label={i18n.t("timeline.attachments", { ns: "conversation" })}
           >
             {attachments.map((attachment) => {
-              const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
+              const attachmentUrl = buildNativeAssetUrl(attachment.id);
               if (attachment.kind === "image") {
                 return (
                   <MessageImageAttachment

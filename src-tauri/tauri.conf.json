@@ -22,6 +22,10 @@
       }
     ],
     "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/attachments/**"]
+      },
       "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'",
       "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost ws://localhost:1421; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'"
     }

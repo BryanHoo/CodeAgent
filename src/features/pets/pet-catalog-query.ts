@@ -1,14 +1,14 @@
-import type { CodexlyClient } from "@/client/index.js";
+import type { NativeClient } from "@/platform/native-client-contract.js";
 import type { WorkbenchPetCatalogResponse, WorkbenchPetDescriptor } from "@/protocol/index.js";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
-import { codexlyClient } from "../projects/project-query-contracts.js";
+import { nativeClient } from "../projects/project-query-contracts.js";
 
 export const petCatalogQueryKey = ["workbench-pets"] as const;
 
-type PetCatalogClient = Pick<CodexlyClient, "downloadWorkbenchPet" | "listWorkbenchPets">;
+type PetCatalogClient = Pick<NativeClient, "downloadWorkbenchPet" | "listWorkbenchPets">;
 
-export function petCatalogQueryOptions(client: PetCatalogClient = codexlyClient) {
+export function petCatalogQueryOptions(client: PetCatalogClient = nativeClient) {
   return queryOptions({
     queryFn: ({ signal }) => client.listWorkbenchPets({ signal }),
     queryKey: petCatalogQueryKey,
@@ -28,7 +28,7 @@ export function mergeDownloadedPet(
 
 export function downloadWorkbenchPetMutationOptions(
   queryClient: QueryClient,
-  client: PetCatalogClient = codexlyClient,
+  client: PetCatalogClient = nativeClient,
 ) {
   return mutationOptions({
     // 宠物资源会批量后台下载，完成时仅刷新目录，不打断用户操作。

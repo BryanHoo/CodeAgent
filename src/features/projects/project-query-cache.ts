@@ -1,4 +1,4 @@
-import type { CodexlyClient } from "@/client/index.js";
+import type { NativeClient } from "@/platform/native-client-contract.js";
 import type { AgentTask, Project, ProjectPage } from "@/protocol/index.js";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
@@ -7,7 +7,7 @@ import {
   PROJECT_PINNED_TASKS_KEY,
   PROJECT_TASK_SEARCH_PAGE_SIZE,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
-  codexlyClient,
+  nativeClient,
   taskQueueQueryKey,
   type ProjectTaskInfiniteData,
   type TaskTitleSnapshot,
@@ -246,7 +246,7 @@ export function removeProjectTaskFromInfiniteData(
 
 async function listAllProjectTasks(
   projectId: string,
-  client: Pick<CodexlyClient, "listTasks">,
+  client: Pick<NativeClient, "listTasks">,
   options: Readonly<{ pinned?: true }>,
   signal?: AbortSignal,
 ): Promise<readonly AgentTask[]> {
@@ -281,7 +281,7 @@ async function listAllProjectTasks(
 
 export function listProjectTasksForSearch(
   projectId: string,
-  client: Pick<CodexlyClient, "listTasks">,
+  client: Pick<NativeClient, "listTasks">,
   signal?: AbortSignal,
 ) {
   return listAllProjectTasks(projectId, client, {}, signal);
@@ -289,7 +289,7 @@ export function listProjectTasksForSearch(
 
 export function listPinnedProjectTasks(
   projectId: string,
-  client: Pick<CodexlyClient, "listTasks">,
+  client: Pick<NativeClient, "listTasks">,
   signal?: AbortSignal,
 ) {
   return listAllProjectTasks(projectId, client, { pinned: true }, signal);
@@ -297,7 +297,7 @@ export function listPinnedProjectTasks(
 
 export function projectPinnedTasksQueryOptions(
   projectId: string,
-  client: Pick<CodexlyClient, "listTasks"> = codexlyClient,
+  client: Pick<NativeClient, "listTasks"> = nativeClient,
 ) {
   return queryOptions({
     queryFn: ({ signal }) => listPinnedProjectTasks(projectId, client, signal),
@@ -308,7 +308,7 @@ export function projectPinnedTasksQueryOptions(
 export function projectTaskSearchSourceQueryOptions(
   projectId: string,
   enabled: boolean,
-  client: Pick<CodexlyClient, "listTasks"> = codexlyClient,
+  client: Pick<NativeClient, "listTasks"> = nativeClient,
 ) {
   return queryOptions({
     enabled,

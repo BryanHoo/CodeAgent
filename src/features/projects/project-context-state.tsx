@@ -14,7 +14,7 @@ import {
   projectPinnedTasksQueryOptions,
   projectTaskSearchSourceQueryOptions,
   projectTasksInfiniteQueryOptions,
-  type CodexlyWorkbenchClient,
+  type NativeWorkbenchClient,
   type ProjectTaskInfiniteData,
 } from "./project-queries.js";
 
@@ -53,7 +53,7 @@ export async function requestNextProjectTaskPage(
 
 export type ProjectDataContextValue = Readonly<{
   capabilities: AgentCapabilities | undefined;
-  client: CodexlyWorkbenchClient;
+  client: NativeWorkbenchClient;
   error: Error | null;
   isPending: boolean;
   projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
@@ -101,7 +101,7 @@ export const ProjectRootSelectionContext = createContext<
 >(undefined);
 
 export type ProjectTaskQueryProps = Readonly<{
-  client: CodexlyWorkbenchClient;
+  client: NativeWorkbenchClient;
   onRemove: (projectId: string) => void;
   onUpdate: (projectId: string, result: ProjectTaskQueryResult) => void;
   projectId: string;

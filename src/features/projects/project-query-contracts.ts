@@ -1,26 +1,26 @@
-import { CodexlyClient } from "@/client/index.js";
+import type { NativeClient } from "@/platform/native-client-contract.js";
 import type { AgentTaskPage, AgentTaskSnapshot } from "@/protocol/index.js";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import { TauriSidebarClient } from "../../platform/tauri/sidebar-client.js";
 
-export type CodexlyReadClient = Pick<CodexlyClient, "listProjects" | "listTasks" | "readTask">;
-export type CodexlyArchivedTaskClient = Pick<
-  CodexlyClient,
+export type NativeReadClient = Pick<NativeClient, "listProjects" | "listTasks" | "readTask">;
+export type NativeArchivedTaskClient = Pick<
+  NativeClient,
   "deleteTask" | "listTasks" | "unarchiveTask"
 >;
-export type CodexlyAccessClient = Pick<
-  CodexlyClient,
+export type NativeAccessClient = Pick<
+  NativeClient,
   "getAccessStatus" | "logoutAccess" | "pairAccess" | "subscribeUnauthorized"
 >;
-export type CodexlyGitStatusClient = Pick<CodexlyClient, "getProjectGitStatus">;
-export type CodexlyGitHistoryClient = Pick<CodexlyClient, "getProjectGitHistory">;
-export type CodexlyGitCommitReviewClient = Pick<
-  CodexlyClient,
+export type NativeGitStatusClient = Pick<NativeClient, "getProjectGitStatus">;
+export type NativeGitHistoryClient = Pick<NativeClient, "getProjectGitHistory">;
+export type NativeGitCommitReviewClient = Pick<
+  NativeClient,
   "getProjectGitCommitFileDiff" | "getProjectGitCommitFiles"
 >;
-export type CodexlyGitMutationClient = Pick<
-  CodexlyClient,
+export type NativeGitMutationClient = Pick<
+  NativeClient,
   | "commitProjectChanges"
   | "createProjectBranch"
   | "createProjectWorktree"
@@ -29,49 +29,52 @@ export type CodexlyGitMutationClient = Pick<
   | "switchProjectBranch"
   | "switchProjectWorktree"
 >;
-export type CodexlyFileTreeReadClient = Pick<CodexlyClient, "listProjectFiles">;
-export type CodexlyFileTreeClient = Pick<
-  CodexlyClient,
+export type NativeFileTreeReadClient = Pick<NativeClient, "listProjectFiles">;
+export type NativeFileTreeClient = Pick<
+  NativeClient,
   "deleteProjectFile" | "listProjectFiles" | "renameProjectFile"
 >;
-export type CodexlyProjectFileSearchClient = Pick<
-  CodexlyClient,
+export type NativeProjectFileSearchClient = Pick<
+  NativeClient,
   "searchProjectFiles" | "stopProjectFileSearch"
 >;
-export type CodexlyProjectDirectoryClient = Pick<CodexlyClient, "listProjectDirectories">;
-export type CodexlyHostAttachmentClient = Pick<
-  CodexlyClient,
+export type NativeProjectDirectoryClient = Pick<NativeClient, "listProjectDirectories">;
+export type NativeHostAttachmentClient = Pick<
+  NativeClient,
   "importHostAttachment" | "listHostFiles"
 >;
-export type CodexlySourceFileClient = Pick<CodexlyClient, "readProjectSourceFile">;
-export type CodexlyProjectOpenClient = Pick<
-  CodexlyClient,
+export type NativeSourceFileClient = Pick<
+  NativeClient,
+  "cacheProjectImage" | "readProjectSourceFile"
+>;
+export type NativeProjectOpenClient = Pick<
+  NativeClient,
   "getProjectOpenCapabilities" | "openProject"
 >;
-export type CodexlyRuntimeClient = Pick<
-  CodexlyClient,
+export type NativeRuntimeClient = Pick<
+  NativeClient,
   "readTask" | "subscribeEvents" | "unsubscribeTask"
 >;
-export type CodexlyBackgroundTerminalClient = Pick<
-  CodexlyClient,
+export type NativeBackgroundTerminalClient = Pick<
+  NativeClient,
   "listBackgroundTerminals" | "terminateBackgroundTerminal"
 >;
-export type CodexlyCapabilitiesClient = Pick<CodexlyClient, "getCapabilities">;
-export type CodexlyModelsClient = Pick<CodexlyClient, "listModels">;
-export type CodexlyAppUpdateClient = Pick<CodexlyClient, "getAppInfo" | "installAppUpdate">;
-export type CodexlyMcpServersClient = Pick<CodexlyClient, "listMcpServers">;
-export type CodexlyMcpServersMutationClient = Pick<CodexlyClient, "retryMcpServers">;
-export type CodexlySkillsClient = Pick<CodexlyClient, "listSkills">;
-export type CodexlySettingsClient = Pick<
-  CodexlyClient,
+export type NativeCapabilitiesClient = Pick<NativeClient, "getCapabilities">;
+export type NativeModelsClient = Pick<NativeClient, "listModels">;
+export type NativeAppUpdateClient = Pick<NativeClient, "getAppInfo" | "installAppUpdate">;
+export type NativeMcpServersClient = Pick<NativeClient, "listMcpServers">;
+export type NativeMcpServersMutationClient = Pick<NativeClient, "retryMcpServers">;
+export type NativeSkillsClient = Pick<NativeClient, "listSkills">;
+export type NativeSettingsClient = Pick<
+  NativeClient,
   | "getGlobalSettings"
   | "getProjectDefaults"
   | "updateGlobalSettings"
   | "updateProjectDefaults"
   | "updateTaskSettings"
 >;
-export type CodexlyMutationClient = Pick<
-  CodexlyClient,
+export type NativeMutationClient = Pick<
+  NativeClient,
   | "addQueuedSubmission"
   | "addProject"
   | "archiveTask"
@@ -98,34 +101,33 @@ export type CodexlyMutationClient = Pick<
   | "startTurn"
   | "steerTurn"
   | "uploadAttachment"
-  | "uploadFeedback"
   | "unarchiveTask"
   | "updateQueuedSubmission"
   | "updateTaskGoal"
 >;
-export type CodexlyPendingRequestClient = Pick<CodexlyClient, "resolvePendingRequest">;
-export type CodexlyWorkbenchClient = CodexlyReadClient &
-  CodexlyBackgroundTerminalClient &
-  CodexlyGitStatusClient &
-  CodexlyGitHistoryClient &
-  CodexlyGitCommitReviewClient &
-  CodexlyGitMutationClient &
-  CodexlyFileTreeClient &
-  CodexlyProjectFileSearchClient &
-  CodexlyProjectDirectoryClient &
-  CodexlyProjectOpenClient &
-  CodexlyRuntimeClient &
-  CodexlyMutationClient &
-  CodexlyPendingRequestClient &
-  CodexlyCapabilitiesClient &
-  CodexlyModelsClient &
-  CodexlyAppUpdateClient &
-  CodexlyMcpServersClient &
-  CodexlyMcpServersMutationClient &
-  CodexlySkillsClient &
-  CodexlySettingsClient &
-  CodexlySourceFileClient;
-export type CodexlySnapshotClient = Pick<CodexlyClient, "readTask">;
+export type NativePendingRequestClient = Pick<NativeClient, "resolvePendingRequest">;
+export type NativeWorkbenchClient = NativeReadClient &
+  NativeBackgroundTerminalClient &
+  NativeGitStatusClient &
+  NativeGitHistoryClient &
+  NativeGitCommitReviewClient &
+  NativeGitMutationClient &
+  NativeFileTreeClient &
+  NativeProjectFileSearchClient &
+  NativeProjectDirectoryClient &
+  NativeProjectOpenClient &
+  NativeRuntimeClient &
+  NativeMutationClient &
+  NativePendingRequestClient &
+  NativeCapabilitiesClient &
+  NativeModelsClient &
+  NativeAppUpdateClient &
+  NativeMcpServersClient &
+  NativeMcpServersMutationClient &
+  NativeSkillsClient &
+  NativeSettingsClient &
+  NativeSourceFileClient;
+export type NativeSnapshotClient = Pick<NativeClient, "readTask">;
 
 export const PROJECT_TASK_PAGE_SIZE = 5;
 export const ARCHIVED_TASK_PAGE_SIZE = 20;
@@ -139,7 +141,7 @@ export function taskQueueQueryKey(projectId: string, taskId: string) {
 }
 
 // 左栏运行时直接调用 Rust/Tauri，保留现有视图 Client 契约以避免组件交互漂移。
-export const codexlyClient = new TauriSidebarClient();
+export const nativeClient = new TauriSidebarClient();
 
 export type ProjectTaskInfiniteData = InfiniteData<AgentTaskPage, string | undefined>;
 export type TaskTitleSnapshot = Pick<

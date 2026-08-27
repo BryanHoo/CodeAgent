@@ -58,6 +58,23 @@ pub struct ProjectDirectoryListing {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct HostFileEntry {
+    pub name: String,
+    pub path: String,
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostFileListing {
+    pub entries: Vec<HostFileEntry>,
+    pub parent_path: Option<String>,
+    pub path: String,
+    pub roots: Vec<FilesystemRoot>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentTask {
     pub id: String,

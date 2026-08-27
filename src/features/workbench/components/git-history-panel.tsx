@@ -6,15 +6,15 @@ import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { cn } from "../../../shared/lib/utils.js";
 import {
-  codexlyClient,
+  nativeClient,
   projectGitHistoryInfiniteQueryOptions,
-  type CodexlyGitCommitReviewClient,
-  type CodexlyGitHistoryClient,
+  type NativeGitCommitReviewClient,
+  type NativeGitHistoryClient,
 } from "../../projects/project-queries.js";
 import { GitCommitReview } from "./git-commit-review.js";
 import { GitHistoryContent, GitHistoryList } from "./git-history-list.js";
 
-type GitHistoryClient = CodexlyGitHistoryClient & CodexlyGitCommitReviewClient;
+type GitHistoryClient = NativeGitHistoryClient & NativeGitCommitReviewClient;
 
 type QueriedGitHistoryPanelProps = Readonly<{
   active: boolean;
@@ -61,7 +61,7 @@ function getPanelId(index: number): string {
 }
 
 export function GitHistoryPanel({
-  client = codexlyClient,
+  client = nativeClient,
   projectId,
   rootPath,
 }: Readonly<{ client?: GitHistoryClient; projectId: string; rootPath: string }>) {

@@ -22,10 +22,10 @@ import type {
   PromptInputAttachment,
 } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
-import type { CodexlyMutationClient } from "../../projects/project-queries.js";
+import type { NativeMutationClient } from "../../projects/project-queries.js";
 import type {
-  CodexlyGitMutationClient,
-  CodexlyProjectFileSearchClient,
+  NativeGitMutationClient,
+  NativeProjectFileSearchClient,
 } from "../../projects/project-query-contracts.js";
 
 export type ComposerMode = "goal" | "plan";
@@ -55,16 +55,16 @@ export type WorkbenchComposerHandle = Readonly<{
 export type WorkbenchComposerProps = Readonly<{
   composerRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
-  client: CodexlyMutationClient &
+  client: NativeMutationClient &
     Pick<
-      CodexlyGitMutationClient,
+      NativeGitMutationClient,
       | "createProjectBranch"
       | "createProjectWorktree"
       | "listProjectWorktrees"
       | "switchProjectBranch"
       | "switchProjectWorktree"
     > &
-    CodexlyProjectFileSearchClient;
+    NativeProjectFileSearchClient;
   fastModeAvailable: boolean;
   fastModeDefault: boolean;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];

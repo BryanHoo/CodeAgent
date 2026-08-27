@@ -1,7 +1,9 @@
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
-use super::{archive_task, delete_task, list_tasks, pin_task, rename_task, unarchive_task};
+use super::{
+    archive_task, delete_task, list_tasks, pin_task, rename_task, unarchive_task, unsubscribe_task,
+};
 use crate::{
     domain::sidebar::ListTasksInput, infrastructure::codex::connection::AppServerConnection,
 };
@@ -37,6 +39,7 @@ async fn list_tasks_should_filter_and_map_native_threads() {
                     "preview": "ignored",
                     "projectId": "project-a",
                     "section": {"id": PINNED_SECTION_ID, "name": "Pinned", "appearance": null},
+                    "status": {"type": "idle"},
                     "updatedAt": 1735689600
                 }],
                 "nextCursor": "cursor-b",
@@ -79,8 +82,85 @@ fn task_thread(title: &str, pinned: bool) -> Value {
         "preview": "preview",
         "projectId": "project-a",
         "section": pinned.then(|| json!({"id": PINNED_SECTION_ID, "name": "Pinned", "appearance": null})),
+        "status": {"type": "idle"},
         "updatedAt": 1735689600
     })
+}
+
+#[tokio::test]
+async fn unsubscribe_task_should_preserve_active_runtime_and_release_idle_thread() {
+    let (client, server) = duplex(16 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+
+    let server_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(server_reader).lines();
+        let cases = [
+            ("thread/read", json!({"thread": task_thread("Idle", false)})),
+            (
+                "thread/backgroundTerminals/list",
+                json!({"data": [], "nextCursor": null}),
+            ),
+            ("thread/unsubscribe", json!({"status": "unsubscribed"})),
+        ];
+        for (method, result) in cases {
+            let request: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(request["method"], method);
+            assert_eq!(request["params"]["threadId"], "thread-a");
+            server_writer
+                .write_all(
+                    format!(
+                        "{}\n",
+                        json!({"id": request["id"].clone(), "result": result})
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        }
+    });
+
+    let response = unsubscribe_task(&connection, "project-a", "thread-a")
+        .await
+        .expect("idle thread should unsubscribe");
+    assert_eq!(response.status, "unsubscribed");
+    assert_eq!(response.task_id, "thread-a");
+    server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn unsubscribe_task_should_report_busy_without_releasing_active_thread() {
+    let (client, server) = duplex(8 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+
+    let server_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(server_reader).lines();
+        let request: Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(request["method"], "thread/read");
+        let mut thread = task_thread("Running", false);
+        thread["status"] = json!({"type": "active", "activeFlags": []});
+        server_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({"id": request["id"].clone(), "result": {"thread": thread}})
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+
+    let response = unsubscribe_task(&connection, "project-a", "thread-a")
+        .await
+        .expect("active thread should report busy");
+    assert_eq!(response.status, "busy");
+    server_task.await.unwrap();
 }
 
 #[tokio::test]

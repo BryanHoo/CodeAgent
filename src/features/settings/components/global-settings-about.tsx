@@ -59,7 +59,7 @@ export function GlobalSettingsAbout({
         </div>
       ) : (
         <>
-          <SettingsField label={t("about.codexlyVersion")}>
+          <SettingsField label={t("about.codeagentVersion")}>
             <span className="font-mono text-body-small text-foreground">{appInfo.appVersion}</span>
           </SettingsField>
           <SettingsField label={t("about.codexVersion")}>
@@ -70,12 +70,12 @@ export function GlobalSettingsAbout({
           <SettingsField label={t("about.github")}>
             <Button asChild className="justify-self-start" size="sm" variant="link">
               <a
-                href="https://github.com/BryanHoo/Codexly"
+                href="https://github.com/BryanHoo/Native"
                 rel="noopener noreferrer"
                 target="_blank"
               >
                 <GitFork aria-hidden="true" data-icon="inline-start" />
-                BryanHoo/Codexly
+                BryanHoo/Native
               </a>
             </Button>
           </SettingsField>

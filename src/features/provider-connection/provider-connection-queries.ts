@@ -1,4 +1,4 @@
-import type { CodexlyClient } from "@/client/index.js";
+import type { NativeClient } from "@/platform/native-client-contract.js";
 import type {
   AgentProviderConnectionStatus,
   ConfigureCustomProviderRequest,
@@ -6,7 +6,7 @@ import type {
 } from "@/protocol/index.js";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
-import { codexlyClient } from "../projects/project-query-contracts.js";
+import { nativeClient } from "../projects/project-query-contracts.js";
 
 export const providerConnectionQueryKey = ["provider-connection"] as const;
 
@@ -16,9 +16,9 @@ export function providerConnectionRefetchInterval(
   return status?.state === "pending" ? 1_000 : false;
 }
 
-type ProviderConnectionReadClient = Pick<CodexlyClient, "getProviderConnection">;
+type ProviderConnectionReadClient = Pick<NativeClient, "getProviderConnection">;
 type ProviderConnectionMutationClient = Pick<
-  CodexlyClient,
+  NativeClient,
   | "cancelProviderLogin"
   | "configureCustomProvider"
   | "logoutProvider"
@@ -26,7 +26,7 @@ type ProviderConnectionMutationClient = Pick<
 >;
 
 export function providerConnectionQueryOptions(
-  client: ProviderConnectionReadClient = codexlyClient,
+  client: ProviderConnectionReadClient = nativeClient,
 ) {
   return queryOptions({
     queryFn: ({ signal }) => client.getProviderConnection({ signal }),
@@ -48,7 +48,7 @@ export async function invalidateProviderConnectionQueries(queryClient: QueryClie
 
 export function startOfficialProviderLoginMutationOptions(
   queryClient: QueryClient,
-  client: Pick<ProviderConnectionMutationClient, "startOfficialProviderLogin"> = codexlyClient,
+  client: Pick<ProviderConnectionMutationClient, "startOfficialProviderLogin"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: () => client.startOfficialProviderLogin(),
@@ -60,7 +60,7 @@ export function startOfficialProviderLoginMutationOptions(
 
 export function cancelProviderLoginMutationOptions(
   queryClient: QueryClient,
-  client: Pick<ProviderConnectionMutationClient, "cancelProviderLogin"> = codexlyClient,
+  client: Pick<ProviderConnectionMutationClient, "cancelProviderLogin"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: (loginId: string) => client.cancelProviderLogin(loginId),
@@ -72,7 +72,7 @@ export function cancelProviderLoginMutationOptions(
 
 export function logoutProviderMutationOptions(
   queryClient: QueryClient,
-  client: Pick<ProviderConnectionMutationClient, "logoutProvider"> = codexlyClient,
+  client: Pick<ProviderConnectionMutationClient, "logoutProvider"> = nativeClient,
 ) {
   return mutationOptions({
     mutationFn: () => client.logoutProvider(),
@@ -85,7 +85,7 @@ export function logoutProviderMutationOptions(
 export async function configureCustomProvider(
   input: ConfigureCustomProviderRequest,
   queryClient: QueryClient,
-  client: Pick<ProviderConnectionMutationClient, "configureCustomProvider"> = codexlyClient,
+  client: Pick<ProviderConnectionMutationClient, "configureCustomProvider"> = nativeClient,
 ): Promise<ConfigureCustomProviderResponse> {
   // Secret 只存在于当前调用栈，不作为 TanStack Mutation 变量进入缓存。
   const result = await client.configureCustomProvider(input);

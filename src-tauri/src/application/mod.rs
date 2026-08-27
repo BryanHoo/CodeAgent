@@ -1,4 +1,13 @@
+pub mod attachment_commands;
+pub mod background_commands;
+pub mod catalog_commands;
 pub mod commands;
 pub mod error;
+pub mod open_commands;
+mod pet_assets;
+pub mod pet_commands;
 pub mod sidebar_commands;
 pub mod state;
+mod turn_waiters;
+pub mod workflow_commands;
+pub mod workspace_commands;

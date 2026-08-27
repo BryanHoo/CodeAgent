@@ -1,10 +1,9 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { buildProjectImageFileUrl } from "@/client/index.js";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { ProjectSourceFile } from "@/protocol/index.js";
 import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
 
-import type { CodexlyWorkbenchClient } from "../../projects/project-queries.js";
+import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
 import {
   getMarkdownPreviewPreferenceStorage,
   readMarkdownPreviewPreference,
@@ -32,7 +31,7 @@ import { useTranslation } from "../../../i18n/i18n.js";
 export { getCodeLanguage } from "../../../shared/components/agent/code-languages.js";
 
 type ProjectSourcePanelProps = Readonly<{
-  client: CodexlyWorkbenchClient;
+  client: NativeWorkbenchClient;
   onClose?: () => void;
   previewKind: "image" | "source";
   projectId: string;
@@ -195,6 +194,13 @@ export function ProjectSourcePanel({
     queryKey: ["projects", projectId, rootPath ?? null, "source-file", reference.path] as const,
     staleTime: 30_000,
   });
+  const imageQuery = useQuery({
+    enabled: previewKind === "image",
+    queryFn: ({ signal }) =>
+      client.cacheProjectImage(projectId, rootPath, reference.path, { signal }),
+    queryKey: ["projects", projectId, rootPath ?? null, "image-file", reference.path] as const,
+    staleTime: 30_000,
+  });
   const sourcePages = sourceQuery.data?.pages;
   const fetchNextSourcePage = sourceQuery.fetchNextPage;
   const hasNextSourcePage = sourceQuery.hasNextPage;
@@ -206,7 +212,7 @@ export function ProjectSourcePanel({
   const sourcePath = sourceData?.path ?? reference.path;
   const sourceContent = sourceData?.content ?? "";
   const fileName = getFileName(sourcePath);
-  const imageUrl = buildProjectImageFileUrl("", projectId, reference.path, rootPath);
+  const imageUrl = imageQuery.data ?? "";
   const sourceLanguage = getCodeLanguage(sourcePath);
   const isMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
   const canRenderMarkdown = isMarkdown && sourceData?.nextCursor === null;
@@ -283,7 +289,11 @@ export function ProjectSourcePanel({
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
           <SourceHeader {...headerProps} />
           <div className="grid min-h-0 place-items-center overflow-hidden p-4 sm:p-6">
-            {imageLoadFailed ? (
+            {imageQuery.isPending ? (
+              <div className="text-body-small text-muted-foreground" role="status">
+                {t("projectDialog.loadingSource")}
+              </div>
+            ) : imageLoadFailed || imageQuery.error !== null ? (
               <div className="text-body-small text-danger" role="alert">
                 {t("projectDialog.loadImageError")}
               </div>

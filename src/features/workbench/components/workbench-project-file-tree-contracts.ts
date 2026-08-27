@@ -1,10 +1,10 @@
 import type { ProjectFileSearchEntry, ProjectOpenApp, ProjectOpenAppId } from "@/protocol/index.js";
 
 import type { AgentFileChange } from "../../diff/file-change.js";
-import type { CodexlyFileTreeClient } from "../../projects/project-query-contracts.js";
+import type { NativeFileTreeClient } from "../../projects/project-query-contracts.js";
 
 export type WorkbenchProjectFileTreeProps = Readonly<{
-  client: CodexlyFileTreeClient;
+  client: NativeFileTreeClient;
   expandedPaths: ReadonlySet<string>;
   fileChangesByPath: ReadonlyMap<string, AgentFileChange>;
   onExpandedPathsChange: (paths: Set<string>) => void;
