@@ -1,0 +1,25 @@
+# Tauri 后端开发规格
+
+## 范围
+
+适用于 `src-tauri/` Rust crate，负责桌面运行时、Tauri 命令与 WebView IPC 契约。
+
+## 目录边界
+
+- `src-tauri/src/application/`：命令入口、应用状态与错误转换
+- `src-tauri/src/domain/`：稳定的 Rust 领域模型和序列化契约
+- `src-tauri/src/lib.rs`：Tauri Builder 装配与命令注册
+- `src-tauri/src/main.rs`：桌面二进制入口
+
+## 规格索引
+
+| 文档 | 内容 |
+|---|---|
+| [IPC 契约](./ipc-contracts.md) | 命令、Channel 与序列化约束 |
+| [质量规范](./quality-guidelines.md) | Rust 测试、格式化与静态检查 |
+
+## 开发前检查
+
+- 阅读 [.superwork/spec/guides/index.md](../../guides/index.md)
+- 涉及 WebView 类型时同步阅读 [Web 前端类型安全](../../root/frontend/type-safety.md)
+- 不授予通用 shell 或 opener 权限，新增能力时使用最小权限
