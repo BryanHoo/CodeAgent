@@ -1,122 +1,185 @@
 import {
+  ArchiveIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  EllipsisIcon,
   FolderIcon,
   MessageSquareTextIcon,
+  PencilIcon,
   PinIcon,
   PlusIcon,
   SearchIcon,
   SendIcon,
   Settings2Icon,
+  Trash2Icon,
 } from "lucide-react";
+import { DropdownMenu } from "radix-ui";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
+import type { WorkbenchDispatch } from "@/app/app-shell";
+import { ALL_TASKS, PROJECTS, type WorkbenchTask } from "@/app/workbench-data";
+import type { WorkbenchState } from "@/app/workbench-state";
 import { Button } from "@/components/ui/button";
 
-const PINNED_TASKS = [
-  { title: "根据 Codex 官方文档完善工作台布局", time: "1d" },
-  { title: "阅读项目结构并整理组件规范", time: "1d" },
-];
+type TaskSidebarProps = Readonly<{ dispatch: WorkbenchDispatch; state: WorkbenchState }>;
 
-const PROJECTS = [
-  {
-    name: "CodeAgent",
-    sessions: [
-      { title: "实现 Codex 风格工作台界面", time: "2m", active: true },
-      { title: "梳理 Tauri 桌面端工程结构", time: "9m" },
-      { title: "优化前端状态管理与类型定义", time: "1h" },
-    ],
-  },
-  {
-    name: "superwork",
-    sessions: [
-      { title: "更新技能路由和执行规范", time: "2h" },
-      { title: "补充工作流校验文档", time: "3h" },
-    ],
-  },
-  { name: "FeedFuse", sessions: [] },
-  { name: "demo-page", sessions: [] },
-];
+export function TaskSidebar({ dispatch, state }: TaskSidebarProps) {
+  const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(
+    () => new Set(["codeagent", "superwork"]),
+  );
+  const normalizedQuery = state.searchQuery.trim().toLocaleLowerCase();
+  const visibleTaskIds = useMemo(
+    () =>
+      new Set(
+        ALL_TASKS.filter((task) => task.title.toLocaleLowerCase().includes(normalizedQuery)).map(
+          (task) => task.id,
+        ),
+      ),
+    [normalizedQuery],
+  );
 
-export function TaskSidebar() {
+  const toggleProject = (projectId: string) => {
+    setExpandedProjects((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
+
   return (
-    <aside className="task-sidebar" id="task-sidebar" aria-label="任务导航">
-      <div className="sidebar-topbar">
-        <div className="app-brand">
-          <span className="brand-symbol" aria-hidden="true">
-            <i>&gt;</i>_
-          </span>
-          <strong>CodeAgent</strong>
-        </div>
-      </div>
+    <aside className="workbench-sidebar" id="task-sidebar" aria-label="任务导航">
+      <header className="sidebar-brand-row">
+        <img alt="CodeAgent" height="28" src="/brand/codeagent-logo.svg" width="124" />
+      </header>
 
-      <div className="sidebar-actions">
-        <label className="search-control">
+      <nav aria-label="Agent 导航" className="sidebar-primary-nav">
+        <label className="sidebar-search">
           <SearchIcon aria-hidden="true" />
-          <input aria-label="搜索任务" placeholder="搜索任务" readOnly />
+          <input
+            aria-label="搜索任务"
+            onChange={(event) => dispatch({ query: event.currentTarget.value, type: "setSearch" })}
+            placeholder="搜索任务"
+            value={state.searchQuery}
+          />
           <kbd>⌘ K</kbd>
         </label>
-        <button className="new-task-control" type="button">
-          <SendIcon aria-hidden="true" />
-          <span>新建任务</span>
-          <kbd>⌘ N</kbd>
+        <button className="sidebar-new-task" onClick={() => dispatch({ taskId: "draft", type: "selectTask" })} type="button">
+          <SendIcon aria-hidden="true" /><span>新建任务</span><kbd>⌘ N</kbd>
         </button>
-      </div>
+      </nav>
 
-      <div className="sidebar-scroll-area">
-        <section className="task-section" aria-labelledby="pinned-heading">
-          <h2 id="pinned-heading">已固定</h2>
-          <div className="task-list">
-            {PINNED_TASKS.map((task) => (
-              <button className="task-row" key={task.title} type="button">
-                <PinIcon aria-hidden="true" />
-                <span>{task.title}</span>
-                <time>{task.time}</time>
-              </button>
+      <div className="sidebar-tree-scroll">
+        {normalizedQuery.length === 0 ? (
+          <section className="sidebar-section" aria-labelledby="pinned-heading">
+            <h2 id="pinned-heading">已固定</h2>
+            {ALL_TASKS.filter((task) => task.pinned === true).map((task) => (
+              <TaskRow
+                dispatch={dispatch}
+                key={`pinned:${task.id}`}
+                selected={state.selectedTaskId === task.id}
+                task={task}
+                withPin
+              />
             ))}
-          </div>
-        </section>
+          </section>
+        ) : null}
 
-        <section className="task-section project-section" aria-labelledby="projects-heading">
-          <div className="section-heading-row">
+        <section className="sidebar-section project-tree" aria-labelledby="projects-heading">
+          <div className="sidebar-section-heading">
             <h2 id="projects-heading">项目</h2>
-            <Button aria-label="添加项目" title="添加项目" size="icon" variant="ghost">
-              <PlusIcon aria-hidden="true" />
-            </Button>
+            <Button aria-label="添加项目" onClick={() => dispatch({ dialog: "project", type: "openDialog" })} size="icon" title="添加项目" variant="ghost"><PlusIcon aria-hidden="true" /></Button>
+          </div>
+          <ProjectHeading expanded onClick={() => undefined} name="临时任务" temporary />
+          <div className="project-task-list">
+            <button className={state.selectedTaskId === "draft" ? "sidebar-task-row active" : "sidebar-task-row"} onClick={() => dispatch({ taskId: "draft", type: "selectTask" })} type="button"><MessageSquareTextIcon aria-hidden="true" /><span>新任务草稿</span></button>
           </div>
 
-          <button className="task-row temporary-row" type="button">
-            <MessageSquareTextIcon aria-hidden="true" />
-            <span>临时任务</span>
-          </button>
-
-          <div className="project-list">
-            {PROJECTS.map((project) => (
-              <div className="project-group" key={project.name}>
-                <button className="project-name" type="button">
-                  <FolderIcon aria-hidden="true" />
-                  <span>{project.name}</span>
-                </button>
-                {project.sessions.map((session) => (
-                  <button
-                    className={`session-row${session.active ? " session-row-active" : ""}`}
-                    key={session.title}
-                    type="button"
-                  >
-                    <span>{session.title}</span>
-                    <time>{session.time}</time>
-                  </button>
-                ))}
+          {PROJECTS.map((project) => {
+            const expanded = expandedProjects.has(project.id);
+            const tasks = project.tasks.filter((task) => visibleTaskIds.has(task.id));
+            if (normalizedQuery.length > 0 && tasks.length === 0) return null;
+            return (
+              <div className="project-group" key={project.id}>
+                <ProjectHeading expanded={expanded} name={project.name} onClick={() => toggleProject(project.id)} />
+                {expanded ? (
+                  <div className="project-task-list">
+                    {tasks.map((task) => (
+                      <TaskRow
+                        dispatch={dispatch}
+                        key={task.id}
+                        selected={state.selectedTaskId === task.id}
+                        task={task}
+                      />
+                    ))}
+                    {tasks.length === 0 ? <p className="sidebar-empty">暂无任务</p> : null}
+                  </div>
+                ) : null}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </section>
       </div>
 
       <footer className="sidebar-footer">
-        <button className="settings-control" type="button">
-          <Settings2Icon aria-hidden="true" />
-          <span>设置</span>
-          <span className="version-number">v0.6.0</span>
-        </button>
+        <button onClick={() => dispatch({ dialog: "settings", type: "openDialog" })} type="button"><Settings2Icon aria-hidden="true" /><span>设置</span><small>v0.1.0 · <i className="connection-dot" /> 在线</small></button>
       </footer>
     </aside>
+  );
+}
+
+function ProjectHeading({
+  expanded,
+  name,
+  onClick,
+  temporary = false,
+}: Readonly<{ expanded: boolean; name: string; onClick: () => void; temporary?: boolean }>) {
+  return (
+    <div className="project-heading-row">
+      <button aria-expanded={expanded} onClick={onClick} type="button">
+        {expanded ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />}
+        {temporary ? <MessageSquareTextIcon aria-hidden="true" /> : <FolderIcon aria-hidden="true" />}
+        <span>{name}</span>
+      </button>
+      <Button aria-label={`在 ${name} 中新建任务`} size="icon" title="新建任务" variant="ghost"><PlusIcon aria-hidden="true" /></Button>
+    </div>
+  );
+}
+
+function TaskRow({
+  dispatch,
+  selected,
+  task,
+  withPin = false,
+}: Readonly<{
+  dispatch: WorkbenchDispatch;
+  selected: boolean;
+  task: WorkbenchTask;
+  withPin?: boolean;
+}>) {
+  return (
+    <div className="sidebar-task-wrap">
+      <button
+        aria-current={selected ? "page" : undefined}
+        className={selected ? "sidebar-task-row active" : "sidebar-task-row"}
+        onClick={() => dispatch({ taskId: task.id, type: "selectTask" })}
+        type="button"
+      >
+        {withPin ? <PinIcon aria-hidden="true" /> : null}
+        <span>{task.title}</span>
+        <span className={`task-status task-status--${task.status}`} title={task.status} />
+        <time>{task.time}</time>
+      </button>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild><Button aria-label={`打开任务操作：${task.title}`} className="task-action-trigger" size="icon" variant="ghost"><EllipsisIcon aria-hidden="true" /></Button></DropdownMenu.Trigger>
+        <DropdownMenu.Portal><DropdownMenu.Content align="end" className="task-action-menu" sideOffset={3}>
+          <DropdownMenu.Item onSelect={() => dispatch({ dialog: "task", type: "openDialog" })}><PencilIcon aria-hidden="true" />重命名</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => toast.success(task.pinned === true ? "已取消固定任务" : "已固定任务")}><PinIcon aria-hidden="true" />{task.pinned === true ? "取消固定" : "固定"}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => dispatch({ dialog: "archived", type: "openDialog" })}><ArchiveIcon aria-hidden="true" />归档</DropdownMenu.Item>
+          <DropdownMenu.Item className="danger" onSelect={() => toast.info("前端演示不会删除本地任务")}><Trash2Icon aria-hidden="true" />删除</DropdownMenu.Item>
+        </DropdownMenu.Content></DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
   );
 }

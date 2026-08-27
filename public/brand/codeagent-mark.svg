@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img">
+  <title>CodeAgent</title>
+  <rect width="64" height="64" rx="14" fill="#171717" />
+  <!-- 提示符表达 Coding Agent，蓝色光标作为产品识别。 -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="5">
+    <path d="m19 24 8 8-8 8" stroke="#ffffff" />
+    <path d="M34 40h12" stroke="#339cff" />
+  </g>
+</svg>

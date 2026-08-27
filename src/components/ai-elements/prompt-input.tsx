@@ -4,6 +4,7 @@ import type {
   HTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
+import { forwardRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -26,19 +27,35 @@ export function PromptInputBody({ className, ...props }: HTMLAttributes<HTMLDivE
   return <div className={cn("prompt-input-body", className)} data-slot="prompt-input-body" {...props} />;
 }
 
-export function PromptInputTextarea({
-  className,
-  ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export const PromptInputTextarea = forwardRef<
+  HTMLTextAreaElement,
+  TextareaHTMLAttributes<HTMLTextAreaElement>
+>(function PromptInputTextarea({ className, onKeyDown, ...props }, ref) {
   return (
     <textarea
       aria-label="任务描述"
       className={cn("prompt-input-textarea", className)}
       data-slot="prompt-input-textarea"
+      onKeyDown={(event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+        onKeyDown?.(event);
+        if (
+          !event.defaultPrevented &&
+          event.key === "Enter" &&
+          !event.shiftKey &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.nativeEvent.isComposing
+        ) {
+          event.preventDefault();
+          event.currentTarget.form?.requestSubmit();
+        }
+      }}
+      ref={ref}
       {...props}
     />
   );
-}
+});
 
 export function PromptInputFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("prompt-input-footer", className)} data-slot="prompt-input-footer" {...props} />;
