@@ -1,0 +1,34 @@
+[package]
+name = "codeagent"
+version = "0.1.0"
+description = "CodeAgent desktop runtime"
+edition = "2024"
+rust-version = "1.97"
+
+[lib]
+name = "codeagent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+tauri = { version = "2.11.5", features = [] }
+thiserror = "2.0.20"
+
+[dev-dependencies]
+serde_json = "1.0.149"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = "s"
+panic = "abort"
+strip = true
