@@ -40,13 +40,15 @@ pub async fn update_global_settings(
     settings: Value,
 ) -> Result<Value, ConnectionError> {
     validate_global_settings(&settings)?;
-    let private = json!({
+    let mut private = json!({
         "commitMessageModel": settings["commitMessageModel"],
         "commitMessagePrompt": settings["commitMessagePrompt"],
         "defaultOpenAppId": settings["defaultOpenAppId"],
         "followUpBehavior": settings["followUpBehavior"],
         "pet": settings["pet"],
     });
+    // TOML 不支持 null，写入 Codex 配置前移除所有空的可选字段。
+    remove_null_object_fields(&mut private);
     write_config(
         connection,
         vec![
@@ -152,6 +154,7 @@ fn map_global_settings(config: &Value) -> Value {
         .filter(|value| value.is_object())
         .cloned()
         .unwrap_or_else(|| json!({}));
+    let pet = private.get("pet").filter(|value| value.is_object());
     json!({
         "approvalPolicy": config.get("approval_policy").cloned().unwrap_or_else(|| json!("on-request")),
         "approvalsReviewer": config.get("approvals_reviewer").and_then(Value::as_str).unwrap_or("user"),
@@ -161,10 +164,22 @@ fn map_global_settings(config: &Value) -> Value {
         "fastMode": config.pointer("/features/fast_mode").and_then(Value::as_bool).unwrap_or(false),
         "followUpBehavior": private.get("followUpBehavior").and_then(Value::as_str).unwrap_or("queue"),
         "model": config.get("model").and_then(Value::as_str).unwrap_or("gpt-5.6-sol"),
-        "pet": private.get("pet").cloned().unwrap_or_else(|| json!({"enabled": false, "selectedPetId": null})),
+        "pet": {
+            "enabled": pet.and_then(|value| value.get("enabled")).and_then(Value::as_bool).unwrap_or(false),
+            "selectedPetId": pet.and_then(|value| value.get("selectedPetId")).and_then(Value::as_str),
+        },
         "reasoningEffort": config.get("model_reasoning_effort").and_then(Value::as_str).unwrap_or("high"),
         "sandboxMode": config.get("sandbox_mode").and_then(Value::as_str).unwrap_or("workspace-write"),
     })
+}
+
+fn remove_null_object_fields(value: &mut Value) {
+    if let Value::Object(object) = value {
+        object.retain(|_, child| !child.is_null());
+        for child in object.values_mut() {
+            remove_null_object_fields(child);
+        }
+    }
 }
 
 fn map_project_defaults(config: &Value) -> Value {

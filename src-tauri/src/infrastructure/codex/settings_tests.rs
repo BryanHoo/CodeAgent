@@ -20,8 +20,7 @@ async fn global_settings_should_read_effective_config_and_write_atomically() {
             "sandbox_mode": "read-only", "features": {"fast_mode": true},
             "desktop": {"codeagent": {"global": {
                 "commitMessageModel": "gpt-commit", "commitMessagePrompt": "Summarize",
-                "defaultOpenAppId": "vscode", "followUpBehavior": "steer",
-                "pet": {"enabled": true, "selectedPetId": "cat"}
+                "followUpBehavior": "steer", "pet": {"enabled": true}
             }}}
         });
         server_writer.write_all(format!("{}\n", json!({"id": read["id"].clone(), "result": {"config": config, "origins": {}, "layers": null}})).as_bytes()).await.unwrap();
@@ -41,6 +40,12 @@ async fn global_settings_should_read_effective_config_and_write_atomically() {
                 .iter()
                 .any(|edit| edit["keyPath"] == "desktop.codeagent.global")
         );
+        let private = &edits
+            .iter()
+            .find(|edit| edit["keyPath"] == "desktop.codeagent.global")
+            .unwrap()["value"];
+        assert_eq!(private.get("defaultOpenAppId"), None);
+        assert_eq!(private["pet"].get("selectedPetId"), None);
         server_writer
             .write_all(format!("{}\n", json!({"id": write["id"].clone(), "result": {}})).as_bytes())
             .await
@@ -51,6 +56,11 @@ async fn global_settings_should_read_effective_config_and_write_atomically() {
     assert_eq!(current["settings"]["model"], "gpt-test");
     assert_eq!(current["settings"]["fastMode"], true);
     assert_eq!(current["settings"]["followUpBehavior"], "steer");
+    assert_eq!(current["settings"]["defaultOpenAppId"], Value::Null);
+    assert_eq!(
+        current["settings"]["pet"],
+        json!({"enabled": true, "selectedPetId": null})
+    );
 
     let mut next = current["settings"].clone();
     next["model"] = json!("gpt-next");
