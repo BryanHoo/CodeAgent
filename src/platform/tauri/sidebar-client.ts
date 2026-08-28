@@ -52,6 +52,11 @@ import type {
   UpdateAgentQueuedSubmissionResponse,
 } from "@/protocol/index.js";
 
+type StartTurnMutationOptions = MutationOptions &
+  Readonly<{
+    threadAlreadyLoaded?: boolean;
+  }>;
+
 import type { TauriClientOptions } from "./native-client.js";
 import { TauriRuntimeClient } from "./runtime-client.js";
 
@@ -265,9 +270,16 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     taskId: string,
     input: AgentPromptInput,
     options: AgentTurnOptions,
-    _mutationOptions: MutationOptions = {},
+    mutationOptions: StartTurnMutationOptions = {},
   ): Promise<StartAgentTurnResponse> {
-    return this.call("start_turn", { input, options, projectId, taskId });
+    return this.call("start_turn", {
+      input,
+      options,
+      projectId,
+      // thread/start 已把新线程载入当前 app-server，首回合不能再次 resume。
+      resumeTask: mutationOptions.threadAlreadyLoaded !== true,
+      taskId,
+    });
   }
 
   public async steerTurn(

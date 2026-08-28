@@ -116,7 +116,9 @@ describe("TauriSidebarClient", () => {
     } as const;
 
     await client.startTask("project-a");
-    await client.startTurn("project-a", "thread-a", input, options);
+    await client.startTurn("project-a", "thread-a", input, options, {
+      threadAlreadyLoaded: true,
+    });
     await client.steerTurn("project-a", "thread-a", "turn-a", input);
     await client.interruptTurn("project-a", "thread-a", "turn-a");
     await expect(client.unsubscribeTask("project-a", "thread-a")).resolves.toEqual({
@@ -129,6 +131,7 @@ describe("TauriSidebarClient", () => {
       input,
       options,
       projectId: "project-a",
+      resumeTask: false,
       taskId: "thread-a",
     });
     expect(invoke).toHaveBeenNthCalledWith(3, "steer_turn", {

@@ -193,8 +193,12 @@ pub async fn start_turn(
     task_id: String,
     input: AgentPromptInput,
     options: AgentTurnOptions,
+    resume_task_before_turn: bool,
 ) -> Result<StartAgentTurnResponse, ConnectionError> {
-    resume_task(connection, &project_id, &task_id).await?;
+    // 新线程已由 thread/start 载入，但首个 Turn 前尚无 rollout，不能立即 resume。
+    if resume_task_before_turn {
+        resume_task(connection, &project_id, &task_id).await?;
+    }
 
     let response: NativeTurnResponse = connection
         .request(

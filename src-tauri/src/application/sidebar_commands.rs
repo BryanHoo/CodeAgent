@@ -162,6 +162,7 @@ pub async fn start_turn(
     task_id: String,
     mut input: AgentPromptInput,
     options: AgentTurnOptions,
+    resume_task: bool,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let app_data = app
@@ -181,9 +182,11 @@ pub async fn start_turn(
         if !input.attachments.is_empty() || !input.skills.is_empty() {
             return Err(AppError::CodexRequestFailed);
         }
-        codex::resume_task(&connection, &project_id, &task_id)
-            .await
-            .map_err(|_| AppError::CodexRequestFailed)?;
+        if resume_task {
+            codex::resume_task(&connection, &project_id, &task_id)
+                .await
+                .map_err(|_| AppError::CodexRequestFailed)?;
+        }
         let (waiter_id, turn_started) = state.register_turn_started(&task_id).await;
         let result = async {
             codex::update_thread_settings(&connection, &task_id, &options)
@@ -214,9 +217,16 @@ pub async fn start_turn(
             "turn": turn,
         }));
     }
-    let mut response = codex::start_turn(&connection, project_id.clone(), task_id, input, options)
-        .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+    let mut response = codex::start_turn(
+        &connection,
+        project_id.clone(),
+        task_id,
+        input,
+        options,
+        resume_task,
+    )
+    .await
+    .map_err(|_| AppError::CodexRequestFailed)?;
     response.checkpoint.sequence = state.project_sequence(&project_id).await;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
