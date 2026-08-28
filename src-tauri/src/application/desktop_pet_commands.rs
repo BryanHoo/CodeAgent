@@ -1,0 +1,348 @@
+use std::{
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
+
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, WebviewWindow};
+use tokio::sync::Mutex;
+
+use super::{
+    desktop_pet_window::{
+        DESKTOP_PET_BUBBLES_LABEL, DESKTOP_PET_EVENT, DESKTOP_PET_LABEL,
+        create_desktop_pet_bubbles_window, create_desktop_pet_window, destroy_desktop_pet_window,
+        drag_pet_position, monitor_bounds, move_pet_position, persist_position,
+        position_desktop_pet_bubbles,
+    },
+    error::AppError,
+};
+
+const DESKTOP_PET_OPEN_TASK_EVENT: &str = "desktop-pet://open-task";
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DesktopPetAnimation {
+    Failed,
+    Idle,
+    Review,
+    Running,
+    Waiting,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopPetState {
+    animation_name: DesktopPetAnimation,
+    local_access: bool,
+    pet_id: String,
+    tasks: Vec<DesktopPetTask>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopPetTask {
+    project_id: String,
+    root_path: Option<String>,
+    status: DesktopPetTaskStatus,
+    task_id: String,
+    task_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum DesktopPetTaskStatus {
+    Completed,
+    Running,
+    Waiting,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct DesktopPetPosition {
+    x: i32,
+    y: i32,
+}
+
+impl From<PhysicalPosition<i32>> for DesktopPetPosition {
+    fn from(position: PhysicalPosition<i32>) -> Self {
+        Self {
+            x: position.x,
+            y: position.y,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopPetTaskOpen {
+    project_id: String,
+    task_id: String,
+}
+
+#[derive(Default)]
+pub struct DesktopPetRuntime {
+    position_generation: AtomicU64,
+    state: Mutex<Option<DesktopPetState>>,
+}
+
+impl DesktopPetRuntime {
+    pub(super) fn schedule_position_persist(
+        &self,
+        app: AppHandle,
+        position: PhysicalPosition<i32>,
+    ) {
+        let generation = self.position_generation.fetch_add(1, Ordering::Relaxed) + 1;
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(180)).await;
+            let runtime = app.state::<DesktopPetRuntime>();
+            if runtime.position_generation.load(Ordering::Relaxed) == generation {
+                let _ = persist_position(&app, position).await;
+            }
+        });
+    }
+}
+
+fn ensure_desktop_pet_window(window: &WebviewWindow) -> Result<(), AppError> {
+    if matches!(
+        window.label(),
+        DESKTOP_PET_LABEL | DESKTOP_PET_BUBBLES_LABEL
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::DesktopPetWindowFailed)
+    }
+}
+
+fn ensure_pet_sprite_window(window: &WebviewWindow) -> Result<(), AppError> {
+    if window.label() == DESKTOP_PET_LABEL {
+        Ok(())
+    } else {
+        Err(AppError::DesktopPetWindowFailed)
+    }
+}
+
+fn state_is_valid(state: &DesktopPetState) -> bool {
+    !state.pet_id.is_empty()
+        && state.pet_id.len() <= 128
+        && state.tasks.len() <= 256
+        && state.tasks.iter().all(|task| {
+            !task.project_id.is_empty()
+                && task.project_id.len() <= 128
+                && !task.task_id.is_empty()
+                && task.task_id.len() <= 128
+                && !task.task_name.is_empty()
+                && task.task_name.len() <= 512
+                && task
+                    .root_path
+                    .as_ref()
+                    .is_none_or(|path| path.len() <= 4096)
+        })
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn sync_desktop_pet(
+    app: AppHandle,
+    runtime: State<'_, DesktopPetRuntime>,
+    state: Option<DesktopPetState>,
+) -> Result<(), AppError> {
+    if state.as_ref().is_some_and(|state| !state_is_valid(state)) {
+        return Err(AppError::DesktopPetWindowFailed);
+    }
+    *runtime.state.lock().await = state.clone();
+
+    let Some(state) = state else {
+        for label in [DESKTOP_PET_LABEL, DESKTOP_PET_BUBBLES_LABEL] {
+            destroy_desktop_pet_window(&app, label).await?;
+        }
+        return Ok(());
+    };
+    let window = match app.get_webview_window(DESKTOP_PET_LABEL) {
+        Some(window) => window,
+        None => create_desktop_pet_window(&app).await?,
+    };
+    window
+        .emit(DESKTOP_PET_EVENT, state.clone())
+        .map_err(|_| AppError::DesktopPetWindowFailed)?;
+
+    if state.tasks.is_empty() {
+        destroy_desktop_pet_window(&app, DESKTOP_PET_BUBBLES_LABEL).await?;
+        return Ok(());
+    }
+    let bubble_window = match app.get_webview_window(DESKTOP_PET_BUBBLES_LABEL) {
+        Some(window) => window,
+        None => create_desktop_pet_bubbles_window(&app).await?,
+    };
+    bubble_window
+        .emit(DESKTOP_PET_EVENT, state)
+        .map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+#[tauri::command]
+pub async fn get_desktop_pet_state(
+    window: WebviewWindow,
+    runtime: State<'_, DesktopPetRuntime>,
+) -> Result<Option<DesktopPetState>, AppError> {
+    ensure_desktop_pet_window(&window)?;
+    Ok(runtime.state.lock().await.clone())
+}
+
+#[tauri::command]
+pub fn get_desktop_pet_position(window: WebviewWindow) -> Result<DesktopPetPosition, AppError> {
+    ensure_pet_sprite_window(&window)?;
+    window
+        .outer_position()
+        .map(DesktopPetPosition::from)
+        .map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+#[tauri::command]
+pub fn show_desktop_pet(window: WebviewWindow) -> Result<(), AppError> {
+    ensure_pet_sprite_window(&window)?;
+    window.show().map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn set_desktop_pet_drag_position(
+    window: WebviewWindow,
+    x: i32,
+    y: i32,
+) -> Result<(), AppError> {
+    ensure_pet_sprite_window(&window)?;
+    let size = window
+        .outer_size()
+        .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    let position = drag_pet_position(PhysicalPosition::new(x, y), &monitor_bounds(&window)?, size);
+    window
+        .set_position(position)
+        .map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn move_desktop_pet(
+    window: WebviewWindow,
+    delta_x: i32,
+    delta_y: i32,
+    reset: bool,
+) -> Result<(), AppError> {
+    ensure_pet_sprite_window(&window)?;
+    if !(-48..=48).contains(&delta_x) || !(-48..=48).contains(&delta_y) {
+        return Err(AppError::DesktopPetWindowFailed);
+    }
+    let size = window
+        .outer_size()
+        .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    let monitors = monitor_bounds(&window)?;
+    let position = if reset {
+        super::desktop_pet_window::resolve_pet_position(None, &monitors, size)
+    } else {
+        move_pet_position(
+            window
+                .outer_position()
+                .map_err(|_| AppError::DesktopPetWindowFailed)?,
+            delta_x,
+            delta_y,
+            &monitors,
+            size,
+        )
+    };
+    window
+        .set_position(position)
+        .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    persist_position(window.app_handle(), position).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn layout_desktop_pet_bubbles(
+    window: WebviewWindow,
+    width: f64,
+    height: f64,
+) -> Result<(), AppError> {
+    if window.label() != DESKTOP_PET_BUBBLES_LABEL
+        || !(80.0..=320.0).contains(&width)
+        || !(24.0..=640.0).contains(&height)
+    {
+        return Err(AppError::DesktopPetWindowFailed);
+    }
+    window
+        .set_size(LogicalSize::new(width.ceil(), height.ceil()))
+        .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    let pet_window = window
+        .app_handle()
+        .get_webview_window(DESKTOP_PET_LABEL)
+        .ok_or(AppError::DesktopPetWindowFailed)?;
+    position_desktop_pet_bubbles(
+        window.app_handle(),
+        pet_window
+            .outer_position()
+            .map_err(|_| AppError::DesktopPetWindowFailed)?,
+    )?;
+    window.show().map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn open_desktop_pet_task(
+    window: WebviewWindow,
+    project_id: String,
+    task_id: String,
+) -> Result<(), AppError> {
+    if window.label() != DESKTOP_PET_BUBBLES_LABEL
+        || project_id.is_empty()
+        || project_id.len() > 128
+        || task_id.is_empty()
+        || task_id.len() > 128
+    {
+        return Err(AppError::DesktopPetWindowFailed);
+    }
+    let main = window
+        .app_handle()
+        .get_webview_window("main")
+        .ok_or(AppError::DesktopPetWindowFailed)?;
+    main.emit(
+        DESKTOP_PET_OPEN_TASK_EVENT,
+        DesktopPetTaskOpen {
+            project_id,
+            task_id,
+        },
+    )
+    .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    main.unminimize()
+        .and_then(|()| main.show())
+        .and_then(|()| main.set_focus())
+        .map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn desktop_pet_state_uses_the_frontend_camel_case_contract() {
+        let state = DesktopPetState {
+            animation_name: DesktopPetAnimation::Waiting,
+            local_access: true,
+            pet_id: "codex".to_string(),
+            tasks: vec![DesktopPetTask {
+                project_id: "project-1".to_string(),
+                root_path: Some("/workspace".to_string()),
+                status: DesktopPetTaskStatus::Waiting,
+                task_id: "task-1".to_string(),
+                task_name: "Review change".to_string(),
+            }],
+        };
+
+        assert_eq!(
+            serde_json::to_value(state).unwrap(),
+            serde_json::json!({
+                "animationName": "waiting",
+                "localAccess": true,
+                "petId": "codex",
+                "tasks": [{
+                    "projectId": "project-1",
+                    "rootPath": "/workspace",
+                    "status": "waiting",
+                    "taskId": "task-1",
+                    "taskName": "Review change"
+                }]
+            }),
+        );
+    }
+}

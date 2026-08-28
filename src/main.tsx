@@ -1,12 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App.js";
-import { AppProviders } from "./app/providers.js";
-import { initializeThemePreference } from "./features/settings/theme-preference.js";
-import { synchronizeLanguagePreference } from "./i18n/i18n.js";
+import { I18nextProvider, i18n, synchronizeLanguagePreference } from "./i18n/i18n.js";
 import { initializeAppStorage } from "./platform/tauri/app-storage.js";
 import "./shared/styles/globals.css";
+import "./shared/styles/desktop-pet.css";
 import "./shared/styles/workbench.css";
 
 const rootElement = document.querySelector("#root");
@@ -15,8 +13,35 @@ if (!(rootElement instanceof HTMLElement)) {
   throw new Error("Missing #root element");
 }
 const applicationRoot = rootElement;
+const windowSurface = new URLSearchParams(window.location.search).get("window");
+const appSurface =
+  windowSurface === "desktop-pet" || windowSurface === "desktop-pet-bubbles"
+    ? windowSurface
+    : "main";
+document.documentElement.dataset.appSurface = appSurface;
 
 async function startApplication(): Promise<void> {
+  if (appSurface !== "main") {
+    const PetSurface =
+      appSurface === "desktop-pet"
+        ? (await import("./features/pets/components/desktop-pet-window.js")).DesktopPetWindow
+        : (await import("./features/pets/components/desktop-pet-bubble-window.js"))
+            .DesktopPetBubbleWindow;
+    await synchronizeLanguagePreference();
+    createRoot(applicationRoot).render(
+      <StrictMode>
+        <I18nextProvider i18n={i18n}>
+          <PetSurface />
+        </I18nextProvider>
+      </StrictMode>,
+    );
+    return;
+  }
+  const [{ App }, { AppProviders }, { initializeThemePreference }] = await Promise.all([
+    import("./App.js"),
+    import("./app/providers.js"),
+    import("./features/settings/theme-preference.js"),
+  ]);
   try {
     // 首次启动会先把旧 WebView 数据迁入应用目录，失败时保留旧数据供下次重试。
     await initializeAppStorage();

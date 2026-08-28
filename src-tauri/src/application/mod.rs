@@ -3,6 +3,10 @@ pub mod attachment_commands;
 pub mod background_commands;
 pub mod catalog_commands;
 pub mod commands;
+pub mod desktop_pet_commands;
+#[cfg(target_os = "macos")]
+mod desktop_pet_panel;
+mod desktop_pet_window;
 pub mod error;
 mod model_turn_waiters;
 pub mod notification_commands;

@@ -1,0 +1,86 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+import type {
+  DesktopPetPosition,
+  DesktopPetState,
+  DesktopPetTaskOpen,
+} from "../../protocol/desktop-pet.js";
+import type { WorkbenchPetDescriptor } from "../../protocol/index.js";
+import {
+  mapNativePet,
+  type NativePetCatalogResponse,
+} from "./workbench-pet-catalog.js";
+
+const DESKTOP_PET_STATE_EVENT = "desktop-pet://state";
+const DESKTOP_PET_MOVED_EVENT = "desktop-pet://moved";
+const DESKTOP_PET_OPEN_TASK_EVENT = "desktop-pet://open-task";
+
+export async function syncDesktopPet(state: DesktopPetState | null): Promise<void> {
+  await invoke("sync_desktop_pet", { state });
+}
+
+export async function getDesktopPetState(): Promise<DesktopPetState | null> {
+  return invoke<DesktopPetState | null>("get_desktop_pet_state");
+}
+
+export async function listenDesktopPetState(
+  listener: (state: DesktopPetState) => void,
+): Promise<UnlistenFn> {
+  return listen<DesktopPetState>(DESKTOP_PET_STATE_EVENT, (event) => {
+    listener(event.payload);
+  });
+}
+
+export async function listenDesktopPetMoved(
+  listener: (position: DesktopPetPosition) => void,
+): Promise<UnlistenFn> {
+  return listen<DesktopPetPosition>(DESKTOP_PET_MOVED_EVENT, (event) => {
+    listener(event.payload);
+  });
+}
+
+export async function listenDesktopPetTaskOpen(
+  listener: (target: DesktopPetTaskOpen) => void,
+): Promise<UnlistenFn> {
+  return listen<DesktopPetTaskOpen>(DESKTOP_PET_OPEN_TASK_EVENT, (event) => {
+    listener(event.payload);
+  });
+}
+
+export async function loadDesktopPet(petId: string): Promise<WorkbenchPetDescriptor | null> {
+  const response = await invoke<NativePetCatalogResponse>("list_workbench_pets");
+  const record = response.data.find((pet) => pet.id === petId && pet.availability === "ready");
+  return record === undefined ? null : mapNativePet(record);
+}
+
+export async function showDesktopPet(): Promise<void> {
+  await invoke("show_desktop_pet");
+}
+
+export async function getDesktopPetPosition(): Promise<DesktopPetPosition> {
+  return invoke<DesktopPetPosition>("get_desktop_pet_position");
+}
+
+export async function layoutDesktopPetBubbles(input: Readonly<{
+  height: number;
+  width: number;
+}>): Promise<void> {
+  await invoke("layout_desktop_pet_bubbles", input);
+}
+
+export async function openDesktopPetTask(target: DesktopPetTaskOpen): Promise<void> {
+  await invoke("open_desktop_pet_task", target);
+}
+
+export async function setDesktopPetDragPosition(position: DesktopPetPosition): Promise<void> {
+  await invoke("set_desktop_pet_drag_position", position);
+}
+
+export async function moveDesktopPet(input: Readonly<{
+  deltaX: number;
+  deltaY: number;
+  reset: boolean;
+}>): Promise<void> {
+  await invoke("move_desktop_pet", input);
+}

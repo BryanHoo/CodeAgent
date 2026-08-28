@@ -23,6 +23,8 @@ pub enum AppError {
     HomeDirectoryUnavailable,
     #[error("workbench pet asset is unavailable")]
     PetAssetUnavailable,
+    #[error("desktop pet window operation failed")]
+    DesktopPetWindowFailed,
     #[error("workbench background is unavailable")]
     WorkbenchBackgroundUnavailable,
     #[error("failed to show desktop notification")]

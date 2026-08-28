@@ -1,0 +1,9 @@
+[package]
+name = "macos-panel-activation"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+objc2 = "0.6.1"
+objc2-app-kit = "0.3.1"

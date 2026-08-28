@@ -19,11 +19,15 @@ reqwest = { version = "0.13.2", default-features = false, features = ["rustls", 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.149", features = ["raw_value"] }
 sha2 = "0.10.9"
-tauri = { version = "2.11.5", features = ["protocol-asset"] }
+tauri = { version = "2.11.5", features = ["macos-private-api", "protocol-asset"] }
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-opener = "2.5.4"
 thiserror = "2.0.20"
 tokio = { version = "1.50.0", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+macos-panel-activation = { path = "native/macos-panel-activation" }
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 
 [lints.rust]
 unsafe_code = "forbid"

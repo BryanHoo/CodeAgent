@@ -14,3 +14,6 @@
 - `@pierre/diffs` 首次显示前按当前文件语言预加载高亮器，避免首个 Diff 异步初始化后保持空白
 - Composer 提交消息时必须保留完整 `AgentMessageAttachment`，不得退化为仅含 `id` 的引用
 - 仅在多个调用方确有一致需求时提取通用组件
+- 桌面宠物不得挂载到工作台 DOM；主窗口只投影动画与有界任务摘要，宠物和气泡使用专用入口与最小 Provider 装配，气泡点击通过固定事件回到主窗口路由，避免重复连接 Provider Runtime
+- 桌面宠物必须保留 Codexly 的动画映射：pointer capture 拖动时切换 `running-left`/`running-right`，释放后播放 `jumping` 再恢复活动动画；位置 IPC 按动画帧合并到最新坐标，不得调用会阻塞 WebView 动画循环的原生模态拖窗
+- Tauri asset protocol 的宠物图集使用 `HTMLImageElement` 解码后绘制到 Canvas；不得依赖 WKWebView 对自定义协议执行 `fetch` 后再 `createImageBitmap`

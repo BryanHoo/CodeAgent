@@ -79,6 +79,16 @@ pub async fn initialize_storage(
     Ok(storage.preferences)
 }
 
+pub async fn read_preferences(
+    app_data: &Path,
+) -> Result<BTreeMap<String, String>, AppStorageError> {
+    let _guard = STORAGE_LOCK.lock().await;
+    Ok(read_storage_file(app_data)
+        .await?
+        .map(|storage| storage.preferences)
+        .unwrap_or_default())
+}
+
 pub async fn update_preferences(
     app_data: &Path,
     updates: BTreeMap<String, Option<String>>,

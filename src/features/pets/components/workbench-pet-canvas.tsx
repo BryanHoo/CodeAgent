@@ -3,7 +3,7 @@ import type { WorkbenchPetDescriptor } from "@/protocol/index.js";
 import { useEffect, useRef, useState } from "react";
 
 import { PetAnimationController } from "../pet-animation-controller.js";
-import { drawPetFrame, loadPetBitmap } from "../pet-renderer.js";
+import { drawPetFrame, loadPetImage } from "../pet-renderer.js";
 
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -23,32 +23,37 @@ function useReducedMotion(): boolean {
 
 export function WorkbenchPetCanvas({
   animationName,
+  alwaysAnimate = false,
+  onReady,
   pet,
-}: Readonly<{ animationName: string; pet: WorkbenchPetDescriptor }>) {
+}: Readonly<{
+  animationName: string;
+  alwaysAnimate?: boolean;
+  onReady?: () => void;
+  pet: WorkbenchPetDescriptor;
+}>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [fallback, setFallback] = useState(false);
   const reducedMotion = useReducedMotion();
   const assetUrl = buildNativeAssetUrl(pet.assetPath ?? pet.assetId);
+  const readyRef = useRef(false);
 
   useEffect(() => {
     const abortController = new AbortController();
     let active = true;
-    setBitmap(null);
+    readyRef.current = false;
+    setImage(null);
     setFallback(false);
-    if (typeof createImageBitmap !== "function") {
+    if (typeof Image !== "function") {
       setFallback(true);
       return () => {
         abortController.abort();
       };
     }
-    void loadPetBitmap(assetUrl, abortController.signal)
-      .then((nextBitmap) => {
-        if (active) {
-          setBitmap(nextBitmap);
-        } else {
-          nextBitmap.close();
-        }
+    void loadPetImage(assetUrl, abortController.signal)
+      .then((nextImage) => {
+        if (active) setImage(nextImage);
       })
       .catch(() => {
         if (active && !abortController.signal.aborted) setFallback(true);
@@ -59,28 +64,25 @@ export function WorkbenchPetCanvas({
     };
   }, [assetUrl]);
 
-  useEffect(
-    () => () => {
-      bitmap?.close();
-    },
-    [bitmap],
-  );
-
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas === null || bitmap === null) return;
+    if (canvas === null || image === null) return;
     let currentFrame = 0;
     const draw = (spriteIndex: number) => {
       currentFrame = spriteIndex;
       try {
-        drawPetFrame(canvas, bitmap, pet.frame, spriteIndex);
+        drawPetFrame(canvas, image, pet.frame, spriteIndex);
+        if (!readyRef.current) {
+          readyRef.current = true;
+          onReady?.();
+        }
       } catch {
         setFallback(true);
       }
     };
     const controller = new PetAnimationController({ animations: pet.animations, onFrame: draw });
     controller.setReducedMotion(reducedMotion);
-    controller.setVisible(document.visibilityState === "visible");
+    controller.setVisible(alwaysAnimate || document.visibilityState === "visible");
     controller.play(animationName);
 
     // 尺寸只在 ResizeObserver 通知时读取，动画帧本身不会触发布局测量。
@@ -89,7 +91,7 @@ export function WorkbenchPetCanvas({
     });
     observer.observe(canvas);
     const handleVisibility = () => {
-      controller.setVisible(document.visibilityState === "visible");
+      controller.setVisible(alwaysAnimate || document.visibilityState === "visible");
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
@@ -97,7 +99,15 @@ export function WorkbenchPetCanvas({
       document.removeEventListener("visibilitychange", handleVisibility);
       controller.dispose();
     };
-  }, [animationName, bitmap, pet.animations, pet.frame, reducedMotion]);
+  }, [alwaysAnimate, animationName, image, onReady, pet.animations, pet.frame, reducedMotion]);
+
+  useEffect(() => {
+    // 隐藏的原生窗口不会推进动画，资源提交后即可显示并由 visibilitychange 启动首帧。
+    if ((image !== null || fallback) && !readyRef.current) {
+      readyRef.current = true;
+      onReady?.();
+    }
+  }, [fallback, image, onReady]);
 
   if (fallback) {
     return (

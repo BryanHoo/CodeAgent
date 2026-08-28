@@ -1,0 +1,98 @@
+use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri_nspanel::{
+    CollectionBehavior, ManagerExt as _, PanelLevel, StyleMask, WebviewWindowExt as _, tauri_panel,
+};
+use tokio::sync::oneshot;
+
+use super::error::AppError;
+
+tauri_panel! {
+    panel!(DesktopPetPanel {
+        config: {
+            can_become_key_window: true,
+            is_floating_panel: true
+        }
+    })
+}
+
+fn prevent_application_activation(panel: &dyn tauri_nspanel::Panel) {
+    // tauri-nspanel 动态转换 NSWindow，需补齐原生非激活面板初始化时设置的 CPS 标记。
+    macos_panel_activation::prevent_activation(panel.as_panel());
+}
+
+fn panel_collection_behavior() -> tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior {
+    CollectionBehavior::new()
+        .can_join_all_spaces()
+        .full_screen_auxiliary()
+        .value()
+}
+
+async fn dispatch_to_main_thread<T, F>(app: &AppHandle, operation: F) -> Result<T, AppError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+{
+    let (sender, receiver) = oneshot::channel();
+    // tauri-nspanel 直接调用 AppKit；所有面板生命周期操作必须在 macOS 主线程执行。
+    app.run_on_main_thread(move || {
+        let _ = sender.send(operation());
+    })
+    .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    receiver
+        .await
+        .map_err(|_| AppError::DesktopPetWindowFailed)?
+}
+
+pub(super) async fn configure_desktop_overlay(window: &WebviewWindow) -> Result<(), AppError> {
+    let app = window.app_handle().clone();
+    let window = window.clone();
+    dispatch_to_main_thread(&app, move || {
+        let panel = window
+            .to_panel::<DesktopPetPanel>()
+            .map_err(|_| AppError::DesktopPetWindowFailed)?;
+        panel.set_level(PanelLevel::Floating.value());
+        panel.set_style_mask(StyleMask::empty().nonactivating_panel().into());
+        prevent_application_activation(panel.as_ref());
+        panel.set_collection_behavior(panel_collection_behavior());
+        Ok(())
+    })
+    .await
+}
+
+pub(super) async fn destroy_desktop_overlay(app: &AppHandle, label: &str) -> Result<(), AppError> {
+    let main_app = app.clone();
+    let label = label.to_string();
+    dispatch_to_main_thread(app, move || {
+        if let Ok(panel) = main_app.get_webview_panel(&label) {
+            // 先恢复原始 NSWindow class，再销毁窗口，避免残留的面板句柄跨线程释放。
+            let window = panel.to_window().ok_or(AppError::DesktopPetWindowFailed)?;
+            window
+                .destroy()
+                .map_err(|_| AppError::DesktopPetWindowFailed)?;
+        } else if let Some(window) = main_app.get_webview_window(&label) {
+            window
+                .destroy()
+                .map_err(|_| AppError::DesktopPetWindowFailed)?;
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_joins_fullscreen_spaces() {
+        let behavior = panel_collection_behavior();
+        assert!(
+            behavior.contains(
+                tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
+            )
+        );
+        assert!(behavior.contains(
+            tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary
+        ));
+    }
+}

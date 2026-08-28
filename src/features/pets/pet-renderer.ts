@@ -1,9 +1,35 @@
 import type { WorkbenchPetFrame } from "@/protocol/index.js";
 
-export async function loadPetBitmap(assetUrl: string, signal: AbortSignal): Promise<ImageBitmap> {
-  const response = await fetch(assetUrl, { credentials: "same-origin", signal });
-  if (!response.ok) throw new Error(`Unable to load pet asset: ${String(response.status)}`);
-  return createImageBitmap(await response.blob());
+export function loadPetImage(assetUrl: string, signal: AbortSignal): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const cleanup = () => {
+      image.onload = null;
+      image.onerror = null;
+      signal.removeEventListener("abort", handleAbort);
+    };
+    const handleAbort = () => {
+      cleanup();
+      image.src = "";
+      reject(new DOMException("Pet asset loading was aborted", "AbortError"));
+    };
+    if (signal.aborted) {
+      handleAbort();
+      return;
+    }
+    image.decoding = "async";
+    image.onload = () => {
+      cleanup();
+      resolve(image);
+    };
+    image.onerror = () => {
+      cleanup();
+      reject(new Error("Unable to load pet asset"));
+    };
+    signal.addEventListener("abort", handleAbort, { once: true });
+    // Tauri 的 asset protocol 支持图像加载，但在 WKWebView 中不能依赖 fetch 完成响应。
+    image.src = assetUrl;
+  });
 }
 
 export function drawPetFrame(

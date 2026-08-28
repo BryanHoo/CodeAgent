@@ -2,6 +2,8 @@ mod application;
 pub mod domain;
 mod infrastructure;
 
+use tauri::Manager as _;
+
 use application::{
     app_storage_commands::{
         initialize_app_storage, list_custom_backgrounds, read_custom_background,
@@ -18,6 +20,11 @@ use application::{
         update_project_defaults,
     },
     commands::{connect_runtime, get_app_info, start_runtime},
+    desktop_pet_commands::{
+        DesktopPetRuntime, get_desktop_pet_position, get_desktop_pet_state,
+        layout_desktop_pet_bubbles, move_desktop_pet, open_desktop_pet_task,
+        set_desktop_pet_drag_position, show_desktop_pet, sync_desktop_pet,
+    },
     notification_commands::show_task_notification,
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
     pet_commands::{download_workbench_pet, list_workbench_pets},
@@ -47,10 +54,25 @@ use application::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let result = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+    let result = builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
+        .manage(DesktopPetRuntime::default())
+        .on_window_event(|window, event| {
+            if window.label() == "main"
+                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
+                for label in ["desktop-pet", "desktop-pet-bubbles"] {
+                    if let Some(pet_window) = window.app_handle().get_webview_window(label) {
+                        let _ = pet_window.destroy();
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             initialize_app_storage,
             update_app_preferences,
@@ -60,6 +82,14 @@ pub fn run() {
             connect_runtime,
             start_runtime,
             get_app_info,
+            sync_desktop_pet,
+            get_desktop_pet_state,
+            get_desktop_pet_position,
+            show_desktop_pet,
+            set_desktop_pet_drag_position,
+            move_desktop_pet,
+            layout_desktop_pet_bubbles,
+            open_desktop_pet_task,
             show_task_notification,
             get_workbench_background,
             list_workbench_pets,

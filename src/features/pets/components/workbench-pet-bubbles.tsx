@@ -1,17 +1,9 @@
 import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../shared/components/core/tooltip.js";
-import type { WorkbenchPetTaskActivity } from "../pet-activity.js";
+import type { DesktopPetTask } from "../../../protocol/desktop-pet.js";
 
-function compareBubblePriority(
-  left: WorkbenchPetTaskActivity,
-  right: WorkbenchPetTaskActivity,
-): number {
+function compareBubblePriority(left: DesktopPetTask, right: DesktopPetTask): number {
   if (left.status === right.status) return 0;
   if (left.status === "completed") return -1;
   if (right.status === "completed") return 1;
@@ -23,56 +15,47 @@ function TaskBubble({
   localAccess,
   onTaskSelect,
 }: Readonly<{
-  activity: WorkbenchPetTaskActivity;
+  activity: DesktopPetTask;
   localAccess: boolean;
   onTaskSelect: (projectId: string, taskId: string) => void;
 }>) {
   const { t } = useTranslation("workbench");
-  const content = (
+  return (
     <button
       aria-label={t("pet.openTask", {
         name: activity.taskName,
         status: t(`pet.status.${activity.status}`),
       })}
-      className="workbench-pet-bubble-button flex h-full w-full min-w-0 appearance-none items-center gap-2 rounded-control border border-separator-strong bg-raised px-2.5 text-left text-body-small text-foreground shadow-control"
+      className="workbench-pet-bubble-button"
       onClick={() => {
         onTaskSelect(activity.projectId, activity.taskId);
       }}
+      title={localAccess ? activity.rootPath : undefined}
       type="button"
     >
       {activity.status === "waiting" ? (
-        <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-warning" />
+        <CircleAlert aria-hidden="true" className="desktop-pet-bubble-icon text-warning" />
       ) : activity.status === "completed" ? (
-        <CircleCheck aria-hidden="true" className="size-3.5 shrink-0 text-task-completed" />
+        <CircleCheck aria-hidden="true" className="desktop-pet-bubble-icon text-task-completed" />
       ) : (
         <LoaderCircle
           aria-hidden="true"
-          className="size-3.5 shrink-0 text-brand motion-safe:animate-spin"
+          className="desktop-pet-bubble-icon text-brand motion-safe:animate-spin"
         />
       )}
-      <span className="min-w-0 truncate">{activity.taskName}</span>
+      <span>{activity.taskName}</span>
     </button>
-  );
-  return localAccess && activity.rootPath !== undefined ? (
-    <Tooltip>
-      <TooltipTrigger asChild>{content}</TooltipTrigger>
-      <TooltipContent>{activity.rootPath}</TooltipContent>
-    </Tooltip>
-  ) : (
-    content
   );
 }
 
 export function WorkbenchPetBubbles({
   localAccess,
   onTaskSelect,
-  placement,
   tasks,
 }: Readonly<{
   localAccess: boolean;
   onTaskSelect: (projectId: string, taskId: string) => void;
-  placement: "above" | "below";
-  tasks: readonly WorkbenchPetTaskActivity[];
+  tasks: readonly DesktopPetTask[];
 }>) {
   const { t } = useTranslation("workbench");
   if (tasks.length === 0) return null;
@@ -80,20 +63,11 @@ export function WorkbenchPetBubbles({
   // 完成提醒在折叠态置于最高层，其余气泡保持原有顺序。
   const orderedTasks = tasks.toSorted(compareBubblePriority);
   return (
-    <div
-      className={`workbench-pet-bubbles ${placement === "above" ? "bottom-full pb-2" : "top-full pt-2"}`}
-      data-placement={placement}
-      onPointerDown={(event) => {
-        event.stopPropagation();
-      }}
-    >
+    <div className="workbench-pet-bubbles">
       <span aria-live="polite" className="sr-only">
         {t("pet.activitySummary", { count: tasks.length, waiting: waitingCount })}
       </span>
-      <ol
-        aria-label={t("pet.activeTasks")}
-        className="workbench-pet-bubble-list max-h-[40dvh] overflow-y-auto"
-      >
+      <ol aria-label={t("pet.activeTasks")} className="workbench-pet-bubble-list">
         {orderedTasks.map((activity, index) => (
           <li
             className="workbench-pet-bubble-item"

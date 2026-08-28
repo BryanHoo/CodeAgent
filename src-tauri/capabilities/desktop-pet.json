@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-pet",
+  "description": "Minimum capability set for the desktop pet window",
+  "windows": ["desktop-pet", "desktop-pet-bubbles"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}
