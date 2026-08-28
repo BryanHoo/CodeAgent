@@ -6,6 +6,7 @@ mod conversation;
 mod conversation_advanced;
 mod conversation_background;
 mod conversation_commands;
+mod conversation_delta_events;
 mod conversation_events;
 mod conversation_file_input;
 mod conversation_items;
@@ -70,7 +71,7 @@ pub use conversation_background::{list_background_terminals, terminate_backgroun
 pub use conversation_commands::{
     interrupt_turn, resume_task, start_task, start_turn, steer_turn, update_thread_settings,
 };
-pub use conversation_events::map_server_message_now;
+pub use conversation_events::map_server_event_now;
 pub use conversation_queue::{
     add_queued_submission, delete_queued_submission, list_queued_submissions,
     reorder_queued_submissions, start_queued_submission, update_queued_submission,

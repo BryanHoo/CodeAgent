@@ -11,6 +11,8 @@ use tokio::{
 use super::error::AppError;
 use super::model_turn_waiters::ModelTurnWaiters;
 use super::turn_waiters::TurnStartedWaiters;
+#[path = "state_event_delta_batcher.rs"]
+mod event_delta_batcher;
 #[path = "state_event_forwarder.rs"]
 mod event_forwarder;
 use crate::{
@@ -293,7 +295,9 @@ impl AppState {
             "type": "pending_request.resolved",
             "version": 2,
         });
-        runtime.publish(AppEvent::AgentEvent { event })?;
+        runtime.publish(AppEvent::AgentEvent {
+            event: event.into(),
+        })?;
         Ok(request)
     }
 }

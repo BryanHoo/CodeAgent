@@ -4,11 +4,16 @@ use serde_json::{Value, json};
 use tokio::{
     sync::{Mutex, mpsc},
     task::JoinHandle,
+    time::{Instant, sleep_until},
 };
 
-use super::{super::error::AppError, RuntimeSession};
+use super::{
+    super::error::AppError,
+    RuntimeSession,
+    event_delta_batcher::{BatchAction, DeltaBatcher},
+};
 use crate::{
-    domain::runtime::{AppEvent, ProviderKind, RuntimeStatus},
+    domain::runtime::{AgentEvent, AppEvent, ProviderKind, RuntimeStatus},
     infrastructure::codex::{MappedServerRequest, PendingServerRequest, ServerMessage},
 };
 
@@ -17,7 +22,27 @@ pub(super) fn spawn_event_forwarder(
     mut messages: mpsc::Receiver<ServerMessage>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        while let Some(message) = messages.recv().await {
+        let mut batcher = DeltaBatcher::new();
+        loop {
+            let message = if let Some(deadline) = batcher.deadline() {
+                tokio::select! {
+                    message = messages.recv() => message,
+                    _ = sleep_until(deadline) => {
+                        if let Some(event) = batcher.flush(Instant::now())
+                            && !publish_mapped_event(&runtime, event, None).await
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+            } else {
+                messages.recv().await
+            };
+            let Some(message) = message else {
+                break;
+            };
+
             // JSON 建树和协议映射可能随 delta 体积增长，必须在全局状态锁之外完成。
             observe_model_turn(&runtime, &message).await;
             if handle_login_notification(&runtime, &message).await {
@@ -27,58 +52,89 @@ pub(super) fn spawn_event_forwarder(
                 continue;
             }
             if message.method == "serverRequest/resolved" {
+                if let Some(event) = batcher.flush_boundary()
+                    && !publish_mapped_event(&runtime, event, None).await
+                {
+                    break;
+                }
                 if !handle_resolved_request(&runtime, &message).await {
                     break;
                 }
                 continue;
             }
 
-            let Some((mut event, mut pending)) = map_message(message) else {
-                continue;
-            };
-            let Some(task_id) = event
-                .get("taskId")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-            else {
+            let Some((event, pending)) = map_message(message) else {
                 continue;
             };
 
-            // 锁内仅维护共享索引、序号和 waiter；publish 只写入有界发布队列。
-            let mut session = runtime.lock().await;
-            let Some(project_id) = session.task_projects.get(&task_id).cloned() else {
-                continue;
-            };
-            if let Some(pending) = pending.as_mut() {
-                pending.request["projectId"] = json!(project_id);
-                event["payload"]["request"]["projectId"] = json!(project_id);
+            match batcher.push(event, Instant::now()) {
+                BatchAction::Buffered => {}
+                BatchAction::Publish(event) => {
+                    if !publish_mapped_event(&runtime, event, pending).await {
+                        break;
+                    }
+                }
+                BatchAction::PublishThen(first, second) => {
+                    if !publish_mapped_event(&runtime, first, None).await
+                        || !publish_mapped_event(&runtime, second, pending).await
+                    {
+                        break;
+                    }
+                }
             }
-            let sequence = session.project_sequences.entry(project_id).or_default();
-            *sequence += 1;
-            event["sequence"] = Value::from(*sequence);
-            if event.get("type").and_then(Value::as_str) == Some("turn.started")
-                && let Some(turn) = event.pointer("/payload/turn")
-            {
-                session.turn_started_waiters.resolve(&task_id, turn);
-            }
-            if let Some(pending) = pending {
-                let Some(request_id) = pending
-                    .request
-                    .get("requestId")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-                else {
-                    continue;
-                };
-                session.pending_requests.insert(request_id, pending);
-            }
-            if session.publish(AppEvent::AgentEvent { event }).is_err() {
-                break;
-            }
+        }
+
+        if let Some(event) = batcher.flush_boundary() {
+            let _ = publish_mapped_event(&runtime, event, None).await;
         }
 
         finish_runtime(&runtime).await;
     })
+}
+
+async fn publish_mapped_event(
+    runtime: &Arc<Mutex<RuntimeSession>>,
+    mut event: AgentEvent,
+    mut pending: Option<PendingServerRequest>,
+) -> bool {
+    let Some(task_id) = event.task_id().map(str::to_owned) else {
+        return true;
+    };
+
+    // 序号只在实际发布时分配，合并后的 delta 不会制造 checkpoint 空洞。
+    let mut session = runtime.lock().await;
+    let Some(project_id) = session.task_projects.get(&task_id).cloned() else {
+        return true;
+    };
+    if let Some(pending) = pending.as_mut() {
+        pending.request["projectId"] = json!(project_id);
+        let Some(event_json) = event.as_json_mut() else {
+            return true;
+        };
+        event_json["payload"]["request"]["projectId"] = json!(project_id);
+    }
+    let sequence = session.project_sequences.entry(project_id).or_default();
+    *sequence += 1;
+    event.set_sequence(*sequence);
+    if event.event_type() == Some("turn.started")
+        && let Some(turn) = event
+            .as_json()
+            .and_then(|event| event.pointer("/payload/turn"))
+    {
+        session.turn_started_waiters.resolve(&task_id, turn);
+    }
+    if let Some(pending) = pending {
+        let Some(request_id) = pending
+            .request
+            .get("requestId")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+        else {
+            return true;
+        };
+        session.pending_requests.insert(request_id, pending);
+    }
+    session.publish(AppEvent::AgentEvent { event }).is_ok()
 }
 
 async fn observe_model_turn(runtime: &Arc<Mutex<RuntimeSession>>, message: &ServerMessage) {
@@ -188,12 +244,12 @@ async fn handle_resolved_request(
     publish_terminal_event(&mut session, project_id, event).is_ok()
 }
 
-fn map_message(message: ServerMessage) -> Option<(Value, Option<PendingServerRequest>)> {
+fn map_message(message: ServerMessage) -> Option<(AgentEvent, Option<PendingServerRequest>)> {
     if message.id.is_some() {
         match crate::infrastructure::codex::map_server_request_now(message, 0) {
             Ok(Some(mapped)) => {
                 let mapped: MappedServerRequest = mapped;
-                Some((mapped.event, Some(mapped.pending)))
+                Some((mapped.event.into(), Some(mapped.pending)))
             }
             Ok(None) => None,
             Err(error) => {
@@ -202,7 +258,7 @@ fn map_message(message: ServerMessage) -> Option<(Value, Option<PendingServerReq
             }
         }
     } else {
-        match crate::infrastructure::codex::map_server_message_now(message, 0) {
+        match crate::infrastructure::codex::map_server_event_now(message, 0) {
             Ok(Some(event)) => Some((event, None)),
             Ok(None) => None,
             Err(error) => {
@@ -264,7 +320,9 @@ fn publish_terminal_event(
     let sequence = runtime.project_sequences.entry(project_id).or_default();
     *sequence += 1;
     event["sequence"] = Value::from(*sequence);
-    runtime.publish(AppEvent::AgentEvent { event })
+    runtime.publish(AppEvent::AgentEvent {
+        event: event.into(),
+    })
 }
 
 pub(super) fn required_event_string(value: &Value, key: &str) -> Result<String, AppError> {

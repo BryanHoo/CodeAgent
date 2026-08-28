@@ -5,7 +5,10 @@ use std::sync::{
 
 use serde_json::{Value, json, value::to_raw_value};
 use tauri::ipc::{Channel, InvokeResponseBody};
-use tokio::sync::{Mutex, mpsc};
+use tokio::{
+    sync::{Mutex, mpsc},
+    time::{Duration, timeout},
+};
 
 use super::{RuntimeSession, spawn_event_forwarder};
 use crate::domain::runtime::{AppEvent, ProviderKind, RuntimeStatus};
@@ -154,4 +157,66 @@ async fn event_channel_should_run_without_holding_runtime_lock() {
         lock_was_available.load(Ordering::Relaxed),
         "runtime lock should be released before Channel::send"
     );
+}
+
+#[tokio::test]
+async fn consecutive_deltas_should_merge_before_crossing_the_channel() {
+    let published = Arc::new(StdMutex::new(Vec::new()));
+    let published_for_channel = Arc::clone(&published);
+    let channel = Channel::new(move |body| {
+        if let InvokeResponseBody::Json(value) = body {
+            published_for_channel.lock().unwrap().push(value);
+        }
+        Ok(())
+    });
+    let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
+    {
+        let mut session = runtime.lock().await;
+        session.set_event_channel(channel);
+        session
+            .task_projects
+            .insert("thread-a".to_owned(), "project-a".to_owned());
+    }
+    let (sender, receiver) = mpsc::channel(4);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    for delta in ["a", "b", "c"] {
+        sender
+            .send(ServerMessage {
+                id: None,
+                method: "item/agentMessage/delta".to_owned(),
+                params: to_raw_value(&json!({
+                    "threadId": "thread-a",
+                    "turnId": "turn-a",
+                    "itemId": "item-a",
+                    "delta": delta
+                }))
+                .unwrap(),
+            })
+            .await
+            .unwrap();
+    }
+    drop(sender);
+    task.await.expect("event forwarder should stop cleanly");
+    timeout(Duration::from_millis(100), async {
+        while published.lock().unwrap().len() < 3 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("channel should receive merged events");
+
+    let events = published
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(event).ok())
+        .filter(|event| {
+            event.pointer("/data/event/type").and_then(Value::as_str) == Some("message.delta")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["data"]["event"]["payload"]["delta"], "a");
+    assert_eq!(events[0]["data"]["event"]["sequence"], 1);
+    assert_eq!(events[1]["data"]["event"]["payload"]["delta"], "bc");
+    assert_eq!(events[1]["data"]["event"]["sequence"], 2);
 }

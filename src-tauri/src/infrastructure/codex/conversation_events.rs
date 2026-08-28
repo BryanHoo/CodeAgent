@@ -3,10 +3,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
+use crate::domain::runtime::AgentEvent;
+
 use super::{
     connection::{ConnectionError, ServerMessage},
     conversation::{NativeTurn, RUNTIME_SESSION_ID, map_item, map_turn},
     conversation_advanced::{NativeGoal, map_native_goal},
+    conversation_delta_events::map_delta_message,
     conversation_runtime_events::map_runtime_notification,
     sidebar::unix_seconds_to_rfc3339,
 };
@@ -357,16 +360,22 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
     &value[..end]
 }
 
-pub fn map_server_message_now(
+pub fn map_server_event_now(
     message: ServerMessage,
     sequence: u64,
-) -> Result<Option<Value>, ConnectionError> {
+) -> Result<Option<AgentEvent>, ConnectionError> {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| ConnectionError::StateUnavailable)?
         .as_secs();
     let seconds = i64::try_from(seconds).map_err(|_| ConnectionError::StateUnavailable)?;
-    map_server_message(message, sequence, &unix_seconds_to_rfc3339(seconds))
+    let timestamp = unix_seconds_to_rfc3339(seconds);
+
+    // Delta 直接从 RawValue 映射到强类型事件，避免构建临时 JSON 树。
+    if let Some(event) = map_delta_message(&message, sequence, &timestamp)? {
+        return Ok(Some(AgentEvent::Delta(event)));
+    }
+    map_server_message(message, sequence, &timestamp).map(|event| event.map(AgentEvent::Json))
 }
 
 fn delta_event(
