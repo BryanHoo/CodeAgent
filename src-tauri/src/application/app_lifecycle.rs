@@ -43,9 +43,13 @@ impl MainWindowLifecycle {
         state.destroy_generation
     }
 
-    fn cancel_destroy(&self) {
+    fn prepare_show(&self, route: Option<String>) -> u64 {
         let mut state = self.lock();
         state.destroy_generation = state.destroy_generation.wrapping_add(1);
+        if route.is_some() {
+            state.route = route;
+        }
+        state.destroy_generation
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, MainWindowLifecycleState> {
@@ -193,23 +197,36 @@ pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
 }
 
 fn show_main_window(app: &AppHandle) {
-    app.state::<MainWindowLifecycle>().cancel_destroy();
+    queue_main_window_restore(app, None);
+}
+
+pub(crate) fn show_main_window_at_route(app: &AppHandle, route: String) {
+    queue_main_window_restore(app, Some(route));
+}
+
+fn queue_main_window_restore(app: &AppHandle, route: Option<String>) {
+    let generation = app
+        .state::<MainWindowLifecycle>()
+        .prepare_show(route.clone());
     let app = app.clone();
     // Windows WebView2 不能在同步托盘回调中创建窗口，统一切到异步运行时重建。
     tauri::async_runtime::spawn(async move {
-        restore_main_window(&app);
+        restore_main_window(&app, generation, route);
     });
 }
 
-fn restore_main_window(app: &AppHandle) {
+fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option<String>) {
     #[cfg(target_os = "macos")]
     let _ = app.set_dock_visibility(true);
     let lifecycle = app.state::<MainWindowLifecycle>();
     let state = lifecycle.lock();
-    let window = match app.get_webview_window(MAIN_WINDOW_LABEL) {
-        Some(window) => window,
+    if state.destroy_generation != generation {
+        return;
+    }
+    let (window, should_navigate) = match app.get_webview_window(MAIN_WINDOW_LABEL) {
+        Some(window) => (window, true),
         None => match create_main_window(app, state.route.clone()) {
-            Ok(window) => window,
+            Ok(window) => (window, false),
             Err(error) => {
                 eprintln!("failed to recreate main window: {error}");
                 return;
@@ -217,10 +234,25 @@ fn restore_main_window(app: &AppHandle) {
         },
     };
 
+    if should_navigate
+        && let Some(route) = requested_route
+        && let Err(error) = navigate_main_window(&window, &route)
+    {
+        eprintln!("failed to navigate main window: {error}");
+    }
+
     // 恢复时同时处理最小化状态，确保托盘操作始终把工作台带到前台。
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+fn navigate_main_window(window: &WebviewWindow, route: &str) -> tauri::Result<()> {
+    let target = window
+        .url()?
+        .join(&format!("/{route}"))
+        .map_err(tauri::Error::InvalidUrl)?;
+    window.navigate(target)
 }
 
 fn create_main_window(app: &AppHandle, route: Option<String>) -> tauri::Result<WebviewWindow> {
@@ -332,9 +364,20 @@ mod tests {
     fn showing_main_window_invalidates_pending_destroy_generation() {
         let lifecycle = MainWindowLifecycle::default();
         let scheduled = lifecycle.schedule_destroy(None);
-        lifecycle.cancel_destroy();
+        lifecycle.prepare_show(None);
 
         assert_ne!(lifecycle.lock().destroy_generation, scheduled);
+    }
+
+    #[test]
+    fn latest_requested_route_replaces_the_hidden_route() {
+        let lifecycle = MainWindowLifecycle::default();
+        lifecycle.schedule_destroy(Some("p/project-a".to_owned()));
+        let generation = lifecycle.prepare_show(Some("p/project-a/t/task-a".to_owned()));
+        let state = lifecycle.lock();
+
+        assert_eq!(state.destroy_generation, generation);
+        assert_eq!(state.route.as_deref(), Some("p/project-a/t/task-a"));
     }
 
     #[test]

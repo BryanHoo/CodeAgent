@@ -5,10 +5,14 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, WebviewWindow};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, Url, WebviewWindow,
+};
 use tokio::sync::Mutex;
 
 use super::{
+    app_lifecycle::show_main_window_at_route,
+    desktop_pet_activity::apply_agent_event_to_desktop_pet_state,
     desktop_pet_window::{
         DESKTOP_PET_BUBBLES_LABEL, DESKTOP_PET_EVENT, DESKTOP_PET_LABEL,
         create_desktop_pet_bubbles_window, create_desktop_pet_window, destroy_desktop_pet_window,
@@ -17,10 +21,9 @@ use super::{
     },
     error::AppError,
 };
+use crate::domain::runtime::AgentEvent;
 
-const DESKTOP_PET_OPEN_TASK_EVENT: &str = "desktop-pet://open-task";
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DesktopPetAnimation {
     Failed,
@@ -37,27 +40,27 @@ pub enum DesktopPetDragStrategy {
     Webview,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopPetState {
-    animation_name: DesktopPetAnimation,
-    pet_id: String,
-    tasks: Vec<DesktopPetTask>,
+    pub(super) animation_name: DesktopPetAnimation,
+    pub(super) pet_id: String,
+    pub(super) tasks: Vec<DesktopPetTask>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DesktopPetTask {
-    project_id: String,
-    root_path: Option<String>,
-    status: DesktopPetTaskStatus,
-    task_id: String,
-    task_name: String,
+pub(super) struct DesktopPetTask {
+    pub(super) project_id: String,
+    pub(super) root_path: Option<String>,
+    pub(super) status: DesktopPetTaskStatus,
+    pub(super) task_id: String,
+    pub(super) task_name: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum DesktopPetTaskStatus {
+pub(super) enum DesktopPetTaskStatus {
     Completed,
     Running,
     Waiting,
@@ -76,13 +79,6 @@ impl From<PhysicalPosition<i32>> for DesktopPetPosition {
             y: position.y,
         }
     }
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DesktopPetTaskOpen {
-    project_id: String,
-    task_id: String,
 }
 
 #[derive(Default)]
@@ -158,31 +154,61 @@ pub async fn sync_desktop_pet(
     }
     *runtime.state.lock().await = state.clone();
 
+    render_desktop_pet_state(&app, state).await
+}
+
+async fn render_desktop_pet_state(
+    app: &AppHandle,
+    state: Option<DesktopPetState>,
+) -> Result<(), AppError> {
     let Some(state) = state else {
         for label in [DESKTOP_PET_LABEL, DESKTOP_PET_BUBBLES_LABEL] {
-            destroy_desktop_pet_window(&app, label).await?;
+            destroy_desktop_pet_window(app, label).await?;
         }
         return Ok(());
     };
     let window = match app.get_webview_window(DESKTOP_PET_LABEL) {
         Some(window) => window,
-        None => create_desktop_pet_window(&app).await?,
+        None => create_desktop_pet_window(app).await?,
     };
     window
         .emit(DESKTOP_PET_EVENT, state.clone())
         .map_err(|_| AppError::DesktopPetWindowFailed)?;
 
     if state.tasks.is_empty() {
-        destroy_desktop_pet_window(&app, DESKTOP_PET_BUBBLES_LABEL).await?;
+        destroy_desktop_pet_window(app, DESKTOP_PET_BUBBLES_LABEL).await?;
         return Ok(());
     }
     let bubble_window = match app.get_webview_window(DESKTOP_PET_BUBBLES_LABEL) {
         Some(window) => window,
-        None => create_desktop_pet_bubbles_window(&app).await?,
+        None => create_desktop_pet_bubbles_window(app).await?,
     };
     bubble_window
         .emit(DESKTOP_PET_EVENT, state)
         .map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+pub(super) async fn observe_desktop_pet_agent_event(
+    app: &AppHandle,
+    project_id: &str,
+    event: &AgentEvent,
+) {
+    let runtime = app.state::<DesktopPetRuntime>();
+    let next_state = {
+        let mut stored_state = runtime.state.lock().await;
+        let Some(state) = stored_state.as_mut() else {
+            return;
+        };
+        if !apply_agent_event_to_desktop_pet_state(state, project_id, event) {
+            return;
+        }
+        state.clone()
+    };
+
+    // 主 WebView 不存在时由 Rust 直接刷新独立宠物窗口。
+    if let Err(error) = render_desktop_pet_state(app, Some(next_state)).await {
+        eprintln!("failed to update desktop pet from runtime event: {error}");
+    }
 }
 
 #[tauri::command]
@@ -341,22 +367,19 @@ pub fn open_desktop_pet_task(
     {
         return Err(AppError::DesktopPetWindowFailed);
     }
-    let main = window
-        .app_handle()
-        .get_webview_window("main")
-        .ok_or(AppError::DesktopPetWindowFailed)?;
-    main.emit(
-        DESKTOP_PET_OPEN_TASK_EVENT,
-        DesktopPetTaskOpen {
-            project_id,
-            task_id,
-        },
-    )
-    .map_err(|_| AppError::DesktopPetWindowFailed)?;
-    main.unminimize()
-        .and_then(|()| main.show())
-        .and_then(|()| main.set_focus())
-        .map_err(|_| AppError::DesktopPetWindowFailed)
+    let route = desktop_pet_task_route(&project_id, &task_id)?;
+    show_main_window_at_route(window.app_handle(), route);
+    Ok(())
+}
+
+fn desktop_pet_task_route(project_id: &str, task_id: &str) -> Result<String, AppError> {
+    let mut url = Url::parse("tauri://localhost/").map_err(|_| AppError::DesktopPetWindowFailed)?;
+    let mut segments = url
+        .path_segments_mut()
+        .map_err(|()| AppError::DesktopPetWindowFailed)?;
+    segments.push("p").push(project_id).push("t").push(task_id);
+    drop(segments);
+    Ok(url.path().trim_start_matches('/').to_owned())
 }
 
 #[cfg(test)]
@@ -402,6 +425,14 @@ mod tests {
         assert_eq!(
             serde_json::to_value(DesktopPetDragStrategy::Webview).unwrap(),
             serde_json::json!("webview"),
+        );
+    }
+
+    #[test]
+    fn pet_task_route_encodes_each_dynamic_segment() {
+        assert_eq!(
+            desktop_pet_task_route("project/one", "task two").unwrap(),
+            "p/project%2Fone/t/task%20two"
         );
     }
 }

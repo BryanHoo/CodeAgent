@@ -46,7 +46,7 @@ async fn closed_app_server_stream_should_mark_runtime_failed() {
         session.snapshot.provider = Some(ProviderKind::Codex);
     }
     let (sender, receiver) = mpsc::channel(1);
-    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     drop(sender);
     task.await.expect("event forwarder should stop cleanly");
 
@@ -74,7 +74,7 @@ async fn task_scoped_mcp_status_should_be_cached_and_forwarded() {
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
     let (sender, receiver) = mpsc::channel(1);
-    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     sender
         .send(ServerMessage {
             id: None,
@@ -136,7 +136,7 @@ async fn event_channel_should_run_without_holding_runtime_lock() {
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
     let (sender, receiver) = mpsc::channel(1);
-    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     sender
         .send(ServerMessage {
             id: None,
@@ -171,7 +171,7 @@ async fn missing_webview_channel_should_not_stop_event_forwarder() {
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
     let (sender, receiver) = mpsc::channel(2);
-    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     for name in ["context7", "filesystem"] {
         sender
             .send(ServerMessage {
@@ -222,7 +222,7 @@ async fn consecutive_deltas_should_merge_before_crossing_the_channel() {
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
     let (sender, receiver) = mpsc::channel(4);
-    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     for delta in ["a", "b", "c"] {
         sender
             .send(ServerMessage {

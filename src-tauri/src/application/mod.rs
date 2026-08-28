@@ -4,6 +4,7 @@ pub mod attachment_commands;
 pub mod background_commands;
 pub mod catalog_commands;
 pub mod commands;
+mod desktop_pet_activity;
 pub mod desktop_pet_commands;
 #[cfg(target_os = "macos")]
 mod desktop_pet_panel;

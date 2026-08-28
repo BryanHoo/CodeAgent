@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
 use serde_json::{Value, json};
+use tauri::AppHandle;
 use tokio::{
     sync::{Mutex, mpsc},
     task::JoinHandle,
     time::{Instant, sleep_until},
 };
 
+use super::super::{desktop_pet_commands::observe_desktop_pet_agent_event, error::AppError};
 use super::{
-    super::error::AppError,
     RuntimeSession,
     event_delta_batcher::{BatchAction, DeltaBatcher},
 };
@@ -20,6 +21,7 @@ use crate::{
 pub(super) fn spawn_event_forwarder(
     runtime: Arc<Mutex<RuntimeSession>>,
     mut messages: mpsc::Receiver<ServerMessage>,
+    app: Option<AppHandle>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut batcher = DeltaBatcher::new();
@@ -29,7 +31,7 @@ pub(super) fn spawn_event_forwarder(
                     message = messages.recv() => message,
                     _ = sleep_until(deadline) => {
                         if let Some(event) = batcher.flush(Instant::now())
-                            && !publish_mapped_event(&runtime, event, None).await
+                            && !publish_mapped_event(&runtime, event, None, app.as_ref()).await
                         {
                             break;
                         }
@@ -53,7 +55,7 @@ pub(super) fn spawn_event_forwarder(
             }
             if message.method == "serverRequest/resolved" {
                 if let Some(event) = batcher.flush_boundary()
-                    && !publish_mapped_event(&runtime, event, None).await
+                    && !publish_mapped_event(&runtime, event, None, app.as_ref()).await
                 {
                     break;
                 }
@@ -70,13 +72,13 @@ pub(super) fn spawn_event_forwarder(
             match batcher.push(event, Instant::now()) {
                 BatchAction::Buffered => {}
                 BatchAction::Publish(event) => {
-                    if !publish_mapped_event(&runtime, event, pending).await {
+                    if !publish_mapped_event(&runtime, event, pending, app.as_ref()).await {
                         break;
                     }
                 }
                 BatchAction::PublishThen(first, second) => {
-                    if !publish_mapped_event(&runtime, first, None).await
-                        || !publish_mapped_event(&runtime, second, pending).await
+                    if !publish_mapped_event(&runtime, first, None, app.as_ref()).await
+                        || !publish_mapped_event(&runtime, second, pending, app.as_ref()).await
                     {
                         break;
                     }
@@ -85,7 +87,7 @@ pub(super) fn spawn_event_forwarder(
         }
 
         if let Some(event) = batcher.flush_boundary() {
-            let _ = publish_mapped_event(&runtime, event, None).await;
+            let _ = publish_mapped_event(&runtime, event, None, app.as_ref()).await;
         }
 
         finish_runtime(&runtime).await;
@@ -96,6 +98,7 @@ async fn publish_mapped_event(
     runtime: &Arc<Mutex<RuntimeSession>>,
     mut event: AgentEvent,
     mut pending: Option<PendingServerRequest>,
+    app: Option<&AppHandle>,
 ) -> bool {
     let Some(task_id) = event.task_id().map(str::to_owned) else {
         return true;
@@ -113,7 +116,10 @@ async fn publish_mapped_event(
         };
         event_json["payload"]["request"]["projectId"] = json!(project_id);
     }
-    let sequence = session.project_sequences.entry(project_id).or_default();
+    let sequence = session
+        .project_sequences
+        .entry(project_id.clone())
+        .or_default();
     *sequence += 1;
     event.set_sequence(*sequence);
     if event.event_type() == Some("turn.started")
@@ -135,7 +141,12 @@ async fn publish_mapped_event(
         session.pending_requests.insert(request_id, pending);
     }
     // WebView 销毁期间没有可用 Channel，但 Runtime 必须继续消费并维护原生状态。
+    let pet_event = event.clone();
     let _ = session.publish(AppEvent::AgentEvent { event });
+    drop(session);
+    if let Some(app) = app {
+        observe_desktop_pet_agent_event(app, &project_id, &pet_event).await;
+    }
     true
 }
 

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::{collections::HashMap, sync::Arc};
 
 use serde_json::{Value, json};
-use tauri::ipc::Channel;
+use tauri::{AppHandle, ipc::Channel};
 use tokio::{
     sync::{Mutex, mpsc},
     task::JoinHandle,
@@ -61,7 +61,11 @@ impl AppState {
         runtime.snapshot
     }
 
-    pub async fn start_codex(&self, app_data: &Path) -> Result<RuntimeSnapshot, AppError> {
+    pub async fn start_codex(
+        &self,
+        app: &AppHandle,
+        app_data: &Path,
+    ) -> Result<RuntimeSnapshot, AppError> {
         {
             let mut runtime = self.runtime.lock().await;
             if matches!(
@@ -81,7 +85,8 @@ impl AppState {
                     .take_server_messages()
                     .await
                     .map_err(|_| AppError::CodexRuntimeStartFailed)?;
-                let event_task = spawn_event_forwarder(Arc::clone(&self.runtime), messages);
+                let event_task =
+                    spawn_event_forwarder(Arc::clone(&self.runtime), messages, Some(app.clone()));
                 let mut runtime = self.runtime.lock().await;
                 runtime.codex_process = Some(process);
                 runtime._event_task = Some(event_task);

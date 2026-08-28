@@ -21,7 +21,7 @@ pub async fn start_runtime(
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    state.start_codex(&app_data).await
+    state.start_codex(&app, &app_data).await
 }
 
 #[tauri::command]

@@ -15,7 +15,6 @@ import {
 
 const DESKTOP_PET_STATE_EVENT = "desktop-pet://state";
 const DESKTOP_PET_MOVED_EVENT = "desktop-pet://moved";
-const DESKTOP_PET_OPEN_TASK_EVENT = "desktop-pet://open-task";
 
 export async function syncDesktopPet(state: DesktopPetState | null): Promise<void> {
   await invoke("sync_desktop_pet", { state });
@@ -37,14 +36,6 @@ export async function listenDesktopPetMoved(
   listener: (position: DesktopPetPosition) => void,
 ): Promise<UnlistenFn> {
   return listen<DesktopPetPosition>(DESKTOP_PET_MOVED_EVENT, (event) => {
-    listener(event.payload);
-  });
-}
-
-export async function listenDesktopPetTaskOpen(
-  listener: (target: DesktopPetTaskOpen) => void,
-): Promise<UnlistenFn> {
-  return listen<DesktopPetTaskOpen>(DESKTOP_PET_OPEN_TASK_EVENT, (event) => {
     listener(event.payload);
   });
 }

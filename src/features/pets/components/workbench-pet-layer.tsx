@@ -1,13 +1,9 @@
 import type { DesktopPetState } from "../../../protocol/desktop-pet.js";
 import type { WorkbenchPetSettings } from "../../../protocol/index.js";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 
-import {
-  listenDesktopPetTaskOpen,
-  syncDesktopPet,
-} from "../../../platform/tauri/desktop-pet-client.js";
+import { syncDesktopPet } from "../../../platform/tauri/desktop-pet-client.js";
 import { useProjectActivity, useProjectData } from "../../projects/project-context.js";
 import { resolveDesktopPetState } from "../desktop-pet-state.js";
 import { deriveWorkbenchPetActivity } from "../pet-activity.js";
@@ -24,7 +20,6 @@ function DesktopPetSync({ state }: Readonly<{ state: DesktopPetState | null }>) 
 function EnabledDesktopPet({ settings }: Readonly<{ settings: WorkbenchPetSettings }>) {
   const { projects, tasks } = useProjectData();
   const { taskActivity } = useProjectActivity();
-  const navigate = useNavigate();
   const catalog = useQuery(petCatalogQueryOptions());
   const activity = useMemo(
     () => deriveWorkbenchPetActivity(projects, tasks, taskActivity),
@@ -35,17 +30,6 @@ function EnabledDesktopPet({ settings }: Readonly<{ settings: WorkbenchPetSettin
     [activity, catalog.data?.data, settings],
   );
 
-  useEffect(() => {
-    let stopListening: (() => void) | undefined;
-    void listenDesktopPetTaskOpen(({ projectId, taskId }) => {
-      void navigate({ params: { projectId, taskId }, to: "/p/$projectId/t/$taskId" });
-    }).then((unlisten) => {
-      stopListening = unlisten;
-    });
-    return () => {
-      stopListening?.();
-    };
-  }, [navigate]);
   return <DesktopPetSync state={state} />;
 }
 
