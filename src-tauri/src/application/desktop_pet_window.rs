@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tauri::{
     AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder, utils::config::BackgroundThrottlingPolicy,
+    WebviewWindowBuilder,
 };
 
 #[cfg(not(target_os = "macos"))]
@@ -337,7 +337,6 @@ fn overlay_window_builder<'a>(
         .decorations(false)
         .shadow(false)
         .transparent(true)
-        .background_throttling(BackgroundThrottlingPolicy::Disabled)
         .always_on_top(true)
         .visible_on_all_workspaces(true)
         .skip_taskbar(true)

@@ -23,12 +23,12 @@ function useReducedMotion(): boolean {
 
 export function WorkbenchPetCanvas({
   animationName,
-  alwaysAnimate = false,
+  maximumFps,
   onReady,
   pet,
 }: Readonly<{
   animationName: string;
-  alwaysAnimate?: boolean;
+  maximumFps?: number;
   onReady?: () => void;
   pet: WorkbenchPetDescriptor;
 }>) {
@@ -80,9 +80,13 @@ export function WorkbenchPetCanvas({
         setFallback(true);
       }
     };
-    const controller = new PetAnimationController({ animations: pet.animations, onFrame: draw });
+    const controller = new PetAnimationController({
+      animations: pet.animations,
+      maximumFps,
+      onFrame: draw,
+    });
     controller.setReducedMotion(reducedMotion);
-    controller.setVisible(alwaysAnimate || document.visibilityState === "visible");
+    controller.setVisible(document.visibilityState === "visible");
     controller.play(animationName);
 
     // 尺寸只在 ResizeObserver 通知时读取，动画帧本身不会触发布局测量。
@@ -91,7 +95,7 @@ export function WorkbenchPetCanvas({
     });
     observer.observe(canvas);
     const handleVisibility = () => {
-      controller.setVisible(alwaysAnimate || document.visibilityState === "visible");
+      controller.setVisible(document.visibilityState === "visible");
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
@@ -99,7 +103,7 @@ export function WorkbenchPetCanvas({
       document.removeEventListener("visibilitychange", handleVisibility);
       controller.dispose();
     };
-  }, [alwaysAnimate, animationName, image, onReady, pet.animations, pet.frame, reducedMotion]);
+  }, [animationName, image, maximumFps, onReady, pet.animations, pet.frame, reducedMotion]);
 
   useEffect(() => {
     // 隐藏的原生窗口不会推进动画，资源提交后即可显示并由 visibilitychange 启动首帧。

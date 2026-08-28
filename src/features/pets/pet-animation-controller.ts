@@ -29,11 +29,18 @@ export function resolvePetAnimation(
 
 type PetAnimationControllerOptions = Readonly<{
   animations: PetAnimations;
+  maximumFps: number | undefined;
   onFrame: (spriteIndex: number) => void;
 }>;
 
+export function resolvePetFrameDuration(durationMs: number, maximumFps?: number): number {
+  if (maximumFps === undefined) return durationMs;
+  return Math.max(durationMs, Math.ceil(1_000 / maximumFps));
+}
+
 export class PetAnimationController {
   readonly #animations: PetAnimations;
+  readonly #maximumFps: number | undefined;
   readonly #onFrame: (spriteIndex: number) => void;
   #animationName = "idle";
   #disposed = false;
@@ -44,6 +51,7 @@ export class PetAnimationController {
 
   public constructor(options: PetAnimationControllerOptions) {
     this.#animations = options.animations;
+    this.#maximumFps = options.maximumFps;
     this.#onFrame = options.onFrame;
   }
 
@@ -101,6 +109,6 @@ export class PetAnimationController {
         nextIndex < animation.frames.length ? nextIndex : loopIndex,
         generation,
       );
-    }, frame.durationMs);
+    }, resolvePetFrameDuration(frame.durationMs, this.#maximumFps));
   }
 }

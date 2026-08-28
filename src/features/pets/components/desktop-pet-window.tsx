@@ -34,6 +34,9 @@ import {
 import { releaseDesktopPetPointerCapture } from "../desktop-pet-pointer.js";
 import { WorkbenchPetCanvas } from "./workbench-pet-canvas.js";
 
+const IDLE_MAXIMUM_FPS = 10;
+const ACTIVE_MAXIMUM_FPS = 25;
+
 interface DragStateBase {
   pointerId: number;
   startX: number;
@@ -307,7 +310,7 @@ export function DesktopPetWindow() {
       <span className="desktop-pet-sprite">
         <WorkbenchPetCanvas
           animationName={animationName}
-          alwaysAnimate
+          maximumFps={animationName === "idle" ? IDLE_MAXIMUM_FPS : ACTIVE_MAXIMUM_FPS}
           onReady={handleReady}
           pet={pet}
         />
