@@ -19,6 +19,7 @@ import {
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
+import { observeConversationViewportRecovery } from "./conversation-viewport-recovery.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
@@ -244,6 +245,31 @@ export function ConversationVirtualList<TItem>({
     overscan: TURN_OVERSCAN,
     scrollEndThreshold: 24,
   });
+  useEffect(() => {
+    if (items.length === 0) {
+      return;
+    }
+
+    return observeConversationViewportRecovery({
+      cancelFrame: cancelAnimationFrame,
+      documentTarget: document,
+      isFollowing: () => context.atBottom,
+      measure: () => {
+        const container = containerRef.current;
+        if (container === null) {
+          return;
+        }
+        for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
+          virtualizer.measureElement(turn);
+        }
+      },
+      requestFrame: (callback) => requestAnimationFrame(callback),
+      scrollToEnd: () => {
+        virtualizer.scrollToIndex(items.length - 1, { align: "end", behavior: "auto" });
+      },
+      windowTarget: window,
+    });
+  }, [containerRef, context.atBottom, items.length, virtualizer]);
   const navigateToItem = useCallback(
     (index: number, anchorId: string) => {
       const container = containerRef.current;
@@ -303,6 +329,7 @@ export function ConversationVirtualList<TItem>({
           {virtualizer.getVirtualItems().map((virtualTurn) => (
             <div
               className="absolute left-0 top-0 w-full"
+              data-conversation-turn=""
               data-index={virtualTurn.index}
               key={virtualTurn.key}
               ref={virtualizer.measureElement}
