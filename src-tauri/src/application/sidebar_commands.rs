@@ -185,7 +185,7 @@ pub async fn start_turn(
         if resume_task {
             codex::resume_task(&connection, &project_id, &task_id)
                 .await
-                .map_err(|_| AppError::CodexRequestFailed)?;
+                .map_err(AppError::from)?;
         }
         let (waiter_id, turn_started) = state.register_turn_started(&task_id).await;
         let result = async {
@@ -226,7 +226,7 @@ pub async fn start_turn(
         resume_task,
     )
     .await
-    .map_err(|_| AppError::CodexRequestFailed)?;
+    .map_err(AppError::from)?;
     response.checkpoint.sequence = state.project_sequence(&project_id).await;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }

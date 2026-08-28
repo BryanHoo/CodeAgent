@@ -1,7 +1,7 @@
 use serde::{Serialize, ser::SerializeStruct, ser::Serializer};
 use thiserror::Error;
 
-use crate::infrastructure::workspace::WorkspaceError;
+use crate::infrastructure::{codex::ConnectionError, workspace::WorkspaceError};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -15,6 +15,8 @@ pub enum AppError {
     CodexRuntimeUnavailable,
     #[error("Codex request failed")]
     CodexRequestFailed,
+    #[error("Codex thread is active in another session")]
+    CodexThreadBusy,
     #[error("filesystem request failed")]
     FilesystemRequestFailed,
     #[error(transparent)]
@@ -36,13 +38,35 @@ impl Serialize for AppError {
     where
         S: Serializer,
     {
-        if let Self::Workspace(error) = self {
+        let structured_error = match self {
+            Self::CodexThreadBusy => Some(("CODEX_THREAD_BUSY", self.to_string())),
+            Self::Workspace(error) => Some((error.code(), error.to_string())),
+            _ => None,
+        };
+        if let Some((code, message)) = structured_error {
             let mut payload = serializer.serialize_struct("AppError", 2)?;
-            payload.serialize_field("code", error.code())?;
-            payload.serialize_field("message", &error.to_string())?;
+            payload.serialize_field("code", code)?;
+            payload.serialize_field("message", &message)?;
             return payload.end();
         }
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl From<ConnectionError> for AppError {
+    fn from(error: ConnectionError) -> Self {
+        // active writer 是用户可处理的会话冲突，其余 Provider 细节继续留在后端边界。
+        match error {
+            ConnectionError::Request {
+                code: -32600,
+                message,
+            } if message.starts_with("thread ")
+                && message.ends_with(" already has an active writer") =>
+            {
+                Self::CodexThreadBusy
+            }
+            _ => Self::CodexRequestFailed,
+        }
     }
 }
 
@@ -62,6 +86,35 @@ mod tests {
                 "code": "SNAPSHOT_MISMATCH",
                 "message": "workspace snapshot changed; refresh and retry"
             })
+        );
+    }
+
+    #[test]
+    fn active_thread_writer_should_preserve_a_stable_error_code() {
+        let error = crate::infrastructure::codex::ConnectionError::Request {
+            code: -32600,
+            message: "thread thread-a already has an active writer".to_owned(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(AppError::from(error)).unwrap(),
+            json!({
+                "code": "CODEX_THREAD_BUSY",
+                "message": "Codex thread is active in another session"
+            })
+        );
+    }
+
+    #[test]
+    fn unrelated_codex_errors_should_remain_generic() {
+        let error = crate::infrastructure::codex::ConnectionError::Request {
+            code: -32600,
+            message: "invalid turn options".to_owned(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(AppError::from(error)).unwrap(),
+            json!("Codex request failed")
         );
     }
 }

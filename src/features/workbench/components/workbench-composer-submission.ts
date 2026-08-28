@@ -10,6 +10,7 @@ import type {
 import type { RefObject } from "react";
 import { v4 as createUuid } from "uuid";
 
+import { NativeCommandError } from "../../../platform/tauri/native-client.js";
 import type { PromptInputMessage } from "../../../shared/components/agent/prompt-input.js";
 import type { NativeMutationClient } from "../../projects/project-queries.js";
 import type { AcceptedSteerPrompt } from "../composer-queue-state.js";
@@ -66,6 +67,17 @@ type ComposerSubmissionOptions = Readonly<{
   t: (key: string) => string;
   turnControlsDisabled: boolean;
 }>;
+
+export function toPromptSubmissionError(
+  error: unknown,
+  t: (key: string) => string,
+): Error {
+  // Provider writer 冲突需要给出可操作提示，不能降级成无上下文的提交失败。
+  if (error instanceof NativeCommandError && error.code === "CODEX_THREAD_BUSY") {
+    return new Error(t("composer.threadBusy"));
+  }
+  return error instanceof Error ? error : new Error(t("composer.operationFailed"));
+}
 
 export function createComposerSubmission({
   activeUserMessageIds,
@@ -355,7 +367,7 @@ export function createComposerSubmission({
       return true;
     } catch (error) {
       if (isCurrentScope(requestScope)) {
-        setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
+        setMutationError(toPromptSubmissionError(error, t));
       }
       return false;
     } finally {

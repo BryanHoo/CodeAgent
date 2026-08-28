@@ -10,6 +10,7 @@
 
 - 对外结构使用 `serde(rename_all = "camelCase")`
 - 事件枚举使用 `serde(tag = "type", content = "data")`
+- Codex 线程被其他 writer 占用时返回 `{ code: "CODEX_THREAD_BUSY", message }`；其他 Provider 错误继续使用通用错误，避免透传底层敏感细节
 - IPC 结构变化时同步修改 `src/domain/` 中对应的 TypeScript 类型
 - Channel 事件保持单调递增序号，前端据此忽略陈旧事件
 - 为序列化结果编写精确 JSON 断言，防止字段名或标签漂移

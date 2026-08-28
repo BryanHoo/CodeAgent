@@ -128,6 +128,7 @@ export const workbench = {
     noModels: "暂无可用模型",
     openProjectFolder: "在系统文件夹中打开",
     operationFailed: "操作失败，请重试",
+    threadBusy: "该任务正在另一个 Codex 会话中运行，请关闭原会话后重试",
     placeholder: "告诉 CodeAgent 你想完成什么",
     planMode: "计划",
     projectPath: "项目路径",

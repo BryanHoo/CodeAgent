@@ -58,6 +58,7 @@ pub use commit_message::{
     parse_commit_message_output, read_commit_message_settings, start_commit_message_thread,
     start_commit_message_turn,
 };
+pub(crate) use connection::ConnectionError;
 pub use connection::{AppServerConnection, ServerMessage};
 pub(crate) use conversation::RUNTIME_SESSION_ID;
 pub use conversation::read_task_snapshot;

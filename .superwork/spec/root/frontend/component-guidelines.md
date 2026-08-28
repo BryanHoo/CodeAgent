@@ -13,6 +13,7 @@
 - Inspector 始终显示可用 Tab；数据模块仅在存在实体时渲染，无内容时在面板内容区显示空状态
 - `@pierre/diffs` 首次显示前按当前文件语言预加载高亮器，避免首个 Diff 异步初始化后保持空白
 - Composer 提交消息时必须保留完整 `AgentMessageAttachment`，不得退化为仅含 `id` 的引用
+- Composer 必须将 `CODEX_THREAD_BUSY` 映射为本地化的可操作提示；未知原生拒绝不得显示硬编码英文兜底文案
 - 仅在多个调用方确有一致需求时提取通用组件
 - 桌面宠物不得挂载到工作台 DOM；主窗口只投影动画与有界任务摘要，宠物和气泡使用专用入口与最小 Provider 装配，气泡点击通过固定事件回到主窗口路由，避免重复连接 Provider Runtime
 - 桌面宠物必须保留 Codexly 的动画映射：pointer capture 拖动时切换 `running-left`/`running-right`，释放后播放 `jumping` 再恢复活动动画；位置 IPC 按动画帧合并到最新坐标，不得调用会阻塞 WebView 动画循环的原生模态拖窗
