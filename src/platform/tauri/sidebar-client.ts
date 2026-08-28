@@ -283,13 +283,13 @@ export class TauriSidebarClient extends TauriRuntimeClient {
   }
 
   public async steerTurn(
-    _projectId: string,
+    projectId: string,
     taskId: string,
     turnId: string,
     input: AgentPromptInput,
     _options: MutationOptions = {},
   ): Promise<SteerAgentTurnResponse> {
-    return this.call("steer_turn", { input, taskId, turnId });
+    return this.call("steer_turn", { input, projectId, taskId, turnId });
   }
 
   public async interruptTurn(

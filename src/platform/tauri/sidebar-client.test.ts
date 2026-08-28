@@ -136,6 +136,7 @@ describe("TauriSidebarClient", () => {
     });
     expect(invoke).toHaveBeenNthCalledWith(3, "steer_turn", {
       input,
+      projectId: "project-a",
       taskId: "thread-a",
       turnId: "turn-a",
     });

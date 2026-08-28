@@ -82,9 +82,12 @@ pub async fn open_task_attachment(
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    let path = workspace::validate_attachment(&app_data, &project_id, &attachment_id)
-        .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    let path = match workspace::validate_attachment(&app_data, &project_id, &attachment_id).await {
+        Ok(path) => path,
+        Err(_) => workspace::validate_generated_attachment(&app_data, &attachment_id)
+            .await
+            .map_err(|_| AppError::FilesystemRequestFailed)?,
+    };
     workspace::open_path("system-default", &path)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;

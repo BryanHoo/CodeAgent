@@ -1,4 +1,5 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::path::{Path, PathBuf};
+use std::{collections::HashMap, sync::Arc};
 
 use serde_json::{Value, json};
 use tauri::ipc::Channel;
@@ -42,7 +43,7 @@ impl AppState {
         runtime.snapshot
     }
 
-    pub async fn start_codex(&self) -> Result<RuntimeSnapshot, AppError> {
+    pub async fn start_codex(&self, app_data: &Path) -> Result<RuntimeSnapshot, AppError> {
         {
             let mut runtime = self.runtime.lock().await;
             if matches!(
@@ -55,7 +56,7 @@ impl AppState {
             runtime.publish(event)?;
         }
 
-        match CodexProcess::start().await {
+        match CodexProcess::start(app_data).await {
             Ok(process) => {
                 let messages = process
                     .connection()

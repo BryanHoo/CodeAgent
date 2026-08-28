@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    path::Path,
     pin::Pin,
     sync::{
         Arc, Mutex,
@@ -18,6 +19,7 @@ use tokio::{
     time::{sleep, timeout},
 };
 
+use super::generated_image_store::GeneratedImageStore;
 use super::protocol::{
     ClientInfo, IGNORED_NOTIFICATION_METHODS, IncomingMessage, InitializeCapabilities,
     InitializeParams, InitializeResponse, RpcError, encode_notification, encode_request,
@@ -71,7 +73,24 @@ pub struct ServerMessage {
 }
 
 impl AppServerConnection {
+    #[cfg(test)]
     pub fn new<R, W>(reader: R, writer: W) -> Self
+    where
+        R: AsyncRead + Send + Unpin + 'static,
+        W: AsyncWrite + Send + Unpin + 'static,
+    {
+        Self::build(reader, writer, None)
+    }
+
+    pub fn with_image_store<R, W>(reader: R, writer: W, app_data: &Path) -> Self
+    where
+        R: AsyncRead + Send + Unpin + 'static,
+        W: AsyncWrite + Send + Unpin + 'static,
+    {
+        Self::build(reader, writer, Some(GeneratedImageStore::new(app_data)))
+    }
+
+    fn build<R, W>(reader: R, writer: W, image_store: Option<GeneratedImageStore>) -> Self
     where
         R: AsyncRead + Send + Unpin + 'static,
         W: AsyncWrite + Send + Unpin + 'static,
@@ -79,7 +98,12 @@ impl AppServerConnection {
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let reader_pending = Arc::clone(&pending);
         let (message_sender, message_receiver) = mpsc::channel(256);
-        let reader_task = tokio::spawn(read_responses(reader, reader_pending, message_sender));
+        let reader_task = tokio::spawn(read_responses(
+            reader,
+            reader_pending,
+            message_sender,
+            image_store,
+        ));
 
         Self {
             writer: AsyncMutex::new(Box::pin(writer)),
@@ -219,6 +243,7 @@ async fn read_responses<R>(
     reader: R,
     pending: PendingRequests,
     server_messages: mpsc::Sender<ServerMessage>,
+    image_store: Option<GeneratedImageStore>,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -240,6 +265,19 @@ async fn read_responses<R>(
         }
         if line.is_empty() {
             continue;
+        }
+
+        if let Some(store) = image_store.as_ref()
+            && GeneratedImageStore::contains_image_generation(&line)
+        {
+            let store = store.clone();
+            match tokio::task::spawn_blocking(move || store.sanitize_frame(line)).await {
+                Ok(Ok(sanitized)) => line = sanitized,
+                Ok(Err(_)) | Err(_) => {
+                    fail_pending(&pending, PendingError::InvalidMessage);
+                    return;
+                }
+            }
         }
 
         // 只解析响应信封，result 保持 RawValue，避免大响应在路由阶段重复建树。
@@ -440,41 +478,5 @@ mod tests {
             "ok"
         );
         server_task.await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn server_request_id_should_not_consume_client_response() {
-        let (client, server) = duplex(4096);
-        let (client_reader, client_writer) = split(client);
-        let (server_reader, mut server_writer) = split(server);
-        let connection = AppServerConnection::new(client_reader, client_writer);
-
-        let server_task = tokio::spawn(async move {
-            let mut lines = BufReader::new(server_reader).lines();
-            let request: Value = serde_json::from_str(
-                &lines
-                    .next_line()
-                    .await
-                    .expect("server should read request")
-                    .expect("client request should exist"),
-            )
-            .expect("client request should be JSON");
-            let id = &request["id"];
-            let messages = format!(
-                "{{\"id\":{id},\"method\":\"item/tool/requestUserInput\",\"params\":{{}}}}\n{{\"id\":{id},\"result\":{{\"value\":\"client-response\"}}}}\n"
-            );
-            server_writer
-                .write_all(messages.as_bytes())
-                .await
-                .expect("server should write messages");
-        });
-
-        let result: Value = connection
-            .request("test/collision", &json!({}), Duration::from_secs(1))
-            .await
-            .expect("server request must not consume the client response");
-
-        assert_eq!(result["value"], "client-response");
-        server_task.await.expect("fake server should finish");
     }
 }

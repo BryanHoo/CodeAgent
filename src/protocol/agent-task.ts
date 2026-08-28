@@ -321,13 +321,8 @@ export const AgentSkillReferenceSchema = Type.Object(
 
 export type AgentSkillReference = Readonly<Static<typeof AgentSkillReferenceSchema>>;
 
-const AgentAttachmentReferenceSchema = Type.Object(
-  { id: Type.String({ minLength: 1 }) },
-  { additionalProperties: false },
-);
-
 const AgentPromptInputProperties = {
-  attachments: Type.Array(AgentAttachmentReferenceSchema),
+  attachments: Type.Array(AgentMessageAttachmentSchema),
   skills: Type.Array(AgentSkillReferenceSchema),
   text: Type.String({ maxLength: 100_000 }),
   type: Type.Literal("prompt"),
@@ -344,7 +339,7 @@ export const AgentPromptInputSchema = Type.Union([
   Type.Object(
     {
       ...AgentPromptInputProperties,
-      attachments: Type.Array(AgentAttachmentReferenceSchema, { minItems: 1 }),
+      attachments: Type.Array(AgentMessageAttachmentSchema, { minItems: 1 }),
     },
     { additionalProperties: false },
   ),

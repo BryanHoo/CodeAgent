@@ -62,7 +62,7 @@ pub struct CodexProcess {
 }
 
 impl CodexProcess {
-    pub async fn start() -> Result<Self, ProcessError> {
+    pub async fn start(app_data: &Path) -> Result<Self, ProcessError> {
         let program = configured_binary()?;
         let version = probe_codex_version(&program).await?;
         let runtime_path = resolve_login_shell_path().await;
@@ -77,7 +77,9 @@ impl CodexProcess {
         let stderr_task = tokio::spawn(async move {
             let _ = io::copy(&mut stderr, &mut io::sink()).await;
         });
-        let connection = Arc::new(AppServerConnection::new(stdout, stdin));
+        let connection = Arc::new(AppServerConnection::with_image_store(
+            stdout, stdin, app_data,
+        ));
         let metadata = connection
             .initialize(STARTUP_TIMEOUT)
             .await
@@ -357,7 +359,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires the installed codex-cli 0.149.0 binary"]
     async fn installed_codex_should_complete_real_app_server_lifecycle() {
-        let process = CodexProcess::start()
+        let process = CodexProcess::start(&std::env::temp_dir())
             .await
             .expect("installed Codex app-server should start");
         assert_eq!(process.version(), SUPPORTED_CODEX_VERSION);

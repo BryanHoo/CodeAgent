@@ -12,4 +12,5 @@
 - `temporary` 是合成任务作用域；依赖真实 Project 或根目录的查询必须在该作用域禁用
 - Inspector 始终显示可用 Tab；数据模块仅在存在实体时渲染，无内容时在面板内容区显示空状态
 - `@pierre/diffs` 首次显示前按当前文件语言预加载高亮器，避免首个 Diff 异步初始化后保持空白
+- Composer 提交消息时必须保留完整 `AgentMessageAttachment`，不得退化为仅含 `id` 的引用
 - 仅在多个调用方确有一致需求时提取通用组件

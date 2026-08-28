@@ -35,7 +35,8 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 命令、文件变更、工具、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、搜索取消和结果上限 | 已实现 |
-| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.149 `text`/`localImage` 输入；Rust 校验 UTF-8、类型、大小与缓存边界 | 已实现 |
+| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.149 `text`/`localImage` 输入；文件通过 `text_elements.placeholder` 保留名称与媒体类型，队列与历史恢复为附件 | 已实现 |
+| 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
@@ -66,6 +67,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 
 - `AppServerConnection` 使用请求 ID 匹配乱序响应，`-32001` 过载有限重试。
 - stdout 按 JSONL 增量读取，stderr 独立排水，通知队列容量为 256。
+- 普通 JSONL 帧继续使用 `RawValue` 快路；仅 `imageGeneration` 帧定向解析，图片正文不进入 WebView。
 - 前端只保留 1,024 条近期事件，流式文本按动画帧批量提交。
 - 历史页每次读取 10 个 Turn，每个 Turn 的 Item 每页 100 条，同页 Turn 并发补全。
 - 文件变更、附件、命令输出、搜索结果和运行时事件均设有大小或数量边界。

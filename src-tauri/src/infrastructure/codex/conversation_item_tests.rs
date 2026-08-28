@@ -88,3 +88,52 @@ fn command_output_should_keep_bounded_utf8_head_and_tail() {
     assert!(value["outputOmitted"]["bytes"].as_u64().unwrap() > 0);
     assert!(value["outputOmitted"]["lines"].as_u64().unwrap() > 0);
 }
+
+#[test]
+fn user_file_should_restore_attachment_without_exposing_its_path_as_text() {
+    let mapped = map_item(json!({
+        "id": "user-file",
+        "type": "userMessage",
+        "content": [{
+            "text": "/tmp/report.json",
+            "text_elements": [{
+                "byteRange": {"start": 0, "end": 16},
+                "placeholder": "codexly-file:eyJraW5kIjoiZmlsZSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJuYW1lIjoicmVwb3J0Lmpzb24iLCJzaXplIjoxN30",
+            }],
+            "type": "text",
+        }],
+    }))
+    .expect("user file should map");
+    let value = to_value(mapped).unwrap();
+
+    assert_eq!(value["text"], "");
+    assert_eq!(value["attachments"][0]["id"], "/tmp/report.json");
+    assert_eq!(value["attachments"][0]["name"], "report.json");
+}
+
+#[test]
+fn completed_image_generation_should_map_to_attachment_metadata_without_base64() {
+    let encoded = "iVBORw0KGgo=";
+    let mapped = map_item(json!({
+        "codeagentAttachment": {
+            "id": "/tmp/generated.png",
+            "kind": "image",
+            "mediaType": "image/png",
+            "name": "generated-image.png",
+            "size": 8,
+        },
+        "failure": null,
+        "id": "image-a",
+        "result": encoded,
+        "revisedPrompt": "diagram",
+        "status": "completed",
+        "type": "imageGeneration",
+    }))
+    .expect("generated image should map");
+    let value = to_value(mapped).unwrap();
+
+    assert_eq!(value["type"], "message");
+    assert_eq!(value["role"], "assistant");
+    assert_eq!(value["attachments"][0]["id"], "/tmp/generated.png");
+    assert!(!value.to_string().contains(encoded));
+}

@@ -1,6 +1,8 @@
 use serde_json::{Map, Value, json};
 
 use super::connection::ConnectionError;
+use super::conversation_file_input::read_file_text_input;
+use super::generated_image_store::IMAGE_ATTACHMENT_FIELD;
 use crate::domain::conversation::{AgentCommandOutputOmission, AgentFileChange, AgentItem};
 
 const MAX_COMMAND_OUTPUT_BYTES: usize = 1_048_576;
@@ -94,20 +96,33 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
                 .cloned(),
             status: "completed",
         }),
-        "imageGeneration" => Ok(AgentItem::Tool {
-            id,
-            input: item
-                .get("revisedPrompt")
-                .filter(|value| !value.is_null())
-                .map(|value| json!({"prompt": value})),
-            name: "image_generation".to_owned(),
-            output: item
-                .get("result")
-                .filter(|value| !value.is_null())
-                .or_else(|| item.get("failure").filter(|value| !value.is_null()))
-                .cloned(),
-            status: map_status(required_string(item, "status")?, false)?,
-        }),
+        "imageGeneration" => {
+            if let Some(attachment) = generated_image_attachment(item)? {
+                Ok(AgentItem::Message {
+                    attachments: Some(vec![attachment]),
+                    id,
+                    phase: None,
+                    role: "assistant",
+                    skills: None,
+                    text: String::new(),
+                })
+            } else {
+                Ok(AgentItem::Tool {
+                    id,
+                    input: item
+                        .get("revisedPrompt")
+                        .filter(|value| !value.is_null())
+                        .map(|value| json!({"prompt": value})),
+                    name: "image_generation".to_owned(),
+                    // 失败元数据可以展示，图片正文绝不进入 Tool output。
+                    output: item
+                        .get("failure")
+                        .filter(|value| !value.is_null())
+                        .cloned(),
+                    status: map_status(required_string(item, "status")?, false)?,
+                })
+            }
+        }
         "hookPrompt" => activity(id, "Hook 提示", None, None, None),
         "subAgentActivity" => {
             let path = required_string(item, "agentPath")?;
@@ -280,7 +295,13 @@ fn map_user_message(
             continue;
         };
         match part.get("type").and_then(Value::as_str) {
-            Some("text") => text.push(required_string(part, "text")?.to_owned()),
+            Some("text") => {
+                if let Some(attachment) = read_file_text_input(part)? {
+                    attachments.push(attachment);
+                } else {
+                    text.push(required_string(part, "text")?.to_owned());
+                }
+            }
             Some("localImage") => {
                 let path = std::path::Path::new(required_string(part, "path")?);
                 let name = path
@@ -319,6 +340,32 @@ fn image_media_type(path: &std::path::Path) -> &'static str {
         Some("webp") => "image/webp",
         _ => "image/png",
     }
+}
+
+fn generated_image_attachment(item: &Map<String, Value>) -> Result<Option<Value>, ConnectionError> {
+    let Some(attachment) = item.get(IMAGE_ATTACHMENT_FIELD) else {
+        return Ok(None);
+    };
+    let object = attachment
+        .as_object()
+        .ok_or(ConnectionError::InvalidMessage)?;
+    let size = object
+        .get("size")
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+        .ok_or(ConnectionError::InvalidMessage)?;
+    if required_string(object, "kind")? != "image"
+        || !matches!(
+            required_string(object, "mediaType")?,
+            "image/gif" | "image/jpeg" | "image/png" | "image/webp"
+        )
+        || required_string(object, "name")?.len() > 255
+        || size > 50 * 1024 * 1024
+        || !std::path::Path::new(required_string(object, "id")?).is_absolute()
+    {
+        return Err(ConnectionError::InvalidMessage);
+    }
+    Ok(Some(attachment.clone()))
 }
 
 fn map_file_changes(item: &Map<String, Value>) -> Result<Vec<AgentFileChange>, ConnectionError> {

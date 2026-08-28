@@ -146,26 +146,30 @@ pub async fn resolve_prompt_attachments(
         let path_string = path.to_string_lossy().into_owned();
         object.insert("id".to_owned(), Value::String(path_string.clone()));
         if is_image_path(&path) {
+            if object.get("kind").and_then(Value::as_str) != Some("image") {
+                return Err(AppError::FilesystemRequestFailed);
+            }
             object.insert("kind".to_owned(), Value::String("image".to_owned()));
         } else {
             let metadata = tokio::fs::metadata(&path)
                 .await
                 .map_err(|_| AppError::FilesystemRequestFailed)?;
-            if metadata.len() > 1024 * 1024 {
+            let expected_size = object.get("size").and_then(Value::as_u64);
+            let kind = object.get("kind").and_then(Value::as_str);
+            let name = object.get("name").and_then(Value::as_str);
+            let media_type = object.get("mediaType").and_then(Value::as_str);
+            if metadata.len() > 1024 * 1024
+                || expected_size != Some(metadata.len())
+                || !matches!(kind, Some("file" | "text"))
+                || name.is_none_or(|value| {
+                    value.is_empty()
+                        || value.len() > 255
+                        || value.contains(['/', '\\', '\0', '\r', '\n'])
+                })
+                || media_type.is_none_or(|value| value.is_empty() || value.len() > 255)
+            {
                 return Err(AppError::FilesystemRequestFailed);
             }
-            let content = tokio::fs::read_to_string(&path)
-                .await
-                .map_err(|_| AppError::FilesystemRequestFailed)?;
-            let name = path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .ok_or(AppError::FilesystemRequestFailed)?;
-            object.insert("kind".to_owned(), Value::String("text".to_owned()));
-            object.insert(
-                "content".to_owned(),
-                Value::String(format!("<file path=\"{name}\">\n{content}\n</file>")),
-            );
         }
     }
     Ok(())

@@ -1,0 +1,12 @@
+# 共享协议规格
+
+## 附件契约
+
+- `AgentMessageAttachment` 是提交、队列编辑和历史恢复共用的完整附件身份，必须保留 `id`、`kind`、`name`、`mediaType`、`size` 与 `path`
+- 普通文件通过 `codexly-file:` `text_elements.placeholder` 携带固定大小元数据；关联的 `text` 仅保存本地缓存路径，不得作为可见正文渲染
+- 生成图片正文只允许写入本地附件存储；跨 Rust、Tauri Channel 和 WebView 仅传固定大小附件元数据，不得传输 Base64 `result`
+
+## 验证要求
+
+- 覆盖普通文件提交后在队列编辑与历史恢复中的附件 chip 保留行为
+- 覆盖生成图片落盘、Base64 移除和时间线附件映射行为

@@ -19,3 +19,4 @@
 - 阅读 [.superwork/spec/guides/index.md](../../guides/index.md)
 - 涉及真实后端接入时同步阅读 [Tauri 后端开发规格](../../src-tauri/backend/index.md)
 - 确认变更属于应用装配、功能域、共享基础设施、协议契约或 mock 传输中的单一职责
+- 队列编辑必须从消息中的完整附件恢复 chip，并将附件占位信息与可见正文分离

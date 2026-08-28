@@ -7,6 +7,7 @@ use super::{
     AppServerConnection,
     connection::ConnectionError,
     conversation::{NativeTurn, map_turn},
+    conversation_file_input::read_file_text_input,
     conversation_prompt::map_prompt_input,
 };
 use crate::domain::conversation::{AgentPromptInput, AgentTurn};
@@ -285,7 +286,13 @@ fn map_submission(native: NativeSubmission) -> Result<AgentQueuedSubmission, Con
     for input in native.input {
         let object = input.as_object().ok_or(ConnectionError::InvalidMessage)?;
         match object_string_from_map(object, "type")? {
-            "text" => text.push_str(object_string_from_map(object, "text")?),
+            "text" => {
+                if let Some(attachment) = read_file_text_input(object)? {
+                    attachments.push(attachment);
+                } else {
+                    text.push_str(object_string_from_map(object, "text")?);
+                }
+            }
             "skill" => skills.push(json!({
                 "id": object_string_from_map(object, "path")?,
                 "name": object_string_from_map(object, "name")?,
@@ -337,4 +344,34 @@ fn object_string_from_map<'a>(
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
         .ok_or(ConnectionError::InvalidMessage)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FILE_PLACEHOLDER: &str = "codexly-file:eyJraW5kIjoiZmlsZSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJuYW1lIjoicmVwb3J0Lmpzb24iLCJzaXplIjoxN30";
+
+    #[test]
+    fn queued_file_should_restore_attachment_without_exposing_its_path_as_text() {
+        let submission = NativeSubmission {
+            client_user_message_id: "client-a".to_owned(),
+            id: "queue-a".to_owned(),
+            input: vec![json!({
+                "text": "/tmp/report.json",
+                "text_elements": [{
+                    "byteRange": {"start": 0, "end": 16},
+                    "placeholder": FILE_PLACEHOLDER,
+                }],
+                "type": "text",
+            })],
+        };
+
+        let mapped = map_submission(submission).expect("queued file should map");
+        assert_eq!(mapped.text, "");
+        assert_eq!(mapped.attachments.len(), 1);
+        assert_eq!(mapped.attachments[0]["id"], "/tmp/report.json");
+        assert_eq!(mapped.attachments[0]["name"], "report.json");
+        assert_eq!(mapped.attachments[0]["mediaType"], "application/json");
+    }
 }

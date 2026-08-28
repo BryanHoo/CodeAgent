@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use tauri::{State, ipc::Channel};
+use tauri::{AppHandle, Manager, State, ipc::Channel};
 
 use super::{error::AppError, state::AppState};
 use crate::domain::runtime::{AppEvent, RuntimeSnapshot};
@@ -13,8 +13,15 @@ pub async fn connect_runtime(
 }
 
 #[tauri::command]
-pub async fn start_runtime(state: State<'_, AppState>) -> Result<RuntimeSnapshot, AppError> {
-    state.start_codex().await
+pub async fn start_runtime(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RuntimeSnapshot, AppError> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    state.start_codex(&app_data).await
 }
 
 #[tauri::command]

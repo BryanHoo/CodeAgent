@@ -188,7 +188,7 @@ export function useComposerQueue({
       queuedPrompt.id,
       {
         attachments: editablePrompt.files.flatMap((file) =>
-          file.source === "host" ? [{ id: file.attachment.id }] : [],
+          file.source === "host" ? [file.attachment] : [],
         ),
         skills: editablePrompt.skills.map(({ id, name }) => ({ id, name })),
         text: editablePrompt.text,

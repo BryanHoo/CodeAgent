@@ -9,7 +9,9 @@ mod path_guard;
 #[cfg(test)]
 mod git_tests;
 
-pub use attachments::{import_attachment, store_attachment, validate_attachment};
+pub use attachments::{
+    import_attachment, store_attachment, validate_attachment, validate_generated_attachment,
+};
 pub use files::{
     delete_project_file, list_project_files, read_source_file, rename_project_file,
     search_project_files,

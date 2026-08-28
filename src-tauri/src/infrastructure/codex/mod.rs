@@ -7,12 +7,14 @@ mod conversation_advanced;
 mod conversation_background;
 mod conversation_commands;
 mod conversation_events;
+mod conversation_file_input;
 mod conversation_items;
 mod conversation_prompt;
 mod conversation_queue;
 mod conversation_request_fields;
 mod conversation_requests;
 mod conversation_runtime_events;
+mod generated_image_store;
 mod process;
 mod protocol;
 mod settings;
@@ -25,6 +27,9 @@ mod auth_tests;
 #[cfg(test)]
 #[path = "catalogs_tests.rs"]
 mod catalogs_tests;
+#[cfg(test)]
+#[path = "connection_message_tests.rs"]
+mod connection_message_tests;
 #[cfg(test)]
 #[path = "connection_retry_tests.rs"]
 mod connection_retry_tests;

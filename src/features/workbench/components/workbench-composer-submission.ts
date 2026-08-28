@@ -206,7 +206,7 @@ export function createComposerSubmission({
         ),
       );
       input = {
-        attachments: messageAttachments.map((attachment) => ({ id: attachment.id })),
+        attachments: [...messageAttachments],
         skills: skills.map((skill) => ({ id: skill.id, name: skill.name })),
         text,
         type: "prompt",
