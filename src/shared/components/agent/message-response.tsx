@@ -32,6 +32,7 @@ import {
   RELATIVE_FILE_REFERENCE_PREFIX,
   UNC_FILE_REFERENCE_PREFIX,
 } from "./message-response-processing.js";
+import { openMarkdownLink } from "./markdown-link-navigation.js";
 import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
@@ -208,7 +209,14 @@ function rawMarkupRemarkPlugin() {
   };
 }
 
-function MarkdownLink({ children, className = "", href, node, ...props }: MarkdownLinkProps) {
+function MarkdownLink({
+  children,
+  className = "",
+  href,
+  node,
+  onClick,
+  ...props
+}: MarkdownLinkProps) {
   // Streamdown 注入的语法树节点不能透传给原生元素。
   void node;
   const fileReference = getFileReferenceMetadata(href);
@@ -306,6 +314,12 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
     <a
       className={`font-medium text-brand underline decoration-current/35 underline-offset-2 transition-colors hover:text-brand-strong ${className}`}
       href={href}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          openMarkdownLink(event, href);
+        }
+      }}
       rel="noopener noreferrer"
       target="_blank"
       {...props}
