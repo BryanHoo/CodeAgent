@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 
+import { appPreferenceStorage } from "@/platform/tauri/app-storage.js";
 import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
 import { nativeClient } from "../../projects/project-queries.js";
 
 import {
-  DEFAULT_WORKBENCH_BACKGROUND,
   readCustomBackgroundImage,
   readWorkbenchBackgroundPreference,
   WORKBENCH_BACKGROUND_CHANGED_EVENT,
@@ -153,9 +153,7 @@ export function WorkbenchBackgroundFrame({
 export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode }>) {
   const [backgroundTone, setBackgroundTone] = useState<WorkbenchBackgroundTone | null>(null);
   const [preference, setPreference] = useState<WorkbenchBackgroundPreference>(() =>
-    typeof window === "undefined"
-      ? DEFAULT_WORKBENCH_BACKGROUND
-      : readWorkbenchBackgroundPreference(window.localStorage),
+    readWorkbenchBackgroundPreference(appPreferenceStorage),
   );
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const [bingImageUrl, setBingImageUrl] = useState<string | null>(null);

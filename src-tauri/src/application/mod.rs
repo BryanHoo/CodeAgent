@@ -1,3 +1,4 @@
+pub mod app_storage_commands;
 pub mod attachment_commands;
 pub mod background_commands;
 pub mod catalog_commands;

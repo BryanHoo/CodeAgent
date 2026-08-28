@@ -35,3 +35,5 @@
 - 文件、Git、附件和自定义资源均由 Rust 校验项目根或资源目录边界，WebView 不得获得通用 shell 与任意文件访问能力
 - Bing 壁纸只允许 Rust 访问固定 HTTPS 元数据与图片端点；响应必须限制大小、校验 JPEG 并原子写入单日缓存，再按文件动态授权 asset protocol
 - 新增或修改工作台能力时，同步更新 `docs/codexly-capability-matrix.md` 并运行真实 Codex 0.149 生命周期测试
+- CodeAgent 自身偏好写入 Tauri `app_data_dir()/app.json`，自定义背景写入 `app_data_dir()/backgrounds/custom/`；写入必须有界、校验资源标识并原子替换
+- CodeAgent 存储迁移不得修改 `CODEX_HOME`；Codex 配置、认证、线程与 SQLite 始终由官方目录管理

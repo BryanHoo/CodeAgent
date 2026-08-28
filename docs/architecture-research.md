@@ -237,29 +237,23 @@ AI Elements 的 `Conversation` 提供自动滚动，但没有长列表虚拟化�
 
 ## 6. 数据隔离
 
-建议目录结构：
+当前目录结构：
 
 ```text
 appData/
-├── providers/
-│   ├── codex/
-│   │   ├── bin/           # 应用私有的版本化 Codex 运行时
-│   │   ├── logs/
-│   │   └── ui.sqlite
-│   └── claude/
-│       ├── bin/           # 应用私有的版本化 Claude Code 运行时
-│       ├── runtime/       # CLAUDE_CONFIG_DIR
-│       ├── logs/
-│       └── ui.sqlite
-└── app.json               # 仅保存启动 provider 等全局设置
+├── app.json               # CodeAgent 前端偏好、草稿和界面状态
+├── attachments/           # 用户导入的任务附件
+├── backgrounds/custom/    # 自定义背景二进制与元数据索引
+├── task-settings/         # 任务级运行设置
+└── providers/             # 应用私有 Provider 运行时与可重建缓存
 ```
 
 Codex 的状态数据不写入 `appData/providers/codex/`。启动 `codex app-server` 时不覆盖
 `CODEX_HOME`；存在用户配置时继承该值，否则使用官方默认 `~/.codex`。
 
-`app.json` 只保存 provider 选择、窗口状态和通用外观设置。Provider 启动后，本次应用运行期间不再创建另一个 provider 的运行时。
+CodeAgent 的偏好和自定义背景不依赖 WebView `localStorage` 或 IndexedDB。升级后首次启动会将旧数据迁入上述应用目录，成功后清理旧副本。Provider 启动后，本次应用运行期间不再创建另一个 provider 的运行时。
 
-首版可以不使用 SQLite，只保存 UI 设置和轻量会话索引。Codex 线程历史仍由 `app-server` 管理，不能复制整份会话形成第二个事实来源。后续引入 SQLite 时，仅用于：
+CodeAgent 当前不为 UI 数据引入 SQLite。Codex 线程历史仍由 `app-server` 和官方 `CODEX_HOME` 管理，不能复制整份会话形成第二个事实来源。后续如引入应用 SQLite，仅用于：
 
 - UI 偏好设置。
 - 会话轻量索引和搜索辅助数据。

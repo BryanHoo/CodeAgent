@@ -1,3 +1,5 @@
+import { appPreferenceStorage } from "../../platform/tauri/app-storage.js";
+
 const expandedProjectsStorageKey = "codeagent:project-sidebar:expanded-projects:v1";
 const temporaryTasksExpandedStorageKey = "codeagent:project-sidebar:temporary-tasks-expanded:v1";
 
@@ -17,12 +19,7 @@ type TemporaryTasksExpandedPreference = Readonly<{
 }>;
 
 export function getProjectSidebarPreferenceStorage(): ProjectSidebarPreferenceStorage | undefined {
-  try {
-    return typeof window === "undefined" ? undefined : window.localStorage;
-  } catch {
-    // 浏览器禁用存储时保持侧栏可用，仅跳过跨会话恢复。
-    return undefined;
-  }
+  return appPreferenceStorage;
 }
 
 export function readExpandedProjectIds(

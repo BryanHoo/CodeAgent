@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { appPreferenceStorage } from "../../platform/tauri/app-storage.js";
 import type { PromptInputAttachment } from "../../shared/components/agent/prompt-input.js";
 import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 
@@ -54,11 +55,7 @@ function revokeRemovedDraftPreviews(previousDraft: ComposerDraft, nextDraft: Com
 }
 
 function defaultDraftStorage(): DraftStorage | undefined {
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return undefined;
-  }
+  return appPreferenceStorage;
 }
 
 function readPersistedDraft(

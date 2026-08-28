@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
+import { appPreferenceStorage } from "../../platform/tauri/app-storage.js";
 
 export type FileNavigationViewMode = "list" | "tree";
 export type FileNavigationViewScope = "changes" | "review";
@@ -28,12 +29,7 @@ const currentModeByScope: Record<FileNavigationViewScope, FileNavigationViewMode
 };
 
 function getFileNavigationViewStorage(): FileNavigationViewStorage | undefined {
-  try {
-    return typeof window === "undefined" ? undefined : window.localStorage;
-  } catch {
-    // 浏览器拒绝访问本地存储时，仍允许当前页面完成视图切换。
-    return undefined;
-  }
+  return appPreferenceStorage;
 }
 
 export function readFileNavigationViewPreference(

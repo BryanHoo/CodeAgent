@@ -1,5 +1,6 @@
 import i18next from "i18next";
 import { initReactI18next, I18nextProvider, Trans, useTranslation } from "react-i18next";
+import { appPreferenceStorage } from "../platform/tauri/app-storage.js";
 
 import {
   applyLanguagePreference,
@@ -10,17 +11,8 @@ import {
 } from "./language-preference.js";
 import { defaultNamespace, namespaces, resources } from "./resources.js";
 
-function getBrowserStorage(): Storage | null {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-const browserStorage = getBrowserStorage();
 const initialLanguage = resolveInitialLanguage(
-  browserStorage,
+  appPreferenceStorage,
   typeof window === "undefined" || typeof navigator === "undefined" ? [] : navigator.languages,
 );
 
@@ -43,7 +35,7 @@ if (typeof document !== "undefined") {
 }
 
 export async function changeAppLanguage(language: SupportedLanguage): Promise<void> {
-  saveLanguagePreference(language, browserStorage ?? { setItem: () => undefined });
+  saveLanguagePreference(language, appPreferenceStorage);
   if (typeof document !== "undefined") {
     applyLanguagePreference(language, document.documentElement);
   }
@@ -52,9 +44,20 @@ export async function changeAppLanguage(language: SupportedLanguage): Promise<vo
 
 export function getCurrentLanguage(): SupportedLanguage {
   return (
-    readLanguagePreference(browserStorage ?? { getItem: () => null }) ??
+    readLanguagePreference(appPreferenceStorage) ??
     (i18next.resolvedLanguage === "en" ? "en" : "zh-CN")
   );
+}
+
+export async function synchronizeLanguagePreference(): Promise<void> {
+  const language = resolveInitialLanguage(
+    appPreferenceStorage,
+    typeof navigator === "undefined" ? [] : navigator.languages,
+  );
+  if (typeof document !== "undefined") {
+    applyLanguagePreference(language, document.documentElement);
+  }
+  await i18next.changeLanguage(language);
 }
 
 export { I18nextProvider, Trans, i18next as i18n, useTranslation };

@@ -46,6 +46,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
 | 宠物 | `listWorkbenchPets`, `downloadWorkbenchPet` | 内置 CDN 下载、WebP 校验、自定义 `pets`/旧 `avatars` 扫描、动态资产授权 | 已实现 |
 | Bing 每日壁纸 | `/v1/workbench-background/bing` | Rust 固定来源有界下载、JPEG 校验、原子缓存、Tauri asset protocol | 已实现 |
+| CodeAgent 本地偏好与自定义背景 | WebView `localStorage`、IndexedDB | Tauri IPC、`appData/app.json`、`appData/backgrounds/custom/`，首次启动自动迁移 | 已实现 |
 | 本地访问模式 | access pair/logout/status | 桌面端固定 `local`，无 HTTP 服务和 LAN 认证面 | 等价替代 |
 | 应用内更新 | `getAppInfo`, `installAppUpdate` | 返回应用/Codex 真实版本；当前构建没有签名发布源，不宣告可用更新 | 分发边界 |
 

@@ -1,3 +1,11 @@
+import {
+  appPreferenceStorage,
+  listNativeCustomBackgrounds,
+  readNativeCustomBackground,
+  updateNativeCustomBackgrounds,
+  type NativeCustomBackground,
+} from "../../platform/tauri/app-storage.js";
+
 export type WorkbenchBackgroundMode = "bing" | "custom" | "none";
 
 export type WorkbenchBackgroundPreference = Readonly<{
@@ -30,9 +38,6 @@ export const WORKBENCH_BACKGROUND_CHANGED_EVENT = "codeagent:workbench-backgroun
 
 const BACKGROUND_STORAGE_KEY = "codeagent.workbench-background-preference";
 const BACKGROUND_STORAGE_VERSION = 3;
-const BACKGROUND_DATABASE_NAME = "codeagent-workbench";
-const BACKGROUND_DATABASE_VERSION = 2;
-const BACKGROUND_OBJECT_STORE = "background-images";
 const MAX_CUSTOM_BACKGROUND_BYTES = 20 * 1024 * 1024;
 const CUSTOM_BACKGROUND_TYPES = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"]);
 
@@ -130,100 +135,34 @@ export function removeCustomBackgroundFromDraft(
   };
 }
 
-function openBackgroundDatabase(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(BACKGROUND_DATABASE_NAME, BACKGROUND_DATABASE_VERSION);
-    request.onerror = () => {
-      reject(request.error ?? new Error("Unable to open background image storage"));
-    };
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      // v2 起每张图片使用独立记录；旧固定键仓库无法表达图片集合，直接重建。
-      if (database.objectStoreNames.contains(BACKGROUND_OBJECT_STORE)) {
-        database.deleteObjectStore(BACKGROUND_OBJECT_STORE);
-      }
-      database.createObjectStore(BACKGROUND_OBJECT_STORE, { keyPath: "id" });
-    };
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-  });
-}
-
-function isCustomBackgroundImage(value: unknown): value is CustomBackgroundImage {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "blob" in value &&
-    value.blob instanceof Blob &&
-    "createdAt" in value &&
-    typeof value.createdAt === "number" &&
-    "id" in value &&
-    typeof value.id === "string" &&
-    "name" in value &&
-    typeof value.name === "string"
+export async function readCustomBackgroundImages(): Promise<readonly CustomBackgroundImage[]> {
+  const metadata = await listNativeCustomBackgrounds();
+  return Promise.all(
+    metadata.map(async (image) => ({
+      blob: await readNativeCustomBackground(image.id, image.mediaType),
+      createdAt: image.createdAt,
+      id: image.id,
+      name: image.name,
+    })),
   );
 }
 
-export async function readCustomBackgroundImages(): Promise<readonly CustomBackgroundImage[]> {
-  const database = await openBackgroundDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction(BACKGROUND_OBJECT_STORE, "readonly");
-    const request = transaction.objectStore(BACKGROUND_OBJECT_STORE).getAll();
-    request.onerror = () => {
-      database.close();
-      reject(request.error ?? new Error("Unable to read custom background images"));
-    };
-    request.onsuccess = () => {
-      resolve(
-        request.result
-          .filter(isCustomBackgroundImage)
-          .sort((first, second) => first.createdAt - second.createdAt),
-      );
-    };
-    transaction.oncomplete = () => {
-      database.close();
-    };
-  });
-}
-
 export async function readCustomBackgroundImage(id: string): Promise<Blob | null> {
-  const database = await openBackgroundDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction(BACKGROUND_OBJECT_STORE, "readonly");
-    const request = transaction.objectStore(BACKGROUND_OBJECT_STORE).get(id);
-    request.onerror = () => {
-      database.close();
-      reject(request.error ?? new Error("Unable to read custom background image"));
-    };
-    request.onsuccess = () => {
-      resolve(isCustomBackgroundImage(request.result) ? request.result.blob : null);
-    };
-    transaction.oncomplete = () => {
-      database.close();
-    };
-  });
+  return readNativeCustomBackground(id);
 }
 
 async function applyCustomBackgroundMutation(mutation: CustomBackgroundMutation): Promise<void> {
   if (mutation.deletedImageIds.length === 0 && mutation.imagesToSave.length === 0) return;
-  const database = await openBackgroundDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction(BACKGROUND_OBJECT_STORE, "readwrite");
-    const store = transaction.objectStore(BACKGROUND_OBJECT_STORE);
-    mutation.deletedImageIds.forEach((id) => store.delete(id));
-    mutation.imagesToSave.forEach((image) => store.put(image));
-    transaction.onerror = () => {
-      reject(transaction.error ?? new Error("Unable to update custom background images"));
-    };
-    transaction.onabort = () => {
-      database.close();
-    };
-    transaction.oncomplete = () => {
-      database.close();
-      resolve();
-    };
-  });
+  const images: NativeCustomBackground[] = await Promise.all(
+    mutation.imagesToSave.map(async (image) => ({
+      bytes: Array.from(new Uint8Array(await image.blob.arrayBuffer())),
+      createdAt: image.createdAt,
+      id: image.id,
+      mediaType: image.blob.type,
+      name: image.name,
+    })),
+  );
+  await updateNativeCustomBackgrounds(mutation.deletedImageIds, images);
 }
 
 export async function applyWorkbenchBackgroundPreference(
@@ -232,7 +171,7 @@ export async function applyWorkbenchBackgroundPreference(
 ): Promise<void> {
   // 先提交图片集合再发布偏好，避免工作台读取到尚未落盘的图片 ID。
   await applyCustomBackgroundMutation(mutation);
-  saveWorkbenchBackgroundPreference(preference, window.localStorage);
+  saveWorkbenchBackgroundPreference(preference, appPreferenceStorage);
   window.dispatchEvent(
     new CustomEvent<WorkbenchBackgroundPreference>(WORKBENCH_BACKGROUND_CHANGED_EVENT, {
       detail: preference,

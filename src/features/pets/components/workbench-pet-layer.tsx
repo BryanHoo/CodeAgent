@@ -14,6 +14,7 @@ import {
 import { useAccess } from "../../access/access-context.js";
 import { useProjectActivity, useProjectData } from "../../projects/project-context.js";
 import { useTranslation } from "../../../i18n/i18n.js";
+import { appPreferenceStorage } from "../../../platform/tauri/app-storage.js";
 import { deriveWorkbenchPetActivity, type WorkbenchPetActivity } from "../pet-activity.js";
 import { petCatalogQueryOptions } from "../pet-catalog-query.js";
 import {
@@ -94,7 +95,7 @@ export function WorkbenchPetLayerView({
     const boundary = boundaryRef.current;
     const positioner = positionerRef.current;
     if (boundary === null || positioner === null) return;
-    preferenceRef.current = readPetPositionPreference(window.localStorage);
+    preferenceRef.current = readPetPositionPreference(appPreferenceStorage);
     const updateBounds = () => {
       const bounds = {
         height: boundary.clientHeight,
@@ -130,7 +131,7 @@ export function WorkbenchPetLayerView({
       }
       if (bounds !== null) {
         const preference = petPositionToRatio(positionRef.current, bounds);
-        writePetPositionPreference(window.localStorage, preference);
+        writePetPositionPreference(appPreferenceStorage, preference);
       }
     },
     [],
@@ -155,7 +156,7 @@ export function WorkbenchPetLayerView({
     const bounds = boundsRef.current;
     if (bounds === null) return;
     preferenceRef.current = petPositionToRatio(positionRef.current, bounds);
-    writePetPositionPreference(window.localStorage, preferenceRef.current);
+    writePetPositionPreference(appPreferenceStorage, preferenceRef.current);
   };
 
   const finishDrag = (pointerId: number) => {

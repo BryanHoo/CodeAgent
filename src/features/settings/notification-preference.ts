@@ -1,3 +1,5 @@
+import { appPreferenceStorage } from "../../platform/tauri/app-storage.js";
+
 const NOTIFICATION_STORAGE_KEY = "codeagent.notification-preference";
 const NOTIFICATION_STORAGE_VERSION = 1;
 
@@ -38,19 +40,9 @@ export function saveNotificationPreference(
 }
 
 export function getNotificationPreference(): boolean {
-  try {
-    return typeof window === "undefined" ? true : readNotificationPreference(window.localStorage);
-  } catch {
-    return true;
-  }
+  return readNotificationPreference(appPreferenceStorage);
 }
 
 export function setNotificationPreference(enabled: boolean): void {
-  try {
-    if (typeof window !== "undefined") {
-      saveNotificationPreference(enabled, window.localStorage);
-    }
-  } catch {
-    // 访问 localStorage 本身被浏览器拒绝时保持当前运行不受影响。
-  }
+  saveNotificationPreference(enabled, appPreferenceStorage);
 }

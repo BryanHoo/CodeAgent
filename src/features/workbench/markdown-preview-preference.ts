@@ -1,3 +1,5 @@
+import { appPreferenceStorage } from "../../platform/tauri/app-storage.js";
+
 const MARKDOWN_PREVIEW_STORAGE_KEY = "codeagent:workbench:markdown-preview:v1";
 
 type MarkdownPreviewStorage = Readonly<{
@@ -11,12 +13,7 @@ type MarkdownPreviewPreference = Readonly<{
 }>;
 
 export function getMarkdownPreviewPreferenceStorage(): MarkdownPreviewStorage | undefined {
-  try {
-    return typeof window === "undefined" ? undefined : window.localStorage;
-  } catch {
-    // 浏览器拒绝访问本地存储时仍保留当前页面的 Markdown 切换能力。
-    return undefined;
-  }
+  return appPreferenceStorage;
 }
 
 export function readMarkdownPreviewPreference(

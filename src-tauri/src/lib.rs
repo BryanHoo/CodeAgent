@@ -3,6 +3,10 @@ pub mod domain;
 mod infrastructure;
 
 use application::{
+    app_storage_commands::{
+        initialize_app_storage, list_custom_backgrounds, read_custom_background,
+        update_app_preferences, update_custom_backgrounds,
+    },
     attachment_commands::{
         cache_project_image, import_host_attachment, list_host_files, upload_attachment,
     },
@@ -45,6 +49,11 @@ pub fn run() {
     let result = tauri::Builder::default()
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
+            initialize_app_storage,
+            update_app_preferences,
+            list_custom_backgrounds,
+            read_custom_background,
+            update_custom_backgrounds,
             connect_runtime,
             start_runtime,
             get_app_info,

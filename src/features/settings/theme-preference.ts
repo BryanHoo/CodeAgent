@@ -1,3 +1,5 @@
+import { appPreferenceStorage } from "../../platform/tauri/app-storage.js";
+
 export type ThemePreference = "dark" | "light" | "system";
 
 const THEME_STORAGE_KEY = "codeagent.theme-preference";
@@ -65,12 +67,12 @@ function synchronizeThemePreference(theme: ThemePreference): void {
 }
 
 export function setThemePreference(theme: ThemePreference): void {
-  saveThemePreference(theme, window.localStorage);
+  saveThemePreference(theme, appPreferenceStorage);
   synchronizeThemePreference(theme);
 }
 
 export function initializeThemePreference(): ThemePreference {
-  const theme = readThemePreference(window.localStorage);
+  const theme = readThemePreference(appPreferenceStorage);
   synchronizeThemePreference(theme);
   return theme;
 }

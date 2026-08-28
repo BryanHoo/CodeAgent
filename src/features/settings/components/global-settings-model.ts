@@ -4,6 +4,7 @@ import {
   type AgentModel,
   type AgentProjectDefaults,
 } from "@/protocol/index.js";
+import { appPreferenceStorage } from "@/platform/tauri/app-storage.js";
 
 import { readThemePreference, type ThemePreference } from "../theme-preference.js";
 import {
@@ -60,5 +61,5 @@ export function createFallbackSettings(models: readonly AgentModel[]): AgentGlob
 }
 
 export function readInitialTheme(): ThemePreference {
-  return typeof window === "undefined" ? "system" : readThemePreference(window.localStorage);
+  return readThemePreference(appPreferenceStorage);
 }
