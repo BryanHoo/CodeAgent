@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { ProjectSourceFile } from "@/protocol/index.js";
 import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type UIEvent } from "react";
 
 import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
 import {
@@ -154,19 +154,6 @@ export function getNextSourceCursor(
     : lastPage.nextCursor;
 }
 
-export function mergeProjectSourcePages(
-  pages: readonly ProjectSourceFile[],
-): ProjectSourceFile | undefined {
-  const firstPage = pages[0];
-  const lastPage = pages.at(-1);
-  if (firstPage === undefined || lastPage === undefined) return undefined;
-  return {
-    content: pages.map((page) => page.content).join(""),
-    nextCursor: lastPage.nextCursor,
-    path: firstPage.path,
-  };
-}
-
 export function ProjectSourcePanel({
   client,
   onClose,
@@ -176,7 +163,6 @@ export function ProjectSourcePanel({
   rootPath,
 }: ProjectSourcePanelProps) {
   const { t } = useTranslation("workbench");
-  const contentRef = useRef<HTMLElement>(null);
   const [preferMarkdownPreview, setPreferMarkdownPreview] = useState(() =>
     readMarkdownPreviewPreference(getMarkdownPreviewPreferenceStorage()),
   );
@@ -202,54 +188,38 @@ export function ProjectSourcePanel({
     staleTime: 30_000,
   });
   const sourcePages = sourceQuery.data?.pages;
+  const sourcePageParams = sourceQuery.data?.pageParams;
   const fetchNextSourcePage = sourceQuery.fetchNextPage;
   const hasNextSourcePage = sourceQuery.hasNextPage;
   const isFetchingNextSourcePage = sourceQuery.isFetchingNextPage;
-  const sourceData = useMemo(
-    () => (sourcePages === undefined ? undefined : mergeProjectSourcePages(sourcePages)),
-    [sourcePages],
+  const sourceCodePages = useMemo(
+    () =>
+      sourcePages?.map((page, index) => ({
+        code: page.content,
+        key: `${String(index)}:${String(sourcePageParams?.[index] ?? "initial")}`,
+      })) ?? [],
+    [sourcePageParams, sourcePages],
   );
-  const sourcePath = sourceData?.path ?? reference.path;
-  const sourceContent = sourceData?.content ?? "";
+  const firstSourcePage = sourcePages?.[0];
+  const lastSourcePage = sourcePages?.at(-1);
+  const sourcePath = firstSourcePage?.path ?? reference.path;
   const fileName = getFileName(sourcePath);
   const imageUrl = imageQuery.data ?? "";
   const sourceLanguage = getCodeLanguage(sourcePath);
   const isMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
-  const canRenderMarkdown = isMarkdown && sourceData?.nextCursor === null;
+  const canRenderMarkdown = isMarkdown && lastSourcePage?.nextCursor === null;
   const showRenderedMarkdown = canRenderMarkdown && preferMarkdownPreview;
+  const sourceContent = useMemo(
+    () => (showRenderedMarkdown ? (sourcePages?.map((page) => page.content).join("") ?? "") : ""),
+    [showRenderedMarkdown, sourcePages],
+  );
 
   useEffect(() => {
     setImageLoadFailed(false);
   }, [previewKind, reference.path]);
 
-  useEffect(() => {
-    const lineNumber = reference.lineNumber;
-    if (sourceData === undefined || lineNumber === null || showRenderedMarkdown) {
-      return;
-    }
-
-    // 行节点由共享 CodeBlock 提供，查询完成后让所有可滚动祖先共同定位目标行。
-    const targetLine = contentRef.current?.querySelector(
-      `[data-code-line="${String(lineNumber)}"]`,
-    );
-    if (targetLine !== null && targetLine !== undefined) {
-      targetLine.scrollIntoView({ block: "center" });
-      return;
-    }
-    // 文件引用可能指向首段之外；继续逐页读取，直到目标行出现或文件结束。
-    if (hasNextSourcePage && !isFetchingNextSourcePage) {
-      void fetchNextSourcePage();
-    }
-  }, [
-    fetchNextSourcePage,
-    hasNextSourcePage,
-    isFetchingNextSourcePage,
-    reference.lineNumber,
-    sourceData,
-    showRenderedMarkdown,
-  ]);
   const sourceStatus: SourceHeaderProps["sourceStatus"] =
-    sourceData === undefined
+    firstSourcePage === undefined
       ? null
       : isFetchingNextSourcePage
         ? "loading"
@@ -273,6 +243,10 @@ export function ProjectSourcePanel({
     if (!(scrollTarget instanceof HTMLElement) || !shouldLoadNextSourcePage(scrollTarget)) return;
     void fetchNextSourcePage();
   };
+  const handleHighlightedLineUnavailable = useCallback(() => {
+    // 目标行尚未加载时逐页补齐；虚拟列表在行可用后负责精确定位。
+    if (hasNextSourcePage && !isFetchingNextSourcePage) void fetchNextSourcePage();
+  }, [fetchNextSourcePage, hasNextSourcePage, isFetchingNextSourcePage]);
   const updateMarkdownPreviewPreference = (preview: boolean) => {
     setPreferMarkdownPreview(preview);
     writeMarkdownPreviewPreference(preview, getMarkdownPreviewPreferenceStorage());
@@ -283,7 +257,6 @@ export function ProjectSourcePanel({
       aria-label={sourcePath}
       className="h-full min-h-0 bg-raised"
       onScrollCapture={handleSourceScroll}
-      ref={contentRef}
     >
       {previewKind === "image" ? (
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
@@ -310,7 +283,7 @@ export function ProjectSourcePanel({
             )}
           </div>
         </div>
-      ) : sourceData === undefined && sourceQuery.isPending ? (
+      ) : firstSourcePage === undefined && sourceQuery.isPending ? (
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
           <SourceHeader {...headerProps} />
           <div
@@ -320,7 +293,7 @@ export function ProjectSourcePanel({
             {t("projectDialog.loadingSource")}
           </div>
         </div>
-      ) : sourceData === undefined && sourceQuery.error !== null ? (
+      ) : firstSourcePage === undefined && sourceQuery.error !== null ? (
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
           <SourceHeader {...headerProps} />
           <div
@@ -360,9 +333,10 @@ export function ProjectSourcePanel({
       ) : (
         <CodeBlock
           className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-none bg-content shadow-none"
-          code={sourceContent}
           highlightedLine={reference.lineNumber}
           language={sourceLanguage}
+          onHighlightedLineUnavailable={handleHighlightedLineUnavailable}
+          pages={sourceCodePages}
           showLineNumbers
         >
           <SourceHeader

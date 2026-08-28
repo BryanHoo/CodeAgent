@@ -1,5 +1,7 @@
 import { Check, Copy } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -14,13 +16,20 @@ import type { ThemedToken } from "shiki/core";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
-import type { CodeBlockLanguage } from "./code-languages.js";
+import type { CodeBlockLanguage, HighlightLanguage } from "./code-languages.js";
+import {
+  createCodePageLayout,
+  createCodePageTokenStore,
+  getCodePageLineTokens,
+  type CodeBlockPage,
+  type CodePageTokenState,
+} from "./code-block-pages.js";
 import { CodeTokenCache, type TokenizedCode } from "./code-token-cache.js";
 
 export type { CodeBlockLanguage } from "./code-languages.js";
 
 type CodeBlockContextValue = Readonly<{
-  code: string;
+  getCode: () => string;
 }>;
 
 const CodeBlockContext = createContext<CodeBlockContextValue | null>(null);
@@ -32,14 +41,6 @@ function useCodeBlockContext(): CodeBlockContextValue {
     throw new Error("CodeBlock components must be rendered inside CodeBlock");
   }
   return context;
-}
-
-function createRawTokens(code: string): TokenizedCode {
-  return {
-    background: "transparent",
-    foreground: "inherit",
-    lines: code.split("\n").map((line) => (line === "" ? [] : [{ content: line, offset: 0 }])),
-  };
 }
 
 function getTokenStyle(token: ThemedToken): CSSProperties {
@@ -64,11 +65,7 @@ function getTokenStyle(token: ThemedToken): CSSProperties {
   };
 }
 
-async function tokenizeCode(code: string, language: CodeBlockLanguage): Promise<TokenizedCode> {
-  if (language === "text") {
-    return createRawTokens(code);
-  }
-
+async function tokenizeCode(code: string, language: HighlightLanguage): Promise<TokenizedCode> {
   const cached = tokenCache.get(language, code);
   if (cached !== undefined) {
     return cached;
@@ -81,60 +78,117 @@ async function tokenizeCode(code: string, language: CodeBlockLanguage): Promise<
   return tokenized;
 }
 
+const CODE_LINE_HEIGHT_PX = 24;
+const CODE_LINE_OVERSCAN = 16;
+const CODE_VIEWPORT_INITIAL_RECT = { height: 600, width: 800 };
+
+function useCodePageTokens(
+  pages: readonly CodeBlockPage[],
+  language: CodeBlockLanguage,
+): readonly CodePageTokenState[] {
+  const storeRef = useRef<ReturnType<typeof createCodePageTokenStore> | null>(null);
+  const mountedRef = useRef(true);
+  const [, setRevision] = useState(0);
+  storeRef.current ??= createCodePageTokenStore();
+  const store = storeRef.current;
+  const states = store.reconcile(pages, language);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+  useEffect(() => {
+    for (const state of states) {
+      if (state.status !== "idle" || state.language === "text") continue;
+      const language = state.language;
+      state.status = "loading";
+      void tokenizeCode(state.code, language)
+        .then((tokenized) => {
+          if (!mountedRef.current || !store.isCurrent(state)) return;
+          state.status = "complete";
+          state.tokenized = tokenized;
+          setRevision((revision) => revision + 1);
+        })
+        .catch(() => {
+          // 高亮失败时保留该页纯文本，并停止重复加载同一个失败任务。
+          state.status = "complete";
+        });
+    }
+  }, [states, store]);
+
+  return states;
+}
+
 export type CodeBlockContentProps = Readonly<{
-  code: string;
   highlightedLine?: number | null;
   language: CodeBlockLanguage;
+  onHighlightedLineUnavailable?: () => void;
+  pages: readonly CodeBlockPage[];
   showLineNumbers?: boolean;
 }> &
   HTMLAttributes<HTMLDivElement>;
 
 export function CodeBlockContent({
   className = "",
-  code,
   highlightedLine = null,
   language,
+  onHighlightedLineUnavailable,
+  pages,
   showLineNumbers = false,
   ...props
 }: CodeBlockContentProps) {
-  const rawTokens = useMemo(() => createRawTokens(code), [code]);
-  const [tokenized, setTokenized] = useState(rawTokens);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pageStates = useCodePageTokens(pages, language);
+  const layout = createCodePageLayout(pageStates.map((state) => state.tokenized));
+  const getScrollElement = useCallback(() => scrollRef.current, []);
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLSpanElement>({
+    count: layout.lineCount,
+    estimateSize: () => CODE_LINE_HEIGHT_PX,
+    getScrollElement,
+    initialRect: CODE_VIEWPORT_INITIAL_RECT,
+    overscan: CODE_LINE_OVERSCAN,
+  });
+  const palette = pageStates[0]?.tokenized;
 
   useEffect(() => {
-    let active = true;
-    setTokenized(rawTokens);
-    void tokenizeCode(code, language)
-      .then((result) => {
-        if (active) {
-          setTokenized(result);
-        }
-      })
-      .catch(() => {
-        // 高亮失败时继续展示完整纯文本，避免查看器因可选增强不可用而清空。
-      });
-    return () => {
-      active = false;
-    };
-  }, [code, language, rawTokens]);
+    if (highlightedLine === null || highlightedLine < 1) return;
+    if (highlightedLine > layout.lineCount) {
+      onHighlightedLineUnavailable?.();
+      return;
+    }
+    virtualizer.scrollToIndex(highlightedLine - 1, { align: "center", behavior: "auto" });
+  }, [highlightedLine, layout.lineCount, onHighlightedLineUnavailable, virtualizer]);
 
   return (
-    <div className={`relative min-h-0 overflow-auto ${className}`} {...props}>
+    <div className={`relative min-h-0 overflow-auto ${className}`} ref={scrollRef} {...props}>
       <pre
-        className="m-0 min-w-max bg-transparent py-3 font-mono text-body-small leading-6 text-foreground"
-        style={{ backgroundColor: tokenized.background, color: tokenized.foreground }}
+        className="relative m-0 min-w-full bg-transparent font-mono text-body-small leading-6 text-foreground"
+        style={{
+          backgroundColor: palette?.background ?? "transparent",
+          color: palette?.foreground ?? "inherit",
+          height: virtualizer.getTotalSize() + CODE_LINE_HEIGHT_PX,
+        }}
       >
         <code>
-          {tokenized.lines.map((tokens, lineIndex) => {
+          {virtualizer.getVirtualItems().map((virtualLine) => {
+            const lineIndex = virtualLine.index;
+            const tokens = getCodePageLineTokens(layout, lineIndex);
             const lineNumber = lineIndex + 1;
             const highlighted = lineNumber === highlightedLine;
             return (
               <span
-                className={`block min-h-6 px-3 ${
+                className={`absolute left-0 top-0 min-h-6 w-max min-w-full px-3 ${
                   showLineNumbers ? "grid grid-cols-[4rem_minmax(0,1fr)]" : ""
                 } ${highlighted ? "bg-brand-soft text-brand-strong" : ""}`}
                 data-code-line={lineNumber}
                 data-highlighted={highlighted ? "true" : undefined}
-                key={lineNumber}
+                key={virtualLine.key}
+                style={{
+                  height: virtualLine.size,
+                  transform: `translateY(${String(virtualLine.start + CODE_LINE_HEIGHT_PX / 2)}px)`,
+                }}
               >
                 {showLineNumbers ? (
                   <span
@@ -171,9 +225,11 @@ export function CodeBlockContent({
 
 export type CodeBlockProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
-    code: string;
+    code?: string;
     highlightedLine?: number | null;
     language: CodeBlockLanguage;
+    onHighlightedLineUnavailable?: () => void;
+    pages?: readonly CodeBlockPage[];
     showLineNumbers?: boolean;
   }>;
 
@@ -183,11 +239,21 @@ export function CodeBlock({
   code,
   highlightedLine = null,
   language,
+  onHighlightedLineUnavailable,
+  pages,
   showLineNumbers = false,
   style,
   ...props
 }: CodeBlockProps) {
-  const contextValue = useMemo(() => ({ code }), [code]);
+  const resolvedPages = useMemo<readonly CodeBlockPage[]>(
+    () => pages ?? [{ code: code ?? "", key: "code" }],
+    [code, pages],
+  );
+  const getCode = useCallback(
+    () => resolvedPages.map((page) => page.code).join(""),
+    [resolvedPages],
+  );
+  const contextValue = useMemo(() => ({ getCode }), [getCode]);
   return (
     <CodeBlockContext.Provider value={contextValue}>
       <div
@@ -198,9 +264,12 @@ export function CodeBlock({
       >
         {children}
         <CodeBlockContent
-          code={code}
           highlightedLine={highlightedLine}
           language={language}
+          {...(onHighlightedLineUnavailable === undefined
+            ? {}
+            : { onHighlightedLineUnavailable })}
+          pages={resolvedPages}
           showLineNumbers={showLineNumbers}
         />
       </div>
@@ -252,7 +321,7 @@ export function CodeBlockCopyButton({
   timeout = 2_000,
   ...props
 }: CodeBlockCopyButtonProps) {
-  const { code } = useCodeBlockContext();
+  const { getCode } = useCodeBlockContext();
   const [copied, setCopied] = useState(false);
   const { t } = useTranslation("conversation");
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -268,7 +337,7 @@ export function CodeBlockCopyButton({
 
   const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(getCode());
       setCopied(true);
       onCopy?.();
       if (resetTimerRef.current !== null) {
