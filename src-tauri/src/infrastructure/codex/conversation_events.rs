@@ -220,8 +220,9 @@ fn usage_updated_event(
         .get("tokenUsage")
         .and_then(Value::as_object)
         .ok_or(ConnectionError::InvalidMessage)?;
-    let total = usage
-        .get("total")
+    // `total` 是线程累计消耗；当前上下文占用必须与 Codex TUI 一样读取最近一次用量。
+    let last = usage
+        .get("last")
         .and_then(Value::as_object)
         .ok_or(ConnectionError::InvalidMessage)?;
     Ok(envelope(
@@ -231,7 +232,7 @@ fn usage_updated_event(
         json!({
             "payload": {"usage": {
                 "contextWindow": usage.get("modelContextWindow").cloned().unwrap_or(Value::Null),
-                "usedTokens": required_u64(total, "totalTokens")?,
+                "usedTokens": required_u64(last, "totalTokens")?,
             }},
             "turnId": required_string(params, "turnId")?,
             "type": "usage.updated",

@@ -224,7 +224,7 @@ fn workbench_notifications_should_map_complete_timeline_state() {
             "thread/tokenUsage/updated",
             json!({
                 "threadId": "thread-a", "turnId": "turn-a",
-                "tokenUsage": {"total": {"totalTokens": 120}, "modelContextWindow": 1000}
+                "tokenUsage": {"total": {"totalTokens": 120}, "last": {"totalTokens": 40}, "modelContextWindow": 1000}
             }),
             "usage.updated",
         ),
@@ -252,6 +252,13 @@ fn workbench_notifications_should_map_complete_timeline_state() {
             }),
             "file_change.updated",
         ),
+        (
+            "mcpServer/startupStatus/updated",
+            json!({
+                "threadId": "thread-a", "name": "context7", "status": "ready", "error": null, "failureReason": null
+            }),
+            "mcp_server.status_updated",
+        ),
     ];
 
     for (index, (method, params, event_type)) in cases.into_iter().enumerate() {
@@ -267,6 +274,14 @@ fn workbench_notifications_should_map_complete_timeline_state() {
         .expect("notification should map")
         .expect("notification should be supported");
         assert_eq!(event["type"], event_type);
+        if method == "thread/tokenUsage/updated" {
+            assert_eq!(event["payload"]["usage"]["usedTokens"], 40);
+        }
+        if method == "mcpServer/startupStatus/updated" {
+            assert_eq!(event["taskId"], "thread-a");
+            assert_eq!(event["payload"]["name"], "context7");
+            assert_eq!(event["payload"]["status"], "ready");
+        }
     }
 }
 

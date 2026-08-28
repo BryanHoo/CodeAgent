@@ -62,9 +62,50 @@ pub(super) fn map_runtime_notification(
         "item/autoApprovalReview/started" | "item/autoApprovalReview/completed" => {
             approval_review_event(method, params, sequence, timestamp)?
         }
+        "mcpServer/startupStatus/updated" => mcp_server_status_event(params, sequence, timestamp)?,
         _ => return Ok(None),
     };
     Ok(Some(event))
+}
+
+fn mcp_server_status_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+) -> Result<Value, ConnectionError> {
+    let status = match required_string(params, "status")? {
+        "starting" => "starting",
+        "ready" => "ready",
+        "failed" => "failed",
+        "cancelled" => "cancelled",
+        _ => return Err(ConnectionError::InvalidMessage),
+    };
+    let failure_reason = match params.get("failureReason") {
+        None | Some(Value::Null) => Value::Null,
+        Some(Value::String(value)) if value == "reauthenticationRequired" => {
+            Value::String(value.clone())
+        }
+        _ => return Err(ConnectionError::InvalidMessage),
+    };
+    let error = match params.get("error") {
+        None | Some(Value::Null) => Value::Null,
+        Some(Value::String(value)) => Value::String(value.chars().take(8_192).collect()),
+        _ => return Err(ConnectionError::InvalidMessage),
+    };
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({
+            "payload": {
+                "error": error,
+                "failureReason": failure_reason,
+                "name": required_string(params, "name")?,
+                "status": status,
+            },
+            "type": "mcp_server.status_updated",
+        }),
+    ))
 }
 
 fn hook_event(

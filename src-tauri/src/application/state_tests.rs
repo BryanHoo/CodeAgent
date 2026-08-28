@@ -1,9 +1,12 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
+use serde_json::{Value, json, value::to_raw_value};
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tokio::sync::{Mutex, mpsc};
 
 use super::{RuntimeSession, spawn_event_forwarder};
 use crate::domain::runtime::{AppEvent, ProviderKind, RuntimeStatus};
+use crate::infrastructure::codex::ServerMessage;
 
 #[test]
 fn runtime_status_should_advance_monotonic_sequence() {
@@ -44,4 +47,59 @@ async fn closed_app_server_stream_should_mark_runtime_failed() {
     let session = runtime.lock().await;
     assert_eq!(session.snapshot.status, RuntimeStatus::Failed);
     assert!(session.codex_process.is_none());
+}
+
+#[tokio::test]
+async fn task_scoped_mcp_status_should_be_cached_and_forwarded() {
+    let published = Arc::new(StdMutex::new(Vec::new()));
+    let published_for_channel = Arc::clone(&published);
+    let channel = Channel::new(move |body| {
+        if let InvokeResponseBody::Json(value) = body {
+            published_for_channel.lock().unwrap().push(value);
+        }
+        Ok(())
+    });
+    let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
+    {
+        let mut session = runtime.lock().await;
+        session.event_channel = Some(channel);
+        session
+            .task_projects
+            .insert("thread-a".to_owned(), "project-a".to_owned());
+    }
+    let (sender, receiver) = mpsc::channel(1);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    sender
+        .send(ServerMessage {
+            id: None,
+            method: "mcpServer/startupStatus/updated".to_owned(),
+            params: to_raw_value(&json!({
+                "threadId": "thread-a",
+                "name": "context7",
+                "status": "ready",
+                "error": null,
+                "failureReason": null
+            }))
+            .unwrap(),
+        })
+        .await
+        .unwrap();
+    drop(sender);
+    task.await.expect("event forwarder should stop cleanly");
+
+    let session = runtime.lock().await;
+    assert_eq!(
+        session.mcp_statuses["thread-a\0context7"]["status"],
+        "ready"
+    );
+    let events = published.lock().unwrap();
+    let agent_event = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(event).ok())
+        .find(|event| {
+            event.pointer("/data/event/type").and_then(Value::as_str)
+                == Some("mcp_server.status_updated")
+        })
+        .expect("task-scoped MCP status should be published");
+    assert_eq!(agent_event["data"]["event"]["taskId"], "thread-a");
 }

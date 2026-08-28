@@ -296,6 +296,7 @@ fn spawn_event_forwarder(
                 continue;
             }
             if message.id.is_none() && message.method == "mcpServer/startupStatus/updated" {
+                let mut task_scoped = false;
                 if let Ok(params) = serde_json::from_str::<Value>(message.params.get())
                     && let Some(name) = params.get("name").and_then(Value::as_str)
                 {
@@ -303,11 +304,15 @@ fn spawn_event_forwarder(
                         .get("threadId")
                         .and_then(Value::as_str)
                         .unwrap_or("*");
+                    task_scoped = thread != "*";
                     runtime
                         .mcp_statuses
                         .insert(format!("{thread}\0{name}"), params);
                 }
-                continue;
+                // 任务级通知继续进入统一事件流，驱动前端重新读取完整 MCP 清单。
+                if !task_scoped {
+                    continue;
+                }
             }
             if message.method == "serverRequest/resolved" {
                 let request_id = match crate::infrastructure::codex::resolved_request_id(&message) {
