@@ -236,6 +236,8 @@ export function ConversationVirtualList<TItem>({
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     anchorTo: "end",
     count: items.length,
+    directDomUpdates: true,
+    directDomUpdatesMode: "position",
     estimateSize: estimateTurnSize,
     followOnAppend: "auto",
     gap: TURN_GAP_PX,
@@ -325,7 +327,8 @@ export function ConversationVirtualList<TItem>({
         data-conversation-content=""
         {...props}
       >
-        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+        {/* 同步写入 sizer 与 top，避免 WKWebView 在完成态替换 transformed Turn 后漏绘。 */}
+        <div className="relative w-full" ref={virtualizer.containerRef}>
           {virtualizer.getVirtualItems().map((virtualTurn) => (
             <div
               className="absolute left-0 top-0 w-full"
@@ -333,7 +336,6 @@ export function ConversationVirtualList<TItem>({
               data-index={virtualTurn.index}
               key={virtualTurn.key}
               ref={virtualizer.measureElement}
-              style={{ transform: `translateY(${String(virtualTurn.start)}px)` }}
             >
               {renderItem(items[virtualTurn.index] as TItem, virtualTurn.index)}
             </div>

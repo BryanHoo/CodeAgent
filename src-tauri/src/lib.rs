@@ -2,9 +2,8 @@ mod application;
 pub mod domain;
 mod infrastructure;
 
-use tauri::Manager as _;
-
 use application::{
+    app_lifecycle::{handle_window_event, setup_tray},
     app_storage_commands::{
         initialize_app_storage, list_custom_backgrounds, read_custom_background,
         update_app_preferences, update_custom_backgrounds,
@@ -63,17 +62,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .manage(DesktopPetRuntime::default())
-        .on_window_event(|window, event| {
-            if window.label() == "main"
-                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
-            {
-                for label in ["desktop-pet", "desktop-pet-bubbles"] {
-                    if let Some(pet_window) = window.app_handle().get_webview_window(label) {
-                        let _ = pet_window.destroy();
-                    }
-                }
-            }
-        })
+        .setup(|app| setup_tray(app.handle()).map_err(Into::into))
+        .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![
             initialize_app_storage,
             update_app_preferences,
