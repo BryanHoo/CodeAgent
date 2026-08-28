@@ -3,7 +3,7 @@ pub mod domain;
 mod infrastructure;
 
 use application::{
-    app_lifecycle::{handle_window_event, setup_tray},
+    app_lifecycle::{MainWindowLifecycle, handle_window_event, setup_tray},
     app_storage_commands::{
         initialize_app_storage, list_custom_backgrounds, read_custom_background,
         update_app_preferences, update_custom_backgrounds,
@@ -62,6 +62,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .manage(DesktopPetRuntime::default())
+        .manage(MainWindowLifecycle::default())
         .setup(|app| setup_tray(app.handle()).map_err(Into::into))
         .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![

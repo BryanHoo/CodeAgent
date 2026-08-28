@@ -134,7 +134,9 @@ async fn publish_mapped_event(
         };
         session.pending_requests.insert(request_id, pending);
     }
-    session.publish(AppEvent::AgentEvent { event }).is_ok()
+    // WebView 销毁期间没有可用 Channel，但 Runtime 必须继续消费并维护原生状态。
+    let _ = session.publish(AppEvent::AgentEvent { event });
+    true
 }
 
 async fn observe_model_turn(runtime: &Arc<Mutex<RuntimeSession>>, message: &ServerMessage) {
@@ -241,7 +243,8 @@ async fn handle_resolved_request(
         return false;
     };
     let mut session = runtime.lock().await;
-    publish_terminal_event(&mut session, project_id, event).is_ok()
+    let _ = publish_terminal_event(&mut session, project_id, event);
+    true
 }
 
 fn map_message(message: ServerMessage) -> Option<(AgentEvent, Option<PendingServerRequest>)> {

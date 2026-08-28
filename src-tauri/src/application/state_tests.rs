@@ -160,6 +160,50 @@ async fn event_channel_should_run_without_holding_runtime_lock() {
 }
 
 #[tokio::test]
+async fn missing_webview_channel_should_not_stop_event_forwarder() {
+    let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
+    {
+        let mut session = runtime.lock().await;
+        session.snapshot.status = RuntimeStatus::Ready;
+        session.snapshot.provider = Some(ProviderKind::Codex);
+        session
+            .task_projects
+            .insert("thread-a".to_owned(), "project-a".to_owned());
+    }
+    let (sender, receiver) = mpsc::channel(2);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    for name in ["context7", "filesystem"] {
+        sender
+            .send(ServerMessage {
+                id: None,
+                method: "mcpServer/startupStatus/updated".to_owned(),
+                params: to_raw_value(&json!({
+                    "threadId": "thread-a",
+                    "name": name,
+                    "status": "ready"
+                }))
+                .unwrap(),
+            })
+            .await
+            .unwrap();
+    }
+    timeout(Duration::from_millis(100), async {
+        loop {
+            if runtime.lock().await.project_sequences.get("project-a") == Some(&2) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("event forwarder should keep consuming without a WebView channel");
+    assert!(!task.is_finished());
+
+    drop(sender);
+    task.await.expect("event forwarder should stop cleanly");
+}
+
+#[tokio::test]
 async fn consecutive_deltas_should_merge_before_crossing_the_channel() {
     let published = Arc::new(StdMutex::new(Vec::new()));
     let published_for_channel = Arc::clone(&published);

@@ -1,18 +1,59 @@
+use std::{
+    sync::Mutex,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 #[cfg(target_os = "macos")]
 use tauri::menu::MenuItemKind;
 use tauri::{
-    AppHandle, Manager as _, Window, WindowEvent,
+    AppHandle, Manager as _, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window,
+    WindowEvent,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
+const MAIN_WINDOW_DESTROY_MIN_SECS: u64 = 30;
+const MAIN_WINDOW_DESTROY_MAX_SECS: u64 = 60;
 const SHOW_MAIN_MENU_ID: &str = "show-main";
 const QUIT_APP_MENU_ID: &str = "quit-app";
 #[cfg(target_os = "macos")]
 const HOLD_TO_QUIT_MENU_ID: &str = "hold-to-quit-app";
 #[cfg(target_os = "macos")]
 const MACOS_TRAY_ICON: tauri::image::Image<'_> = tauri::include_image!("./icons/tray-icon.png");
+
+#[derive(Default)]
+pub(crate) struct MainWindowLifecycle {
+    inner: Mutex<MainWindowLifecycleState>,
+}
+
+#[derive(Default)]
+struct MainWindowLifecycleState {
+    destroy_generation: u64,
+    route: Option<String>,
+}
+
+impl MainWindowLifecycle {
+    fn schedule_destroy(&self, route: Option<String>) -> u64 {
+        let mut state = self.lock();
+        state.destroy_generation = state.destroy_generation.wrapping_add(1);
+        if route.is_some() {
+            state.route = route;
+        }
+        state.destroy_generation
+    }
+
+    fn cancel_destroy(&self) {
+        let mut state = self.lock();
+        state.destroy_generation = state.destroy_generation.wrapping_add(1);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, MainWindowLifecycleState> {
+        self.inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CloseRequestAction {
@@ -128,24 +169,114 @@ pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
         return;
     };
 
-    // 拦截主窗口关闭并仅隐藏工作台，让运行时和桌面宠物窗口继续常驻。
+    // 先隐藏以即时响应关闭操作，延迟到期后只销毁主 WebView。
     api.prevent_close();
     let _ = window.hide();
     #[cfg(target_os = "macos")]
     let _ = window.app_handle().set_dock_visibility(false);
+
+    let app = window.app_handle().clone();
+    let route = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .and_then(|main_window| main_window.url().ok())
+        .map(|url| app_route_from_url(&url));
+    let generation = app.state::<MainWindowLifecycle>().schedule_destroy(route);
+    let entropy = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(generation, |duration| {
+            duration.as_nanos() as u64 ^ generation
+        });
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(main_window_destroy_delay(entropy)).await;
+        destroy_main_window_if_current(&app, generation);
+    });
 }
 
 fn show_main_window(app: &AppHandle) {
+    app.state::<MainWindowLifecycle>().cancel_destroy();
+    let app = app.clone();
+    // Windows WebView2 不能在同步托盘回调中创建窗口，统一切到异步运行时重建。
+    tauri::async_runtime::spawn(async move {
+        restore_main_window(&app);
+    });
+}
+
+fn restore_main_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.set_dock_visibility(true);
-    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-        return;
+    let lifecycle = app.state::<MainWindowLifecycle>();
+    let state = lifecycle.lock();
+    let window = match app.get_webview_window(MAIN_WINDOW_LABEL) {
+        Some(window) => window,
+        None => match create_main_window(app, state.route.clone()) {
+            Ok(window) => window,
+            Err(error) => {
+                eprintln!("failed to recreate main window: {error}");
+                return;
+            }
+        },
     };
 
     // 恢复时同时处理最小化状态，确保托盘操作始终把工作台带到前台。
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+fn create_main_window(app: &AppHandle, route: Option<String>) -> tauri::Result<WebviewWindow> {
+    let mut config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == MAIN_WINDOW_LABEL)
+        .cloned()
+        .ok_or_else(|| tauri::Error::WindowNotFound)?;
+    if let Some(route) = route {
+        config.url = WebviewUrl::App(route.into());
+    }
+    WebviewWindowBuilder::from_config(app, &config)?.build()
+}
+
+fn destroy_main_window_if_current(app: &AppHandle, generation: u64) {
+    let lifecycle = app.state::<MainWindowLifecycle>();
+    let mut state = lifecycle.lock();
+    if state.destroy_generation != generation {
+        return;
+    }
+    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    if window.is_visible().unwrap_or(true) {
+        return;
+    }
+    if let Ok(route) = window.url() {
+        state.route = Some(app_route_from_url(&route));
+    }
+    if let Err(error) = window.destroy() {
+        eprintln!("failed to destroy hidden main window: {error}");
+    }
+}
+
+fn main_window_destroy_delay(entropy: u64) -> Duration {
+    let range = MAIN_WINDOW_DESTROY_MAX_SECS - MAIN_WINDOW_DESTROY_MIN_SECS + 1;
+    Duration::from_secs(MAIN_WINDOW_DESTROY_MIN_SECS + entropy % range)
+}
+
+fn app_route_from_url(url: &Url) -> String {
+    let mut route = url.path().trim_start_matches('/').to_owned();
+    if route.is_empty() {
+        route.push_str("index.html");
+    }
+    if let Some(query) = url.query() {
+        route.push('?');
+        route.push_str(query);
+    }
+    if let Some(fragment) = url.fragment() {
+        route.push('#');
+        route.push_str(fragment);
+    }
+    route
 }
 
 #[cfg(test)]
@@ -187,6 +318,35 @@ mod tests {
         assert_eq!(
             tray_menu_action("hold-to-quit-app"),
             TrayMenuAction::ConfirmQuitApplication
+        );
+    }
+
+    #[test]
+    fn hidden_main_window_destroy_delay_stays_within_configured_range() {
+        assert_eq!(main_window_destroy_delay(0), Duration::from_secs(30));
+        assert_eq!(main_window_destroy_delay(30), Duration::from_secs(60));
+        assert_eq!(main_window_destroy_delay(31), Duration::from_secs(30));
+    }
+
+    #[test]
+    fn showing_main_window_invalidates_pending_destroy_generation() {
+        let lifecycle = MainWindowLifecycle::default();
+        let scheduled = lifecycle.schedule_destroy(None);
+        lifecycle.cancel_destroy();
+
+        assert_ne!(lifecycle.lock().destroy_generation, scheduled);
+    }
+
+    #[test]
+    fn restored_app_route_preserves_path_query_and_fragment() {
+        let route = app_route_from_url(
+            &Url::parse("tauri://localhost/p/project-a/task/task-a?panel=context#turn-a").unwrap(),
+        );
+
+        assert_eq!(route, "p/project-a/task/task-a?panel=context#turn-a");
+        assert_eq!(
+            app_route_from_url(&Url::parse("tauri://localhost/").unwrap()),
+            "index.html"
         );
     }
 }
