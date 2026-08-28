@@ -1,10 +1,15 @@
-use std::path::Path;
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use serde::Serialize;
 use tokio::io::AsyncReadExt;
 
 use super::{
-    git_read::{GitStatus, get_git_status, repository_path, run_git},
+    git_process::{run_git, run_git_with_index},
+    git_read::{GitStatus, get_git_status, repository_path},
     path_guard::{WorkspaceError, valid_relative},
 };
 
@@ -281,17 +286,102 @@ pub async fn commit_changes(
     if !matches!(action, "commit" | "commit_and_push") {
         return Err(WorkspaceError::InvalidPath);
     }
-    validate_snapshot(root, repository, expected_snapshot).await?;
+    let status = validate_snapshot(root, repository, expected_snapshot).await?;
     let repo = repository_path(root, repository).await?;
-    let mut add_args = vec!["add", "--"];
-    add_args.extend(paths.iter().map(String::as_str));
-    run_git(&repo, &add_args, MAX_GIT_OUTPUT_BYTES).await?;
-    run_git(
-        &repo,
-        &["commit", "--no-gpg-sign", "-m", message],
-        MAX_GIT_OUTPUT_BYTES,
-    )
-    .await?;
+    let staged_paths: HashSet<_> = status
+        .staged
+        .iter()
+        .map(|change| change.path.as_str())
+        .collect();
+    let selected_staged: Vec<_> = paths
+        .iter()
+        .filter(|path| staged_paths.contains(path.as_str()))
+        .collect();
+    let selected_unstaged: Vec<_> = paths
+        .iter()
+        .filter(|path| !staged_paths.contains(path.as_str()))
+        .collect();
+    let literal_paths: Vec<_> = paths.iter().map(|path| literal_path(path)).collect();
+    let (temporary_root, temporary_index) = create_temporary_index().await?;
+
+    let commit_result = async {
+        // 从 HEAD 组装隔离 index，禁止未选择的暂存条目进入本次提交。
+        run_git_with_index(
+            &repo,
+            &["read-tree", "HEAD"],
+            MAX_GIT_OUTPUT_BYTES,
+            &temporary_index,
+            None,
+        )
+        .await?;
+        if !selected_staged.is_empty() {
+            let staged_literals: Vec<_> = selected_staged
+                .iter()
+                .map(|path| literal_path(path))
+                .collect();
+            let mut list_args = vec!["ls-files", "--stage", "-z", "--"];
+            list_args.extend(staged_literals.iter().map(String::as_str));
+            let (entries, truncated) = run_git(&repo, &list_args, MAX_GIT_OUTPUT_BYTES).await?;
+            if truncated {
+                return Err(WorkspaceError::InvalidPath);
+            }
+
+            let mut remove_args = vec!["update-index", "--force-remove", "--"];
+            remove_args.extend(selected_staged.iter().map(|path| path.as_str()));
+            run_git_with_index(
+                &repo,
+                &remove_args,
+                MAX_GIT_OUTPUT_BYTES,
+                &temporary_index,
+                None,
+            )
+            .await?;
+            if !entries.is_empty() {
+                // 复制真实 index 条目，确保混合文件提交暂存版本而非工作区版本。
+                run_git_with_index(
+                    &repo,
+                    &["update-index", "-z", "--index-info"],
+                    MAX_GIT_OUTPUT_BYTES,
+                    &temporary_index,
+                    Some(&entries),
+                )
+                .await?;
+            }
+        }
+        if !selected_unstaged.is_empty() {
+            let unstaged_literals: Vec<_> = selected_unstaged
+                .iter()
+                .map(|path| literal_path(path))
+                .collect();
+            let mut add_args = vec!["add", "--"];
+            add_args.extend(unstaged_literals.iter().map(String::as_str));
+            run_git_with_index(
+                &repo,
+                &add_args,
+                MAX_GIT_OUTPUT_BYTES,
+                &temporary_index,
+                None,
+            )
+            .await?;
+        }
+        run_git_with_index(
+            &repo,
+            &["commit", "--no-gpg-sign", "-m", message],
+            MAX_GIT_OUTPUT_BYTES,
+            &temporary_index,
+            None,
+        )
+        .await?;
+        Ok::<_, WorkspaceError>(())
+    }
+    .await;
+    // 清理失败不能覆盖已完成的 commit 结果。
+    let _ = tokio::fs::remove_dir_all(&temporary_root).await;
+    commit_result?;
+
+    let mut reset_args = vec!["reset", "--quiet", "HEAD", "--"];
+    reset_args.extend(literal_paths.iter().map(String::as_str));
+    run_git(&repo, &reset_args, MAX_GIT_OUTPUT_BYTES).await?;
     let commit_sha = first_line(&repo, &["rev-parse", "HEAD"]).await?;
     let branch = optional_line(&repo, &["branch", "--show-current"]).await?;
     let (push_status, push_error) = if action == "commit" {
@@ -313,6 +403,34 @@ pub async fn commit_changes(
         push_error,
         push_status,
     })
+}
+
+fn literal_path(path: &str) -> String {
+    format!(":(literal){path}")
+}
+
+async fn create_temporary_index() -> Result<(PathBuf, PathBuf), WorkspaceError> {
+    static NEXT_INDEX: AtomicU64 = AtomicU64::new(0);
+    for _ in 0..16 {
+        let sequence = NEXT_INDEX.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "codeagent-git-index-{}-{sequence}",
+            std::process::id()
+        ));
+        match tokio::fs::create_dir(&root).await {
+            Ok(()) => {
+                let index = root.join("index");
+                return Ok((root, index));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "temporary Git index path is unavailable",
+    )
+    .into())
 }
 
 async fn validate_snapshot(

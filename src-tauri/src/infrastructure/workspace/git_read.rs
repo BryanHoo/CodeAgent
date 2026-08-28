@@ -2,9 +2,11 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokio::{io::AsyncReadExt, process::Command};
 
-use super::path_guard::{WorkspaceError, valid_relative};
+use super::{
+    git_process::run_git,
+    path_guard::{WorkspaceError, valid_relative},
+};
 
 const MAX_DIFF_BYTES: usize = 512 * 1024;
 const MAX_GIT_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -94,7 +96,7 @@ pub async fn get_git_status(
     };
     let status_output = run_git(
         &repo,
-        &["-c", "core.quotepath=false", "status", "--porcelain=v1"],
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
         MAX_GIT_OUTPUT_BYTES,
     )
     .await?
@@ -111,9 +113,7 @@ pub async fn get_git_status(
         .filter(|branch| matches!(branch.as_str(), "main" | "master"))
         .cloned()
         .collect();
-    let (mut staged, mut unstaged) = parse_status(
-        &String::from_utf8(status_output.clone()).map_err(|_| WorkspaceError::InvalidPath)?,
-    )?;
+    let (mut staged, mut unstaged) = parse_status(&status_output)?;
     if include_diff {
         add_diffs(&repo, &mut staged, true).await?;
         add_diffs(&repo, &mut unstaged, false).await?;
@@ -286,32 +286,39 @@ pub(super) async fn repository_path(
         .ok_or(WorkspaceError::InvalidPath)
 }
 
-fn parse_status(output: &str) -> Result<(Vec<GitChange>, Vec<GitChange>), WorkspaceError> {
+fn parse_status(output: &[u8]) -> Result<(Vec<GitChange>, Vec<GitChange>), WorkspaceError> {
     let mut staged = Vec::new();
     let mut unstaged = Vec::new();
-    for line in output.lines().filter(|line| !line.is_empty()) {
-        let bytes = line.as_bytes();
-        if bytes.len() < 4 || bytes[2] != b' ' {
+    // NUL 记录保留空格、换行和字面量 ` -> `，重命名记录再消费一个原路径字段。
+    let mut records = output
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty());
+    while let Some(record) = records.next() {
+        if record.len() < 4 || record[2] != b' ' {
             return Err(WorkspaceError::InvalidPath);
         }
-        let path = line[3..]
-            .rsplit_once(" -> ")
-            .map_or(&line[3..], |(_, path)| path);
+        let path = std::str::from_utf8(&record[3..]).map_err(|_| WorkspaceError::InvalidPath)?;
         valid_relative(path)?;
         let change = |code| GitChange {
             diff: String::new(),
             kind: change_kind(code),
             path: path.to_owned(),
         };
-        if bytes[0] == b'?' && bytes[1] == b'?' {
+        if record[0] == b'?' && record[1] == b'?' {
             unstaged.push(change(b'?'));
         } else {
-            if bytes[0] != b' ' {
-                staged.push(change(bytes[0]));
+            if record[0] != b' ' {
+                staged.push(change(record[0]));
             }
-            if bytes[1] != b' ' {
-                unstaged.push(change(bytes[1]));
+            if record[1] != b' ' {
+                unstaged.push(change(record[1]));
             }
+        }
+        if matches!(record[0], b'R' | b'C') || matches!(record[1], b'R' | b'C') {
+            let original = records.next().ok_or(WorkspaceError::InvalidPath)?;
+            let original =
+                std::str::from_utf8(original).map_err(|_| WorkspaceError::InvalidPath)?;
+            valid_relative(original)?;
         }
     }
     Ok((staged, unstaged))
@@ -434,42 +441,4 @@ async fn git_lines(repo: &Path, args: &[&str]) -> Result<Vec<String>, WorkspaceE
 async fn optional_git_line(repo: &Path, args: &[&str]) -> Result<Option<String>, WorkspaceError> {
     let lines = git_lines(repo, args).await?;
     Ok(lines.into_iter().next())
-}
-
-pub(super) async fn run_git(
-    repo: &Path,
-    args: &[&str],
-    max_bytes: usize,
-) -> Result<(Vec<u8>, bool), WorkspaceError> {
-    let mut child = Command::new("git")
-        .args(args)
-        .current_dir(repo)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()?;
-    let stdout = child.stdout.take().ok_or(WorkspaceError::InvalidPath)?;
-    let stderr = child.stderr.take().ok_or(WorkspaceError::InvalidPath)?;
-    let stdout_task = async {
-        let mut bytes = Vec::new();
-        stdout
-            .take((max_bytes + 1) as u64)
-            .read_to_end(&mut bytes)
-            .await?;
-        Ok::<_, std::io::Error>(bytes)
-    };
-    let stderr_task = async {
-        let mut bytes = Vec::new();
-        stderr.take(64 * 1024).read_to_end(&mut bytes).await?;
-        Ok::<_, std::io::Error>(bytes)
-    };
-    let (mut output, _) = tokio::try_join!(stdout_task, stderr_task)?;
-    let status = child.wait().await?;
-    if !status.success() {
-        return Err(WorkspaceError::InvalidPath);
-    }
-    let truncated = output.len() > max_bytes;
-    output.truncate(max_bytes);
-    Ok((output, truncated))
 }

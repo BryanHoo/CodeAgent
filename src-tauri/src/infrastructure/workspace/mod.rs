@@ -1,5 +1,6 @@
 mod attachments;
 mod files;
+mod git_process;
 mod git_read;
 mod git_write;
 mod open;

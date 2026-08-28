@@ -121,6 +121,112 @@ async fn commit_message_context_should_only_include_selected_changes() {
     fs::remove_dir_all(root).unwrap();
 }
 
+#[tokio::test]
+async fn commit_changes_should_preserve_unselected_staged_files() {
+    let root = create_repository("codeagent-git-selected");
+    fs::write(root.join("selected.txt"), "selected old\n").unwrap();
+    fs::write(root.join("unselected.txt"), "unselected old\n").unwrap();
+    run(&root, &["add", "."]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    fs::write(root.join("selected.txt"), "selected current\n").unwrap();
+    fs::write(root.join("unselected.txt"), "unselected staged\n").unwrap();
+    run(&root, &["add", "--", "unselected.txt"]);
+    let root = fs::canonicalize(root).unwrap();
+    let status = get_git_status(&root, None, false).await.unwrap();
+
+    commit_changes(
+        &root,
+        None,
+        &["selected.txt".to_owned()],
+        "fix(workspace): 仅提交选择文件",
+        "commit",
+        &status.snapshot,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        output(&root, &["show", "--format=", "--name-only", "HEAD"]),
+        "selected.txt"
+    );
+    assert_eq!(
+        output(&root, &["diff", "--cached", "--name-only"]),
+        "unselected.txt"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn commit_changes_should_use_staged_content_for_mixed_files() {
+    let root = create_repository("codeagent-git-mixed");
+    fs::write(root.join("mixed.txt"), "old\n").unwrap();
+    run(&root, &["add", "mixed.txt"]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    fs::write(root.join("mixed.txt"), "staged\n").unwrap();
+    run(&root, &["add", "mixed.txt"]);
+    fs::write(root.join("mixed.txt"), "worktree\n").unwrap();
+    let root = fs::canonicalize(root).unwrap();
+    let status = get_git_status(&root, None, false).await.unwrap();
+
+    commit_changes(
+        &root,
+        None,
+        &["mixed.txt".to_owned()],
+        "fix(workspace): 提交暂存版本",
+        "commit",
+        &status.snapshot,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(output(&root, &["show", "HEAD:mixed.txt"]), "staged");
+    assert!(output(&root, &["diff", "--", "mixed.txt"]).contains("+worktree"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn git_status_should_preserve_special_paths() {
+    let root = create_repository("codeagent-git-paths");
+    fs::write(root.join("tracked.txt"), "baseline\n").unwrap();
+    run(&root, &["add", "tracked.txt"]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    let paths = [
+        "file with space.txt",
+        "line\nbreak.txt",
+        "left -> right.txt",
+    ];
+    for path in paths {
+        fs::write(root.join(path), "content\n").unwrap();
+    }
+    let root = fs::canonicalize(root).unwrap();
+
+    let status = get_git_status(&root, None, false).await.unwrap();
+    let mut actual: Vec<_> = status
+        .unstaged
+        .into_iter()
+        .map(|change| change.path)
+        .collect();
+    actual.sort_unstable();
+    let mut expected = paths.map(str::to_owned);
+    expected.sort_unstable();
+
+    assert_eq!(actual, expected);
+    fs::remove_dir_all(root).unwrap();
+}
+
+fn create_repository(prefix: &str) -> std::path::PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("{prefix}-{unique}"));
+    fs::create_dir_all(&root).unwrap();
+    run(&root, &["init", "-b", "main"]);
+    run(&root, &["config", "user.name", "CodeAgent Test"]);
+    run(&root, &["config", "user.email", "test@example.com"]);
+    root
+}
+
 fn run(root: &std::path::Path, args: &[&str]) {
     assert!(
         Command::new("git")
