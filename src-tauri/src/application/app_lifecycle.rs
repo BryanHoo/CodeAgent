@@ -12,6 +12,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+use super::desktop_pet_commands::acknowledge_completed_desktop_pet_route;
+
 const MAIN_WINDOW_LABEL: &str = "main";
 const MAIN_WINDOW_DESTROY_MIN_SECS: u64 = 30;
 const MAIN_WINDOW_DESTROY_MAX_SECS: u64 = 60;
@@ -219,13 +221,16 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
     #[cfg(target_os = "macos")]
     let _ = app.set_dock_visibility(true);
     let lifecycle = app.state::<MainWindowLifecycle>();
-    let state = lifecycle.lock();
-    if state.destroy_generation != generation {
-        return;
-    }
+    let saved_route = {
+        let state = lifecycle.lock();
+        if state.destroy_generation != generation {
+            return;
+        }
+        state.route.clone()
+    };
     let (window, should_navigate) = match app.get_webview_window(MAIN_WINDOW_LABEL) {
         Some(window) => (window, true),
-        None => match create_main_window(app, state.route.clone()) {
+        None => match create_main_window(app, saved_route) {
             Ok(window) => (window, false),
             Err(error) => {
                 eprintln!("failed to recreate main window: {error}");
@@ -235,8 +240,8 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
     };
 
     if should_navigate
-        && let Some(route) = requested_route
-        && let Err(error) = navigate_main_window(&window, &route)
+        && let Some(route) = requested_route.as_deref()
+        && let Err(error) = navigate_main_window(&window, route)
     {
         eprintln!("failed to navigate main window: {error}");
     }
@@ -245,6 +250,15 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
+
+    let active_route =
+        requested_route.or_else(|| window.url().ok().map(|url| app_route_from_url(&url)));
+    if let Some(route) = active_route {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            acknowledge_completed_desktop_pet_route(&app, &route).await;
+        });
+    }
 }
 
 fn navigate_main_window(window: &WebviewWindow, route: &str) -> tauri::Result<()> {

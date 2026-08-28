@@ -12,7 +12,10 @@ use tokio::sync::Mutex;
 
 use super::{
     app_lifecycle::show_main_window_at_route,
-    desktop_pet_activity::apply_agent_event_to_desktop_pet_state,
+    desktop_pet_activity::{
+        acknowledge_completed_task, apply_agent_event_to_desktop_pet_state,
+        preserve_hidden_completed_tasks,
+    },
     desktop_pet_window::{
         DESKTOP_PET_BUBBLES_LABEL, DESKTOP_PET_EVENT, DESKTOP_PET_LABEL,
         create_desktop_pet_bubbles_window, create_desktop_pet_window, destroy_desktop_pet_window,
@@ -152,7 +155,18 @@ pub async fn sync_desktop_pet(
     if state.as_ref().is_some_and(|state| !state_is_valid(state)) {
         return Err(AppError::DesktopPetWindowFailed);
     }
-    *runtime.state.lock().await = state.clone();
+    let mut stored_state = runtime.state.lock().await;
+    let mut state = state;
+    if app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        != Some(true)
+        && let (Some(current), Some(next)) = (stored_state.as_ref(), state.as_mut())
+    {
+        preserve_hidden_completed_tasks(current, next);
+    }
+    *stored_state = state.clone();
+    drop(stored_state);
 
     render_desktop_pet_state(&app, state).await
 }
@@ -354,7 +368,7 @@ pub fn layout_desktop_pet_bubbles(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn open_desktop_pet_task(
+pub async fn open_desktop_pet_task(
     window: WebviewWindow,
     project_id: String,
     task_id: String,
@@ -368,8 +382,53 @@ pub fn open_desktop_pet_task(
         return Err(AppError::DesktopPetWindowFailed);
     }
     let route = desktop_pet_task_route(&project_id, &task_id)?;
-    show_main_window_at_route(window.app_handle(), route);
-    Ok(())
+    let app = window.app_handle().clone();
+    show_main_window_at_route(&app, route);
+    acknowledge_completed_desktop_pet_task(&app, &project_id, &task_id).await
+}
+
+pub(super) async fn acknowledge_completed_desktop_pet_task(
+    app: &AppHandle,
+    project_id: &str,
+    task_id: &str,
+) -> Result<(), AppError> {
+    let runtime = app.state::<DesktopPetRuntime>();
+    let next_state = {
+        let mut stored_state = runtime.state.lock().await;
+        let Some(state) = stored_state.as_mut() else {
+            return Ok(());
+        };
+        if !acknowledge_completed_task(state, project_id, task_id) {
+            return Ok(());
+        }
+        state.clone()
+    };
+    render_desktop_pet_state(app, Some(next_state)).await
+}
+
+pub(super) async fn acknowledge_completed_desktop_pet_route(app: &AppHandle, route: &str) {
+    let route = route.split(['?', '#']).next().unwrap_or(route);
+    let target = {
+        let runtime = app.state::<DesktopPetRuntime>();
+        let stored_state = runtime.state.lock().await;
+        stored_state.as_ref().and_then(|state| {
+            state
+                .tasks
+                .iter()
+                .find(|task| {
+                    task.status == DesktopPetTaskStatus::Completed
+                        && desktop_pet_task_route(&task.project_id, &task.task_id)
+                            .is_ok_and(|task_route| task_route == route)
+                })
+                .map(|task| (task.project_id.clone(), task.task_id.clone()))
+        })
+    };
+    let Some((project_id, task_id)) = target else {
+        return;
+    };
+    if let Err(error) = acknowledge_completed_desktop_pet_task(app, &project_id, &task_id).await {
+        eprintln!("failed to acknowledge completed desktop pet task: {error}");
+    }
 }
 
 fn desktop_pet_task_route(project_id: &str, task_id: &str) -> Result<String, AppError> {

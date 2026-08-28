@@ -59,11 +59,8 @@ pub(super) fn apply_agent_event_to_desktop_pet_state(
                     return true;
                 }
                 Some("idle") => {
-                    // turn.completed 后的 idle 不能清除待查看的完成提醒。
-                    if state.tasks[task_index].status == DesktopPetTaskStatus::Completed {
-                        return false;
-                    }
-                    state.tasks.remove(task_index);
+                    // idle 与 turn.completed 的到达顺序不稳定，终态只由完整 Turn 事件确认。
+                    return false;
                 }
                 _ => return false,
             }
@@ -101,6 +98,40 @@ fn refresh_desktop_pet_animation(state: &mut DesktopPetState) {
     };
 }
 
+pub(super) fn preserve_hidden_completed_tasks(
+    current: &DesktopPetState,
+    next: &mut DesktopPetState,
+) {
+    for task in &current.tasks {
+        if task.status == DesktopPetTaskStatus::Completed
+            && !next.tasks.iter().any(|next_task| {
+                next_task.project_id == task.project_id && next_task.task_id == task.task_id
+            })
+        {
+            next.tasks.push(task.clone());
+        }
+    }
+    refresh_desktop_pet_animation(next);
+}
+
+pub(super) fn acknowledge_completed_task(
+    state: &mut DesktopPetState,
+    project_id: &str,
+    task_id: &str,
+) -> bool {
+    let original_len = state.tasks.len();
+    state.tasks.retain(|task| {
+        task.status != DesktopPetTaskStatus::Completed
+            || task.project_id != project_id
+            || task.task_id != task_id
+    });
+    if state.tasks.len() == original_len {
+        return false;
+    }
+    refresh_desktop_pet_animation(state);
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,6 +154,18 @@ mod tests {
     #[test]
     fn completed_runtime_event_replaces_loading_with_review_state() {
         let mut state = running_pet_state();
+        let idle = AgentEvent::from(serde_json::json!({
+            "payload": {"status": "idle"},
+            "taskId": "task-1",
+            "type": "task.status_updated"
+        }));
+        assert!(!apply_agent_event_to_desktop_pet_state(
+            &mut state,
+            "project-1",
+            &idle
+        ));
+        assert_eq!(state.tasks[0].status, DesktopPetTaskStatus::Running);
+
         let completed = AgentEvent::from(serde_json::json!({
             "payload": {"turn": {"status": "completed"}},
             "taskId": "task-1",
@@ -137,11 +180,6 @@ mod tests {
         assert_eq!(state.animation_name, DesktopPetAnimation::Review);
         assert_eq!(state.tasks[0].status, DesktopPetTaskStatus::Completed);
 
-        let idle = AgentEvent::from(serde_json::json!({
-            "payload": {"status": "idle"},
-            "taskId": "task-1",
-            "type": "task.status_updated"
-        }));
         assert!(!apply_agent_event_to_desktop_pet_state(
             &mut state,
             "project-1",
@@ -166,5 +204,45 @@ mod tests {
         ));
         assert_eq!(state.animation_name, DesktopPetAnimation::Failed);
         assert!(state.tasks.is_empty());
+    }
+
+    #[test]
+    fn hidden_frontend_sync_preserves_unacknowledged_completion() {
+        let mut current = running_pet_state();
+        current.tasks[0].status = DesktopPetTaskStatus::Completed;
+        current.animation_name = DesktopPetAnimation::Review;
+        let mut next = DesktopPetState {
+            animation_name: DesktopPetAnimation::Idle,
+            pet_id: "codex".to_owned(),
+            tasks: vec![],
+        };
+
+        preserve_hidden_completed_tasks(&current, &mut next);
+
+        assert_eq!(next.animation_name, DesktopPetAnimation::Review);
+        assert_eq!(next.tasks, current.tasks);
+    }
+
+    #[test]
+    fn acknowledging_completion_only_removes_the_selected_completed_task() {
+        let mut state = running_pet_state();
+        state
+            .tasks
+            .push(super::super::desktop_pet_commands::DesktopPetTask {
+                project_id: "project-1".to_owned(),
+                root_path: Some("/workspace".to_owned()),
+                status: DesktopPetTaskStatus::Completed,
+                task_id: "task-2".to_owned(),
+                task_name: "Completed task".to_owned(),
+            });
+
+        assert!(acknowledge_completed_task(
+            &mut state,
+            "project-1",
+            "task-2"
+        ));
+        assert_eq!(state.tasks.len(), 1);
+        assert_eq!(state.tasks[0].status, DesktopPetTaskStatus::Running);
+        assert_eq!(state.animation_name, DesktopPetAnimation::Running);
     }
 }
