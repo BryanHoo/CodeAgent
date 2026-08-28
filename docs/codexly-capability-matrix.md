@@ -35,7 +35,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 命令、文件变更、工具、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、搜索取消和结果上限 | 已实现 |
-| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | Rust 类型/大小校验、应用缓存、Tauri asset protocol | 已实现 |
+| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.149 `text`/`localImage` 输入；Rust 校验 UTF-8、类型、大小与缓存边界 | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |

@@ -1,5 +1,9 @@
 import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
-import type { HostFileKind, HostFileListing } from "@/protocol/index.js";
+import {
+  isAgentTextFileName,
+  type HostFileKind,
+  type HostFileListing,
+} from "@/protocol/index.js";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -39,12 +43,24 @@ type HostFileNodesProps = Readonly<{
   directoryStates: ReadonlyMap<string, HostFileDirectoryState>;
   entries: HostFileListing["entries"];
   expandedPaths: Set<string>;
+  kind: HostFileKind;
   onRetry: (path: string) => void;
 }>;
 
-function HostFileNodes({ directoryStates, entries, expandedPaths, onRetry }: HostFileNodesProps) {
+function isVisibleHostEntry(entry: HostFileListing["entries"][number], kind: HostFileKind) {
+  return entry.type === "directory" || kind === "image" || isAgentTextFileName(entry.name);
+}
+
+function HostFileNodes({
+  directoryStates,
+  entries,
+  expandedPaths,
+  kind,
+  onRetry,
+}: HostFileNodesProps) {
   const { t } = useTranslation("workbench");
-  return entries.map((entry) => {
+  // 宿主选择器与拖放入口共享扩展名规则，避免展示必然被 149 拒绝的二进制文件。
+  return entries.filter((entry) => isVisibleHostEntry(entry, kind)).map((entry) => {
     if (entry.type === "file") {
       return <FileTreeFile key={entry.path} name={entry.name} path={entry.path} />;
     }
@@ -83,7 +99,7 @@ function HostFileNodes({ directoryStates, entries, expandedPaths, onRetry }: Hos
           <p className="px-2 py-1.5 text-caption text-muted-foreground" role="status">
             {t("hostAttachmentPicker.loadingBranch")}
           </p>
-        ) : state.data.entries.length === 0 ? (
+        ) : !state.data.entries.some((entry) => isVisibleHostEntry(entry, kind)) ? (
           <p className="px-2 py-1.5 text-caption text-muted-foreground">
             {t("hostAttachmentPicker.empty")}
           </p>
@@ -92,6 +108,7 @@ function HostFileNodes({ directoryStates, entries, expandedPaths, onRetry }: Hos
             directoryStates={directoryStates}
             entries={state.data.entries}
             expandedPaths={expandedPaths}
+            kind={kind}
             onRetry={onRetry}
           />
         )}
@@ -104,6 +121,7 @@ type HostFileTreeProps = Readonly<{
   directoryStates: readonly HostFileDirectoryState[];
   expandedPaths: Set<string>;
   listing: HostFileListing;
+  kind: HostFileKind;
   onExpandedChange: (paths: Set<string>) => void;
   onRetry: (path: string) => void;
   onSelect: (path: string) => void;
@@ -114,6 +132,7 @@ export function HostFileTree({
   directoryStates,
   expandedPaths,
   listing,
+  kind,
   onExpandedChange,
   onRetry,
   onSelect,
@@ -136,6 +155,7 @@ export function HostFileTree({
         directoryStates={directoryStateMap}
         entries={listing.entries}
         expandedPaths={expandedPaths}
+        kind={kind}
         onRetry={onRetry}
       />
     </FileTree>
@@ -196,10 +216,12 @@ export function HostAttachmentPickerDialog({
         [listing, ...directoryStates.map((state) => state.data)]
           .filter((value): value is HostFileListing => value !== undefined)
           .flatMap((value) =>
-            value.entries.flatMap((entry) => (entry.type === "file" ? [entry.path] : [])),
+            value.entries.flatMap((entry) =>
+              entry.type === "file" && isVisibleHostEntry(entry, kind) ? [entry.path] : [],
+            ),
           ),
       ),
-    [directoryStates, listing],
+    [directoryStates, kind, listing],
   );
   const displayedPath = pathDraft ?? rootPath ?? listing?.path ?? "";
 
@@ -335,7 +357,9 @@ export function HostAttachmentPickerDialog({
                 {t("actions.retry")}
               </Button>
             </div>
-          ) : listing === undefined ? null : listing.entries.length === 0 ? (
+          ) : listing === undefined ? null : !listing.entries.some((entry) =>
+              isVisibleHostEntry(entry, kind),
+            ) ? (
             <p className="grid min-h-32 place-items-center text-body-small text-muted-foreground">
               {t("hostAttachmentPicker.empty")}
             </p>
@@ -343,6 +367,7 @@ export function HostAttachmentPickerDialog({
             <HostFileTree
               directoryStates={directoryStates}
               expandedPaths={expandedPaths}
+              kind={kind}
               listing={listing}
               onExpandedChange={setExpandedPaths}
               onRetry={(path) => {

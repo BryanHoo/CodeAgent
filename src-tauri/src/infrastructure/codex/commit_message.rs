@@ -124,7 +124,7 @@ pub async fn start_commit_message_turn(
             &TurnStartParams {
                 approval_policy: "never",
                 effort: "low",
-                input: [json!({"text": prompt, "textElements": [], "type": "text"})],
+                input: [json!({"text": prompt, "text_elements": [], "type": "text"})],
                 model,
                 output_schema: json!({
                     "additionalProperties": false,

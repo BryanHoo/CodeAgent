@@ -57,17 +57,18 @@ export const AgentReviewTargetSchema = Type.Intersect([
 ]);
 export type AgentReviewTarget = Readonly<Static<typeof AgentReviewTargetSchema>>;
 
-export const MAX_AGENT_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_AGENT_TEXT_BYTES = 1024 * 1024;
+export const MAX_AGENT_FILE_BYTES = MAX_AGENT_TEXT_BYTES;
 export const MAX_AGENT_FILE_TOTAL_BYTES = 50 * 1024 * 1024;
 export const MAX_AGENT_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_AGENT_IMAGES = 20;
 export const MAX_AGENT_IMAGE_TOTAL_BYTES = 50 * 1024 * 1024;
-export const MAX_AGENT_TEXT_BYTES = 1024 * 1024;
 export const MAX_AGENT_ATTACHMENT_BYTES = Math.max(MAX_AGENT_FILE_BYTES, MAX_AGENT_IMAGE_BYTES);
 export const MAX_AGENT_HISTORY_IMAGES = 1_500;
 export const MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES = 512 * 1024 * 1024;
 
 export const AGENT_IMAGE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
+// Codex 0.149 的 turn input 仅原生支持文本和图片；二进制文档不进入附件上传链路。
 export const AGENT_FILE_EXTENSIONS = [
   ".asm",
   ".astro",
@@ -85,8 +86,6 @@ export const AGENT_FILE_EXTENSIONS = [
   ".def",
   ".dic",
   ".diff",
-  ".doc",
-  ".docx",
   ".dot",
   ".eml",
   ".ejs",
@@ -131,17 +130,10 @@ export const AGENT_FILE_EXTENSIONS = [
   ".mjs",
   ".nws",
   ".ndjson",
-  ".odt",
-  ".pdf",
   ".pl",
   ".patch",
   ".php",
   ".pot",
-  ".ppa",
-  ".pps",
-  ".ppt",
-  ".pptx",
-  ".pwz",
   ".py",
   ".properties",
   ".proto",
@@ -172,14 +164,6 @@ export const AGENT_FILE_EXTENSIONS = [
   ".vtt",
   ".vbs",
   ".wiz",
-  ".xla",
-  ".xlb",
-  ".xlc",
-  ".xlm",
-  ".xls",
-  ".xlsx",
-  ".xlt",
-  ".xlw",
   ".xml",
   ".yaml",
   ".yml",
@@ -190,17 +174,9 @@ export const AGENT_FILE_MEDIA_TYPES = [
   "application/graphql",
   "application/javascript",
   "application/json",
-  "application/msword",
-  "application/pdf",
   "application/rtf",
   "application/toml",
   "application/typescript",
-  "application/vnd.ms-excel",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.oasis.opendocument.text",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/x-httpd-php",
   "application/x-iif",
   "application/x-ndjson",
@@ -243,6 +219,12 @@ export const AGENT_FILE_MEDIA_TYPES = [
   "text/xml",
 ] as const;
 export const AGENT_FILE_ACCEPT = [...AGENT_FILE_EXTENSIONS, ...AGENT_FILE_MEDIA_TYPES].join(",");
+const AGENT_FILE_EXTENSION_SET = new Set<string>(AGENT_FILE_EXTENSIONS);
+
+export function isAgentTextFileName(name: string): boolean {
+  const extensionOffset = name.lastIndexOf(".");
+  return extensionOffset >= 0 && AGENT_FILE_EXTENSION_SET.has(name.slice(extensionOffset).toLowerCase());
+}
 
 export const AgentImageMediaTypeSchema = Type.Union([
   Type.Literal("image/gif"),

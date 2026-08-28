@@ -34,21 +34,12 @@ pub async fn upload_attachment(
     kind: String,
     name: String,
     bytes: Vec<u8>,
-    state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    validate_project(&state, &project_id).await?;
-    let response = workspace::store_attachment(
-        &app.path()
-            .app_data_dir()
-            .map_err(|_| AppError::FilesystemRequestFailed)?,
-        &project_id,
-        &kind,
-        &name,
-        &bytes,
-    )
-    .await
-    .map_err(|_| AppError::FilesystemRequestFailed)?;
-    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    store_attachment_without_codex(&app_data, &project_id, &kind, &name, &bytes).await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -57,19 +48,36 @@ pub async fn import_host_attachment(
     project_id: String,
     kind: String,
     path: String,
-    state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    validate_project(&state, &project_id).await?;
-    let response = workspace::import_attachment(
-        &app.path()
-            .app_data_dir()
-            .map_err(|_| AppError::FilesystemRequestFailed)?,
-        &project_id,
-        &kind,
-        &path,
-    )
-    .await
-    .map_err(|_| AppError::FilesystemRequestFailed)?;
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    import_attachment_without_codex(&app_data, &project_id, &kind, &path).await
+}
+
+async fn store_attachment_without_codex(
+    app_data: &Path,
+    project_id: &str,
+    kind: &str,
+    name: &str,
+    bytes: &[u8],
+) -> Result<Value, AppError> {
+    let response = workspace::store_attachment(app_data, project_id, kind, name, bytes)
+        .await
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+}
+
+async fn import_attachment_without_codex(
+    app_data: &Path,
+    project_id: &str,
+    kind: &str,
+    path: &str,
+) -> Result<Value, AppError> {
+    let response = workspace::import_attachment(app_data, project_id, kind, path)
+        .await
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -174,10 +182,34 @@ fn is_image_path(path: &Path) -> bool {
         })
 }
 
-async fn validate_project(state: &State<'_, AppState>, project_id: &str) -> Result<(), AppError> {
-    let connection = state.codex_connection().await?;
-    codex::read_project(&connection, project_id)
+#[cfg(test)]
+mod tests {
+    use std::{fs, time::SystemTime};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn temporary_scope_should_import_json_without_a_codex_project() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codeagent-command-attachments-{unique}"));
+        let source = root.join("capslock-plus.json");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&source, br#"{"enabled":true}"#).unwrap();
+
+        let response = import_attachment_without_codex(
+            &root.join("app-data"),
+            "temporary",
+            "file",
+            source.to_str().unwrap(),
+        )
         .await
-        .map(|_| ())
-        .map_err(|_| AppError::CodexRequestFailed)
+        .expect("temporary attachment should not require project/read");
+
+        assert_eq!(response["attachment"]["kind"], "file");
+        assert_eq!(response["attachment"]["name"], "capslock-plus.json");
+        fs::remove_dir_all(root).unwrap();
+    }
 }

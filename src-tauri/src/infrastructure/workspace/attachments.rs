@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::path_guard::WorkspaceError;
 
-const MAX_FILE_BYTES: usize = 50 * 1024 * 1024;
+const MAX_TEXT_BYTES: usize = 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
@@ -75,10 +75,11 @@ pub async fn import_attachment(
 ) -> Result<AttachmentResponse, WorkspaceError> {
     let source = tokio::fs::canonicalize(source).await?;
     let metadata = tokio::fs::metadata(&source).await?;
-    if !metadata.is_file()
-        || usize::try_from(metadata.len()).map_err(|_| WorkspaceError::InvalidPath)?
-            > MAX_FILE_BYTES
-    {
+    if !metadata.is_file() {
+        return Err(WorkspaceError::InvalidPath);
+    }
+    let size = usize::try_from(metadata.len()).map_err(|_| WorkspaceError::InvalidPath)?;
+    if size > max_content_bytes(kind)? {
         return Err(WorkspaceError::InvalidPath);
     }
     let name = source
@@ -135,8 +136,19 @@ fn validate_content(kind: &str, name: &str, bytes: &[u8]) -> Result<&'static str
         return Err(WorkspaceError::InvalidPath);
     }
     match kind {
-        "file" if bytes.len() <= MAX_FILE_BYTES => Ok("file"),
+        // 149 app-server 没有通用文件输入，文本在缓存边界完成 UTF-8 与大小校验。
+        "file" | "text" if bytes.len() <= MAX_TEXT_BYTES && std::str::from_utf8(bytes).is_ok() => {
+            Ok(if kind == "text" { "text" } else { "file" })
+        }
         "image" if bytes.len() <= MAX_IMAGE_BYTES && is_supported_image(name, bytes) => Ok("image"),
+        _ => Err(WorkspaceError::InvalidPath),
+    }
+}
+
+fn max_content_bytes(kind: &str) -> Result<usize, WorkspaceError> {
+    match kind {
+        "file" | "text" => Ok(MAX_TEXT_BYTES),
+        "image" => Ok(MAX_IMAGE_BYTES),
         _ => Err(WorkspaceError::InvalidPath),
     }
 }
@@ -204,6 +216,35 @@ mod tests {
                 .await
                 .is_err()
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn attachment_cache_should_accept_generated_text_and_reject_binary_files() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codeagent-text-attachments-{unique}"));
+
+        let generated = store_attachment(
+            &root,
+            "project-a",
+            "text",
+            "Pasted text.txt",
+            "生成的附件".as_bytes(),
+        )
+        .await
+        .expect("generated UTF-8 text should be cached");
+        assert_eq!(generated.attachment.kind, "text");
+
+        let binary =
+            store_attachment(&root, "project-a", "file", "document.pdf", b"%PDF-\xff\xfe").await;
+        assert!(
+            binary.is_err(),
+            "binary files are not supported by Codex 0.149 input"
+        );
+
         fs::remove_dir_all(root).unwrap();
     }
 }

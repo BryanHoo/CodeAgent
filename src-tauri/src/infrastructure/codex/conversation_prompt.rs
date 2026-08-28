@@ -6,13 +6,13 @@ use crate::domain::conversation::AgentPromptInput;
 pub(super) fn map_prompt_input(input: &AgentPromptInput) -> Result<Vec<Value>, ConnectionError> {
     let mut native = Vec::with_capacity(1 + input.attachments.len() + input.skills.len());
     if !input.text.is_empty() {
-        native.push(json!({"text": input.text, "textElements": [], "type": "text"}));
+        native.push(json!({"text": input.text, "text_elements": [], "type": "text"}));
     }
     for attachment in &input.attachments {
         match attachment.get("kind").and_then(Value::as_str) {
             Some("text") => native.push(json!({
                 "text": object_string(attachment, "content")?,
-                "textElements": [],
+                "text_elements": [],
                 "type": "text",
             })),
             None | Some("image") => native.push(json!({
@@ -42,4 +42,18 @@ fn object_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, ConnectionE
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
         .ok_or(ConnectionError::InvalidMessage)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_text_should_follow_codex_149_wire_schema() {
+        let input = AgentPromptInput::text("读取附件");
+        let native = map_prompt_input(&input).expect("prompt should map");
+
+        assert_eq!(native[0]["text_elements"], json!([]));
+        assert!(native[0].get("textElements").is_none());
+    }
 }
