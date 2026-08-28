@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use serde::Serialize;
+use tokio::io::AsyncReadExt;
 
 use super::{
     git_read::{GitStatus, get_git_status, repository_path, run_git},
@@ -8,6 +9,7 @@ use super::{
 };
 
 const MAX_GIT_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_COMMIT_CONTEXT_BYTES: usize = 512 * 1024;
 
 #[derive(Debug, Serialize)]
 pub struct WorktreePage {
@@ -21,10 +23,9 @@ pub struct Worktree {
     pub path: String,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GenerateCommitMessageResponse {
-    pub message: String,
+#[derive(Debug)]
+pub struct CommitMessageContext {
+    pub changes: String,
     pub snapshot: String,
 }
 
@@ -160,29 +161,109 @@ pub async fn switch_worktree(
         .ok_or(WorkspaceError::InvalidPath)
 }
 
-pub async fn generate_commit_message(
+pub async fn prepare_commit_message(
     root: &Path,
     repository: Option<&str>,
     paths: &[String],
     expected_snapshot: &str,
-) -> Result<GenerateCommitMessageResponse, WorkspaceError> {
+) -> Result<CommitMessageContext, WorkspaceError> {
     validate_paths(paths)?;
     let status = validate_snapshot(root, repository, expected_snapshot).await?;
-    let deleted = status
+    let repo = repository_path(root, repository).await?;
+    let staged: Vec<_> = status
         .staged
         .iter()
-        .chain(&status.unstaged)
         .filter(|change| paths.contains(&change.path))
-        .all(|change| change.kind == "delete");
-    Ok(GenerateCommitMessageResponse {
-        message: if deleted {
-            "chore(workspace): 删除项目文件"
-        } else {
-            "chore(workspace): 更新项目文件"
+        .collect();
+    let unstaged: Vec<_> = status
+        .unstaged
+        .iter()
+        .filter(|change| paths.contains(&change.path))
+        .collect();
+    if staged.is_empty() && unstaged.is_empty() {
+        return Err(WorkspaceError::InvalidPath);
+    }
+    let mut changes = String::new();
+    for (area, change) in staged
+        .iter()
+        .map(|change| ("staged", *change))
+        .chain(unstaged.iter().map(|change| ("unstaged", *change)))
+    {
+        append_bounded(
+            &mut changes,
+            &format!("## {area}: {} ({})\n", change.path, change.kind),
+            MAX_COMMIT_CONTEXT_BYTES,
+        );
+    }
+
+    append_selected_diff(
+        &repo,
+        &staged
+            .iter()
+            .map(|change| change.path.as_str())
+            .collect::<Vec<_>>(),
+        true,
+        &mut changes,
+    )
+    .await?;
+    let tracked_unstaged: Vec<_> = unstaged
+        .iter()
+        .filter(|change| change.kind != "create")
+        .map(|change| change.path.as_str())
+        .collect();
+    append_selected_diff(&repo, &tracked_unstaged, false, &mut changes).await?;
+
+    for change in unstaged.iter().filter(|change| change.kind == "create") {
+        // 未跟踪文件没有 Git diff，仅读取剩余上下文容量，避免大文件占用过多内存。
+        let remaining = MAX_COMMIT_CONTEXT_BYTES.saturating_sub(changes.len());
+        let mut content = Vec::with_capacity(remaining.min(8 * 1024));
+        if let Ok(file) = tokio::fs::File::open(repo.join(&change.path)).await {
+            file.take(remaining as u64)
+                .read_to_end(&mut content)
+                .await?;
         }
-        .to_owned(),
+        append_bounded(
+            &mut changes,
+            &String::from_utf8_lossy(&content),
+            MAX_COMMIT_CONTEXT_BYTES,
+        );
+        append_bounded(&mut changes, "\n", MAX_COMMIT_CONTEXT_BYTES);
+    }
+    Ok(CommitMessageContext {
+        changes,
         snapshot: status.snapshot,
     })
+}
+
+async fn append_selected_diff(
+    repo: &Path,
+    paths: &[&str],
+    staged: bool,
+    target: &mut String,
+) -> Result<(), WorkspaceError> {
+    if paths.is_empty() || target.len() >= MAX_COMMIT_CONTEXT_BYTES {
+        return Ok(());
+    }
+    let mut args = vec!["diff", "--no-ext-diff"];
+    if staged {
+        args.push("--cached");
+    }
+    args.push("--");
+    args.extend_from_slice(paths);
+    let remaining = MAX_COMMIT_CONTEXT_BYTES - target.len();
+    let (diff, _) = run_git(repo, &args, remaining).await?;
+    append_bounded(
+        target,
+        &String::from_utf8_lossy(&diff),
+        MAX_COMMIT_CONTEXT_BYTES,
+    );
+    Ok(())
+}
+
+fn append_bounded(target: &mut String, value: &str, limit: usize) {
+    let remaining = limit.saturating_sub(target.len());
+    let end = value.floor_char_boundary(remaining.min(value.len()));
+    target.push_str(&value[..end]);
 }
 
 pub async fn commit_changes(

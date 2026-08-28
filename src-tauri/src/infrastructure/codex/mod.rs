@@ -1,5 +1,6 @@
 mod auth;
 mod catalogs;
+mod commit_message;
 mod connection;
 mod conversation;
 mod conversation_advanced;
@@ -48,6 +49,10 @@ pub use auth::{
     list_provider_models, logout_provider, start_official_provider_login,
 };
 pub use catalogs::{list_mcp_servers, list_skills, reload_mcp_servers};
+pub use commit_message::{
+    parse_commit_message_output, read_commit_message_settings, start_commit_message_thread,
+    start_commit_message_turn,
+};
 pub use connection::{AppServerConnection, ServerMessage};
 pub(crate) use conversation::RUNTIME_SESSION_ID;
 pub use conversation::read_task_snapshot;

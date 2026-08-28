@@ -5,6 +5,7 @@ use tauri::ipc::Channel;
 use tokio::{sync::Mutex, task::JoinHandle};
 
 use super::error::AppError;
+use super::model_turn_waiters::ModelTurnWaiters;
 use super::turn_waiters::TurnStartedWaiters;
 use crate::{
     domain::runtime::{AppEvent, ProviderKind, RuntimeSnapshot, RuntimeStatus},
@@ -27,6 +28,7 @@ struct RuntimeSession {
     pending_requests: HashMap<String, PendingServerRequest>,
     provider_login: Option<Value>,
     mcp_statuses: HashMap<String, Value>,
+    model_turn_waiters: ModelTurnWaiters,
     queue_editing_by_task: HashMap<String, String>,
     turn_started_waiters: TurnStartedWaiters,
 }
@@ -186,6 +188,25 @@ impl AppState {
             .cancel(task_id, waiter_id);
     }
 
+    pub async fn register_model_turn(
+        &self,
+        thread_id: &str,
+    ) -> tokio::sync::oneshot::Receiver<Option<String>> {
+        self.runtime
+            .lock()
+            .await
+            .model_turn_waiters
+            .register(thread_id)
+    }
+
+    pub async fn cancel_model_turn(&self, thread_id: &str) {
+        self.runtime
+            .lock()
+            .await
+            .model_turn_waiters
+            .cancel(thread_id);
+    }
+
     pub async fn take_pending_request(&self, request_id: &str) -> Option<PendingServerRequest> {
         self.runtime
             .lock()
@@ -267,6 +288,12 @@ fn spawn_event_forwarder(
     tokio::spawn(async move {
         while let Some(message) = messages.recv().await {
             let mut runtime = runtime.lock().await;
+            if matches!(message.method.as_str(), "item/completed" | "turn/completed")
+                && let Ok(params) = serde_json::from_str::<Value>(message.params.get())
+            {
+                // 内部临时 Turn 不进入任务列表，只在这里提取最终模型输出。
+                runtime.model_turn_waiters.observe(&message.method, &params);
+            }
             if message.id.is_none() && message.method == "account/login/completed" {
                 // 登录通知只更新短期状态，Token 和 API key 始终由 Codex 自己持有。
                 let params = serde_json::from_str::<Value>(message.params.get());
@@ -399,6 +426,7 @@ fn spawn_event_forwarder(
         runtime.codex_process = None;
         runtime._event_task = None;
         runtime.turn_started_waiters.clear();
+        runtime.model_turn_waiters.clear();
         let pending = std::mem::take(&mut runtime.pending_requests);
         for (_, request) in pending {
             let _ = publish_terminal_request(&mut runtime, request, "expired");

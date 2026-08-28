@@ -216,6 +216,7 @@ export const ProjectOpenAppIdSchema = Type.Union([
   Type.Literal("finder"),
   Type.Literal("terminal"),
   Type.Literal("ghostty"),
+  Type.Literal("iterm2"),
   Type.Literal("xcode"),
   Type.Literal("android-studio"),
   Type.Literal("file-manager"),

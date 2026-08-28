@@ -19,6 +19,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 运行时与健康 | `getHealth`, `getCapabilities` | Rust 子进程握手、精确版本校验、失败恢复、有界消息队列 | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
+| 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 按系统安装状态探测编辑器、终端与文件管理器，再通过受限应用 ID 打开 | 已实现 |
 | 任务列表 | `listTasks`, `startTask`, `renameTask`, `pinTask` | 原生 `thread/list`, `thread/start`, `thread/name/set`, `thread/section/set` | 已实现 |
 | 归档与删除 | `archiveTask`, `unarchiveTask`, `deleteTask`, `unsubscribeTask` | 原生 thread 生命周期；活跃任务禁止错误释放 | 已实现 |
 | 会话快照 | `readTask` | `thread/read(includeTurns:false)` + `thread/turns/list` | 已实现 |
@@ -36,7 +37,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、搜索取消和结果上限 | 已实现 |
 | 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | Rust 类型/大小校验、应用缓存、Tauri asset protocol | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
-| Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff | 已实现 |
+| Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
 | 右栏检查器 | 文件、Sources、Changes、历史 | 全部由上述 Tauri 文件/Git接口驱动 | 已实现 |
 | 模型与 Skills | `listModels`, `listSkills` | 原生 `model/list`, `skills/list` | 已实现 |

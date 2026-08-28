@@ -2,7 +2,7 @@ use std::{fs, process::Command, time::SystemTime};
 
 use super::{
     commit_changes, create_branch, get_commit_diff, get_commit_files, get_git_history,
-    get_git_status, switch_branch,
+    get_git_status, prepare_commit_message, switch_branch,
 };
 
 #[tokio::test]
@@ -87,6 +87,37 @@ async fn git_mutations_should_reject_stale_snapshots_and_commit_selected_paths()
     assert_eq!(committed.push_status, "not_requested");
     assert_eq!(committed.message, "fix(workspace): 更新测试文件");
 
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn commit_message_context_should_only_include_selected_changes() {
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("codeagent-git-message-{unique}"));
+    fs::create_dir_all(&root).unwrap();
+    run(&root, &["init", "-b", "main"]);
+    run(&root, &["config", "user.name", "CodeAgent Test"]);
+    run(&root, &["config", "user.email", "test@example.com"]);
+    fs::write(root.join("selected.txt"), "before\n").unwrap();
+    fs::write(root.join("ignored.txt"), "before\n").unwrap();
+    run(&root, &["add", "."]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    fs::write(root.join("selected.txt"), "selected change\n").unwrap();
+    fs::write(root.join("ignored.txt"), "ignored change\n").unwrap();
+    let root = fs::canonicalize(root).unwrap();
+    let status = get_git_status(&root, None, false).await.unwrap();
+
+    let context =
+        prepare_commit_message(&root, None, &["selected.txt".to_owned()], &status.snapshot)
+            .await
+            .unwrap();
+
+    assert!(context.changes.contains("selected change"));
+    assert!(!context.changes.contains("ignored change"));
+    assert_eq!(context.snapshot, status.snapshot);
     fs::remove_dir_all(root).unwrap();
 }
 

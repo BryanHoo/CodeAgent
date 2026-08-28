@@ -1,8 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::State;
+use tokio::time::timeout;
 
 use super::{error::AppError, state::AppState};
 use crate::infrastructure::{codex, workspace};
@@ -334,8 +335,8 @@ pub async fn generate_commit_message(
     input: CommitMutationInput,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (_, root, _) = project_root(&state, &project_id, &root_path).await?;
-    let response = workspace::generate_commit_message(
+    let (connection, root, _) = project_root(&state, &project_id, &root_path).await?;
+    let context = workspace::prepare_commit_message(
         &root,
         input.repository.as_deref(),
         &input.paths,
@@ -343,7 +344,36 @@ pub async fn generate_commit_message(
     )
     .await
     .map_err(|_| AppError::FilesystemRequestFailed)?;
-    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+    let settings = codex::read_commit_message_settings(&connection)
+        .await
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    let thread_id = codex::start_commit_message_thread(&connection, &root, &settings.model)
+        .await
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    let completed = state.register_model_turn(&thread_id).await;
+    if codex::start_commit_message_turn(
+        &connection,
+        &thread_id,
+        &settings.model,
+        &settings.prompt,
+        &context.changes,
+    )
+    .await
+    .is_err()
+    {
+        state.cancel_model_turn(&thread_id).await;
+        return Err(AppError::CodexRequestFailed);
+    }
+    let output = match timeout(Duration::from_secs(120), completed).await {
+        Ok(Ok(Some(output))) => output,
+        _ => {
+            state.cancel_model_turn(&thread_id).await;
+            return Err(AppError::CodexRequestFailed);
+        }
+    };
+    let message =
+        codex::parse_commit_message_output(&output).map_err(|_| AppError::CodexRequestFailed)?;
+    Ok(json!({"message": message, "snapshot": context.snapshot}))
 }
 
 #[tauri::command(rename_all = "camelCase")]

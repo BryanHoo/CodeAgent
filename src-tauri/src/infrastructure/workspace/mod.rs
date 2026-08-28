@@ -15,7 +15,7 @@ pub use files::{
 };
 pub use git_read::{get_commit_diff, get_commit_files, get_git_history, get_git_status};
 pub use git_write::{
-    commit_changes, create_branch, create_worktree, generate_commit_message, list_worktrees,
+    commit_changes, create_branch, create_worktree, list_worktrees, prepare_commit_message,
     switch_branch, switch_worktree,
 };
 pub use open::{open_path, platform_apps};
