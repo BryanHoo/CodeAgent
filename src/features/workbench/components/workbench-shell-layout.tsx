@@ -101,7 +101,6 @@ export function WorkbenchShellLayout({
     setSelectedRootId,
     setSubagentDialogSelection,
     setTaskRenameOpen,
-    sidebarConnectionState,
     sidebarOpen,
     sidebarWidth,
     skillsQuery,
@@ -129,7 +128,6 @@ export function WorkbenchShellLayout({
     >
       <ProjectSidebar
         {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-        connectionState={sidebarConnectionState}
         onClose={closeSidebar}
         onOpenSettings={(section) => {
           setGlobalSettingsSection(section);

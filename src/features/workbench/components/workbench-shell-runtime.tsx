@@ -45,7 +45,6 @@ import {
 } from "../../projects/project-queries.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
-import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
 import { getProjectFileManagerApp } from "./project-open-menu.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import type {
@@ -56,6 +55,7 @@ import {
   deriveWorkbenchInspectorActivation,
   shouldEnableProjectGitDetails,
 } from "../workbench-inspector-activation.js";
+import { shouldEnableWorkbenchSkills } from "../workbench-query-availability.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 import { useSubmissionStartedAt } from "./use-submission-started-at.js";
 
@@ -234,7 +234,7 @@ export function useWorkbenchShellRuntime({
   }, [projectFileManagerApp, projectPathOpenLockRef, projectPathOpenMutationRef]);
   const skillsQuery = useQuery({
     ...skillsQueryOptions(projectId, client),
-    enabled: capabilities?.skills.list === true,
+    enabled: shouldEnableWorkbenchSkills(capabilities?.skills.list === true, temporary),
   });
   const projectDefaultsQuery = useQuery(projectDefaultsQueryOptions(projectId, client, !temporary));
   const projectDefaultsMutation = useMutation({
@@ -267,12 +267,6 @@ export function useWorkbenchShellRuntime({
     [taskLaunchState],
   );
   const projectTaskState = projectTaskStates.get(projectId);
-  const sidebarConnectionState = deriveProjectSidebarConnectionState({
-    hasActiveTask: taskId !== undefined,
-    projectDataFailed: error !== null || (projectTaskState?.error ?? null) !== null,
-    projectDataPending: isPending || projectTaskState?.isPending === true,
-    taskConnectionState: runtime.connectionState,
-  });
   const isTaskRunning =
     runtime.metadata?.status === "running" || startingSnapshot?.status === "running";
   const backgroundTerminals = useBackgroundTerminals(
@@ -461,7 +455,6 @@ export function useWorkbenchShellRuntime({
     setSelectedRootId,
     setSubagentDialogSelection,
     setTaskRenameOpen,
-    sidebarConnectionState,
     sidebarOpen,
     sidebarWidth,
     skillsQuery,

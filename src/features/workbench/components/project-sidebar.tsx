@@ -1,5 +1,4 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import {
   TEMPORARY_TASK_SCOPE_ID,
   type AgentTask,
@@ -59,7 +58,6 @@ const primaryActionClassName =
 const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
 type ProjectSidebarProps = Readonly<{
   appInfo?: AppInfoResponse;
-  connectionState: AgentEventConnectionState;
   onClose: () => void;
   onOpenSettings: (section: SidebarSettingsSection) => void;
   projectId?: string;
@@ -68,7 +66,6 @@ type ProjectSidebarProps = Readonly<{
 
 export function ProjectSidebar({
   appInfo,
-  connectionState,
   onClose,
   onOpenSettings,
   projectId,
@@ -465,7 +462,6 @@ export function ProjectSidebar({
       <div className="p-2">
         <SidebarSettingsButton
           {...(appInfo === undefined ? {} : { appInfo })}
-          connectionState={connectionState}
           onOpen={onOpenSettings}
         />
       </div>

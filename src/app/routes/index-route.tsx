@@ -104,7 +104,6 @@ function IndexPage() {
     >
       <ProjectSidebar
         {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-        connectionState="connected"
         onClose={() => undefined}
         onOpenSettings={(section) => {
           setGlobalSettingsSection(section);

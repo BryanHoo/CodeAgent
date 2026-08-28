@@ -380,13 +380,7 @@ export const workbench = {
     archived: "Archived",
     close: "Close project sidebar",
     collapse: "Show less",
-    connection: {
-      connecting: "Connecting",
-      offline: "Offline",
-      online: "Online",
-      reconnecting: "Reconnecting",
-    },
-    aboutStatus: "About, CodeAgent {{version}}{{update}}, terminal connection status: {{status}}",
+    aboutStatus: "About, CodeAgent v{{version}}{{update}}",
     createInProject: "Create a task in {{project}}",
     deletePermanently: "Delete permanently",
     deleteTaskDescription:

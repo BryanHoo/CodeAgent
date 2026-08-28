@@ -1,16 +1,12 @@
-import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import type { AppInfoResponse, Project } from "@/protocol/index.js";
 import {
   CircleArrowUp,
   Archive,
   Ellipsis,
-  LoaderCircle,
   Pencil,
   Plus,
   Settings,
   Trash2,
-  Wifi,
-  WifiOff,
 } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -26,8 +22,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
-import { getProjectSidebarConnectionStatus } from "./project-sidebar-state.js";
-
 export type SidebarSettingsSection = "about" | "appearance";
 
 export function ProjectPickerButton({
@@ -155,16 +149,12 @@ export function ProjectActionMenu({
 
 export function SidebarSettingsButton({
   appInfo,
-  connectionState,
   onOpen,
 }: Readonly<{
   appInfo?: AppInfoResponse;
-  connectionState: AgentEventConnectionState;
   onOpen: (section: SidebarSettingsSection) => void;
 }>) {
   const { t } = useTranslation("workbench");
-  const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
-  const connectionStatusLabel = t(connectionStatus.labelKey);
   const appVersion = appInfo?.appVersion ?? "…";
   const updateAvailable = appInfo?.updateAvailable === true;
   return (
@@ -185,7 +175,6 @@ export function SidebarSettingsButton({
       </Button>
       <Button
         aria-label={t("sidebar.aboutStatus", {
-          status: connectionStatusLabel,
           update: updateAvailable ? t("sidebar.updateAvailableLabel") : "",
           version: appVersion,
         })}
@@ -197,38 +186,16 @@ export function SidebarSettingsButton({
         type="button"
         variant="ghost"
       >
-        <span aria-live="polite" className="inline-flex items-center gap-1">
-          <span className={updateAvailable ? "text-warning" : "text-muted-foreground"}>
-            {updateAvailable ? (
-              <CircleArrowUp aria-hidden="true" className="mr-1 inline size-3" />
-            ) : null}
-            v{appVersion}
-          </span>
-          <span aria-hidden="true" className="text-muted-foreground">
-            ·
-          </span>
-          <span className={`inline-flex items-center gap-1 ${connectionStatus.toneClassName}`}>
-            <ProjectSidebarConnectionIcon connectionState={connectionState} />
-            {connectionStatusLabel}
-          </span>
+        <span
+          aria-live="polite"
+          className={updateAvailable ? "text-warning" : "text-muted-foreground"}
+        >
+          {updateAvailable ? (
+            <CircleArrowUp aria-hidden="true" className="mr-1 inline size-3" />
+          ) : null}
+          v{appVersion}
         </span>
       </Button>
     </div>
-  );
-}
-
-export function ProjectSidebarConnectionIcon({
-  connectionState,
-}: Readonly<{ connectionState: AgentEventConnectionState }>) {
-  if (connectionState === "connected") {
-    return <Wifi className="size-3" aria-hidden="true" />;
-  }
-  if (connectionState === "closed") {
-    return <WifiOff className="size-3" aria-hidden="true" />;
-  }
-  return (
-    <span className="inline-flex animate-spin" aria-hidden="true">
-      <LoaderCircle className="size-3" />
-    </span>
   );
 }
