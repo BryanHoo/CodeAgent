@@ -14,7 +14,6 @@ describe("desktop pet native client", () => {
     const { syncDesktopPet } = await import("./desktop-pet-client.js");
     const state = {
       animationName: "running" as const,
-      localAccess: false,
       petId: "codex",
       tasks: [],
     };

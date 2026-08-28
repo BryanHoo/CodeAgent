@@ -4,7 +4,7 @@ import type { WorkbenchPetActivity } from "./pet-activity.js";
 
 export function resolveDesktopPetState(
   settings: WorkbenchPetSettings | undefined,
-  activity: WorkbenchPetActivity & Readonly<{ localAccess: boolean }>,
+  activity: WorkbenchPetActivity,
   pets: readonly Pick<WorkbenchPetDescriptor, "availability" | "id">[],
 ): DesktopPetState | null {
   if (settings?.enabled !== true) return null;
@@ -14,7 +14,6 @@ export function resolveDesktopPetState(
   return available
     ? {
         animationName: activity.animationName,
-        localAccess: activity.localAccess,
         petId: settings.selectedPetId,
         tasks: [...activity.tasks],
       }

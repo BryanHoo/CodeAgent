@@ -17,12 +17,6 @@ export const settings = {
     updateTo: "更新到 {{version}}",
     updating: "正在更新",
   },
-  access: {
-    currentSession: "当前浏览器",
-    loggingOut: "正在退出",
-    logout: "退出局域网访问",
-    sessionDescription: "此浏览器当前已配对到本次 CodeAgent 局域网会话。",
-  },
   actions: {
     cancel: "取消",
     close: "关闭",
@@ -79,7 +73,6 @@ export const settings = {
   errors: {
     appInfo: "无法加载版本信息",
     load: "无法加载全局设置",
-    logout: "无法退出局域网访问",
     save: "无法保存全局设置",
     update: "更新失败，请重试",
     updateCheck: "无法检查更新",
@@ -161,7 +154,6 @@ export const settings = {
   },
   sections: {
     about: "关于",
-    access: "局域网访问",
     agent: "Agent 默认值",
     appearance: "基础设置",
     background: "工作台背景",

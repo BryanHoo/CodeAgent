@@ -41,7 +41,6 @@ pub enum DesktopPetDragStrategy {
 #[serde(rename_all = "camelCase")]
 pub struct DesktopPetState {
     animation_name: DesktopPetAnimation,
-    local_access: bool,
     pet_id: String,
     tasks: Vec<DesktopPetTask>,
 }
@@ -368,7 +367,6 @@ mod tests {
     fn desktop_pet_state_uses_the_frontend_camel_case_contract() {
         let state = DesktopPetState {
             animation_name: DesktopPetAnimation::Waiting,
-            local_access: true,
             pet_id: "codex".to_string(),
             tasks: vec![DesktopPetTask {
                 project_id: "project-1".to_string(),
@@ -383,7 +381,6 @@ mod tests {
             serde_json::to_value(state).unwrap(),
             serde_json::json!({
                 "animationName": "waiting",
-                "localAccess": true,
                 "petId": "codex",
                 "tasks": [{
                     "projectId": "project-1",

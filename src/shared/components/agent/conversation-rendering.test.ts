@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { Conversation, ConversationVirtualList } from "./conversation.js";
 
 describe("ConversationVirtualList rendering", () => {
-  it("does not place dynamic turns on transformed layers", () => {
+  it("positions virtual turns with the virtualizer offset", () => {
     const markup = renderToStaticMarkup(
       createElement(
         Conversation,
@@ -19,6 +19,6 @@ describe("ConversationVirtualList rendering", () => {
     );
 
     expect(markup).toContain('data-index="0"');
-    expect(markup).not.toContain("transform:translateY");
+    expect(markup).toContain("transform:translateY");
   });
 });

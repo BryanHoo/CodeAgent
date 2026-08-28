@@ -9,10 +9,6 @@ export type NativeArchivedTaskClient = Pick<
   NativeClient,
   "deleteTask" | "listTasks" | "unarchiveTask"
 >;
-export type NativeAccessClient = Pick<
-  NativeClient,
-  "getAccessStatus" | "logoutAccess" | "pairAccess" | "subscribeUnauthorized"
->;
 export type NativeGitStatusClient = Pick<NativeClient, "getProjectGitStatus">;
 export type NativeGitHistoryClient = Pick<NativeClient, "getProjectGitHistory">;
 export type NativeGitCommitReviewClient = Pick<

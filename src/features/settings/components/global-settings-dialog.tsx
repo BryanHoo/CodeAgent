@@ -1,5 +1,4 @@
 import type {
-  AccessMode,
   AgentGlobalSettings,
   AgentModel,
   AppInfoResponse,
@@ -42,7 +41,6 @@ import {
 } from "./global-settings-model.js";
 import { saveGlobalSettingsDraft } from "./global-settings-save.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
-import { GlobalSettingsAccess } from "./global-settings-access.js";
 import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
 import { GlobalSettingsPets } from "../../pets/components/global-settings-pets.js";
 import { useWorkbenchBackgroundDraft } from "./use-workbench-background-draft.js";
@@ -50,7 +48,6 @@ import { GlobalSettingsBackground } from "./global-settings-background.js";
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
 
 type GlobalSettingsDialogProps = Readonly<{
-  accessMode?: AccessMode;
   appInfo?: AppInfoResponse;
   appInfoError?: Error | null;
   apps: readonly ProjectOpenApp[];
@@ -62,7 +59,6 @@ type GlobalSettingsDialogProps = Readonly<{
   isPending: boolean;
   models: readonly AgentModel[];
   onClose: () => void;
-  onLogoutAccess?: () => Promise<void>;
   onRetry: () => unknown;
   onRetryAppInfo?: () => unknown;
   onSave: (settings: AgentGlobalSettings) => Promise<void>;
@@ -71,7 +67,6 @@ type GlobalSettingsDialogProps = Readonly<{
 }>;
 
 export function GlobalSettingsDialog({
-  accessMode = "local",
   appInfo,
   appInfoError = null,
   apps,
@@ -83,7 +78,6 @@ export function GlobalSettingsDialog({
   isPending,
   models,
   onClose,
-  onLogoutAccess,
   onRetry,
   onRetryAppInfo = () => undefined,
   onSave,
@@ -214,29 +208,27 @@ export function GlobalSettingsDialog({
                 aria-label={t("navigationLabel")}
                 className="flex min-w-0 gap-1 overflow-x-auto sm:flex-col sm:overflow-visible"
               >
-                {settingsSections
-                  .filter((section) => section.id !== "access" || accessMode === "lan")
-                  .map((section) => {
-                    const Icon = section.icon;
-                    const selected = activeSection === section.id;
-                    return (
-                      <Button
-                        variant="ghost"
-                        aria-controls={`settings-panel-${section.id}`}
-                        aria-current={selected ? "page" : undefined}
-                        className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-brand text-brand-contrast shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
-                        contentAlign="start"
-                        key={section.id}
-                        onClick={() => {
-                          setActiveSection(section.id);
-                        }}
-                        type="button"
-                      >
-                        <Icon aria-hidden="true" className="size-4 shrink-0" />
-                        <span>{t(`sections.${section.id}`)}</span>
-                      </Button>
-                    );
-                  })}
+                {settingsSections.map((section) => {
+                  const Icon = section.icon;
+                  const selected = activeSection === section.id;
+                  return (
+                    <Button
+                      variant="ghost"
+                      aria-controls={`settings-panel-${section.id}`}
+                      aria-current={selected ? "page" : undefined}
+                      className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-brand text-brand-contrast shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
+                      contentAlign="start"
+                      key={section.id}
+                      onClick={() => {
+                        setActiveSection(section.id);
+                      }}
+                      type="button"
+                    >
+                      <Icon aria-hidden="true" className="size-4 shrink-0" />
+                      <span>{t(`sections.${section.id}`)}</span>
+                    </Button>
+                  );
+                })}
               </nav>
             </aside>
             <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
@@ -306,13 +298,6 @@ export function GlobalSettingsDialog({
                         setDraft((current) => ({ ...current, pet }));
                       }}
                       settings={draft.pet}
-                    />
-                  ) : null}
-
-                  {accessMode === "lan" ? (
-                    <GlobalSettingsAccess
-                      activeSection={activeSection}
-                      {...(onLogoutAccess === undefined ? {} : { onLogout: onLogoutAccess })}
                     />
                   ) : null}
 

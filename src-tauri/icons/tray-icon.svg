@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img">
   <title>CodeAgent status icon</title>
-  <!-- 使用黑色和透明像素定义模板，交由 macOS 根据菜单栏外观着色。 -->
-  <g fill="none" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5">
-    <path d="m6.5 6.5 10.5 11.5-10.5 11.5" />
-    <path d="M20.5 29.5H30" />
+  <!-- 复用左栏 logo 的原始几何，仅将颜色统一为 macOS 模板黑色。 -->
+  <g fill="none" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-width="5">
+    <path d="m19 24 8 8-8 8" />
+    <path d="M34 40h12" />
   </g>
 </svg>

@@ -24,7 +24,6 @@ export const DesktopPetStateSchema = Type.Object(
       Type.Literal("running"),
       Type.Literal("waiting"),
     ]),
-    localAccess: Type.Boolean(),
     petId: Type.String({ maxLength: 128, minLength: 1 }),
     tasks: Type.Array(DesktopPetTaskSchema, { maxItems: 256 }),
   },

@@ -11,18 +11,6 @@ export {
   type InstallAppUpdateResponse,
 } from "./app-update.js";
 export {
-  AccessModeSchema,
-  AccessStatusResponseSchema,
-  LogoutAccessResponseSchema,
-  PairAccessRequestSchema,
-  PairAccessResponseSchema,
-  type AccessMode,
-  type AccessStatusResponse,
-  type LogoutAccessResponse,
-  type PairAccessRequest,
-  type PairAccessResponse,
-} from "./access.js";
-export {
   AgentProviderAccountSchema,
   AgentProviderConnectionMutationResponseSchema,
   AgentProviderConnectionRecordSchema,

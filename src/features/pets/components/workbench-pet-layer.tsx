@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 
-import { useAccess } from "../../access/access-context.js";
 import {
   listenDesktopPetTaskOpen,
   syncDesktopPet,
@@ -23,7 +22,6 @@ function DesktopPetSync({ state }: Readonly<{ state: DesktopPetState | null }>) 
 }
 
 function EnabledDesktopPet({ settings }: Readonly<{ settings: WorkbenchPetSettings }>) {
-  const access = useAccess();
   const { projects, tasks } = useProjectData();
   const { taskActivity } = useProjectActivity();
   const navigate = useNavigate();
@@ -33,13 +31,8 @@ function EnabledDesktopPet({ settings }: Readonly<{ settings: WorkbenchPetSettin
     [projects, taskActivity, tasks],
   );
   const state = useMemo(
-    () =>
-      resolveDesktopPetState(
-        settings,
-        { ...activity, localAccess: access.status?.mode === "local" },
-        catalog.data?.data ?? [],
-      ),
-    [access.status?.mode, activity, catalog.data?.data, settings],
+    () => resolveDesktopPetState(settings, activity, catalog.data?.data ?? []),
+    [activity, catalog.data?.data, settings],
   );
 
   useEffect(() => {

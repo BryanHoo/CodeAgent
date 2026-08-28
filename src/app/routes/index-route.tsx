@@ -12,7 +12,6 @@ import {
 } from "../../features/projects/project-queries.js";
 import { loadGlobalSettingsDialog } from "../../features/settings/components/global-settings-lazy.js";
 import { useTranslation } from "../../i18n/i18n.js";
-import { useAccess } from "../../features/access/access-context.js";
 import { RuntimeUnavailable } from "../../shared/components/core/runtime-unavailable.js";
 import {
   ProjectSidebar,
@@ -37,7 +36,6 @@ export const indexRoute = createRoute({
 
 function IndexPage() {
   const { t } = useTranslation("common");
-  const access = useAccess();
   const { client, error, isPending, projects } = useProjectData();
   const { retry } = useProjectActions();
   const navigate = useNavigate();
@@ -115,7 +113,6 @@ function IndexPage() {
       {globalSettingsSection === null ? null : (
         <Suspense fallback={null}>
           <LazyGlobalSettingsDialog
-            {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
             {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
             appInfoError={appInfoQuery.error}
             initialSection={globalSettingsSection}
@@ -135,7 +132,6 @@ function IndexPage() {
                 document.querySelector<HTMLButtonElement>(triggerId)?.focus();
               });
             }}
-            onLogoutAccess={access.logout}
             onRetry={() => Promise.all([globalSettingsQuery.refetch(), modelsQuery.refetch()])}
             onRetryAppInfo={() => appInfoQuery.refetch()}
             onSave={(settings) =>

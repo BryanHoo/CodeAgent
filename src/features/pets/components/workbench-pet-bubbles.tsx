@@ -12,11 +12,9 @@ function compareBubblePriority(left: DesktopPetTask, right: DesktopPetTask): num
 
 function TaskBubble({
   activity,
-  localAccess,
   onTaskSelect,
 }: Readonly<{
   activity: DesktopPetTask;
-  localAccess: boolean;
   onTaskSelect: (projectId: string, taskId: string) => void;
 }>) {
   const { t } = useTranslation("workbench");
@@ -30,7 +28,7 @@ function TaskBubble({
       onClick={() => {
         onTaskSelect(activity.projectId, activity.taskId);
       }}
-      title={localAccess ? activity.rootPath : undefined}
+      title={activity.rootPath}
       type="button"
     >
       {activity.status === "waiting" ? (
@@ -49,11 +47,9 @@ function TaskBubble({
 }
 
 export function WorkbenchPetBubbles({
-  localAccess,
   onTaskSelect,
   tasks,
 }: Readonly<{
-  localAccess: boolean;
   onTaskSelect: (projectId: string, taskId: string) => void;
   tasks: readonly DesktopPetTask[];
 }>) {
@@ -74,7 +70,7 @@ export function WorkbenchPetBubbles({
             key={`${activity.projectId}:${activity.taskId}`}
             style={{ zIndex: orderedTasks.length - index }}
           >
-            <TaskBubble activity={activity} localAccess={localAccess} onTaskSelect={onTaskSelect} />
+            <TaskBubble activity={activity} onTaskSelect={onTaskSelect} />
           </li>
         ))}
       </ol>

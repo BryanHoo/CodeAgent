@@ -19,7 +19,10 @@ import {
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
-import { observeConversationViewportRecovery } from "./conversation-viewport-recovery.js";
+import {
+  observeConversationViewportRecovery,
+  scheduleConversationViewportRecovery,
+} from "./conversation-viewport-recovery.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
@@ -201,6 +204,7 @@ export type ConversationVirtualListProps<TItem> = Omit<HTMLAttributes<HTMLDivEle
     footer?: ReactNode;
     getItemKey: (item: TItem, index: number) => Key;
     items: readonly TItem[];
+    layoutRevision?: number;
     renderNavigation?: (
       navigateToItem: (index: number, anchorId: string) => void,
       scrollbarWidth: number,
@@ -215,6 +219,7 @@ export function ConversationVirtualList<TItem>({
   footer,
   getItemKey,
   items,
+  layoutRevision,
   renderNavigation,
   renderItem,
   ...props
@@ -222,6 +227,7 @@ export function ConversationVirtualList<TItem>({
   const context = useConversationContext();
   const { containerRef, pauseFollowing, scrollbarWidth } = context;
   const navigationFrameRef = useRef(0);
+  const layoutRecoveryFrameRef = useRef(0);
   const getScrollElement = useCallback(() => containerRef.current, [containerRef]);
   const estimateTurnSize = useCallback(
     (index: number) =>
@@ -236,8 +242,6 @@ export function ConversationVirtualList<TItem>({
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     anchorTo: "end",
     count: items.length,
-    directDomUpdates: true,
-    directDomUpdatesMode: "position",
     estimateSize: estimateTurnSize,
     followOnAppend: "auto",
     gap: TURN_GAP_PX,
@@ -247,6 +251,38 @@ export function ConversationVirtualList<TItem>({
     overscan: TURN_OVERSCAN,
     scrollEndThreshold: 24,
   });
+  const measureMountedTurns = useCallback(() => {
+    const container = containerRef.current;
+    if (container === null) {
+      return;
+    }
+    for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
+      virtualizer.measureElement(turn);
+    }
+  }, [containerRef, virtualizer]);
+  const scrollToVirtualEnd = useCallback(() => {
+    if (items.length > 0) {
+      virtualizer.scrollToIndex(items.length - 1, { align: "end", behavior: "auto" });
+    }
+  }, [items.length, virtualizer]);
+  // 流式 Item 重组和 Turn 终态都会改变真实高度，提交后立即校准虚拟列表。
+  useLayoutEffect(() => {
+    if (layoutRevision === undefined || items.length === 0) {
+      return;
+    }
+
+    layoutRecoveryFrameRef.current = scheduleConversationViewportRecovery({
+      cancelFrame: cancelAnimationFrame,
+      frameId: layoutRecoveryFrameRef.current,
+      isFollowing: () => context.atBottom,
+      measure: measureMountedTurns,
+      requestFrame: (callback) => requestAnimationFrame(callback),
+      scrollToEnd: scrollToVirtualEnd,
+    });
+    return () => {
+      cancelAnimationFrame(layoutRecoveryFrameRef.current);
+    };
+  }, [context.atBottom, items.length, layoutRevision, measureMountedTurns, scrollToVirtualEnd]);
   useEffect(() => {
     if (items.length === 0) {
       return;
@@ -256,22 +292,12 @@ export function ConversationVirtualList<TItem>({
       cancelFrame: cancelAnimationFrame,
       documentTarget: document,
       isFollowing: () => context.atBottom,
-      measure: () => {
-        const container = containerRef.current;
-        if (container === null) {
-          return;
-        }
-        for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
-          virtualizer.measureElement(turn);
-        }
-      },
+      measure: measureMountedTurns,
       requestFrame: (callback) => requestAnimationFrame(callback),
-      scrollToEnd: () => {
-        virtualizer.scrollToIndex(items.length - 1, { align: "end", behavior: "auto" });
-      },
+      scrollToEnd: scrollToVirtualEnd,
       windowTarget: window,
     });
-  }, [containerRef, context.atBottom, items.length, virtualizer]);
+  }, [context.atBottom, items.length, measureMountedTurns, scrollToVirtualEnd]);
   const navigateToItem = useCallback(
     (index: number, anchorId: string) => {
       const container = containerRef.current;
@@ -327,8 +353,7 @@ export function ConversationVirtualList<TItem>({
         data-conversation-content=""
         {...props}
       >
-        {/* 同步写入 sizer 与 top，避免 WKWebView 在完成态替换 transformed Turn 后漏绘。 */}
-        <div className="relative w-full" ref={virtualizer.containerRef}>
+        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((virtualTurn) => (
             <div
               className="absolute left-0 top-0 w-full"
@@ -336,6 +361,7 @@ export function ConversationVirtualList<TItem>({
               data-index={virtualTurn.index}
               key={virtualTurn.key}
               ref={virtualizer.measureElement}
+              style={{ transform: `translateY(${String(virtualTurn.start)}px)` }}
             >
               {renderItem(items[virtualTurn.index] as TItem, virtualTurn.index)}
             </div>

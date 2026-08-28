@@ -461,6 +461,7 @@ export function TaskStoreTimeline({
           : {})}
         getItemKey={getTurnIdKey}
         items={turnIds}
+        layoutRevision={itemStructureRevision}
         renderNavigation={(navigateToItem, scrollbarWidth, scrollContainerRef) => (
           <TaskTimelineNavigation
             items={navigationItems}

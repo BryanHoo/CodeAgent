@@ -3,6 +3,15 @@ type RecoveryEventTarget = Readonly<{
   removeEventListener: (type: string, listener: () => void) => void;
 }>;
 
+type ConversationViewportRecoveryScheduleOptions = Readonly<{
+  cancelFrame: (frameId: number) => void;
+  frameId: number;
+  isFollowing: () => boolean;
+  measure: () => void;
+  requestFrame: (callback: () => void) => number;
+  scrollToEnd: () => void;
+}>;
+
 type ConversationViewportRecoveryOptions = Readonly<{
   cancelFrame: (frameId: number) => void;
   documentTarget: RecoveryEventTarget & Readonly<{ visibilityState: string }>;
@@ -12,6 +21,25 @@ type ConversationViewportRecoveryOptions = Readonly<{
   scrollToEnd: () => void;
   windowTarget: RecoveryEventTarget;
 }>;
+
+export function scheduleConversationViewportRecovery({
+  cancelFrame,
+  frameId,
+  isFollowing,
+  measure,
+  requestFrame,
+  scrollToEnd,
+}: ConversationViewportRecoveryScheduleOptions): number {
+  cancelFrame(frameId);
+  // 同步修正当前提交的尺寸，下一帧再覆盖 ResizeObserver 与 WebKit 合成延迟。
+  measure();
+  return requestFrame(() => {
+    measure();
+    if (isFollowing()) {
+      scrollToEnd();
+    }
+  });
+}
 
 export function observeConversationViewportRecovery({
   cancelFrame,
@@ -29,14 +57,13 @@ export function observeConversationViewportRecovery({
       return;
     }
 
-    cancelFrame(frameId);
-    // 后台期间 ResizeObserver 可能保留旧高度，恢复时先同步读取已挂载 Turn 的真实尺寸。
-    measure();
-    frameId = requestFrame(() => {
-      measure();
-      if (isFollowing()) {
-        scrollToEnd();
-      }
+    frameId = scheduleConversationViewportRecovery({
+      cancelFrame,
+      frameId,
+      isFollowing,
+      measure,
+      requestFrame,
+      scrollToEnd,
     });
   };
 

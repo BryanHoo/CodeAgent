@@ -9,7 +9,6 @@ describe("resolveDesktopPetState", () => {
         { enabled: true, selectedPetId: "codex" },
         {
           animationName: "waiting",
-          localAccess: true,
           tasks: [
             {
               projectId: "project-1",
@@ -24,7 +23,6 @@ describe("resolveDesktopPetState", () => {
       ),
     ).toEqual({
       animationName: "waiting",
-      localAccess: true,
       petId: "codex",
       tasks: [
         {
@@ -39,14 +37,14 @@ describe("resolveDesktopPetState", () => {
     expect(
       resolveDesktopPetState(
         { enabled: true, selectedPetId: "codex" },
-        { animationName: "waiting", localAccess: false, tasks: [] },
+        { animationName: "waiting", tasks: [] },
         [{ availability: "downloadable", id: "codex" }],
       ),
     ).toBeNull();
     expect(
       resolveDesktopPetState(
         { enabled: false, selectedPetId: null },
-        { animationName: "waiting", localAccess: false, tasks: [] },
+        { animationName: "waiting", tasks: [] },
         [],
       ),
     ).toBeNull();

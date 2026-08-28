@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { observeConversationViewportRecovery } from "./conversation-viewport-recovery.js";
+import {
+  observeConversationViewportRecovery,
+  scheduleConversationViewportRecovery,
+} from "./conversation-viewport-recovery.js";
 
 class FakeEventTarget {
   private readonly listeners = new Map<string, Set<() => void>>();
@@ -81,5 +84,35 @@ describe("observeConversationViewportRecovery", () => {
 
     expect(measure).toHaveBeenCalledTimes(2);
     expect(scrollToEnd).not.toHaveBeenCalled();
+  });
+});
+
+describe("scheduleConversationViewportRecovery", () => {
+  it("remeasures a streamed layout before paint and restores a followed end next frame", () => {
+    const cancelFrame = vi.fn();
+    const measure = vi.fn();
+    const scrollToEnd = vi.fn();
+    let frame: (() => void) | undefined;
+
+    const frameId = scheduleConversationViewportRecovery({
+      cancelFrame,
+      frameId: 7,
+      isFollowing: () => true,
+      measure,
+      requestFrame: (callback) => {
+        frame = callback;
+        return 8;
+      },
+      scrollToEnd,
+    });
+
+    expect(cancelFrame).toHaveBeenCalledWith(7);
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    expect(frameId).toBe(8);
+
+    frame?.();
+    expect(measure).toHaveBeenCalledTimes(2);
+    expect(scrollToEnd).toHaveBeenCalledTimes(1);
   });
 });

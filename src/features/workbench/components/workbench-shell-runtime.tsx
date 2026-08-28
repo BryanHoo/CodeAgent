@@ -13,7 +13,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { useAccess } from "../../access/access-context.js";
 import {
   mergeSubmittedPromptIntoSnapshot,
   type RuntimeTaskSnapshot,
@@ -115,7 +114,6 @@ export function useWorkbenchShellRuntime({
   temporary = false,
 }: WorkbenchShellProps) {
   const { t } = useTranslation("workbench");
-  const access = useAccess();
   const { capabilities, client, error, isPending, projects, projectTaskStates, tasks } =
     useProjectData();
   const project = projects.find((item) => item.id === projectId);
@@ -380,7 +378,6 @@ export function useWorkbenchShellRuntime({
         }
       : null;
   return {
-    access,
     activeTaskRenameLockRef,
     appInfoQuery,
     appUpdateMutation,

@@ -17,12 +17,6 @@ export const settings = {
     updateTo: "Update to {{version}}",
     updating: "Updating",
   },
-  access: {
-    currentSession: "Current browser",
-    loggingOut: "Logging out",
-    logout: "Log out of LAN access",
-    sessionDescription: "This browser is paired with the current CodeAgent LAN session.",
-  },
   actions: {
     cancel: "Cancel",
     close: "Close",
@@ -79,7 +73,6 @@ export const settings = {
   errors: {
     appInfo: "Unable to load version information",
     load: "Unable to load global settings",
-    logout: "Unable to log out of LAN access",
     save: "Unable to save global settings",
     update: "Update failed. Try again.",
     updateCheck: "Unable to check for updates",
@@ -161,7 +154,6 @@ export const settings = {
   },
   sections: {
     about: "About",
-    access: "LAN access",
     agent: "Agent defaults",
     appearance: "General",
     background: "Workbench background",

@@ -56,7 +56,6 @@ export function DesktopPetBubbleWindow() {
   return (
     <div className="desktop-pet-bubble-root" ref={rootRef}>
       <WorkbenchPetBubbles
-        localAccess={state.localAccess}
         onTaskSelect={handleTaskSelect}
         tasks={state.tasks}
       />

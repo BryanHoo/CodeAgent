@@ -1,14 +1,4 @@
 export const common = {
-  access: {
-    checking: "Checking access",
-    codeLabel: "Access password",
-    loadError: "Unable to check access",
-    pair: "Pair",
-    pairing: "Pairing",
-    pairingDescription: "Enter the access password configured or shown when CodeAgent started.",
-    pairingError: "Unable to pair. Check the access password and try again",
-    pairingTitle: "Connect to a trusted LAN session",
-  },
   actions: {
     backToWorkbench: "Back to workbench",
     retry: "Retry",

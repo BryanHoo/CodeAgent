@@ -3,13 +3,6 @@ import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 
 import { ProjectProvider } from "../features/projects/project-context.js";
-import {
-  AccessProvider,
-  useAccess,
-  type AccessContextValue,
-} from "../features/access/access-context.js";
-import { PairingGate } from "../features/access/pairing-gate.js";
-import { nativeClient } from "../features/projects/project-queries.js";
 import { createDesktopTaskNotifier } from "../features/notifications/desktop-task-notifier.js";
 import { createActionMutationCache } from "../features/notifications/action-notifications.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
@@ -48,36 +41,15 @@ type AppProvidersProps = Readonly<{
   children: ReactNode;
 }>;
 
-export function AccessControlledContent({
-  access,
-  children,
-}: Readonly<{ access: AccessContextValue; children: ReactNode }>) {
-  if (access.status?.authenticated === true) {
-    return children;
-  }
-  return (
-    <PairingGate
-      error={access.error}
-      loading={access.loading}
-      onPair={access.pair}
-      onRetry={access.retry}
-      pairing={access.pairing}
-    />
-  );
-}
-
 function AppProviderContent({ children }: AppProvidersProps) {
-  const access = useAccess();
   const { t } = useTranslation("common");
   return (
     <>
-      <AccessControlledContent access={access}>
-        <ProviderConnectionGate>
-          <ProjectProvider taskNotifier={taskNotifier}>
-            <ComposerDraftProvider>{children}</ComposerDraftProvider>
-          </ProjectProvider>
-        </ProviderConnectionGate>
-      </AccessControlledContent>
+      <ProviderConnectionGate>
+        <ProjectProvider taskNotifier={taskNotifier}>
+          <ComposerDraftProvider>{children}</ComposerDraftProvider>
+        </ProjectProvider>
+      </ProviderConnectionGate>
       <Toaster
         containerAriaLabel={t("app.notificationRegion")}
         duration={5_000}
@@ -95,9 +67,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     <I18nextProvider i18n={i18n}>
       <TooltipProvider>
         <QueryClientProvider client={queryClient}>
-          <AccessProvider client={nativeClient} queryClient={queryClient}>
-            <AppProviderContent>{children}</AppProviderContent>
-          </AccessProvider>
+          <AppProviderContent>{children}</AppProviderContent>
         </QueryClientProvider>
       </TooltipProvider>
     </I18nextProvider>

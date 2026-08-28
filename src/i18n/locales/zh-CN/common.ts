@@ -1,14 +1,4 @@
 export const common = {
-  access: {
-    checking: "正在验证访问权限",
-    codeLabel: "访问密码",
-    loadError: "无法验证访问权限",
-    pair: "配对",
-    pairing: "正在配对",
-    pairingDescription: "输入 CodeAgent 启动时设置或显示的访问密码。",
-    pairingError: "无法完成配对，请检查访问密码后重试",
-    pairingTitle: "连接可信局域网会话",
-  },
   actions: {
     backToWorkbench: "返回工作台",
     retry: "重试",

@@ -35,7 +35,6 @@ export type AgentAttachmentUploadInput = Readonly<{
   kind: AgentAttachmentKind;
   name: string;
 }>;
-export type UnauthorizedListener = () => void;
 export type PendingRequestResolution<T extends PendingRequest> = Extract<
   ResolvePendingRequestRequest,
   { type: T["type"] }

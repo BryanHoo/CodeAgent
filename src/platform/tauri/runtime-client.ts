@@ -1,6 +1,5 @@
-import type { MutationOptions, ReadOptions, UnauthorizedListener } from "@/platform/native-client-types.js";
+import type { MutationOptions, ReadOptions } from "@/platform/native-client-types.js";
 import type {
-  AccessStatusResponse,
   AgentCapabilities,
   AppInfoResponse,
   HealthResponse,
@@ -24,22 +23,6 @@ export class TauriRuntimeClient extends TauriCatalogClient {
   public async getHealth(_options: ReadOptions = {}): Promise<HealthResponse> {
     await this.ensureRuntime();
     return { status: "ok", version: 1 };
-  }
-
-  public async getAccessStatus(_options: ReadOptions = {}): Promise<AccessStatusResponse> {
-    return { authenticated: true, mode: "local", version: 1 };
-  }
-
-  public async pairAccess(_code: string): Promise<AccessStatusResponse> {
-    return this.getAccessStatus();
-  }
-
-  public async logoutAccess(): Promise<AccessStatusResponse> {
-    return this.getAccessStatus();
-  }
-
-  public subscribeUnauthorized(_listener: UnauthorizedListener): () => void {
-    return () => undefined;
   }
 
   public async getCapabilities(_options: ReadOptions = {}): Promise<AgentCapabilities> {

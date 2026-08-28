@@ -7,7 +7,6 @@ import {
   Info,
   MonitorCog,
   Moon,
-  Network,
   PawPrint,
   Palette,
   ServerCog,
@@ -25,7 +24,6 @@ import type { ThemePreference } from "../theme-preference.js";
 
 export type SettingsSectionId =
   | "about"
-  | "access"
   | "agent"
   | "appearance"
   | "background"
@@ -45,7 +43,6 @@ export const settingsSections: readonly Readonly<{
   { icon: Bot, id: "agent" },
   { icon: GitCommitHorizontal, id: "commit" },
   { icon: MonitorCog, id: "integration" },
-  { icon: Network, id: "access" },
   { icon: Info, id: "about" },
 ];
 

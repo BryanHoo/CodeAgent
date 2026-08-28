@@ -24,7 +24,6 @@ export function WorkbenchShellDialogs({
   taskId?: string;
 }>) {
   const {
-    access,
     appInfoQuery,
     appUpdateMutation,
     client,
@@ -99,7 +98,6 @@ export function WorkbenchShellDialogs({
       {globalSettingsSection === null ? null : (
         <Suspense fallback={null}>
           <LazyGlobalSettingsDialog
-            {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
             {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
             appInfoError={appInfoQuery.error}
             apps={projectToolsEnabled ? (projectOpenCapabilitiesQuery.data?.apps ?? []) : []}
@@ -128,7 +126,6 @@ export function WorkbenchShellDialogs({
                 document.querySelector<HTMLButtonElement>(triggerId)?.focus();
               });
             }}
-            onLogoutAccess={access.logout}
             onRetry={() =>
               Promise.all([
                 globalSettingsQuery.refetch(),
