@@ -4,6 +4,7 @@ import {
   desktopPetDragPosition,
   dragAnimation,
   introDuration,
+  isDesktopPetDragPointerActive,
 } from "./desktop-pet-animation.js";
 
 describe("desktop pet drag animation", () => {
@@ -36,5 +37,11 @@ describe("desktop pet drag animation", () => {
         2,
       ),
     ).toEqual({ x: 308, y: 488 });
+  });
+
+  it("ends dragging when WebKit misses pointerup after moving the native window", () => {
+    expect(isDesktopPetDragPointerActive(1)).toBe(true);
+    expect(isDesktopPetDragPointerActive(0)).toBe(false);
+    expect(isDesktopPetDragPointerActive(2)).toBe(false);
   });
 });

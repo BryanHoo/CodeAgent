@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{
+    Arc, Mutex as StdMutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 use serde_json::{Value, json, value::to_raw_value};
 use tauri::ipc::{Channel, InvokeResponseBody};
@@ -62,7 +65,7 @@ async fn task_scoped_mcp_status_should_be_cached_and_forwarded() {
     let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
     {
         let mut session = runtime.lock().await;
-        session.event_channel = Some(channel);
+        session.set_event_channel(channel);
         session
             .task_projects
             .insert("thread-a".to_owned(), "project-a".to_owned());
@@ -102,4 +105,53 @@ async fn task_scoped_mcp_status_should_be_cached_and_forwarded() {
         })
         .expect("task-scoped MCP status should be published");
     assert_eq!(agent_event["data"]["event"]["taskId"], "thread-a");
+}
+
+#[tokio::test]
+async fn event_channel_should_run_without_holding_runtime_lock() {
+    let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
+    let runtime_for_channel = Arc::clone(&runtime);
+    let lock_was_available = Arc::new(AtomicBool::new(false));
+    let lock_was_available_for_channel = Arc::clone(&lock_was_available);
+    let channel = Channel::new(move |body| {
+        if let InvokeResponseBody::Json(value) = body
+            && serde_json::from_str::<Value>(&value)
+                .ok()
+                .and_then(|event| event.pointer("/data/event/type").cloned())
+                == Some(json!("mcp_server.status_updated"))
+        {
+            lock_was_available_for_channel
+                .store(runtime_for_channel.try_lock().is_ok(), Ordering::Relaxed);
+        }
+        Ok(())
+    });
+    {
+        let mut session = runtime.lock().await;
+        session.set_event_channel(channel);
+        session
+            .task_projects
+            .insert("thread-a".to_owned(), "project-a".to_owned());
+    }
+    let (sender, receiver) = mpsc::channel(1);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver);
+    sender
+        .send(ServerMessage {
+            id: None,
+            method: "mcpServer/startupStatus/updated".to_owned(),
+            params: to_raw_value(&json!({
+                "threadId": "thread-a",
+                "name": "context7",
+                "status": "ready"
+            }))
+            .unwrap(),
+        })
+        .await
+        .unwrap();
+    drop(sender);
+    task.await.expect("event forwarder should stop cleanly");
+
+    assert!(
+        lock_was_available.load(Ordering::Relaxed),
+        "runtime lock should be released before Channel::send"
+    );
 }

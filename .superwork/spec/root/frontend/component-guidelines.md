@@ -17,4 +17,5 @@
 - 仅在多个调用方确有一致需求时提取通用组件
 - 桌面宠物不得挂载到工作台 DOM；主窗口只投影动画与有界任务摘要，宠物和气泡使用专用入口与最小 Provider 装配，气泡点击通过固定事件回到主窗口路由，避免重复连接 Provider Runtime
 - 桌面宠物必须保留 Codexly 的动画映射：pointer capture 拖动时切换 `running-left`/`running-right`，释放后播放 `jumping` 再恢复活动动画；位置 IPC 按动画帧合并到最新坐标，不得调用会阻塞 WebView 动画循环的原生模态拖窗
+- 桌面宠物移动原生窗口时必须显式释放 pointer capture，并在 `buttons` 不含主键时兜底结束拖动；macOS 非激活宠物面板必须在鼠标离开时执行 `resign_key_window()`，不得长期占用主窗口 hover 与编辑焦点
 - Tauri asset protocol 的宠物图集使用 `HTMLImageElement` 解码后绘制到 Canvas；不得依赖 WKWebView 对自定义协议执行 `fetch` 后再 `createImageBitmap`

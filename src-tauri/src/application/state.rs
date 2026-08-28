@@ -3,15 +3,23 @@ use std::{collections::HashMap, sync::Arc};
 
 use serde_json::{Value, json};
 use tauri::ipc::Channel;
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{
+    sync::{Mutex, mpsc},
+    task::JoinHandle,
+};
 
 use super::error::AppError;
 use super::model_turn_waiters::ModelTurnWaiters;
 use super::turn_waiters::TurnStartedWaiters;
+#[path = "state_event_forwarder.rs"]
+mod event_forwarder;
 use crate::{
     domain::runtime::{AppEvent, ProviderKind, RuntimeSnapshot, RuntimeStatus},
     infrastructure::codex::{AppServerConnection, CodexProcess, PendingServerRequest},
 };
+use event_forwarder::{required_event_string, spawn_event_forwarder};
+
+const EVENT_QUEUE_CAPACITY: usize = 256;
 
 #[derive(Default)]
 pub struct AppState {
@@ -20,7 +28,7 @@ pub struct AppState {
 
 #[derive(Default)]
 struct RuntimeSession {
-    event_channel: Option<Channel<AppEvent>>,
+    event_sender: Option<mpsc::Sender<AppEvent>>,
     snapshot: RuntimeSnapshot,
     codex_process: Option<CodexProcess>,
     _event_task: Option<JoinHandle<()>>,
@@ -38,8 +46,8 @@ impl AppState {
     pub async fn connect(&self, event_channel: Channel<AppEvent>) -> RuntimeSnapshot {
         let mut runtime = self.runtime.lock().await;
 
-        // 保留唯一 Channel 所有权，后续运行时任务通过这里向 WebView 发布归一化事件。
-        runtime.event_channel = Some(event_channel);
+        // 独立发布任务承担序列化和 WebView 调用，状态锁内只执行有界队列入队。
+        runtime.set_event_channel(event_channel);
         runtime.snapshot
     }
 
@@ -282,198 +290,6 @@ impl AppState {
     }
 }
 
-fn spawn_event_forwarder(
-    runtime: Arc<Mutex<RuntimeSession>>,
-    mut messages: tokio::sync::mpsc::Receiver<crate::infrastructure::codex::ServerMessage>,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        while let Some(message) = messages.recv().await {
-            let mut runtime = runtime.lock().await;
-            if matches!(message.method.as_str(), "item/completed" | "turn/completed")
-                && let Ok(params) = serde_json::from_str::<Value>(message.params.get())
-            {
-                // 内部临时 Turn 不进入任务列表，只在这里提取最终模型输出。
-                runtime.model_turn_waiters.observe(&message.method, &params);
-            }
-            if message.id.is_none() && message.method == "account/login/completed" {
-                // 登录通知只更新短期状态，Token 和 API key 始终由 Codex 自己持有。
-                let params = serde_json::from_str::<Value>(message.params.get());
-                if let Ok(params) = params {
-                    if params.get("success").and_then(Value::as_bool) == Some(true) {
-                        runtime.provider_login = None;
-                    } else {
-                        let login_id = params
-                            .get("loginId")
-                            .and_then(Value::as_str)
-                            .or_else(|| {
-                                runtime
-                                    .provider_login
-                                    .as_ref()
-                                    .and_then(|value| value.get("loginId"))
-                                    .and_then(Value::as_str)
-                            })
-                            .unwrap_or("unknown")
-                            .to_owned();
-                        runtime.provider_login = Some(json!({
-                            "error": params.get("error").and_then(Value::as_str).unwrap_or("Login failed"),
-                            "loginId": login_id,
-                            "state": "failed"
-                        }));
-                    }
-                }
-                continue;
-            }
-            if message.id.is_none() && message.method == "mcpServer/startupStatus/updated" {
-                let mut task_scoped = false;
-                if let Ok(params) = serde_json::from_str::<Value>(message.params.get())
-                    && let Some(name) = params.get("name").and_then(Value::as_str)
-                {
-                    let thread = params
-                        .get("threadId")
-                        .and_then(Value::as_str)
-                        .unwrap_or("*");
-                    task_scoped = thread != "*";
-                    runtime
-                        .mcp_statuses
-                        .insert(format!("{thread}\0{name}"), params);
-                }
-                // 任务级通知继续进入统一事件流，驱动前端重新读取完整 MCP 清单。
-                if !task_scoped {
-                    continue;
-                }
-            }
-            if message.method == "serverRequest/resolved" {
-                let request_id = match crate::infrastructure::codex::resolved_request_id(&message) {
-                    Ok(Some(request_id)) => request_id,
-                    Ok(None) => continue,
-                    Err(error) => {
-                        eprintln!("failed to map resolved codex request: {error}");
-                        continue;
-                    }
-                };
-                let Some(pending) = runtime.pending_requests.remove(&request_id) else {
-                    continue;
-                };
-                if publish_terminal_request(&mut runtime, pending, "expired").is_err() {
-                    break;
-                }
-                continue;
-            }
-            let (mut event, mut pending) = if message.id.is_some() {
-                match crate::infrastructure::codex::map_server_request_now(message, 0) {
-                    Ok(Some(mapped)) => {
-                        let mapped: crate::infrastructure::codex::MappedServerRequest = mapped;
-                        (mapped.event, Some(mapped.pending))
-                    }
-                    Ok(None) => continue,
-                    Err(error) => {
-                        eprintln!("failed to map codex request: {error}");
-                        continue;
-                    }
-                }
-            } else {
-                match crate::infrastructure::codex::map_server_message_now(message, 0) {
-                    Ok(Some(event)) => (event, None),
-                    Ok(None) => continue,
-                    Err(error) => {
-                        eprintln!("failed to map codex event: {error}");
-                        continue;
-                    }
-                }
-            };
-            let Some(task_id) = event
-                .get("taskId")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-            else {
-                continue;
-            };
-            let Some(project_id) = runtime.task_projects.get(&task_id).cloned() else {
-                continue;
-            };
-            if let Some(pending) = pending.as_mut() {
-                pending.request["projectId"] = json!(project_id);
-                event["payload"]["request"]["projectId"] = json!(project_id);
-            }
-            let sequence = runtime
-                .project_sequences
-                .entry(project_id.clone())
-                .or_default();
-            *sequence += 1;
-            event["sequence"] = serde_json::Value::from(*sequence);
-            if event.get("type").and_then(Value::as_str) == Some("turn.started")
-                && let Some(turn) = event.pointer("/payload/turn")
-            {
-                let turn = turn.clone();
-                runtime.turn_started_waiters.resolve(&task_id, &turn);
-            }
-            if let Some(pending) = pending {
-                let Some(request_id) = pending
-                    .request
-                    .get("requestId")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-                else {
-                    continue;
-                };
-                runtime.pending_requests.insert(request_id, pending);
-            }
-            if runtime.publish(AppEvent::AgentEvent { event }).is_err() {
-                break;
-            }
-        }
-
-        let mut runtime = runtime.lock().await;
-        runtime.codex_process = None;
-        runtime._event_task = None;
-        runtime.turn_started_waiters.clear();
-        runtime.model_turn_waiters.clear();
-        let pending = std::mem::take(&mut runtime.pending_requests);
-        for (_, request) in pending {
-            let _ = publish_terminal_request(&mut runtime, request, "expired");
-        }
-        let event = runtime.transition(RuntimeStatus::Failed, Some(ProviderKind::Codex));
-        let _ = runtime.publish(event);
-    })
-}
-
-fn publish_terminal_request(
-    runtime: &mut RuntimeSession,
-    pending: PendingServerRequest,
-    status: &str,
-) -> Result<(), AppError> {
-    let mut request = pending.request;
-    request["status"] = json!(status);
-    let project_id = required_event_string(&request, "projectId")?;
-    let item_id = required_event_string(&request, "itemId")?;
-    let task_id = required_event_string(&request, "taskId")?;
-    let timestamp = required_event_string(&request, "createdAt")?;
-    let turn_id = required_event_string(&request, "turnId")?;
-    let sequence = runtime.project_sequences.entry(project_id).or_default();
-    *sequence += 1;
-    let event = json!({
-        "itemId": item_id,
-        "payload": {"request": request},
-        "provider": "codex",
-        "sequence": *sequence,
-        "sessionId": crate::infrastructure::codex::RUNTIME_SESSION_ID,
-        "taskId": task_id,
-        "timestamp": timestamp,
-        "turnId": turn_id,
-        "type": "pending_request.expired",
-        "version": 2,
-    });
-    runtime.publish(AppEvent::AgentEvent { event })
-}
-
-fn required_event_string(value: &Value, key: &str) -> Result<String, AppError> {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or(AppError::CodexRequestFailed)
-}
-
 impl RuntimeSession {
     fn transition(&mut self, status: RuntimeStatus, provider: Option<ProviderKind>) -> AppEvent {
         self.snapshot.last_seq += 1;
@@ -486,11 +302,23 @@ impl RuntimeSession {
         }
     }
 
+    fn set_event_channel(&mut self, channel: Channel<AppEvent>) {
+        let (sender, mut receiver) = mpsc::channel(EVENT_QUEUE_CAPACITY);
+        tokio::spawn(async move {
+            while let Some(event) = receiver.recv().await {
+                if channel.send(event).is_err() {
+                    break;
+                }
+            }
+        });
+        self.event_sender = Some(sender);
+    }
+
     fn publish(&self, event: AppEvent) -> Result<(), AppError> {
-        self.event_channel
+        self.event_sender
             .as_ref()
             .ok_or(AppError::RuntimeChannelUnavailable)?
-            .send(event)
+            .try_send(event)
             .map_err(|_| AppError::RuntimeEventDeliveryFailed)
     }
 }

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Manager, WebviewWindow};
 use tauri_nspanel::{
-    CollectionBehavior, ManagerExt as _, PanelLevel, StyleMask, WebviewWindowExt as _, tauri_panel,
+    CollectionBehavior, ManagerExt as _, PanelLevel, StyleMask, TrackingAreaOptions,
+    WebviewWindowExt as _, tauri_panel,
 };
 use tokio::sync::oneshot;
 
@@ -9,10 +10,27 @@ use super::error::AppError;
 tauri_panel! {
     panel!(DesktopPetPanel {
         config: {
+            can_become_main_window: false,
             can_become_key_window: true,
+            becomes_key_only_if_needed: true,
             is_floating_panel: true
         }
+        with: {
+            tracking_area: {
+                options: panel_tracking_options(),
+                auto_resize: true
+            }
+        }
     })
+
+    panel_event!(DesktopPetPanelEventHandler {})
+}
+
+fn panel_tracking_options() -> tauri_nspanel::objc2_app_kit::NSTrackingAreaOptions {
+    TrackingAreaOptions::new()
+        .active_always()
+        .mouse_entered_and_exited()
+        .value()
 }
 
 fn prevent_application_activation(panel: &dyn tauri_nspanel::Panel) {
@@ -45,8 +63,10 @@ where
 
 pub(super) async fn configure_desktop_overlay(window: &WebviewWindow) -> Result<(), AppError> {
     let app = window.app_handle().clone();
+    let panel_app = app.clone();
     let window = window.clone();
     dispatch_to_main_thread(&app, move || {
+        let label = window.label().to_string();
         let panel = window
             .to_panel::<DesktopPetPanel>()
             .map_err(|_| AppError::DesktopPetWindowFailed)?;
@@ -54,6 +74,14 @@ pub(super) async fn configure_desktop_overlay(window: &WebviewWindow) -> Result<
         panel.set_style_mask(StyleMask::empty().nonactivating_panel().into());
         prevent_application_activation(panel.as_ref());
         panel.set_collection_behavior(panel_collection_behavior());
+        let handler = DesktopPetPanelEventHandler::new();
+        handler.on_mouse_exited(move |_| {
+            if let Ok(panel) = panel_app.get_webview_panel(&label) {
+                // 非激活面板离开后立即归还 key 状态，避免主 WebView 丢失 hover 与编辑焦点。
+                panel.resign_key_window();
+            }
+        });
+        panel.set_event_handler(Some(handler.as_ref()));
         Ok(())
     })
     .await
@@ -94,5 +122,18 @@ mod tests {
         assert!(behavior.contains(
             tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary
         ));
+    }
+
+    #[test]
+    fn panel_tracks_mouse_exit_while_application_is_inactive() {
+        let options = panel_tracking_options();
+        assert!(
+            options.contains(tauri_nspanel::objc2_app_kit::NSTrackingAreaOptions::ActiveAlways)
+        );
+        assert!(
+            options.contains(
+                tauri_nspanel::objc2_app_kit::NSTrackingAreaOptions::MouseEnteredAndExited
+            )
+        );
     }
 }

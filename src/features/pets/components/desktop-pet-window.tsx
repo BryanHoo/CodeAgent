@@ -24,6 +24,7 @@ import {
   desktopPetDragPosition,
   dragAnimation,
   introDuration,
+  isDesktopPetDragPointerActive,
 } from "../desktop-pet-animation.js";
 import { WorkbenchPetCanvas } from "./workbench-pet-canvas.js";
 
@@ -132,7 +133,12 @@ export function DesktopPetWindow() {
   const finishDrag = (pointerId: number) => {
     if (dragRef.current?.pointerId !== pointerId) return;
     dragRef.current = null;
-    handleRef.current?.removeAttribute("data-dragging");
+    const handle = handleRef.current;
+    handle?.removeAttribute("data-dragging");
+    if (handle?.hasPointerCapture(pointerId) === true) {
+      // 原生窗口跟随鼠标移动时 WebKit 偶尔不执行隐式释放，必须主动归还指针路由。
+      handle.releasePointerCapture(pointerId);
+    }
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
     flushPositionRef.current();
@@ -192,6 +198,11 @@ export function DesktopPetWindow() {
   const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
     if (drag?.pointerId !== event.pointerId) return;
+    if (!isDesktopPetDragPointerActive(event.buttons)) {
+      // pointerup 若在原生窗口移动期间丢失，下一次移动仍可根据按键位恢复交互。
+      finishDrag(event.pointerId);
+      return;
+    }
     schedulePosition(
       desktopPetDragPosition(
         drag.origin,

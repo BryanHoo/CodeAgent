@@ -3,11 +3,16 @@ import type { WorkbenchPetAnimation } from "../../protocol/index.js";
 type ScreenPosition = Readonly<{ x: number; y: number }>;
 
 const DRAG_DIRECTION_THRESHOLD = 4;
+const PRIMARY_POINTER_BUTTON = 1;
 
 export function dragAnimation(originX: number, currentX: number): string | null {
   const deltaX = currentX - originX;
   if (Math.abs(deltaX) < DRAG_DIRECTION_THRESHOLD) return null;
   return deltaX < 0 ? "running-left" : "running-right";
+}
+
+export function isDesktopPetDragPointerActive(buttons: number): boolean {
+  return (buttons & PRIMARY_POINTER_BUTTON) !== 0;
 }
 
 export function desktopPetDragPosition(
