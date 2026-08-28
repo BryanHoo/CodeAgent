@@ -58,8 +58,6 @@ const LazyWorkbenchInspectorChanges = lazy(async () => {
 });
 type WorkbenchInspectorProps = Readonly<{
   backgroundTerminals?: readonly AgentBackgroundTerminal[];
-  backgroundTerminalsError?: Error | null;
-  backgroundTerminalsPending?: boolean;
   contextOnly?: boolean;
   expandedFileTreePaths?: Set<string>;
   fileSelection?: WorkbenchInspectorFileSelection | null;
@@ -122,8 +120,6 @@ export type { WorkbenchInspectorTab } from "./workbench-inspector-tabs.js";
 
 export function WorkbenchInspector({
   backgroundTerminals = [],
-  backgroundTerminalsError = null,
-  backgroundTerminalsPending = false,
   contextOnly = false,
   expandedFileTreePaths = emptyExpandedFileTreePaths,
   fileSelection = null,
@@ -212,12 +208,8 @@ export function WorkbenchInspector({
           }}
         />
       ) : null}
-      {backgroundTerminals.length > 0 ||
-      backgroundTerminalsPending ||
-      backgroundTerminalsError !== null ? (
+      {backgroundTerminals.length > 0 ? (
         <BackgroundTerminalSection
-          error={backgroundTerminalsError}
-          isPending={backgroundTerminalsPending}
           onTerminate={onTerminateBackgroundTerminal}
           terminals={backgroundTerminals}
           terminatingTerminalId={terminatingTerminalId}
@@ -241,6 +233,9 @@ export function WorkbenchInspector({
         turns={task?.turns ?? []}
       />
       {task?.plan === null || task?.plan === undefined ? null : <PlanSection plan={task.plan} />}
+      <p className="hidden min-h-full place-items-center px-4 text-center text-body-small text-muted-foreground only:grid">
+        {i18n.t("inspector.emptyContext", { ns: "conversation" })}
+      </p>
     </div>
   );
   return (
@@ -251,13 +246,12 @@ export function WorkbenchInspector({
       <WorkbenchInspectorHeader
         activeTab={activeTab}
         availableTabs={availableTabs}
-        contextOnly={contextOnly}
         onClose={onClose}
         {...(onCloseFile === undefined ? {} : { onCloseFile })}
         onTabChange={onTabChange}
       />
 
-      <div className="min-h-0 flex-1 overflow-hidden" role={contextOnly ? undefined : "tabpanel"}>
+      <div className="min-h-0 flex-1 overflow-hidden" role="tabpanel">
         {activeTab === "file" && fileSelection !== null ? (
           fileSelection.kind === "diff" ? (
             <FileDiffPanel change={fileSelection.change} />

@@ -392,8 +392,6 @@ export function WorkbenchShellLayout({
       {inspectorOpen ? (
         <WorkbenchInspector
           backgroundTerminals={backgroundTerminals.terminals}
-          backgroundTerminalsError={backgroundTerminals.error}
-          backgroundTerminalsPending={backgroundTerminals.isPending}
           contextOnly={temporary}
           expandedFileTreePaths={expandedFileTreePaths}
           gitStatusError={gitStatusQuery.error}

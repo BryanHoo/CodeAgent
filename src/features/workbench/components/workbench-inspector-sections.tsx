@@ -34,14 +34,10 @@ import {
 } from "./subagent.js";
 import { WorkbenchInspectorIncrementalList } from "./workbench-inspector-incremental-list.js";
 export function BackgroundTerminalSection({
-  error,
-  isPending,
   onTerminate,
   terminals,
   terminatingTerminalId,
 }: Readonly<{
-  error: Error | null;
-  isPending: boolean;
   onTerminate: (terminalId: string) => Promise<void>;
   terminals: readonly AgentBackgroundTerminal[];
   terminatingTerminalId: string | null;
@@ -52,67 +48,57 @@ export function BackgroundTerminalSection({
       title={i18n.t("inspector.terminals", { ns: "conversation" })}
     >
       <section aria-label={i18n.t("inspector.terminals", { ns: "conversation" })}>
-        {isPending && terminals.length === 0 ? (
-          <p className="px-2 py-2 text-caption text-muted-foreground">
-            {i18n.t("inspector.terminalLoading", { ns: "conversation" })}
-          </p>
-        ) : error !== null && terminals.length === 0 ? (
-          <p className="px-2 py-2 text-caption text-diff-removed">
-            {i18n.t("inspector.terminalError", { ns: "conversation" })}
-          </p>
-        ) : (
-          <div className="space-y-1">
-            {terminals.map((terminal) => {
-              const isTerminating = terminatingTerminalId === terminal.id;
-              const terminateLabel = isTerminating
-                ? i18n.t("inspector.terminalStopping", {
-                    command: terminal.command,
-                    ns: "conversation",
-                  })
-                : i18n.t("inspector.terminalStop", {
-                    command: terminal.command,
-                    ns: "conversation",
-                  });
-              return (
-                <div
-                  className="flex items-center gap-1 rounded-control px-2 py-1.5 hover:bg-control-hover"
-                  key={terminal.id}
-                >
-                  <LoaderCircle
-                    aria-label={i18n.t("inspector.terminalRunning", { ns: "conversation" })}
-                    className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="truncate text-label font-medium text-foreground"
-                      title={terminal.command}
-                    >
-                      {terminal.command}
-                    </p>
-                    <p className="truncate text-caption text-muted-foreground" title={terminal.cwd}>
-                      {terminal.cwd}
-                    </p>
-                  </div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={terminateLabel}
-                        disabled={terminatingTerminalId !== null}
-                        onClick={() => void onTerminate(terminal.id)}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <Square aria-hidden="true" className="size-3" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{terminateLabel}</TooltipContent>
-                  </Tooltip>
+        <div className="space-y-1">
+          {terminals.map((terminal) => {
+            const isTerminating = terminatingTerminalId === terminal.id;
+            const terminateLabel = isTerminating
+              ? i18n.t("inspector.terminalStopping", {
+                  command: terminal.command,
+                  ns: "conversation",
+                })
+              : i18n.t("inspector.terminalStop", {
+                  command: terminal.command,
+                  ns: "conversation",
+                });
+            return (
+              <div
+                className="flex items-center gap-1 rounded-control px-2 py-1.5 hover:bg-control-hover"
+                key={terminal.id}
+              >
+                <LoaderCircle
+                  aria-label={i18n.t("inspector.terminalRunning", { ns: "conversation" })}
+                  className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                />
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="truncate text-label font-medium text-foreground"
+                    title={terminal.command}
+                  >
+                    {terminal.command}
+                  </p>
+                  <p className="truncate text-caption text-muted-foreground" title={terminal.cwd}>
+                    {terminal.cwd}
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={terminateLabel}
+                      disabled={terminatingTerminalId !== null}
+                      onClick={() => void onTerminate(terminal.id)}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Square aria-hidden="true" className="size-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{terminateLabel}</TooltipContent>
+                </Tooltip>
+              </div>
+            );
+          })}
+        </div>
       </section>
     </InspectorSection>
   );

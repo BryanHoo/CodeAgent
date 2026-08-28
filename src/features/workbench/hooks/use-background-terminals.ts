@@ -25,8 +25,6 @@ export function shouldRefreshBackgroundTerminals(
 }
 
 export type BackgroundTerminalView = Readonly<{
-  error: Error | null;
-  isPending: boolean;
   terminals: readonly AgentBackgroundTerminal[];
   terminatingTerminalId: string | null;
   terminateTerminal: (terminalId: string) => Promise<void>;
@@ -99,8 +97,6 @@ export function useBackgroundTerminals(
   );
 
   return {
-    error: terminalsQuery.error,
-    isPending: terminalsQuery.isPending,
     terminals: terminalsQuery.data?.data ?? [],
     terminatingTerminalId:
       terminateMutation.isPending && typeof terminateMutation.variables === "string"

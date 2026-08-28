@@ -113,25 +113,16 @@ function InspectorCloseButton({ onClose }: Readonly<{ onClose: (() => void) | un
 export function WorkbenchInspectorHeader({
   activeTab,
   availableTabs,
-  contextOnly,
   onClose,
   onCloseFile,
   onTabChange,
 }: Readonly<{
   activeTab: WorkbenchInspectorTab;
   availableTabs: readonly WorkbenchInspectorTab[];
-  contextOnly: boolean;
   onClose: (() => void) | undefined;
   onCloseFile?: () => void;
   onTabChange: (tab: WorkbenchInspectorTab) => void;
 }>) {
-  if (contextOnly && availableTabs.length === 1) {
-    return (
-      <div className="absolute right-2 top-2 z-10 min-[1101px]:hidden">
-        <InspectorCloseButton onClose={onClose} />
-      </div>
-    );
-  }
   return (
     <div className="flex h-workbench-header w-full min-w-0 shrink-0 items-center gap-2 overflow-hidden px-1.5">
       <WorkbenchInspectorTabs
