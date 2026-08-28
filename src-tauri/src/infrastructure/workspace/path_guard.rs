@@ -6,8 +6,29 @@ use thiserror::Error;
 pub enum WorkspaceError {
     #[error("invalid workspace path")]
     InvalidPath,
-    #[error("workspace I/O failed")]
+    #[error("workspace snapshot changed; refresh and retry")]
+    SnapshotMismatch,
+    #[error("invalid Git branch name")]
+    InvalidBranch,
+    #[error("current branch has no upstream")]
+    NoUpstream,
+    #[error("{0}")]
+    GitCommandFailed(String),
+    #[error("workspace I/O failed: {0}")]
     Io(#[from] std::io::Error),
+}
+
+impl WorkspaceError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::InvalidPath => "INVALID_PATH",
+            Self::SnapshotMismatch => "SNAPSHOT_MISMATCH",
+            Self::InvalidBranch => "INVALID_BRANCH",
+            Self::NoUpstream => "NO_UPSTREAM",
+            Self::GitCommandFailed(_) => "GIT_COMMAND_FAILED",
+            Self::Io(_) => "IO_FAILED",
+        }
+    }
 }
 
 pub async fn canonical_root(path: &str) -> Result<PathBuf, WorkspaceError> {

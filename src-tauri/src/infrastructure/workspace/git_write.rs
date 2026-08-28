@@ -387,14 +387,16 @@ pub async fn commit_changes(
     let (push_status, push_error) = if action == "commit" {
         ("not_requested", None)
     } else if optional_line(&repo, &["remote"]).await?.is_none() {
-        ("not_configured", None)
-    } else if run_git(&repo, &["push"], MAX_GIT_OUTPUT_BYTES)
-        .await
-        .is_ok()
-    {
-        ("pushed", None)
+        (
+            "not_configured",
+            Some(WorkspaceError::NoUpstream.to_string()),
+        )
     } else {
-        ("failed", Some("git push failed".to_owned()))
+        match run_git(&repo, &["push"], MAX_GIT_OUTPUT_BYTES).await {
+            Ok(_) => ("pushed", None),
+            Err(error @ WorkspaceError::NoUpstream) => ("not_configured", Some(error.to_string())),
+            Err(error) => ("failed", Some(error.to_string())),
+        }
     };
     Ok(CommitChangesResponse {
         branch,
@@ -443,7 +445,7 @@ async fn validate_snapshot(
     }
     let status = get_git_status(root, repository, false).await?;
     if status.snapshot != expected {
-        return Err(WorkspaceError::InvalidPath);
+        return Err(WorkspaceError::SnapshotMismatch);
     }
     Ok(status)
 }
@@ -454,15 +456,19 @@ async fn validate_branch(
     branch: &str,
 ) -> Result<(), WorkspaceError> {
     if branch.trim() != branch || branch.is_empty() || branch.len() > 1_024 {
-        return Err(WorkspaceError::InvalidPath);
+        return Err(WorkspaceError::InvalidBranch);
     }
     let repo = repository_path(root, repository).await?;
-    run_git(
+    if run_git(
         &repo,
         &["check-ref-format", "--branch", branch],
         MAX_GIT_OUTPUT_BYTES,
     )
-    .await?;
+    .await
+    .is_err()
+    {
+        return Err(WorkspaceError::InvalidBranch);
+    }
     Ok(())
 }
 

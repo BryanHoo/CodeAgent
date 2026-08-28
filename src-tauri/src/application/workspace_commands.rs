@@ -206,7 +206,7 @@ pub async fn get_project_git_status(
     let response =
         workspace::get_git_status(&root, input.repository.as_deref(), input.include_diff)
             .await
-            .map_err(|_| AppError::FilesystemRequestFailed)?;
+            .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -220,7 +220,7 @@ pub async fn get_project_git_history(
     let response =
         workspace::get_git_history(&root, input.repository.as_deref(), input.cursor.as_deref())
             .await
-            .map_err(|_| AppError::FilesystemRequestFailed)?;
+            .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -238,7 +238,7 @@ pub async fn get_project_git_commit_files(
         input.cursor.as_deref(),
     )
     .await
-    .map_err(|_| AppError::FilesystemRequestFailed)?;
+    .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -253,7 +253,7 @@ pub async fn get_project_git_commit_file_diff(
     let response =
         workspace::get_commit_diff(&root, input.repository.as_deref(), &input.sha, &path)
             .await
-            .map_err(|_| AppError::FilesystemRequestFailed)?;
+            .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -267,7 +267,7 @@ pub async fn switch_project_branch(
     let (_, root, _) = project_root(&state, &project_id, &root_path).await?;
     let response = workspace::switch_branch(&root, None, &input.branch, &input.expected_snapshot)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -281,7 +281,7 @@ pub async fn create_project_branch(
     let (_, root, _) = project_root(&state, &project_id, &root_path).await?;
     let response = workspace::create_branch(&root, None, &input.branch, &input.expected_snapshot)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -294,7 +294,7 @@ pub async fn list_project_worktrees(
     let (_, root, _) = project_root(&state, &project_id, &root_path).await?;
     let response = workspace::list_worktrees(&root, None)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -308,7 +308,7 @@ pub async fn create_project_worktree(
     let (connection, root, _) = project_root(&state, &project_id, &root_path).await?;
     let worktree = workspace::create_worktree(&root, None, &input.branch, &input.expected_snapshot)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     let project = project_for_worktree(&connection, &worktree.path).await?;
     Ok(json!({"project": project, "worktree": worktree}))
 }
@@ -323,7 +323,7 @@ pub async fn switch_project_worktree(
     let (connection, root, _) = project_root(&state, &project_id, &root_path).await?;
     let worktree = workspace::switch_worktree(&root, None, &input.path)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     let project = project_for_worktree(&connection, &worktree.path).await?;
     Ok(json!({"project": project, "worktree": worktree}))
 }
@@ -343,7 +343,7 @@ pub async fn generate_commit_message(
         &input.expected_snapshot,
     )
     .await
-    .map_err(|_| AppError::FilesystemRequestFailed)?;
+    .map_err(AppError::from)?;
     let settings = codex::read_commit_message_settings(&connection)
         .await
         .map_err(|_| AppError::CodexRequestFailed)?;
@@ -399,7 +399,7 @@ pub async fn commit_project_changes(
         &input.expected_snapshot,
     )
     .await
-    .map_err(|_| AppError::FilesystemRequestFailed)?;
+    .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 

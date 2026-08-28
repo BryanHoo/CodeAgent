@@ -1,8 +1,8 @@
 use std::{fs, process::Command, time::SystemTime};
 
 use super::{
-    commit_changes, create_branch, get_commit_diff, get_commit_files, get_git_history,
-    get_git_status, prepare_commit_message, switch_branch,
+    WorkspaceError, commit_changes, create_branch, get_commit_diff, get_commit_files,
+    get_git_history, get_git_status, prepare_commit_message, switch_branch,
 };
 
 #[tokio::test]
@@ -66,11 +66,10 @@ async fn git_mutations_should_reject_stale_snapshots_and_commit_selected_paths()
         .unwrap();
     let feature = get_git_status(&root, None, false).await.unwrap();
     assert_eq!(feature.branch.as_deref(), Some("feature/test"));
-    assert!(
-        switch_branch(&root, None, "main", &clean.snapshot)
-            .await
-            .is_err()
-    );
+    assert!(matches!(
+        switch_branch(&root, None, "main", &clean.snapshot).await,
+        Err(WorkspaceError::SnapshotMismatch)
+    ));
 
     fs::write(root.join("tracked.txt"), "second\n").unwrap();
     let changed = get_git_status(&root, None, false).await.unwrap();
@@ -211,6 +210,72 @@ async fn git_status_should_preserve_special_paths() {
     expected.sort_unstable();
 
     assert_eq!(actual, expected);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn git_status_should_split_combined_diffs_for_special_paths() {
+    let root = create_repository("codeagent-git-diffs");
+    let files = [
+        ("file with space.txt", "space-marker"),
+        ("line\nbreak.txt", "newline-marker"),
+        ("left -> right.txt", "arrow-marker"),
+    ];
+    for (path, marker) in files {
+        fs::write(root.join(path), format!("old {marker}\n")).unwrap();
+    }
+    run(&root, &["add", "."]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    for (path, marker) in files {
+        fs::write(root.join(path), format!("new {marker}\n")).unwrap();
+    }
+    let root = fs::canonicalize(root).unwrap();
+
+    let status = get_git_status(&root, None, true).await.unwrap();
+
+    assert_eq!(status.unstaged.len(), files.len());
+    for change in status.unstaged {
+        let marker = files
+            .iter()
+            .find_map(|(path, marker)| (*path == change.path).then_some(marker))
+            .unwrap();
+        assert!(change.diff.contains(&format!("+new {marker}")));
+        assert!(!change.diff.is_empty());
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn git_mutations_should_report_invalid_branch_and_missing_upstream() {
+    let root = create_repository("codeagent-git-errors");
+    fs::write(root.join("tracked.txt"), "old\n").unwrap();
+    run(&root, &["add", "."]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    let root = fs::canonicalize(root).unwrap();
+    let clean = get_git_status(&root, None, false).await.unwrap();
+    assert!(matches!(
+        create_branch(&root, None, "invalid..branch", &clean.snapshot).await,
+        Err(WorkspaceError::InvalidBranch)
+    ));
+
+    fs::write(root.join("tracked.txt"), "new\n").unwrap();
+    let changed = get_git_status(&root, None, false).await.unwrap();
+    let committed = commit_changes(
+        &root,
+        None,
+        &["tracked.txt".to_owned()],
+        "fix(workspace): 更新测试文件",
+        "commit_and_push",
+        &changed.snapshot,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(committed.push_status, "not_configured");
+    assert_eq!(
+        committed.push_error.as_deref(),
+        Some("current branch has no upstream")
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

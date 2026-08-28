@@ -1,5 +1,6 @@
 mod attachments;
 mod files;
+mod git_diff;
 mod git_process;
 mod git_read;
 mod git_write;
@@ -22,4 +23,4 @@ pub use git_write::{
     switch_branch, switch_worktree,
 };
 pub use open::{open_path, platform_apps};
-pub use path_guard::{canonical_root, resolve_existing};
+pub use path_guard::{WorkspaceError, canonical_root, resolve_existing};

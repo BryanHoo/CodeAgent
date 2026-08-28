@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { type InvokeImplementation } from "./native-client.js";
+import { NativeCommandError, type InvokeImplementation } from "./native-client.js";
 import { TauriWorkspaceClient } from "./workspace-client.js";
 
 describe("TauriWorkspaceClient", () => {
@@ -84,5 +84,29 @@ describe("TauriWorkspaceClient", () => {
       input: { path: "src/main.rs", rootPath: "/work/a", sha: "a".repeat(40) },
       projectId: "project-a",
     });
+  });
+
+  it("preserves structured workspace errors", async () => {
+    const client = new TauriWorkspaceClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: vi.fn(async () =>
+        Promise.reject({
+          code: "SNAPSHOT_MISMATCH",
+          message: "workspace snapshot changed; refresh and retry",
+        }),
+      ) as InvokeImplementation,
+    });
+
+    await expect(
+      client.switchProjectBranch("project-a", "/work/a", {
+        branch: "main",
+        expectedSnapshot: "a".repeat(64),
+      }),
+    ).rejects.toEqual(
+      new NativeCommandError(
+        "SNAPSHOT_MISMATCH",
+        "workspace snapshot changed; refresh and retry",
+      ),
+    );
   });
 });

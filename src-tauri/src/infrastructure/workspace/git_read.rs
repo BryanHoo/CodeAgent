@@ -4,6 +4,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::{
+    git_diff::add_diffs,
     git_process::run_git,
     path_guard::{WorkspaceError, valid_relative},
 };
@@ -322,26 +323,6 @@ fn parse_status(output: &[u8]) -> Result<(Vec<GitChange>, Vec<GitChange>), Works
         }
     }
     Ok((staged, unstaged))
-}
-
-async fn add_diffs(
-    repo: &Path,
-    changes: &mut [GitChange],
-    staged: bool,
-) -> Result<(), WorkspaceError> {
-    for change in changes {
-        if change.kind == "create" && !staged {
-            continue;
-        }
-        let mut args = vec!["diff", "--no-ext-diff"];
-        if staged {
-            args.push("--cached");
-        }
-        args.extend(["--", change.path.as_str()]);
-        let (diff, _) = run_git(repo, &args, MAX_DIFF_BYTES).await?;
-        change.diff = String::from_utf8_lossy(&diff).into_owned();
-    }
-    Ok(())
 }
 
 fn parse_history(output: &[u8]) -> Result<Vec<GitCommit>, WorkspaceError> {

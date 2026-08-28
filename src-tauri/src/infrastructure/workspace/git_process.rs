@@ -72,9 +72,21 @@ async fn run_git_command(
         stderr.take(64 * 1024).read_to_end(&mut bytes).await?;
         Ok::<_, std::io::Error>(bytes)
     };
-    let (_, mut output, _) = tokio::try_join!(input_task, stdout_task, stderr_task)?;
-    if !child.wait().await?.success() {
-        return Err(WorkspaceError::InvalidPath);
+    let (_, mut output, stderr) = tokio::try_join!(input_task, stdout_task, stderr_task)?;
+    let status = child.wait().await?;
+    if !status.success() {
+        let stderr = String::from_utf8_lossy(&stderr);
+        let detail = stderr.trim();
+        if detail.contains("has no upstream branch") {
+            return Err(WorkspaceError::NoUpstream);
+        }
+        let operation = args.first().copied().unwrap_or("command");
+        let message = if detail.is_empty() {
+            format!("git {operation} failed with {status}")
+        } else {
+            format!("git {operation} failed: {detail}")
+        };
+        return Err(WorkspaceError::GitCommandFailed(message));
     }
     let truncated = output.len() > max_bytes;
     output.truncate(max_bytes);

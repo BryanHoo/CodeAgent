@@ -13,6 +13,30 @@ export type TauriClientOptions = Readonly<{
   subscribeAgentEvents?: typeof subscribeAgentEvents;
 }>;
 
+export class NativeCommandError extends Error {
+  public readonly code: string;
+
+  public constructor(code: string, message: string) {
+    super(message);
+    this.name = "NativeCommandError";
+    this.code = code;
+  }
+}
+
+function normalizeNativeError(error: unknown): unknown {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return new NativeCommandError(error.code, error.message);
+  }
+  return error;
+}
+
 export class TauriNativeClient {
   protected readonly ensureRuntime: () => Promise<unknown>;
   protected readonly invokeNative: InvokeImplementation;
@@ -27,8 +51,12 @@ export class TauriNativeClient {
 
   protected async call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
     await this.ensureRuntime();
-    return args === undefined
-      ? this.invokeNative<T>(command)
-      : this.invokeNative<T>(command, args);
+    try {
+      return args === undefined
+        ? await this.invokeNative<T>(command)
+        : await this.invokeNative<T>(command, args);
+    } catch (error) {
+      throw normalizeNativeError(error);
+    }
   }
 }
