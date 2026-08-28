@@ -34,5 +34,6 @@ export const DesktopPetStateSchema = Type.Object(
 export type DesktopPetState = Readonly<Static<typeof DesktopPetStateSchema>>;
 export type DesktopPetTask = Readonly<Static<typeof DesktopPetTaskSchema>>;
 
+export type DesktopPetDragStrategy = "native" | "webview";
 export type DesktopPetPosition = Readonly<{ x: number; y: number }>;
 export type DesktopPetTaskOpen = Readonly<{ projectId: string; taskId: string }>;

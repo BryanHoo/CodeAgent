@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "macos"))]
 use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
@@ -27,6 +28,13 @@ pub enum DesktopPetAnimation {
     Review,
     Running,
     Waiting,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DesktopPetDragStrategy {
+    Native,
+    Webview,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -80,11 +88,13 @@ struct DesktopPetTaskOpen {
 
 #[derive(Default)]
 pub struct DesktopPetRuntime {
+    #[cfg(not(target_os = "macos"))]
     position_generation: AtomicU64,
     state: Mutex<Option<DesktopPetState>>,
 }
 
 impl DesktopPetRuntime {
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn schedule_position_persist(
         &self,
         app: AppHandle,
@@ -195,6 +205,18 @@ pub fn get_desktop_pet_position(window: WebviewWindow) -> Result<DesktopPetPosit
 }
 
 #[tauri::command]
+pub fn get_desktop_pet_drag_strategy(
+    window: WebviewWindow,
+) -> Result<DesktopPetDragStrategy, AppError> {
+    ensure_pet_sprite_window(&window)?;
+    if cfg!(target_os = "macos") {
+        Ok(DesktopPetDragStrategy::Native)
+    } else {
+        Ok(DesktopPetDragStrategy::Webview)
+    }
+}
+
+#[tauri::command]
 pub fn show_desktop_pet(window: WebviewWindow) -> Result<(), AppError> {
     ensure_pet_sprite_window(&window)?;
     window.show().map_err(|_| AppError::DesktopPetWindowFailed)
@@ -214,6 +236,32 @@ pub fn set_desktop_pet_drag_position(
     window
         .set_position(position)
         .map_err(|_| AppError::DesktopPetWindowFailed)
+}
+
+#[tauri::command]
+pub async fn start_desktop_pet_native_drag(window: WebviewWindow) -> Result<(), AppError> {
+    ensure_pet_sprite_window(&window)?;
+    #[cfg(not(target_os = "macos"))]
+    return Err(AppError::DesktopPetWindowFailed);
+
+    #[cfg(target_os = "macos")]
+    {
+        super::desktop_pet_panel::run_desktop_pet_drag(&window).await?;
+        let size = window
+            .outer_size()
+            .map_err(|_| AppError::DesktopPetWindowFailed)?;
+        let current = window
+            .outer_position()
+            .map_err(|_| AppError::DesktopPetWindowFailed)?;
+        let position = drag_pet_position(current, &monitor_bounds(&window)?, size);
+        if position != current {
+            window
+                .set_position(position)
+                .map_err(|_| AppError::DesktopPetWindowFailed)?;
+        }
+        position_desktop_pet_bubbles(window.app_handle(), position)?;
+        persist_position(window.app_handle(), position).await
+    }
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -247,6 +295,8 @@ pub async fn move_desktop_pet(
     window
         .set_position(position)
         .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    #[cfg(target_os = "macos")]
+    position_desktop_pet_bubbles(window.app_handle(), position)?;
     persist_position(window.app_handle(), position).await
 }
 
@@ -343,6 +393,18 @@ mod tests {
                     "taskName": "Review change"
                 }]
             }),
+        );
+    }
+
+    #[test]
+    fn desktop_pet_drag_strategy_uses_the_frontend_lowercase_contract() {
+        assert_eq!(
+            serde_json::to_value(DesktopPetDragStrategy::Native).unwrap(),
+            serde_json::json!("native"),
+        );
+        assert_eq!(
+            serde_json::to_value(DesktopPetDragStrategy::Webview).unwrap(),
+            serde_json::json!("webview"),
         );
     }
 }

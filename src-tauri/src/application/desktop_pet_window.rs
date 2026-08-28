@@ -1,18 +1,20 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+#[cfg(not(target_os = "macos"))]
+use tauri::Emitter;
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, utils::config::BackgroundThrottlingPolicy,
 };
 
-use super::{
-    desktop_pet_commands::{DesktopPetPosition, DesktopPetRuntime},
-    error::AppError,
-};
+#[cfg(not(target_os = "macos"))]
+use super::desktop_pet_commands::{DesktopPetPosition, DesktopPetRuntime};
+use super::error::AppError;
 use crate::infrastructure::app_storage;
 
 pub(super) const DESKTOP_PET_EVENT: &str = "desktop-pet://state";
+#[cfg(not(target_os = "macos"))]
 const DESKTOP_PET_MOVED_EVENT: &str = "desktop-pet://moved";
 pub(super) const DESKTOP_PET_LABEL: &str = "desktop-pet";
 pub(super) const DESKTOP_PET_BUBBLES_LABEL: &str = "desktop-pet-bubbles";
@@ -177,31 +179,25 @@ fn bubble_position(
         return pet_position;
     };
     let pet_width = i32::try_from(pet_size.width).unwrap_or(i32::MAX);
-    let pet_height = i32::try_from(pet_size.height).unwrap_or(i32::MAX);
     let bubble_width = i32::try_from(bubble_size.width).unwrap_or(i32::MAX);
     let bubble_height = i32::try_from(bubble_size.height).unwrap_or(i32::MAX);
-    let above = pet_position
+    let x = pet_position
+        .x
+        .saturating_add(pet_width)
+        .saturating_sub(bubble_width)
+        .clamp(
+            monitor.x,
+            monitor
+                .x
+                .saturating_add(i32::try_from(monitor.width).unwrap_or(i32::MAX))
+                .saturating_sub(bubble_width)
+                .max(monitor.x),
+        );
+    let y = pet_position
         .y
         .saturating_sub(bubble_height)
         .saturating_sub(gap);
-    let y = if above >= monitor.y {
-        above
-    } else {
-        pet_position
-            .y
-            .saturating_add(pet_height)
-            .saturating_add(gap)
-    };
-    monitor.clamp_window(
-        PhysicalPosition::new(
-            pet_position
-                .x
-                .saturating_add(pet_width)
-                .saturating_sub(bubble_width),
-            y,
-        ),
-        bubble_size,
-    )
+    PhysicalPosition::new(x, y)
 }
 
 pub(super) fn monitor_bounds(window: &WebviewWindow) -> Result<Vec<MonitorBounds>, AppError> {
@@ -284,17 +280,21 @@ pub(super) async fn create_desktop_pet_window(app: &AppHandle) -> Result<Webview
     window
         .set_position(position)
         .map_err(|_| AppError::DesktopPetWindowFailed)?;
-    let event_app = app.clone();
-    let event_window = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Moved(position) = event {
-            let _ = event_window.emit(DESKTOP_PET_MOVED_EVENT, DesktopPetPosition::from(*position));
-            let _ = position_desktop_pet_bubbles(&event_app, *position);
-            event_app
-                .state::<DesktopPetRuntime>()
-                .schedule_position_persist(event_app.clone(), *position);
-        }
-    });
+    #[cfg(not(target_os = "macos"))]
+    {
+        let event_app = app.clone();
+        let event_window = window.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Moved(position) = event {
+                let _ =
+                    event_window.emit(DESKTOP_PET_MOVED_EVENT, DesktopPetPosition::from(*position));
+                let _ = position_desktop_pet_bubbles(&event_app, *position);
+                event_app
+                    .state::<DesktopPetRuntime>()
+                    .schedule_position_persist(event_app.clone(), *position);
+            }
+        });
+    }
     Ok(window)
 }
 
@@ -312,7 +312,10 @@ pub(super) async fn create_desktop_pet_bubbles_window(
     .build()
     .map_err(|_| AppError::DesktopPetWindowFailed)?;
     #[cfg(target_os = "macos")]
-    super::desktop_pet_panel::configure_desktop_overlay(&window).await?;
+    {
+        super::desktop_pet_panel::configure_desktop_overlay(&window).await?;
+        super::desktop_pet_panel::attach_desktop_pet_bubbles(app).await?;
+    }
     Ok(window)
 }
 
@@ -423,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn bubbles_flip_below_the_pet_at_the_top_edge() {
+    fn bubbles_stay_above_the_pet_at_the_top_edge() {
         assert_eq!(
             bubble_position(
                 PhysicalPosition::new(100, 0),
@@ -432,7 +435,7 @@ mod tests {
                 &[MonitorBounds::new(0, 0, 1920, 1080)],
                 8,
             ),
-            PhysicalPosition::new(4, 104),
+            PhysicalPosition::new(4, -72),
         );
     }
 

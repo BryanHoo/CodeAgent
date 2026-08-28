@@ -40,6 +40,6 @@
 - 新增或修改工作台能力时，同步更新 `docs/codexly-capability-matrix.md` 并运行真实 Codex 0.149 生命周期测试
 - CodeAgent 自身偏好写入 Tauri `app_data_dir()/app.json`，自定义背景写入 `app_data_dir()/backgrounds/custom/`；写入必须有界、校验资源标识并原子替换
 - 桌面宠物及其按需气泡窗口由 Rust 创建和销毁；命令必须校验固定窗口标签，窗口保持透明、无边框、置顶和紧凑点击区域，并按显示器工作区恢复持久化坐标
-- macOS 桌面宠物窗口必须注册为带 `FullScreenAuxiliary`、`CanJoinAllSpaces` 与非激活样式的浮动 `NSPanel`；`tauri-nspanel` 的转换、配置和销毁必须通过 `run_on_main_thread` 执行，动态转换后需补齐防激活标记，使面板可接收 pointer capture 但拖动前后前台应用保持不变
-- 桌面宠物拖动命令只接收物理坐标，允许窗口中心跨越相邻显示器并在完全离屏时钳制到最近工作区；原生 `Moved` 事件只负责同步位置、气泡布局和持久化，不得进入阻塞 WebView 动画循环的系统模态拖窗
+- macOS 桌面宠物窗口必须注册为带 `FullScreenAuxiliary`、`CanJoinAllSpaces` 与非激活样式的浮动 `NSPanel`；`tauri-nspanel` 的转换、配置和销毁必须通过 `run_on_main_thread` 执行，动态转换后需补齐防激活标记；CodeAgent 未激活时面板必须拒绝成为 key window，已激活时继续支持键盘操作
+- macOS 桌面宠物拖动只向主线程提交一次原生拖拽，并低开销轮询 AppKit 主键状态直至物理释放；释放后在应用已激活时恢复 main key window，并一次性钳制、布局和持久化；气泡必须在完成 `NSPanel` 转换后作为宠物的原生 child window 挂接在上方并随系统合成器移动，其他平台的物理坐标命令继续按帧合并
 - CodeAgent 存储迁移不得修改 `CODEX_HOME`；Codex 配置、认证、线程与 SQLite 始终由官方目录管理

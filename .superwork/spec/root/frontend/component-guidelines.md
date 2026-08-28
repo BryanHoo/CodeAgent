@@ -16,6 +16,6 @@
 - Composer 必须将 `CODEX_THREAD_BUSY` 映射为本地化的可操作提示；未知原生拒绝不得显示硬编码英文兜底文案
 - 仅在多个调用方确有一致需求时提取通用组件
 - 桌面宠物不得挂载到工作台 DOM；主窗口只投影动画与有界任务摘要，宠物和气泡使用专用入口与最小 Provider 装配，气泡点击通过固定事件回到主窗口路由，避免重复连接 Provider Runtime
-- 桌面宠物必须保留 Codexly 的动画映射：pointer capture 拖动时切换 `running-left`/`running-right`，释放后播放 `jumping` 再恢复活动动画；位置 IPC 按动画帧合并到最新坐标，不得调用会阻塞 WebView 动画循环的原生模态拖窗
-- 桌面宠物移动原生窗口时必须显式释放 pointer capture，并在 `buttons` 不含主键时兜底结束拖动；macOS 非激活宠物面板必须在鼠标离开时执行 `resign_key_window()`，不得长期占用主窗口 hover 与编辑焦点
+- 桌面宠物必须保留 Codexly 的动画映射：超过阈值后切换 `running-left`/`running-right`，释放后播放 `jumping` 再恢复活动动画；macOS 使用一次原生拖拽命令跟踪至 `mouseUp`，其他平台的位置 IPC 按动画帧合并到最新坐标
+- macOS 宠物在 CodeAgent 未激活时不得获取 key focus；切换到原生拖拽前必须先释放 WebView pointer capture，物理主键释放后再恢复 main key window 并同步位置、气泡布局和持久化；WebView fallback 必须在 `buttons` 不含主键时兜底结束拖动
 - Tauri asset protocol 的宠物图集使用 `HTMLImageElement` 解码后绘制到 Canvas；不得依赖 WKWebView 对自定义协议执行 `fetch` 后再 `createImageBitmap`

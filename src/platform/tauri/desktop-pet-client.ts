@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  DesktopPetDragStrategy,
   DesktopPetPosition,
   DesktopPetState,
   DesktopPetTaskOpen,
@@ -62,6 +63,10 @@ export async function getDesktopPetPosition(): Promise<DesktopPetPosition> {
   return invoke<DesktopPetPosition>("get_desktop_pet_position");
 }
 
+export async function getDesktopPetDragStrategy(): Promise<DesktopPetDragStrategy> {
+  return invoke<DesktopPetDragStrategy>("get_desktop_pet_drag_strategy");
+}
+
 export async function layoutDesktopPetBubbles(input: Readonly<{
   height: number;
   width: number;
@@ -75,6 +80,10 @@ export async function openDesktopPetTask(target: DesktopPetTaskOpen): Promise<vo
 
 export async function setDesktopPetDragPosition(position: DesktopPetPosition): Promise<void> {
   await invoke("set_desktop_pet_drag_position", position);
+}
+
+export async function startDesktopPetNativeDrag(): Promise<void> {
+  await invoke("start_desktop_pet_native_drag");
 }
 
 export async function moveDesktopPet(input: Readonly<{

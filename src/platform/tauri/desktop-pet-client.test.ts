@@ -32,7 +32,20 @@ describe("desktop pet native client", () => {
     expect(invoke).toHaveBeenCalledWith("sync_desktop_pet", { state: null });
   });
 
-  it("moves the desktop window without entering the native modal drag loop", async () => {
+  it("uses the native drag session when the runtime can report its release", async () => {
+    invoke.mockResolvedValueOnce("native");
+    const { getDesktopPetDragStrategy, startDesktopPetNativeDrag } = await import(
+      "./desktop-pet-client.js"
+    );
+
+    await expect(getDesktopPetDragStrategy()).resolves.toBe("native");
+    await startDesktopPetNativeDrag();
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "get_desktop_pet_drag_strategy");
+    expect(invoke).toHaveBeenNthCalledWith(2, "start_desktop_pet_native_drag");
+  });
+
+  it("keeps frame-coalesced positioning as the non-native fallback", async () => {
     const { setDesktopPetDragPosition } = await import("./desktop-pet-client.js");
 
     await setDesktopPetDragPosition({ x: 320, y: 480 });

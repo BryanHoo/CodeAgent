@@ -1,4 +1,7 @@
-import type { DesktopPetState } from "../../../protocol/desktop-pet.js";
+import type {
+  DesktopPetDragStrategy,
+  DesktopPetState,
+} from "../../../protocol/desktop-pet.js";
 import type { WorkbenchPetDescriptor } from "../../../protocol/index.js";
 import {
   useCallback,
@@ -11,6 +14,7 @@ import {
 
 import {
   getDesktopPetState,
+  getDesktopPetDragStrategy,
   getDesktopPetPosition,
   listenDesktopPetMoved,
   listenDesktopPetState,
@@ -18,6 +22,7 @@ import {
   moveDesktopPet,
   setDesktopPetDragPosition,
   showDesktopPet,
+  startDesktopPetNativeDrag,
 } from "../../../platform/tauri/desktop-pet-client.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import {
@@ -26,20 +31,32 @@ import {
   introDuration,
   isDesktopPetDragPointerActive,
 } from "../desktop-pet-animation.js";
+import { releaseDesktopPetPointerCapture } from "../desktop-pet-pointer.js";
 import { WorkbenchPetCanvas } from "./workbench-pet-canvas.js";
 
-interface DragState {
-  directionChosen: boolean;
-  origin: Readonly<{ x: number; y: number }>;
+interface DragStateBase {
   pointerId: number;
   startX: number;
   startY: number;
+}
+
+type DragState =
+  | (DragStateBase & { nativeStarted: boolean; strategy: "native" })
+  | (DragStateBase & {
+      directionChosen: boolean;
+      origin: Readonly<{ x: number; y: number }>;
+      strategy: "webview";
+    });
+
+function isNativeDragRunning(drag: DragState | null): boolean {
+  return drag?.strategy === "native" && drag.nativeStarted;
 }
 
 export function DesktopPetWindow() {
   const { t } = useTranslation("workbench");
   const [state, setState] = useState<DesktopPetState | null>(null);
   const [pet, setPet] = useState<WorkbenchPetDescriptor | null>(null);
+  const [dragStrategy, setDragStrategy] = useState<DesktopPetDragStrategy | null>(null);
   const [animationName, setAnimationName] = useState("idle");
   const baseAnimationRef = useRef("idle");
   const dragRef = useRef<DragState | null>(null);
@@ -51,6 +68,18 @@ export function DesktopPetWindow() {
   const positionRef = useRef<Readonly<{ x: number; y: number }> | null>(null);
   const rafRef = useRef<number | null>(null);
   const shownAssetRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    void getDesktopPetDragStrategy()
+      .catch((): DesktopPetDragStrategy => "webview")
+      .then((strategy) => {
+        if (!disposed) setDragStrategy(strategy);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -74,6 +103,7 @@ export function DesktopPetWindow() {
   }, []);
 
   useEffect(() => {
+    if (dragStrategy !== "webview") return;
     let disposed = false;
     let stopListening: (() => void) | undefined;
     void Promise.all([
@@ -91,7 +121,7 @@ export function DesktopPetWindow() {
       disposed = true;
       stopListening?.();
     };
-  }, []);
+  }, [dragStrategy]);
 
   useEffect(() => {
     if (state === null) return;
@@ -135,10 +165,7 @@ export function DesktopPetWindow() {
     dragRef.current = null;
     const handle = handleRef.current;
     handle?.removeAttribute("data-dragging");
-    if (handle?.hasPointerCapture(pointerId) === true) {
-      // 原生窗口跟随鼠标移动时 WebKit 偶尔不执行隐式释放，必须主动归还指针路由。
-      handle.releasePointerCapture(pointerId);
-    }
+    if (handle !== null) releaseDesktopPetPointerCapture(handle, pointerId);
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
     flushPositionRef.current();
@@ -180,17 +207,21 @@ export function DesktopPetWindow() {
   }, [pet]);
 
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || dragStrategy === null) return;
     const origin = positionRef.current;
-    if (event.button !== 0 || origin === null) return;
+    if (dragStrategy === "webview" && origin === null) return;
     event.preventDefault();
     const target = event.currentTarget;
-    dragRef.current = {
-      directionChosen: false,
-      origin,
+    const common = {
       pointerId: event.pointerId,
       startX: event.screenX,
       startY: event.screenY,
     };
+    if (dragStrategy === "native") {
+      dragRef.current = { ...common, nativeStarted: false, strategy: "native" };
+    } else if (origin !== null) {
+      dragRef.current = { ...common, directionChosen: false, origin, strategy: "webview" };
+    }
     target.setPointerCapture(event.pointerId);
     target.setAttribute("data-dragging", "");
   };
@@ -198,9 +229,26 @@ export function DesktopPetWindow() {
   const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
     if (drag?.pointerId !== event.pointerId) return;
+    if (isNativeDragRunning(drag)) return;
     if (!isDesktopPetDragPointerActive(event.buttons)) {
       // pointerup 若在原生窗口移动期间丢失，下一次移动仍可根据按键位恢复交互。
       finishDrag(event.pointerId);
+      return;
+    }
+    if (drag.strategy === "native") {
+      const nextAnimation = dragAnimation(drag.startX, event.screenX);
+      if (nextAnimation === null) return;
+      drag.nativeStarted = true;
+      // AppKit 会吞掉 mouseup；接管前先释放 WebView capture，避免主窗口 hover 和光标路由残留。
+      releaseDesktopPetPointerCapture(event.currentTarget, event.pointerId);
+      setAnimationName(nextAnimation);
+      // AppKit 在主线程接管完整拖拽会话，Promise 仅在 mouseUp 后返回。
+      const pointerId = event.pointerId;
+      void startDesktopPetNativeDrag()
+        .catch(() => undefined)
+        .finally(() => {
+          finishDrag(pointerId);
+        });
       return;
     }
     schedulePosition(
@@ -243,15 +291,15 @@ export function DesktopPetWindow() {
       className="desktop-pet-target"
       onKeyDown={handleKeyDown}
       onLostPointerCapture={(event) => {
-        finishDrag(event.pointerId);
+        if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
       }}
       onPointerCancel={(event) => {
-        finishDrag(event.pointerId);
+        if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={(event) => {
-        finishDrag(event.pointerId);
+        if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
       }}
       ref={handleRef}
       type="button"
