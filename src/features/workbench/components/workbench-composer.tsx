@@ -55,7 +55,6 @@ export function WorkbenchComposer({
   onFastModeChange,
   onOpenProjectPath,
   onProjectRootChange,
-  onRequestNotificationPermission,
   onSettingsChange,
   onSubmissionStateChange,
   onTaskCreated,
@@ -241,7 +240,6 @@ export function WorkbenchComposer({
       setComposerModeState(undefined);
     },
     onSteerAccepted: composerQueue.onSteerAccepted,
-    onRequestNotificationPermission,
     onTaskCreated,
     onTaskStarted,
     onTurnStarted,
@@ -279,7 +277,6 @@ export function WorkbenchComposer({
   } = createComposerCommands({
     capabilities,
     client,
-    onRequestNotificationPermission,
     onTaskCreated,
     onTaskStarted,
     projectId,

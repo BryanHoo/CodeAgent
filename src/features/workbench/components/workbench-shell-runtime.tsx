@@ -127,7 +127,6 @@ export function useWorkbenchShellRuntime({
     markTaskRunning,
     projectRuntime,
     refreshProjectGitStatus,
-    requestNotificationPermission,
     retry,
     viewTask,
   } = useProjectActions();
@@ -432,7 +431,6 @@ export function useWorkbenchShellRuntime({
     queryClient,
     refreshProjectGitStatus,
     renameMutation,
-    requestNotificationPermission,
     retry,
     runtime,
     selectedFileReview,

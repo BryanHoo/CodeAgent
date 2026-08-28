@@ -25,6 +25,8 @@ pub enum AppError {
     PetAssetUnavailable,
     #[error("workbench background is unavailable")]
     WorkbenchBackgroundUnavailable,
+    #[error("failed to show desktop notification")]
+    NotificationFailed,
 }
 
 impl Serialize for AppError {

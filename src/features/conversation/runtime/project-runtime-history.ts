@@ -1,6 +1,6 @@
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@/protocol/index.js";
 import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
-import type { TaskNotifier } from "../../notifications/browser-task-notifier.js";
+import type { TaskNotifier } from "../../notifications/desktop-task-notifier.js";
 
 export const PROJECT_RUNTIME_IDLE_TIMEOUT_MS = 2 * 60_000;
 export const MAX_PROJECT_EVENT_HISTORY_BYTES = 4 * 1_048_576;

@@ -84,7 +84,6 @@ export function WorkbenchShellLayout({
     projectTaskState,
     projects,
     refreshProjectGitStatus,
-    requestNotificationPermission,
     retry,
     runtime,
     selectedRootPath,
@@ -305,7 +304,6 @@ export function WorkbenchShellLayout({
               onFastModeChange={(enabled, settings) => updateProjectTaskDefaults(settings, enabled)}
               onOpenProjectPath={openProjectFolder}
               onProjectRootChange={setSelectedRootId}
-              onRequestNotificationPermission={requestNotificationPermission}
               onDirectSubmission={beginNewChatSubmission}
               onSubmissionStateChange={handleNewChatSubmissionStateChange}
               onTaskCreated={handleTaskCreated}
@@ -333,7 +331,6 @@ export function WorkbenchShellLayout({
             models={models}
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
-            onRequestNotificationPermission={requestNotificationPermission}
             onProjectTaskDefaultsChange={updateProjectTaskDefaults}
             onOpenProjectPath={openProjectFolder}
             onProjectRootChange={setSelectedRootId}

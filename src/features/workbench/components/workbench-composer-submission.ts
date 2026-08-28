@@ -47,7 +47,6 @@ type ComposerSubmissionOptions = Readonly<{
   editingQueuedSubmission: boolean;
   fastMode: boolean;
   onDirectSubmission: WorkbenchComposerProps["onDirectSubmission"];
-  onRequestNotificationPermission: () => void;
   onTaskCreated: WorkbenchComposerProps["onTaskCreated"];
   onTaskStarted: WorkbenchComposerProps["onTaskStarted"];
   onTurnStarted: WorkbenchComposerProps["onTurnStarted"];
@@ -82,7 +81,6 @@ export function createComposerSubmission({
   editingQueuedSubmission,
   fastMode,
   onDirectSubmission,
-  onRequestNotificationPermission,
   onTaskCreated,
   onTaskStarted,
   onTurnStarted,
@@ -173,8 +171,6 @@ export function createComposerSubmission({
     if (action !== "queue" && options.requestTimelineScroll !== false) {
       onDirectSubmission?.();
     }
-    // Notification 权限必须在提交手势内申请，不能等网络 Mutation 完成后再触发。
-    onRequestNotificationPermission();
     setIsSubmitting(true);
     setMutationError(null);
     let input: AgentPromptInput;

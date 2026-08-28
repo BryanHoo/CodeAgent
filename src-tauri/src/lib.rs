@@ -18,6 +18,7 @@ use application::{
         update_project_defaults,
     },
     commands::{connect_runtime, get_app_info, start_runtime},
+    notification_commands::show_task_notification,
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
     pet_commands::{download_workbench_pet, list_workbench_pets},
     sidebar_commands::{
@@ -47,6 +48,7 @@ use application::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let result = tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
@@ -58,6 +60,7 @@ pub fn run() {
             connect_runtime,
             start_runtime,
             get_app_info,
+            show_task_notification,
             get_workbench_background,
             list_workbench_pets,
             download_workbench_pet,

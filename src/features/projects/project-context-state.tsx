@@ -67,7 +67,6 @@ export type ProjectActionsContextValue = Readonly<{
   forgetTask: (projectId: string, taskId: string) => void;
   markTaskRunning: (projectId: string, taskId: string) => void;
   projectRuntime: ProjectRuntimeManager;
-  requestNotificationPermission: () => void;
   reorderProjects: (projectIds: readonly string[]) => Promise<boolean>;
   removeProject: (projectId: string) => Promise<readonly Project[] | undefined>;
   renameProject: (projectId: string, name: string) => Promise<boolean>;

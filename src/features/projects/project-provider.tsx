@@ -262,9 +262,6 @@ export function ProjectProvider({
       return new Set(projectIds);
     });
   }, []);
-  const requestNotificationPermission = useCallback(() => {
-    void projectRuntime.requestNotificationPermission();
-  }, [projectRuntime]);
   const addProject = useCallback(
     (rootPaths: readonly string[]) =>
       addProjectLockRef.current.run(async () => {
@@ -432,7 +429,6 @@ export function ProjectProvider({
       removeProject,
       renameProject,
       reorderProjects,
-      requestNotificationPermission,
       retry,
       setExpandedProjectTaskIds,
       viewTask,
@@ -447,7 +443,6 @@ export function ProjectProvider({
       removeProject,
       renameProject,
       reorderProjects,
-      requestNotificationPermission,
       retry,
       setExpandedProjectTaskIds,
       viewTask,

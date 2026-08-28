@@ -12,7 +12,6 @@ import type { createComposerSubmission } from "./workbench-composer-submission.j
 type ComposerCommandOptions = Readonly<{
   capabilities: WorkbenchComposerProps["capabilities"];
   client: NativeMutationClient;
-  onRequestNotificationPermission: () => void;
   onTaskCreated: WorkbenchComposerProps["onTaskCreated"];
   onTaskStarted: WorkbenchComposerProps["onTaskStarted"];
   projectId: string;
@@ -25,7 +24,6 @@ type ComposerCommandOptions = Readonly<{
 export function createComposerCommands({
   capabilities,
   client,
-  onRequestNotificationPermission,
   onTaskCreated,
   onTaskStarted,
   projectId,
@@ -132,9 +130,6 @@ export function createComposerCommands({
     }
 
     await composerActionLock.run(async () => {
-      if (command.action === "compact") {
-        onRequestNotificationPermission();
-      }
       setIsSubmitting(true);
       setMutationError(null);
       const attempt = resolveIdempotencyAttempt(
@@ -175,7 +170,6 @@ export function createComposerCommands({
   const executeReviewTarget = (target: AgentReviewTarget) =>
     composerActionLock.run(async () => {
       const requestScope = routeScope;
-      onRequestNotificationPermission();
       closeCommandMenu();
       setIsSubmitting(true);
       setMutationError(null);

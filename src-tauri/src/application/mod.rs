@@ -5,6 +5,7 @@ pub mod catalog_commands;
 pub mod commands;
 pub mod error;
 mod model_turn_waiters;
+pub mod notification_commands;
 pub mod open_commands;
 mod pet_assets;
 pub mod pet_commands;

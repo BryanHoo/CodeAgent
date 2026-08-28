@@ -31,6 +31,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 排队提交 | `list/add/update/delete/reorder/startQueuedSubmission` | 原生 `thread/queue/*`，保留顺序和编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；单调序号、缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
+| 后台通知 | Task 终态、失败与待处理请求 | WebView 只归约事件；受限 Tauri command 通过官方 notification 插件调用系统通知中心 | 已实现 |
 | Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.149 官方 Item；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 命令、文件变更、工具、用户输入、MCP elicitation 原生回写 | 已实现 |
@@ -90,5 +91,6 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - [Codex app-server README](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)
 - [Tauri Rust 到前端通信](https://v2.tauri.app/develop/calling-frontend/)
 - [Tauri 前端调用 Rust](https://v2.tauri.app/develop/calling-rust/)
+- [Tauri Notification 插件](https://v2.tauri.app/plugin/notification/)
 - [codex-webui](https://github.com/seo-rii/codex-webui)
 - [CodexHarbor](https://github.com/adondada/codexharbor)

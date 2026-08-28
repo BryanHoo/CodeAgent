@@ -1,8 +1,8 @@
 import type { AgentTask, AgentTaskSnapshotResponse, EventCheckpoint } from "@/protocol/index.js";
 import {
-  createBrowserTaskNotifier,
+  createDesktopTaskNotifier,
   type TaskNotifier,
-} from "../../notifications/browser-task-notifier.js";
+} from "../../notifications/desktop-task-notifier.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 import {
@@ -70,7 +70,7 @@ export class ProjectRuntimeManager {
     this.#onSkillsChanged = options.onSkillsChanged ?? (() => undefined);
     this.#onTaskRemoved = options.onTaskRemoved ?? (() => undefined);
     this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
-    this.#taskNotifier = options.taskNotifier ?? createBrowserTaskNotifier();
+    this.#taskNotifier = options.taskNotifier ?? createDesktopTaskNotifier();
     if (!Number.isSafeInteger(this.#idleTimeoutMs) || this.#idleTimeoutMs < 0) {
       throw new RangeError("Project Runtime idleTimeoutMs must be non-negative");
     }
@@ -162,12 +162,6 @@ export class ProjectRuntimeManager {
     this.#rememberTaskTitle(response.snapshot);
     this.#recordSnapshotActivity(response);
     this.#getProject(response.snapshot.projectId).observeSnapshot(response);
-  }
-
-  public requestNotificationPermission(): Promise<void> {
-    return this.#taskNotifier.requestPermission().catch((error: unknown) => {
-      recordInternalWarning("notification_permission_failed", error);
-    });
   }
 
   public reconcileTaskSnapshot(response: AgentTaskSnapshotResponse): void {

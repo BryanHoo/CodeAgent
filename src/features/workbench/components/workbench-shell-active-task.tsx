@@ -40,7 +40,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   models,
   modelsError,
   modelsPending,
-  onRequestNotificationPermission,
   onProjectTaskDefaultsChange,
   onOpenProjectPath,
   onProjectRootChange,
@@ -71,7 +70,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
-  onRequestNotificationPermission: () => void;
   onProjectTaskDefaultsChange: (settings: AgentTaskSettings, fastMode: boolean) => Promise<void>;
   onOpenProjectPath: () => void;
   onProjectRootChange: (rootId: string) => void;
@@ -195,7 +193,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         }}
         onOpenProjectPath={onOpenProjectPath}
         onProjectRootChange={onProjectRootChange}
-        onRequestNotificationPermission={onRequestNotificationPermission}
         onFastModeChange={(enabled, settings) => onProjectTaskDefaultsChange(settings, enabled)}
         onSettingsChange={(settings, _field, fastMode) =>
           Promise.all([

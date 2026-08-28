@@ -77,7 +77,6 @@ export type WorkbenchComposerProps = Readonly<{
     fastMode: boolean,
   ) => Promise<void> | void;
   onFastModeChange: (enabled: boolean, settings: AgentTaskSettings) => Promise<void> | void;
-  onRequestNotificationPermission: () => void;
   onOpenProjectPath: () => void;
   onProjectRootChange: (rootId: string) => void;
   onDirectSubmission?: () => void;
