@@ -353,6 +353,7 @@ export function ConversationVirtualList<TItem>({
         data-conversation-content=""
         {...props}
       >
+        {/* React 同步提交 sizer 与 top，避免 WKWebView 在流式内容切换完成态时漏绘 transform 合成层。 */}
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((virtualTurn) => (
             <div
@@ -361,7 +362,7 @@ export function ConversationVirtualList<TItem>({
               data-index={virtualTurn.index}
               key={virtualTurn.key}
               ref={virtualizer.measureElement}
-              style={{ transform: `translateY(${String(virtualTurn.start)}px)` }}
+              style={{ top: virtualTurn.start }}
             >
               {renderItem(items[virtualTurn.index] as TItem, virtualTurn.index)}
             </div>

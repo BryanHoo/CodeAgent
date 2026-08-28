@@ -7,7 +7,7 @@
 - 交互元素提供可访问名称、禁用状态和可见焦点反馈
 - 工作台仅面向桌面端，使用全局设计 tokens 约束三栏布局、颜色、间距和交互状态，不增加移动端适配分支
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
-- 对话虚拟列表必须由 React 同步写入 sizer 高度与 `translateY` 偏移，不得启用 `directDomUpdates`；流式 Item 结构修订和桌面前台恢复时立即测量并在下一帧复测已挂载 Turn，仅在仍自动跟随时置底
+- 对话虚拟列表必须由 React 同步写入 sizer 高度与 `top` 偏移，不得启用 `directDomUpdates` 或为 Turn 创建 transform 合成层；流式 Item 结构修订和桌面前台恢复时立即测量并在下一帧复测已挂载 Turn，仅在仍自动跟随时置底
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航
 - 服务端快照通过 TanStack Query 读取，实时任务状态通过功能域 Runtime/Store 的选择器读取，避免订阅无关状态
 - `temporary` 是合成任务作用域；依赖真实 Project 或根目录的查询必须在该作用域禁用

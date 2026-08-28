@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { Conversation, ConversationVirtualList } from "./conversation.js";
 
 describe("ConversationVirtualList rendering", () => {
-  it("positions virtual turns with the virtualizer offset", () => {
+  it("positions virtual turns without a WebKit transform layer", () => {
     const markup = renderToStaticMarkup(
       createElement(
         Conversation,
@@ -19,6 +19,7 @@ describe("ConversationVirtualList rendering", () => {
     );
 
     expect(markup).toContain('data-index="0"');
-    expect(markup).toContain("transform:translateY");
+    expect(markup).toContain("top:0");
+    expect(markup).not.toContain("transform:");
   });
 });
