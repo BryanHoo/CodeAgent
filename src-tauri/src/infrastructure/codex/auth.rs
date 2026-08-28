@@ -37,7 +37,7 @@ pub async fn list_provider_models(
     connection: &AppServerConnection,
 ) -> Result<Value, ConnectionError> {
     let config = read_config(connection).await?;
-    if provider_mode(&config) == "custom"
+    if selected_provider_id(&config) == CUSTOM_PROVIDER_ID
         && let Some(models) = config.pointer("/desktop/codeagent/provider/customModels")
         && valid_model_page(models)
     {
@@ -61,13 +61,18 @@ pub async fn get_provider_connection(
         )
         .await?;
     let account = response.get("account").and_then(map_account);
+    let requires_openai_auth = response
+        .get("requiresOpenaiAuth")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     let mode = provider_mode(&config);
     let state = if let Some(pending) = pending_login.as_ref() {
         pending
             .get("state")
             .and_then(Value::as_str)
             .unwrap_or("pending")
-    } else if account.is_some() {
+    // Codex 149 中无需 OpenAI 认证的 provider 即使没有 account 也已可用。
+    } else if account.is_some() || !requires_openai_auth {
         "connected"
     } else {
         "disconnected"
@@ -238,8 +243,16 @@ fn map_custom_models(value: Option<&Value>) -> Result<Value, ConnectionError> {
     Ok(json!({"data": data, "nextCursor": null}))
 }
 
+fn selected_provider_id(config: &Value) -> &str {
+    config
+        .get("model_provider")
+        .and_then(Value::as_str)
+        .unwrap_or("openai")
+}
+
 fn provider_mode(config: &Value) -> &'static str {
-    if config.get("model_provider").and_then(Value::as_str) == Some(CUSTOM_PROVIDER_ID) {
+    // Codex 149 以 model_provider 选择服务，openai_base_url 会改写内置 OpenAI 端点。
+    if selected_provider_id(config) != "openai" || configured_openai_base_url(config).is_some() {
         "custom"
     } else {
         "official"
@@ -247,15 +260,38 @@ fn provider_mode(config: &Value) -> &'static str {
 }
 
 fn custom_base_url(config: &Value) -> Value {
-    config
-        .pointer("/desktop/codeagent/provider/customBaseUrl")
-        .cloned()
+    let provider_id = selected_provider_id(config);
+    if provider_id == "openai" {
+        return configured_openai_base_url(config)
+            .map(str::to_owned)
+            .map(Value::String)
+            .unwrap_or(Value::Null);
+    }
+
+    let private_base_url = (provider_id == CUSTOM_PROVIDER_ID)
+        .then(|| config.pointer("/desktop/codeagent/provider/customBaseUrl"))
+        .flatten()
+        .and_then(non_empty_string);
+    private_base_url
         .or_else(|| {
             config
-                .pointer(&format!("/model_providers/{CUSTOM_PROVIDER_ID}/base_url"))
-                .cloned()
+                .get("model_providers")
+                .and_then(Value::as_object)
+                .and_then(|providers| providers.get(provider_id))
+                .and_then(|provider| provider.get("base_url"))
+                .and_then(non_empty_string)
         })
+        .map(str::to_owned)
+        .map(Value::String)
         .unwrap_or(Value::Null)
+}
+
+fn configured_openai_base_url(config: &Value) -> Option<&str> {
+    config.get("openai_base_url").and_then(non_empty_string)
+}
+
+fn non_empty_string(value: &Value) -> Option<&str> {
+    value.as_str().filter(|value| !value.trim().is_empty())
 }
 
 fn map_account(account: &Value) -> Option<Value> {
