@@ -86,6 +86,57 @@ describe("TauriWorkspaceClient", () => {
     });
   });
 
+  it("stops an in-flight file search when its signal is aborted", async () => {
+    let resolveSearch: (() => void) | undefined;
+    const invoke = vi.fn(
+      (command: string) =>
+        new Promise<unknown>((resolve) => {
+          if (command === "search_project_files") resolveSearch = () => resolve({ data: [] });
+          else resolve({});
+        }),
+    );
+    const client = new TauriWorkspaceClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: invoke as InvokeImplementation,
+    });
+    const controller = new AbortController();
+
+    const search = client.searchProjectFiles(
+      "project-a",
+      "/work/a",
+      "main",
+      "search-a",
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(resolveSearch).toBeTypeOf("function"));
+    controller.abort();
+    resolveSearch?.();
+    await search;
+
+    expect(invoke).toHaveBeenCalledWith("stop_project_file_search", {
+      projectId: "project-a",
+      rootPath: "/work/a",
+      sessionId: "search-a",
+    });
+  });
+
+  it("does not start a file search with an already aborted signal", async () => {
+    const invoke = vi.fn(async () => ({ data: [] }));
+    const client = new TauriWorkspaceClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: invoke as InvokeImplementation,
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      client.searchProjectFiles("project-a", "/work/a", "main", "search-a", {
+        signal: controller.signal,
+      }),
+    ).rejects.toHaveProperty("name", "AbortError");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("preserves structured workspace errors", async () => {
     const client = new TauriWorkspaceClient({
       ensureRuntime: vi.fn(async () => undefined),

@@ -103,11 +103,13 @@ pub async fn search_project_files(
     project_id: String,
     root_path: String,
     query: String,
-    _session_id: String,
+    session_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let (_, root, root_id) = project_root(&state, &project_id, &root_path).await?;
-    let response = workspace::search_project_files(&root, &root_id, &query)
+    let response = state
+        .project_file_search()
+        .search(&root, &root_id, &query, &session_id)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
@@ -117,9 +119,10 @@ pub async fn search_project_files(
 pub async fn stop_project_file_search(
     project_id: String,
     root_path: String,
-    _session_id: String,
+    session_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
+    state.project_file_search().cancel(&session_id);
     project_root(&state, &project_id, &root_path).await?;
     Ok(json!({}))
 }
@@ -136,6 +139,7 @@ pub async fn rename_project_file(
     let response = workspace::rename_project_file(&root, &input.path, &name)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
+    state.project_file_search().invalidate(&root);
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -150,6 +154,7 @@ pub async fn delete_project_file(
     let response = workspace::delete_project_file(&root, &input.path)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
+    state.project_file_search().invalidate(&root);
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 

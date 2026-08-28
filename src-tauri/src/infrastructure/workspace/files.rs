@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, path::Path};
+use std::path::Path;
 
 use serde::Serialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -7,8 +7,6 @@ use super::path_guard::{
     WorkspaceError, relative_string, resolve_destination, resolve_existing, valid_relative,
 };
 
-const MAX_SEARCH_RESULTS: usize = 50;
-const MAX_SEARCH_ENTRIES: usize = 100_000;
 const SOURCE_CHUNK_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Serialize)]
@@ -22,20 +20,6 @@ pub struct FileTreeEntry {
     pub path: String,
     #[serde(rename = "type")]
     pub kind: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FileSearchPage {
-    pub data: Vec<FileSearchEntry>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileSearchEntry {
-    pub name: String,
-    pub path: String,
-    pub root_id: String,
-    pub root_path: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -91,48 +75,6 @@ pub async fn list_project_files(
         entries,
         path: relative.map(str::to_owned),
     })
-}
-
-pub async fn search_project_files(
-    root: &Path,
-    root_id: &str,
-    query: &str,
-) -> Result<FileSearchPage, WorkspaceError> {
-    let query = query.trim().to_lowercase();
-    let mut directories = VecDeque::from([root.to_path_buf()]);
-    let mut data = Vec::new();
-    let mut visited = 0usize;
-    while let Some(directory) = directories.pop_front() {
-        let mut reader = tokio::fs::read_dir(directory).await?;
-        while let Some(entry) = reader.next_entry().await? {
-            visited += 1;
-            if visited > MAX_SEARCH_ENTRIES {
-                return Ok(FileSearchPage { data });
-            }
-            let file_type = entry.file_type().await?;
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if file_type.is_symlink() || name == ".git" {
-                continue;
-            }
-            if file_type.is_dir() {
-                directories.push_back(entry.path());
-                continue;
-            }
-            let relative = relative_string(root, &entry.path())?;
-            if query.is_empty() || relative.to_lowercase().contains(&query) {
-                data.push(FileSearchEntry {
-                    name,
-                    path: relative,
-                    root_id: root_id.to_owned(),
-                    root_path: root.to_string_lossy().into_owned(),
-                });
-                if data.len() == MAX_SEARCH_RESULTS {
-                    return Ok(FileSearchPage { data });
-                }
-            }
-        }
-    }
-    Ok(FileSearchPage { data })
 }
 
 pub async fn rename_project_file(
@@ -231,8 +173,6 @@ mod tests {
 
         let tree = list_project_files(&root, Some("src")).await.unwrap();
         assert_eq!(tree.entries[0].path, "src/main.rs");
-        let search = search_project_files(&root, "root-a", "main").await.unwrap();
-        assert_eq!(search.data[0].root_id, "root-a");
         assert!(read_source_file(&root, "../outside", None).await.is_err());
         let renamed = rename_project_file(&root, "src/main.rs", "lib.rs")
             .await

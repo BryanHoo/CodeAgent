@@ -35,7 +35,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.149 官方 Item；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 命令、文件变更、工具、用户输入、MCP elicitation 原生回写 | 已实现 |
-| 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、搜索取消和结果上限 | 已实现 |
+| 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、遵守 ignore 规则的缓存索引、会话取消和结果上限 | 已实现 |
 | 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.149 `text`/`localImage` 输入；文件通过 `text_elements.placeholder` 保留名称与媒体类型，队列与历史恢复为附件 | 已实现 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
@@ -71,6 +71,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - 普通 JSONL 帧继续使用 `RawValue` 快路；仅 `imageGeneration` 帧定向解析，图片正文不进入 WebView。
 - 前端只保留 1,024 条近期事件，流式文本按动画帧批量提交。
 - 历史页每次读取 10 个 Turn，每个 Turn 的 Item 每页 100 条，同页 Turn 并发补全。
+- 文件搜索索引排除 ignore 与隐藏项、按项目根短时复用，并通过会话令牌取消过期扫描。
 - 文件变更、附件、命令输出、搜索结果和运行时事件均设有大小或数量边界。
 - 源码不存在 `new WebSocket`、Codexly `/v1/*` 调用或 mock 运行时；Bing 壁纸也通过原生命令获取。
 

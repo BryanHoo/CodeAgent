@@ -15,7 +15,10 @@ use super::turn_waiters::TurnStartedWaiters;
 mod event_forwarder;
 use crate::{
     domain::runtime::{AppEvent, ProviderKind, RuntimeSnapshot, RuntimeStatus},
-    infrastructure::codex::{AppServerConnection, CodexProcess, PendingServerRequest},
+    infrastructure::{
+        codex::{AppServerConnection, CodexProcess, PendingServerRequest},
+        workspace::ProjectFileSearch,
+    },
 };
 use event_forwarder::{required_event_string, spawn_event_forwarder};
 
@@ -23,6 +26,7 @@ const EVENT_QUEUE_CAPACITY: usize = 256;
 
 #[derive(Default)]
 pub struct AppState {
+    file_search: ProjectFileSearch,
     runtime: Arc<Mutex<RuntimeSession>>,
 }
 
@@ -43,6 +47,10 @@ struct RuntimeSession {
 }
 
 impl AppState {
+    pub fn project_file_search(&self) -> &ProjectFileSearch {
+        &self.file_search
+    }
+
     pub async fn connect(&self, event_channel: Channel<AppEvent>) -> RuntimeSnapshot {
         let mut runtime = self.runtime.lock().await;
 

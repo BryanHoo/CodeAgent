@@ -1,4 +1,5 @@
 mod attachments;
+mod file_search;
 mod files;
 mod git_diff;
 mod git_process;
@@ -13,10 +14,8 @@ mod git_tests;
 pub use attachments::{
     import_attachment, store_attachment, validate_attachment, validate_generated_attachment,
 };
-pub use files::{
-    delete_project_file, list_project_files, read_source_file, rename_project_file,
-    search_project_files,
-};
+pub use file_search::ProjectFileSearch;
+pub use files::{delete_project_file, list_project_files, read_source_file, rename_project_file};
 pub use git_read::{get_commit_diff, get_commit_files, get_git_history, get_git_status};
 pub use git_write::{
     commit_changes, create_branch, create_worktree, list_worktrees, prepare_commit_message,

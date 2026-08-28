@@ -245,9 +245,22 @@ export class TauriWorkspaceClient extends TauriNativeClient {
     rootPath: string,
     query: string,
     sessionId: string,
-    _options: ReadOptions = {},
+    options: ReadOptions = {},
   ): Promise<ProjectFileSearchPage> {
-    return this.call("search_project_files", { projectId, query, rootPath, sessionId });
+    await this.ensureRuntime();
+    options.signal?.throwIfAborted();
+    const stopSearch = () => {
+      // 直接发送停止命令，避免取消路径再次等待运行时初始化。
+      void this.invokeNative("stop_project_file_search", { projectId, rootPath, sessionId }).catch(
+        () => undefined,
+      );
+    };
+    options.signal?.addEventListener("abort", stopSearch, { once: true });
+    try {
+      return await this.call("search_project_files", { projectId, query, rootPath, sessionId });
+    } finally {
+      options.signal?.removeEventListener("abort", stopSearch);
+    }
   }
 
   public async stopProjectFileSearch(
