@@ -84,8 +84,8 @@ pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         });
     #[cfg(target_os = "macos")]
     {
-        // 保留白色背景和品牌配色，避免 template 模式覆盖图标原色。
-        tray = tray.icon(MACOS_TRAY_ICON);
+        // Template 模式让图标自动匹配菜单栏明暗外观和交互状态。
+        tray = tray.icon(MACOS_TRAY_ICON).icon_as_template(true);
     }
     #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
