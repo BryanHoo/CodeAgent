@@ -86,6 +86,30 @@ describe("TauriWorkspaceClient", () => {
     });
   });
 
+  it("adds native request ids to cancellable Git and directory reads", async () => {
+    const invoke = vi.fn(async (_command: string, _args?: Record<string, unknown>) => ({}));
+    const client = new TauriWorkspaceClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: invoke as InvokeImplementation,
+    });
+    const signal = new AbortController().signal;
+    const sha = "a".repeat(40);
+
+    await client.getProjectGitStatus("project-a", { rootPath: "/work/a" }, { signal });
+    await client.getProjectGitHistory("project-a", { rootPath: "/work/a" }, { signal });
+    await client.getProjectGitCommitFiles("project-a", { rootPath: "/work/a", sha }, { signal });
+    await client.getProjectGitCommitFileDiff(
+      "project-a",
+      { path: "src/main.rs", rootPath: "/work/a", sha },
+      { signal },
+    );
+    await client.listProjectFiles("project-a", "/work/a", "src", { signal });
+
+    for (const [, args] of invoke.mock.calls) {
+      expect(args).toMatchObject({ requestId: expect.any(String) });
+    }
+  });
+
   it("stops an in-flight file search when its signal is aborted", async () => {
     let resolveSearch: (() => void) | undefined;
     const invoke = vi.fn(

@@ -199,45 +199,61 @@ export class TauriWorkspaceClient extends TauriNativeClient {
   public async getProjectGitStatus(
     projectId: string,
     input: ProjectGitStatusQuery,
-    _options: ReadOptions = {},
+    options: ReadOptions = {},
   ): Promise<ProjectGitStatus> {
-    return this.call("get_project_git_status", {
-      input: { ...input, includeDiff: input.includeDiff === true },
-      projectId,
-    });
+    return this.callCancellable(
+      "get_project_git_status",
+      {
+        input: { ...input, includeDiff: input.includeDiff === true },
+        projectId,
+      },
+      options.signal,
+    );
   }
 
   public async getProjectGitHistory(
     projectId: string,
     input: ProjectGitHistoryQuery,
-    _options: ReadOptions = {},
+    options: ReadOptions = {},
   ): Promise<ProjectGitHistoryPage> {
-    return this.call("get_project_git_history", { input, projectId });
+    return this.callCancellable("get_project_git_history", { input, projectId }, options.signal);
   }
 
   public async getProjectGitCommitFiles(
     projectId: string,
     input: ProjectGitCommitFilesQuery,
-    _options: ReadOptions = {},
+    options: ReadOptions = {},
   ): Promise<ProjectGitCommitFilesPage> {
-    return this.call("get_project_git_commit_files", { input, projectId });
+    return this.callCancellable(
+      "get_project_git_commit_files",
+      { input, projectId },
+      options.signal,
+    );
   }
 
   public async getProjectGitCommitFileDiff(
     projectId: string,
     input: ProjectGitCommitFileDiffQuery,
-    _options: ReadOptions = {},
+    options: ReadOptions = {},
   ): Promise<ProjectGitCommitFileDiff> {
-    return this.call("get_project_git_commit_file_diff", { input, projectId });
+    return this.callCancellable(
+      "get_project_git_commit_file_diff",
+      { input, projectId },
+      options.signal,
+    );
   }
 
   public async listProjectFiles(
     projectId: string,
     rootPath: string,
     directoryPath: string | null,
-    _options: ReadOptions = {},
+    options: ReadOptions = {},
   ): Promise<ProjectFileTree> {
-    return this.call("list_project_files", { directoryPath, projectId, rootPath });
+    return this.callCancellable(
+      "list_project_files",
+      { directoryPath, projectId, rootPath },
+      options.signal,
+    );
   }
 
   public async searchProjectFiles(

@@ -18,7 +18,10 @@ use application::{
         logout_provider, retry_mcp_servers, start_official_provider_login, update_global_settings,
         update_project_defaults,
     },
-    commands::{connect_runtime, get_app_info, get_runtime_performance_metrics, start_runtime},
+    commands::{
+        cancel_native_request, connect_runtime, get_app_info, get_runtime_performance_metrics,
+        start_runtime,
+    },
     desktop_pet_commands::{
         DesktopPetRuntime, get_desktop_pet_drag_strategy, get_desktop_pet_position,
         get_desktop_pet_state, layout_desktop_pet, move_desktop_pet, open_desktop_pet_task,
@@ -30,11 +33,11 @@ use application::{
     pet_commands::{download_workbench_pet, list_workbench_pets},
     sidebar_commands::{
         add_project, archive_task, compact_task, delete_task, fork_task, get_task_settings,
-        interrupt_turn, list_project_directories, list_projects, list_tasks, pin_task, read_task,
-        remove_project, rename_project, rename_task, reorder_projects, resolve_pending_request,
-        start_review, start_task, start_turn, steer_turn, unarchive_task, unsubscribe_task,
-        update_task_settings,
+        interrupt_turn, list_projects, list_tasks, pin_task, read_task, remove_project,
+        rename_project, rename_task, reorder_projects, resolve_pending_request, start_review,
+        start_task, start_turn, steer_turn, unarchive_task, unsubscribe_task, update_task_settings,
     },
+    sidebar_directory_commands::list_project_directories,
     state::AppState,
     workflow_commands::{
         add_queued_submission, clear_task_goal, delete_queued_submission,
@@ -73,6 +76,7 @@ pub fn run() {
             update_custom_backgrounds,
             connect_runtime,
             start_runtime,
+            cancel_native_request,
             get_app_info,
             get_runtime_performance_metrics,
             sync_desktop_pet,

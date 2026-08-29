@@ -51,6 +51,42 @@ export class TauriNativeClient {
 
   protected async call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
     await this.ensureRuntime();
+    return this.invokeCommand(command, args);
+  }
+
+  protected async callCancellable<T>(
+    command: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    if (signal === undefined) return this.call(command, args);
+
+    signal.throwIfAborted();
+    await this.ensureRuntime();
+    signal.throwIfAborted();
+    const requestId = crypto.randomUUID();
+    let rejectCancellation: ((reason?: unknown) => void) | undefined;
+    const cancellation = new Promise<never>((_resolve, reject) => {
+      rejectCancellation = reject;
+    });
+    const cancelRequest = () => {
+      // 取消命令绕过运行时初始化，确保 AbortSignal 能立即到达已运行的 Rust 任务。
+      void this.invokeNative("cancel_native_request", { requestId }).catch(() => undefined);
+      rejectCancellation?.(signal.reason);
+    };
+    signal.addEventListener("abort", cancelRequest, { once: true });
+    try {
+      const request = this.invokeCommand<T>(command, { ...args, requestId });
+      return await Promise.race([request, cancellation]);
+    } finally {
+      signal.removeEventListener("abort", cancelRequest);
+    }
+  }
+
+  private async invokeCommand<T>(
+    command: string,
+    args?: Record<string, unknown>,
+  ): Promise<T> {
     try {
       return args === undefined
         ? await this.invokeNative<T>(command)

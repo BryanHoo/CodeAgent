@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, future::Future, sync::Arc};
 
 use serde_json::{Value, json};
 use tauri::{AppHandle, ipc::Channel};
@@ -10,6 +10,7 @@ use tokio::{
 
 use super::error::AppError;
 use super::model_turn_waiters::ModelTurnWaiters;
+use super::request_cancellation::RequestCancellationRegistry;
 use super::turn_waiters::TurnStartedWaiters;
 #[path = "state_event_delta_batcher.rs"]
 mod event_delta_batcher;
@@ -32,6 +33,7 @@ const EVENT_QUEUE_CAPACITY: usize = 256;
 #[derive(Default)]
 pub struct AppState {
     file_search: ProjectFileSearch,
+    request_cancellations: RequestCancellationRegistry,
     runtime: Arc<Mutex<RuntimeSession>>,
 }
 
@@ -55,6 +57,24 @@ struct RuntimeSession {
 impl AppState {
     pub fn project_file_search(&self) -> &ProjectFileSearch {
         &self.file_search
+    }
+
+    pub fn cancel_request(&self, request_id: &str) -> bool {
+        self.request_cancellations.cancel(request_id)
+    }
+
+    pub async fn run_cancellable<T, F>(
+        &self,
+        request_id: Option<&str>,
+        task: F,
+    ) -> Result<T, AppError>
+    where
+        F: Future<Output = Result<T, AppError>>,
+    {
+        self.request_cancellations
+            .run(request_id, task)
+            .await
+            .ok_or(AppError::RequestCancelled)?
     }
 
     pub async fn runtime_performance_metrics(&self) -> RuntimePerformanceMetricsSnapshot {

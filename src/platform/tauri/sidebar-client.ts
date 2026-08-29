@@ -74,9 +74,9 @@ export class TauriSidebarClient extends TauriRuntimeClient {
   public async listTasks(
     projectId: string,
     options: ListTasksOptions = {},
-    _requestOptions: ReadOptions = {},
+    requestOptions: ReadOptions = {},
   ): Promise<AgentTaskPage> {
-    const response = await this.call<AgentTaskPage>("list_tasks", {
+    const response = await this.callCancellable<AgentTaskPage>("list_tasks", {
       input: {
         ...(options.archived === true ? { archived: true } : {}),
         ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
@@ -85,7 +85,7 @@ export class TauriSidebarClient extends TauriRuntimeClient {
         projectId,
         ...(options.searchTerm === undefined ? {} : { searchTerm: options.searchTerm }),
       },
-    });
+    }, requestOptions.signal);
     for (const task of response.data) this.taskProjects.set(task.id, projectId);
     return response;
   }
@@ -101,10 +101,14 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     path?: string,
     options: ListFilesystemEntriesOptions = {},
   ): Promise<ProjectDirectoryListing> {
-    return this.call("list_project_directories", {
-      includeHidden: options.includeHidden === true,
-      path: path ?? null,
-    });
+    return this.callCancellable(
+      "list_project_directories",
+      {
+        includeHidden: options.includeHidden === true,
+        path: path ?? null,
+      },
+      options.signal,
+    );
   }
 
   public async renameProject(
@@ -166,11 +170,15 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     taskId: string,
     options: ReadTaskOptions = {},
   ): Promise<AgentTaskSnapshotResponse> {
-    const response = await this.call<AgentTaskSnapshotResponse>("read_task", {
-      projectId,
-      taskId,
-      cursor: options.cursor ?? null,
-    });
+    const response = await this.callCancellable<AgentTaskSnapshotResponse>(
+      "read_task",
+      {
+        projectId,
+        taskId,
+        cursor: options.cursor ?? null,
+      },
+      options.signal,
+    );
     this.taskProjects.set(response.snapshot.id, projectId);
     return response;
   }

@@ -12,11 +12,10 @@ use crate::{
     },
     domain::sidebar::{
         AgentTaskMutationResponse, AgentTaskPage, AgentTaskStatusResponse, ListTasksInput,
-        ProjectDirectoryListing, ProjectMutationResponse, ProjectPage, RemoveProjectResponse,
+        ProjectMutationResponse, ProjectPage, RemoveProjectResponse,
     },
     infrastructure::{
         codex,
-        filesystem::list_project_directories as read_project_directories,
         task_settings::{
             delete_project_task_settings, delete_task_settings, read_task_settings,
             write_task_settings,
@@ -83,37 +82,27 @@ pub async fn reorder_projects(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn list_project_directories(
-    app: AppHandle,
-    path: Option<String>,
-    include_hidden: bool,
-) -> Result<ProjectDirectoryListing, AppError> {
-    let home = app
-        .path()
-        .home_dir()
-        .map_err(|_| AppError::HomeDirectoryUnavailable)?;
-    read_project_directories(&home, path.as_deref(), include_hidden)
-        .await
-        .map_err(|_| AppError::FilesystemRequestFailed)
-}
-
-#[tauri::command]
 pub async fn list_tasks(
     input: ListTasksInput,
+    request_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<AgentTaskPage, AppError> {
-    let connection = state.codex_connection().await?;
-    let project_id = input.project_id.clone();
-    let response = codex::list_tasks(&connection, input)
-        .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
     state
-        .remember_tasks(
-            &project_id,
-            response.data.iter().map(|task| task.id.as_str()),
-        )
-        .await;
-    Ok(response)
+        .run_cancellable(request_id.as_deref(), async {
+            let connection = state.codex_connection().await?;
+            let project_id = input.project_id.clone();
+            let response = codex::list_tasks(&connection, input)
+                .await
+                .map_err(|_| AppError::CodexRequestFailed)?;
+            state
+                .remember_tasks(
+                    &project_id,
+                    response.data.iter().map(|task| task.id.as_str()),
+                )
+                .await;
+            Ok(response)
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -122,22 +111,27 @@ pub async fn read_task(
     project_id: String,
     task_id: String,
     cursor: Option<String>,
+    request_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<AgentTaskSnapshotResponse, AppError> {
-    let connection = state.codex_connection().await?;
-    state.remember_tasks(&project_id, [task_id.as_str()]).await;
-    let mut response = codex::read_task_snapshot(
-        &connection,
-        project_id.clone(),
-        task_id.clone(),
-        cursor.as_deref(),
-    )
-    .await
-    .map_err(|_| AppError::CodexRequestFailed)?;
-    response.snapshot.settings =
-        effective_task_settings(&app, &connection, &project_id, &task_id).await?;
-    response.checkpoint.sequence = state.project_sequence(&project_id).await;
-    Ok(response)
+    state
+        .run_cancellable(request_id.as_deref(), async {
+            let connection = state.codex_connection().await?;
+            state.remember_tasks(&project_id, [task_id.as_str()]).await;
+            let mut response = codex::read_task_snapshot(
+                &connection,
+                project_id.clone(),
+                task_id.clone(),
+                cursor.as_deref(),
+            )
+            .await
+            .map_err(|_| AppError::CodexRequestFailed)?;
+            response.snapshot.settings =
+                effective_task_settings(&app, &connection, &project_id, &task_id).await?;
+            response.checkpoint.sequence = state.project_sequence(&project_id).await;
+            Ok(response)
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]

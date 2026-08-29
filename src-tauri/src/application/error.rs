@@ -17,6 +17,8 @@ pub enum AppError {
     CodexRequestFailed,
     #[error("Codex thread is active in another session")]
     CodexThreadBusy,
+    #[error("native request was cancelled")]
+    RequestCancelled,
     #[error("filesystem request failed")]
     FilesystemRequestFailed,
     #[error(transparent)]
@@ -40,6 +42,7 @@ impl Serialize for AppError {
     {
         let structured_error = match self {
             Self::CodexThreadBusy => Some(("CODEX_THREAD_BUSY", self.to_string())),
+            Self::RequestCancelled => Some(("REQUEST_CANCELLED", self.to_string())),
             Self::Workspace(error) => Some((error.code(), error.to_string())),
             _ => None,
         };

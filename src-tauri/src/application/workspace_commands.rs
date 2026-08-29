@@ -89,13 +89,18 @@ pub async fn list_project_files(
     project_id: String,
     root_path: String,
     directory_path: Option<String>,
+    request_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (_, root, _) = project_root(&state, &project_id, &root_path).await?;
-    let response = workspace::list_project_files(&root, directory_path.as_deref())
+    state
+        .run_cancellable(request_id.as_deref(), async {
+            let (_, root, _) = project_root(&state, &project_id, &root_path).await?;
+            let response = workspace::list_project_files(&root, directory_path.as_deref())
+                .await
+                .map_err(|_| AppError::FilesystemRequestFailed)?;
+            serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+        })
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
-    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -205,61 +210,84 @@ pub async fn read_project_source_file(
 pub async fn get_project_git_status(
     project_id: String,
     input: GitStatusInput,
+    request_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
-    let response =
-        workspace::get_git_status(&root, input.repository.as_deref(), input.include_diff)
-            .await
-            .map_err(AppError::from)?;
-    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+    state
+        .run_cancellable(request_id.as_deref(), async {
+            let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
+            let response =
+                workspace::get_git_status(&root, input.repository.as_deref(), input.include_diff)
+                    .await
+                    .map_err(AppError::from)?;
+            serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn get_project_git_history(
     project_id: String,
     input: GitHistoryInput,
+    request_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
-    let response =
-        workspace::get_git_history(&root, input.repository.as_deref(), input.cursor.as_deref())
+    state
+        .run_cancellable(request_id.as_deref(), async {
+            let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
+            let response = workspace::get_git_history(
+                &root,
+                input.repository.as_deref(),
+                input.cursor.as_deref(),
+            )
             .await
             .map_err(AppError::from)?;
-    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+            serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn get_project_git_commit_files(
     project_id: String,
     input: GitCommitInput,
+    request_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
-    let response = workspace::get_commit_files(
-        &root,
-        input.repository.as_deref(),
-        &input.sha,
-        input.cursor.as_deref(),
-    )
-    .await
-    .map_err(AppError::from)?;
-    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+    state
+        .run_cancellable(request_id.as_deref(), async {
+            let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
+            let response = workspace::get_commit_files(
+                &root,
+                input.repository.as_deref(),
+                &input.sha,
+                input.cursor.as_deref(),
+            )
+            .await
+            .map_err(AppError::from)?;
+            serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn get_project_git_commit_file_diff(
     project_id: String,
     input: GitCommitInput,
+    request_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
-    let path = input.path.ok_or(AppError::FilesystemRequestFailed)?;
-    let response =
-        workspace::get_commit_diff(&root, input.repository.as_deref(), &input.sha, &path)
-            .await
-            .map_err(AppError::from)?;
-    serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+    state
+        .run_cancellable(request_id.as_deref(), async {
+            let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
+            let path = input.path.ok_or(AppError::FilesystemRequestFailed)?;
+            let response =
+                workspace::get_commit_diff(&root, input.repository.as_deref(), &input.sha, &path)
+                    .await
+                    .map_err(AppError::from)?;
+            serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]

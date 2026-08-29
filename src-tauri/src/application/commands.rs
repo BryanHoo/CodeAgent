@@ -43,3 +43,8 @@ pub async fn get_runtime_performance_metrics(
 ) -> Result<RuntimePerformanceMetricsSnapshot, AppError> {
     Ok(state.runtime_performance_metrics().await)
 }
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn cancel_native_request(request_id: String, state: State<'_, AppState>) -> Value {
+    json!({ "cancelled": state.cancel_request(&request_id) })
+}
