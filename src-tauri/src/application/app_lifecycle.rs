@@ -338,13 +338,9 @@ mod tests {
     }
 
     #[test]
-    fn desktop_pet_windows_keep_their_native_close_behavior() {
+    fn desktop_pet_window_keeps_its_native_close_behavior() {
         assert_eq!(
             close_request_action("desktop-pet"),
-            CloseRequestAction::AllowClose
-        );
-        assert_eq!(
-            close_request_action("desktop-pet-bubbles"),
             CloseRequestAction::AllowClose
         );
     }

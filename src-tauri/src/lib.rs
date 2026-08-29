@@ -21,7 +21,7 @@ use application::{
     commands::{connect_runtime, get_app_info, start_runtime},
     desktop_pet_commands::{
         DesktopPetRuntime, get_desktop_pet_drag_strategy, get_desktop_pet_position,
-        get_desktop_pet_state, layout_desktop_pet_bubbles, move_desktop_pet, open_desktop_pet_task,
+        get_desktop_pet_state, layout_desktop_pet, move_desktop_pet, open_desktop_pet_task,
         set_desktop_pet_drag_position, show_desktop_pet, start_desktop_pet_native_drag,
         sync_desktop_pet,
     },
@@ -82,7 +82,7 @@ pub fn run() {
             set_desktop_pet_drag_position,
             start_desktop_pet_native_drag,
             move_desktop_pet,
-            layout_desktop_pet_bubbles,
+            layout_desktop_pet,
             open_desktop_pet_task,
             show_task_notification,
             get_workbench_background,

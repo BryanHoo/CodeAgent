@@ -58,11 +58,8 @@ export async function getDesktopPetDragStrategy(): Promise<DesktopPetDragStrateg
   return invoke<DesktopPetDragStrategy>("get_desktop_pet_drag_strategy");
 }
 
-export async function layoutDesktopPetBubbles(input: Readonly<{
-  height: number;
-  width: number;
-}>): Promise<void> {
-  await invoke("layout_desktop_pet_bubbles", input);
+export async function layoutDesktopPet(bubbleHeight: number): Promise<void> {
+  await invoke("layout_desktop_pet", { bubbleHeight });
 }
 
 export async function openDesktopPetTask(target: DesktopPetTaskOpen): Promise<void> {

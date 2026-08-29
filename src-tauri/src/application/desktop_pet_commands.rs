@@ -5,9 +5,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, Url, WebviewWindow,
-};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, Url, WebviewWindow};
 use tokio::sync::Mutex;
 
 use super::{
@@ -17,10 +15,9 @@ use super::{
         preserve_hidden_completed_tasks,
     },
     desktop_pet_window::{
-        DESKTOP_PET_BUBBLES_LABEL, DESKTOP_PET_EVENT, DESKTOP_PET_LABEL,
-        create_desktop_pet_bubbles_window, create_desktop_pet_window, destroy_desktop_pet_window,
-        drag_pet_position, monitor_bounds, move_pet_position, persist_position,
-        position_desktop_pet_bubbles,
+        DESKTOP_PET_EVENT, DESKTOP_PET_LABEL, create_desktop_pet_window, desktop_pet_position,
+        desktop_pet_size, destroy_desktop_pet_window, drag_pet_position, layout_desktop_pet_window,
+        monitor_bounds, move_pet_position, persist_position, set_desktop_pet_position,
     },
     error::AppError,
 };
@@ -110,17 +107,6 @@ impl DesktopPetRuntime {
 }
 
 fn ensure_desktop_pet_window(window: &WebviewWindow) -> Result<(), AppError> {
-    if matches!(
-        window.label(),
-        DESKTOP_PET_LABEL | DESKTOP_PET_BUBBLES_LABEL
-    ) {
-        Ok(())
-    } else {
-        Err(AppError::DesktopPetWindowFailed)
-    }
-}
-
-fn ensure_pet_sprite_window(window: &WebviewWindow) -> Result<(), AppError> {
     if window.label() == DESKTOP_PET_LABEL {
         Ok(())
     } else {
@@ -176,9 +162,7 @@ async fn render_desktop_pet_state(
     state: Option<DesktopPetState>,
 ) -> Result<(), AppError> {
     let Some(state) = state else {
-        for label in [DESKTOP_PET_LABEL, DESKTOP_PET_BUBBLES_LABEL] {
-            destroy_desktop_pet_window(app, label).await?;
-        }
+        destroy_desktop_pet_window(app, DESKTOP_PET_LABEL).await?;
         return Ok(());
     };
     let window = match app.get_webview_window(DESKTOP_PET_LABEL) {
@@ -186,18 +170,6 @@ async fn render_desktop_pet_state(
         None => create_desktop_pet_window(app).await?,
     };
     window
-        .emit(DESKTOP_PET_EVENT, state.clone())
-        .map_err(|_| AppError::DesktopPetWindowFailed)?;
-
-    if state.tasks.is_empty() {
-        destroy_desktop_pet_window(app, DESKTOP_PET_BUBBLES_LABEL).await?;
-        return Ok(());
-    }
-    let bubble_window = match app.get_webview_window(DESKTOP_PET_BUBBLES_LABEL) {
-        Some(window) => window,
-        None => create_desktop_pet_bubbles_window(app).await?,
-    };
-    bubble_window
         .emit(DESKTOP_PET_EVENT, state)
         .map_err(|_| AppError::DesktopPetWindowFailed)
 }
@@ -236,18 +208,15 @@ pub async fn get_desktop_pet_state(
 
 #[tauri::command]
 pub fn get_desktop_pet_position(window: WebviewWindow) -> Result<DesktopPetPosition, AppError> {
-    ensure_pet_sprite_window(&window)?;
-    window
-        .outer_position()
-        .map(DesktopPetPosition::from)
-        .map_err(|_| AppError::DesktopPetWindowFailed)
+    ensure_desktop_pet_window(&window)?;
+    desktop_pet_position(&window).map(DesktopPetPosition::from)
 }
 
 #[tauri::command]
 pub fn get_desktop_pet_drag_strategy(
     window: WebviewWindow,
 ) -> Result<DesktopPetDragStrategy, AppError> {
-    ensure_pet_sprite_window(&window)?;
+    ensure_desktop_pet_window(&window)?;
     if cfg!(target_os = "macos") {
         Ok(DesktopPetDragStrategy::Native)
     } else {
@@ -257,7 +226,7 @@ pub fn get_desktop_pet_drag_strategy(
 
 #[tauri::command]
 pub fn show_desktop_pet(window: WebviewWindow) -> Result<(), AppError> {
-    ensure_pet_sprite_window(&window)?;
+    ensure_desktop_pet_window(&window)?;
     window.show().map_err(|_| AppError::DesktopPetWindowFailed)
 }
 
@@ -267,38 +236,27 @@ pub fn set_desktop_pet_drag_position(
     x: i32,
     y: i32,
 ) -> Result<(), AppError> {
-    ensure_pet_sprite_window(&window)?;
-    let size = window
-        .outer_size()
-        .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    ensure_desktop_pet_window(&window)?;
+    let size = desktop_pet_size(&window)?;
     let position = drag_pet_position(PhysicalPosition::new(x, y), &monitor_bounds(&window)?, size);
-    window
-        .set_position(position)
-        .map_err(|_| AppError::DesktopPetWindowFailed)
+    set_desktop_pet_position(&window, position)
 }
 
 #[tauri::command]
 pub async fn start_desktop_pet_native_drag(window: WebviewWindow) -> Result<(), AppError> {
-    ensure_pet_sprite_window(&window)?;
+    ensure_desktop_pet_window(&window)?;
     #[cfg(not(target_os = "macos"))]
     return Err(AppError::DesktopPetWindowFailed);
 
     #[cfg(target_os = "macos")]
     {
         super::desktop_pet_panel::run_desktop_pet_drag(&window).await?;
-        let size = window
-            .outer_size()
-            .map_err(|_| AppError::DesktopPetWindowFailed)?;
-        let current = window
-            .outer_position()
-            .map_err(|_| AppError::DesktopPetWindowFailed)?;
+        let size = desktop_pet_size(&window)?;
+        let current = desktop_pet_position(&window)?;
         let position = drag_pet_position(current, &monitor_bounds(&window)?, size);
         if position != current {
-            window
-                .set_position(position)
-                .map_err(|_| AppError::DesktopPetWindowFailed)?;
+            set_desktop_pet_position(&window, position)?;
         }
-        position_desktop_pet_bubbles(window.app_handle(), position)?;
         persist_position(window.app_handle(), position).await
     }
 }
@@ -310,61 +268,31 @@ pub async fn move_desktop_pet(
     delta_y: i32,
     reset: bool,
 ) -> Result<(), AppError> {
-    ensure_pet_sprite_window(&window)?;
+    ensure_desktop_pet_window(&window)?;
     if !(-48..=48).contains(&delta_x) || !(-48..=48).contains(&delta_y) {
         return Err(AppError::DesktopPetWindowFailed);
     }
-    let size = window
-        .outer_size()
-        .map_err(|_| AppError::DesktopPetWindowFailed)?;
+    let size = desktop_pet_size(&window)?;
     let monitors = monitor_bounds(&window)?;
     let position = if reset {
         super::desktop_pet_window::resolve_pet_position(None, &monitors, size)
     } else {
         move_pet_position(
-            window
-                .outer_position()
-                .map_err(|_| AppError::DesktopPetWindowFailed)?,
+            desktop_pet_position(&window)?,
             delta_x,
             delta_y,
             &monitors,
             size,
         )
     };
-    window
-        .set_position(position)
-        .map_err(|_| AppError::DesktopPetWindowFailed)?;
-    #[cfg(target_os = "macos")]
-    position_desktop_pet_bubbles(window.app_handle(), position)?;
+    set_desktop_pet_position(&window, position)?;
     persist_position(window.app_handle(), position).await
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn layout_desktop_pet_bubbles(
-    window: WebviewWindow,
-    width: f64,
-    height: f64,
-) -> Result<(), AppError> {
-    if window.label() != DESKTOP_PET_BUBBLES_LABEL
-        || !(80.0..=320.0).contains(&width)
-        || !(24.0..=640.0).contains(&height)
-    {
-        return Err(AppError::DesktopPetWindowFailed);
-    }
-    window
-        .set_size(LogicalSize::new(width.ceil(), height.ceil()))
-        .map_err(|_| AppError::DesktopPetWindowFailed)?;
-    let pet_window = window
-        .app_handle()
-        .get_webview_window(DESKTOP_PET_LABEL)
-        .ok_or(AppError::DesktopPetWindowFailed)?;
-    position_desktop_pet_bubbles(
-        window.app_handle(),
-        pet_window
-            .outer_position()
-            .map_err(|_| AppError::DesktopPetWindowFailed)?,
-    )?;
-    window.show().map_err(|_| AppError::DesktopPetWindowFailed)
+pub fn layout_desktop_pet(window: WebviewWindow, bubble_height: f64) -> Result<(), AppError> {
+    ensure_desktop_pet_window(&window)?;
+    layout_desktop_pet_window(&window, bubble_height)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -373,7 +301,7 @@ pub async fn open_desktop_pet_task(
     project_id: String,
     task_id: String,
 ) -> Result<(), AppError> {
-    if window.label() != DESKTOP_PET_BUBBLES_LABEL
+    if window.label() != DESKTOP_PET_LABEL
         || project_id.is_empty()
         || project_id.len() > 128
         || task_id.is_empty()

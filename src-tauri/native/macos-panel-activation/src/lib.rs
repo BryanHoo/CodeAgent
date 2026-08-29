@@ -11,7 +11,7 @@ use objc2_app_kit::{
     NSApplication, NSBackingStoreType, NSBox, NSBoxType, NSColor, NSEvent, NSEventMask,
     NSEventModifierFlags, NSEventTrackingRunLoopMode, NSEventType, NSFloatingWindowLevel, NSFont,
     NSPanel, NSTextAlignment, NSTextField, NSTitlePosition, NSWindowCollectionBehavior,
-    NSWindowOrderingMode, NSWindowStyleMask,
+    NSWindowStyleMask,
 };
 use objc2_core_graphics::{CGEventSource, CGEventSourceStateID};
 use objc2_foundation::{NSDate, NSPoint, NSRect, NSSize, NSString, NSTimer};
@@ -89,14 +89,6 @@ pub fn prevent_activation(panel: &NSPanel) {
         unsafe {
             let _: () = msg_send![panel, _setPreventsActivation: true];
         }
-    }
-}
-
-/// 在两个窗口完成 NSPanel 转换后建立原生父子关系，父窗口移动时由 AppKit 同步子窗口。
-pub fn attach_child_window(parent: &NSPanel, child: &NSPanel) {
-    // SAFETY: 两个 NSPanel 均由应用持有，并在 AppKit 主线程调用。
-    unsafe {
-        parent.addChildWindow_ordered(child, NSWindowOrderingMode::Above);
     }
 }
 

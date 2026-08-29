@@ -5,6 +5,14 @@ html[data-app-surface^="desktop-pet"] #root {
   background: transparent;
 }
 
+.desktop-pet-root {
+  display: flex;
+  width: max-content;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .desktop-pet-target {
   display: grid;
   width: 96px;
@@ -31,6 +39,7 @@ html[data-app-surface^="desktop-pet"] #root {
 
 .desktop-pet-bubble-root {
   width: 192px;
+  flex: none;
 }
 
 .workbench-pet-bubbles {

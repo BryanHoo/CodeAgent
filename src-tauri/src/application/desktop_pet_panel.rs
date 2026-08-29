@@ -115,21 +115,6 @@ pub(super) async fn configure_desktop_overlay(window: &WebviewWindow) -> Result<
     .await
 }
 
-pub(super) async fn attach_desktop_pet_bubbles(app: &AppHandle) -> Result<(), AppError> {
-    let panel_app = app.clone();
-    dispatch_to_main_thread(app, move || {
-        let pet = panel_app
-            .get_webview_panel(super::desktop_pet_window::DESKTOP_PET_LABEL)
-            .map_err(|_| AppError::DesktopPetWindowFailed)?;
-        let bubbles = panel_app
-            .get_webview_panel(super::desktop_pet_window::DESKTOP_PET_BUBBLES_LABEL)
-            .map_err(|_| AppError::DesktopPetWindowFailed)?;
-        macos_panel_activation::attach_child_window(pet.as_panel(), bubbles.as_panel());
-        Ok(())
-    })
-    .await
-}
-
 pub(super) async fn run_desktop_pet_drag(window: &WebviewWindow) -> Result<(), AppError> {
     let app = window.app_handle().clone();
     let window = window.clone();

@@ -16,10 +16,12 @@ import {
   getDesktopPetState,
   getDesktopPetDragStrategy,
   getDesktopPetPosition,
+  layoutDesktopPet,
   listenDesktopPetMoved,
   listenDesktopPetState,
   loadDesktopPet,
   moveDesktopPet,
+  openDesktopPetTask,
   setDesktopPetDragPosition,
   showDesktopPet,
   startDesktopPetNativeDrag,
@@ -32,6 +34,7 @@ import {
   isDesktopPetDragPointerActive,
 } from "../desktop-pet-animation.js";
 import { releaseDesktopPetPointerCapture } from "../desktop-pet-pointer.js";
+import { WorkbenchPetBubbles } from "./workbench-pet-bubbles.js";
 import { WorkbenchPetCanvas } from "./workbench-pet-canvas.js";
 
 const IDLE_MAXIMUM_FPS = 10;
@@ -62,6 +65,8 @@ export function DesktopPetWindow() {
   const [dragStrategy, setDragStrategy] = useState<DesktopPetDragStrategy | null>(null);
   const [animationName, setAnimationName] = useState("idle");
   const baseAnimationRef = useRef("idle");
+  const bubbleHeightRef = useRef<number | null>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const handleRef = useRef<HTMLButtonElement>(null);
   const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -203,11 +208,41 @@ export function DesktopPetWindow() {
     };
   }, [state?.petId]);
 
+  useEffect(() => {
+    if (state === null || pet === null) return;
+    const updateLayout = (bubbleHeight: number) => {
+      const height = Math.ceil(bubbleHeight);
+      if (bubbleHeightRef.current === height) return;
+      bubbleHeightRef.current = height;
+      void layoutDesktopPet(height).catch(() => {
+        if (bubbleHeightRef.current === height) bubbleHeightRef.current = null;
+      });
+    };
+    if (state.tasks.length === 0) {
+      updateLayout(0);
+      return;
+    }
+    const bubble = bubbleRef.current;
+    if (bubble === null) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry === undefined) return;
+      updateLayout(entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height);
+    });
+    observer.observe(bubble);
+    return () => {
+      observer.disconnect();
+    };
+  }, [pet, state]);
+
   const handleReady = useCallback(() => {
     if (pet === null || shownAssetRef.current === pet.assetId) return;
     shownAssetRef.current = pet.assetId;
     void showDesktopPet().catch(() => undefined);
   }, [pet]);
+
+  const handleTaskSelect = useCallback((projectId: string, taskId: string) => {
+    void openDesktopPetTask({ projectId, taskId }).catch(() => undefined);
+  }, []);
 
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0 || dragStrategy === null) return;
@@ -289,32 +324,39 @@ export function DesktopPetWindow() {
 
   if (state === null || pet === null) return null;
   return (
-    <button
-      aria-label={t("pet.move", { name: pet.displayName })}
-      className="desktop-pet-target"
-      onKeyDown={handleKeyDown}
-      onLostPointerCapture={(event) => {
-        if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
-      }}
-      onPointerCancel={(event) => {
-        if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={(event) => {
-        if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
-      }}
-      ref={handleRef}
-      type="button"
-    >
-      <span className="desktop-pet-sprite">
-        <WorkbenchPetCanvas
-          animationName={animationName}
-          maximumFps={animationName === "idle" ? IDLE_MAXIMUM_FPS : ACTIVE_MAXIMUM_FPS}
-          onReady={handleReady}
-          pet={pet}
-        />
-      </span>
-    </button>
+    <div className="desktop-pet-root">
+      {state.tasks.length > 0 ? (
+        <div className="desktop-pet-bubble-root" ref={bubbleRef}>
+          <WorkbenchPetBubbles onTaskSelect={handleTaskSelect} tasks={state.tasks} />
+        </div>
+      ) : null}
+      <button
+        aria-label={t("pet.move", { name: pet.displayName })}
+        className="desktop-pet-target"
+        onKeyDown={handleKeyDown}
+        onLostPointerCapture={(event) => {
+          if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
+        }}
+        onPointerCancel={(event) => {
+          if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={(event) => {
+          if (!isNativeDragRunning(dragRef.current)) finishDrag(event.pointerId);
+        }}
+        ref={handleRef}
+        type="button"
+      >
+        <span className="desktop-pet-sprite">
+          <WorkbenchPetCanvas
+            animationName={animationName}
+            maximumFps={animationName === "idle" ? IDLE_MAXIMUM_FPS : ACTIVE_MAXIMUM_FPS}
+            onReady={handleReady}
+            pet={pet}
+          />
+        </span>
+      </button>
+    </div>
   );
 }

@@ -14,24 +14,19 @@ if (!(rootElement instanceof HTMLElement)) {
 }
 const applicationRoot = rootElement;
 const windowSurface = new URLSearchParams(window.location.search).get("window");
-const appSurface =
-  windowSurface === "desktop-pet" || windowSurface === "desktop-pet-bubbles"
-    ? windowSurface
-    : "main";
+const appSurface = windowSurface === "desktop-pet" ? windowSurface : "main";
 document.documentElement.dataset.appSurface = appSurface;
 
 async function startApplication(): Promise<void> {
   if (appSurface !== "main") {
-    const PetSurface =
-      appSurface === "desktop-pet"
-        ? (await import("./features/pets/components/desktop-pet-window.js")).DesktopPetWindow
-        : (await import("./features/pets/components/desktop-pet-bubble-window.js"))
-            .DesktopPetBubbleWindow;
+    const { DesktopPetWindow } = await import(
+      "./features/pets/components/desktop-pet-window.js"
+    );
     await synchronizeLanguagePreference();
     createRoot(applicationRoot).render(
       <StrictMode>
         <I18nextProvider i18n={i18n}>
-          <PetSurface />
+          <DesktopPetWindow />
         </I18nextProvider>
       </StrictMode>,
     );

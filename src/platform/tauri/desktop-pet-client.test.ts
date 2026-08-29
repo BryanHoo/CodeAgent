@@ -64,14 +64,13 @@ describe("desktop pet native client", () => {
     });
   });
 
-  it("sizes the companion bubble window to its rendered content", async () => {
-    const { layoutDesktopPetBubbles } = await import("./desktop-pet-client.js");
+  it("sizes the combined pet WebView to its rendered bubbles", async () => {
+    const { layoutDesktopPet } = await import("./desktop-pet-client.js");
 
-    await layoutDesktopPetBubbles({ height: 96, width: 192 });
+    await layoutDesktopPet(96);
 
-    expect(invoke).toHaveBeenCalledWith("layout_desktop_pet_bubbles", {
-      height: 96,
-      width: 192,
+    expect(invoke).toHaveBeenCalledWith("layout_desktop_pet", {
+      bubbleHeight: 96,
     });
   });
 
