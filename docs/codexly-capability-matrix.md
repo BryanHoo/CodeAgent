@@ -49,7 +49,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
 | 宠物 | `listWorkbenchPets`, `downloadWorkbenchPet` | 内置 CDN 下载、WebP 校验、自定义 `pets`/旧 `avatars` 扫描、动态资产授权、全屏置顶桌面面板、拖动动画、任务气泡与跨显示器位置恢复 | 已实现 |
 | Bing 每日壁纸 | `/v1/workbench-background/bing` | Rust 固定来源有界下载、JPEG 校验、原子缓存、Tauri asset protocol | 已实现 |
-| CodeAgent 本地偏好与自定义背景 | WebView `localStorage`、IndexedDB | Tauri IPC、`appData/app.json`、`appData/backgrounds/custom/`，首次启动自动迁移 | 已实现 |
+| CodeAgent 本地偏好与自定义背景 | WebView `localStorage`、IndexedDB | `appData/app.json`、`appData/backgrounds/custom/`，首次启动自动迁移；已落盘图片使用动态授权 asset URL，显式读取使用 raw IPC | 已实现 |
 | 本地访问模式 | access pair/logout/status | 桌面端固定 `local`，无 HTTP 服务和 LAN 认证面 | 等价替代 |
 | 应用内更新 | `getAppInfo`, `installAppUpdate` | 返回应用/Codex 真实版本；当前构建没有签名发布源，不宣告可用更新 | 分发边界 |
 
@@ -73,6 +73,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - 历史页每次读取 10 个 Turn，每个 Turn 的 Item 每页 100 条，同页 Turn 并发补全。
 - 文件搜索索引排除 ignore 与隐藏项、按项目根短时复用，并通过会话令牌取消过期扫描。
 - 文件变更、附件、命令输出、搜索结果和运行时事件均设有大小或数量边界。
+- 自定义背景读取通过 `tauri::ipc::Response` 返回 `ArrayBuffer`；设置缩略图和工作台壁纸直接使用动态授权的 asset URL，避免大图 JSON 序列化及 WebView 字节复制。
 - 源码不存在 `new WebSocket`、Codexly `/v1/*` 调用或 mock 运行时；Bing 壁纸也通过原生命令获取。
 
 ## 证据索引
@@ -86,6 +87,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - 文件与 Git：`src-tauri/src/infrastructure/workspace/`
 - 宠物资产：`src-tauri/src/application/pet_commands.rs`, `pet_assets.rs`
 - Bing 壁纸：`src-tauri/src/application/background_commands.rs`
+- 自定义背景存储：`src-tauri/src/application/app_storage_commands.rs`, `src/platform/tauri/app-storage.ts`
 
 ## 参考资料
 

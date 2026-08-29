@@ -28,6 +28,8 @@ export type NativeCustomBackground = Readonly<{
 }>;
 
 export type NativeCustomBackgroundMetadata = Omit<NativeCustomBackground, "bytes">;
+export type NativeCustomBackgroundAsset = NativeCustomBackgroundMetadata &
+  Readonly<{ assetPath: string }>;
 
 type InitializeAppStorageOptions = Readonly<{
   invoke?: AppStorageInvoke;
@@ -179,18 +181,16 @@ export async function initializeAppStorage(
   clearLegacyStorage(legacyStorage, Object.keys(legacyPreferences));
 }
 
-export async function listNativeCustomBackgrounds(): Promise<readonly NativeCustomBackgroundMetadata[]> {
-  return (await nativeInvoke("list_custom_backgrounds")) as NativeCustomBackgroundMetadata[];
+export async function listNativeCustomBackgrounds(): Promise<readonly NativeCustomBackgroundAsset[]> {
+  return (await nativeInvoke("list_custom_backgrounds")) as NativeCustomBackgroundAsset[];
 }
 
 export async function readNativeCustomBackground(id: string, mediaType?: string): Promise<Blob> {
-  const response = (await nativeInvoke("read_custom_background", { id })) as Readonly<{
-    bytes: number[];
-  }>;
+  const response = (await nativeInvoke("read_custom_background", { id })) as ArrayBuffer;
   const resolvedMediaType =
     mediaType ?? (await listNativeCustomBackgrounds()).find((image) => image.id === id)?.mediaType;
   if (resolvedMediaType === undefined) throw new Error("Custom background metadata is unavailable");
-  return new Blob([new Uint8Array(response.bytes)], { type: resolvedMediaType });
+  return new Blob([response], { type: resolvedMediaType });
 }
 
 export async function updateNativeCustomBackgrounds(

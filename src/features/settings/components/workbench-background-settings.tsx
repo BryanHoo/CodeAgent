@@ -84,12 +84,16 @@ function CustomBackgroundThumbnail({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    if (image.blob === null) {
+      setPreviewUrl(image.assetUrl);
+      return;
+    }
     const url = URL.createObjectURL(image.blob);
     setPreviewUrl(url);
     return () => {
       URL.revokeObjectURL(url);
     };
-  }, [image.blob]);
+  }, [image.assetUrl, image.blob]);
 
   return (
     <div className="group relative aspect-square min-w-0">

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appPreferenceStorage,
   initializeAppStorage,
+  readNativeCustomBackground,
   resetAppStorageForTest,
 } from "./app-storage.js";
 
@@ -72,5 +73,21 @@ describe("native app storage", () => {
       });
     });
     expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads custom background bytes from a binary IPC response", async () => {
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const invoke = vi.fn(async (command: string) =>
+      command === "read_custom_background" ? bytes.buffer : {},
+    );
+    await initializeAppStorage({ invoke, readLegacyBackgrounds: async () => [] });
+
+    const image = await readNativeCustomBackground("background-1", "image/png");
+
+    expect(invoke).toHaveBeenLastCalledWith("read_custom_background", {
+      id: "background-1",
+    });
+    expect(image.type).toBe("image/png");
+    expect(Array.from(new Uint8Array(await image.arrayBuffer()))).toEqual(Array.from(bytes));
   });
 });

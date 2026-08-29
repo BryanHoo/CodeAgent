@@ -137,6 +137,11 @@ pub async fn read_custom_background(app_data: &Path, id: &str) -> Result<Vec<u8>
     Ok(bytes)
 }
 
+pub fn custom_background_asset_path(app_data: &Path, id: &str) -> Result<PathBuf, AppStorageError> {
+    validate_identifier(id)?;
+    Ok(background_file_path(app_data, id))
+}
+
 pub async fn update_custom_backgrounds(
     app_data: &Path,
     deleted_ids: &[String],

@@ -5,7 +5,7 @@ import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
 import { nativeClient } from "../../projects/project-queries.js";
 
 import {
-  readCustomBackgroundImage,
+  readCustomBackgroundImageSource,
   readWorkbenchBackgroundPreference,
   WORKBENCH_BACKGROUND_CHANGED_EVENT,
   type WorkbenchBackgroundPreference,
@@ -210,30 +210,26 @@ export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode
   }, []);
 
   useEffect(() => {
-    // 每次图片修订都重建 Object URL，并在模式切换或卸载时立即释放浏览器内存。
+    // 自定义背景由 Rust 动态授权单个文件，WebView 不复制图片字节即可直接解码。
     if (preference.mode !== "custom") {
       setCustomImageUrl(null);
       return;
     }
     let disposed = false;
-    let objectUrl: string | null = null;
     const selectedImageId = preference.selectedCustomImageId;
     if (selectedImageId === null) {
       setCustomImageUrl(null);
       return;
     }
-    void readCustomBackgroundImage(selectedImageId)
-      .then((image) => {
-        if (disposed || image === null) return;
-        objectUrl = URL.createObjectURL(image);
-        setCustomImageUrl(objectUrl);
+    void readCustomBackgroundImageSource(selectedImageId)
+      .then((source) => {
+        if (!disposed) setCustomImageUrl(source);
       })
       .catch(() => {
         if (!disposed) setCustomImageUrl(null);
       });
     return () => {
       disposed = true;
-      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
     };
   }, [preference.mode, preference.selectedCustomImageId]);
 

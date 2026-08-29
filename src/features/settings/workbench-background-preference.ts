@@ -1,10 +1,10 @@
 import {
   appPreferenceStorage,
   listNativeCustomBackgrounds,
-  readNativeCustomBackground,
   updateNativeCustomBackgrounds,
   type NativeCustomBackground,
 } from "../../platform/tauri/app-storage.js";
+import { buildNativeAssetUrl } from "../../platform/native-asset-url.js";
 
 export type WorkbenchBackgroundMode = "bing" | "custom" | "none";
 
@@ -16,7 +16,8 @@ export type WorkbenchBackgroundPreference = Readonly<{
 }>;
 
 export type CustomBackgroundImage = Readonly<{
-  blob: Blob;
+  assetUrl: string | null;
+  blob: Blob | null;
   createdAt: number;
   id: string;
   name: string;
@@ -114,7 +115,7 @@ export function createCustomBackgroundImage(
   file: File,
   id = crypto.randomUUID(),
 ): CustomBackgroundImage {
-  return { blob: file, createdAt: Date.now(), id, name: file.name };
+  return { assetUrl: null, blob: file, createdAt: Date.now(), id, name: file.name };
 }
 
 export function removeCustomBackgroundFromDraft(
@@ -137,30 +138,33 @@ export function removeCustomBackgroundFromDraft(
 
 export async function readCustomBackgroundImages(): Promise<readonly CustomBackgroundImage[]> {
   const metadata = await listNativeCustomBackgrounds();
-  return Promise.all(
-    metadata.map(async (image) => ({
-      blob: await readNativeCustomBackground(image.id, image.mediaType),
-      createdAt: image.createdAt,
-      id: image.id,
-      name: image.name,
-    })),
-  );
+  return metadata.map((image) => ({
+    assetUrl: buildNativeAssetUrl(image.assetPath),
+    blob: null,
+    createdAt: image.createdAt,
+    id: image.id,
+    name: image.name,
+  }));
 }
 
-export async function readCustomBackgroundImage(id: string): Promise<Blob | null> {
-  return readNativeCustomBackground(id);
+export async function readCustomBackgroundImageSource(id: string): Promise<string | null> {
+  const image = (await listNativeCustomBackgrounds()).find((candidate) => candidate.id === id);
+  return image === undefined ? null : buildNativeAssetUrl(image.assetPath);
 }
 
 async function applyCustomBackgroundMutation(mutation: CustomBackgroundMutation): Promise<void> {
   if (mutation.deletedImageIds.length === 0 && mutation.imagesToSave.length === 0) return;
   const images: NativeCustomBackground[] = await Promise.all(
-    mutation.imagesToSave.map(async (image) => ({
-      bytes: Array.from(new Uint8Array(await image.blob.arrayBuffer())),
-      createdAt: image.createdAt,
-      id: image.id,
-      mediaType: image.blob.type,
-      name: image.name,
-    })),
+    mutation.imagesToSave.map(async (image) => {
+      if (image.blob === null) throw new Error("Custom background content is unavailable");
+      return {
+        bytes: Array.from(new Uint8Array(await image.blob.arrayBuffer())),
+        createdAt: image.createdAt,
+        id: image.id,
+        mediaType: image.blob.type,
+        name: image.name,
+      };
+    }),
   );
   await updateNativeCustomBackgrounds(mutation.deletedImageIds, images);
 }
