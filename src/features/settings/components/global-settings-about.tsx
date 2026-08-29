@@ -1,5 +1,5 @@
 import type { AppInfoResponse } from "@/protocol/index.js";
-import { BookOpen, Download, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
+import { BookOpen, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -14,25 +14,18 @@ export function GlobalSettingsAbout({
   appInfo,
   error,
   isPending,
-  isUpdatePending,
   onRetry,
-  onUpdate,
 }: Readonly<{
   activeSection: SettingsSectionId;
   appInfo?: AppInfoResponse;
   error: Error | null;
   isPending: boolean;
-  isUpdatePending?: boolean;
   onRetry: () => unknown;
-  onUpdate: (version: string) => Promise<void>;
 }>) {
   const { t } = useTranslation("settings");
-  const updateLockRef = useRef(createAsyncActionLock());
   const checkLockRef = useRef(createAsyncActionLock());
   const [isChecking, setIsChecking] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const updating = isUpdating || isUpdatePending === true;
   const checkForUpdates = () =>
     checkLockRef.current.run(async () => {
       setIsChecking(true);
@@ -94,11 +87,9 @@ export function GlobalSettingsAbout({
               >
                 {appInfo.status === "available" && appInfo.latestVersion !== null
                   ? t("about.available", { version: appInfo.latestVersion })
-                  : appInfo.status === "restart-required"
-                    ? t("about.restartRequired")
-                    : appInfo.status === "check-failed"
-                      ? t("errors.updateCheck")
-                      : t("about.current")}
+                  : appInfo.status === "check-failed"
+                    ? t("errors.updateCheck")
+                    : t("about.current")}
               </p>
               <Button
                 disabled={isChecking}
@@ -119,51 +110,17 @@ export function GlobalSettingsAbout({
                 {isChecking ? t("about.checking") : t("about.check")}
               </Button>
               {appInfo.status === "available" && appInfo.latestVersion !== null ? (
-                <>
-                  <Button
-                    onClick={() => {
-                      setReleaseNotesOpen(true);
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <BookOpen aria-hidden="true" data-icon="inline-start" />
-                    {t("about.releaseNotes")}
-                  </Button>
-                  <Button
-                    disabled={updating}
-                    onClick={() => {
-                      const version = appInfo.latestVersion;
-                      if (version === null) return;
-                      void updateLockRef.current.run(async () => {
-                        setIsUpdating(true);
-                        try {
-                          await onUpdate(version);
-                        } catch {
-                          // 根级 MutationCache 已展示更新失败，保留当前版本状态供用户重试。
-                        } finally {
-                          setIsUpdating(false);
-                        }
-                      });
-                    }}
-                    size="sm"
-                    type="button"
-                  >
-                    {updating ? (
-                      <LoaderCircle
-                        aria-hidden="true"
-                        className="animate-spin"
-                        data-icon="inline-start"
-                      />
-                    ) : (
-                      <Download aria-hidden="true" data-icon="inline-start" />
-                    )}
-                    {updating
-                      ? t("about.updating")
-                      : t("about.updateTo", { version: appInfo.latestVersion })}
-                  </Button>
-                </>
+                <Button
+                  onClick={() => {
+                    setReleaseNotesOpen(true);
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <BookOpen aria-hidden="true" data-icon="inline-start" />
+                  {t("about.releaseNotes")}
+                </Button>
               ) : null}
             </div>
           </SettingsField>

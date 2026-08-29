@@ -57,7 +57,7 @@ export type NativeBackgroundTerminalClient = Pick<
 >;
 export type NativeCapabilitiesClient = Pick<NativeClient, "getCapabilities">;
 export type NativeModelsClient = Pick<NativeClient, "listModels">;
-export type NativeAppUpdateClient = Pick<NativeClient, "getAppInfo" | "installAppUpdate">;
+export type NativeAppInfoClient = Pick<NativeClient, "getAppInfo">;
 export type NativeMcpServersClient = Pick<NativeClient, "listMcpServers">;
 export type NativeMcpServersMutationClient = Pick<NativeClient, "retryMcpServers">;
 export type NativeSkillsClient = Pick<NativeClient, "listSkills">;
@@ -117,7 +117,7 @@ export type NativeWorkbenchClient = NativeReadClient &
   NativePendingRequestClient &
   NativeCapabilitiesClient &
   NativeModelsClient &
-  NativeAppUpdateClient &
+  NativeAppInfoClient &
   NativeMcpServersClient &
   NativeMcpServersMutationClient &
   NativeSkillsClient &

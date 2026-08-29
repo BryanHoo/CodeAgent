@@ -8,7 +8,6 @@ const SemanticVersionSchema = Type.String({
 export const AppUpdateStatusSchema = Type.Union([
   Type.Literal("current"),
   Type.Literal("available"),
-  Type.Literal("restart-required"),
   Type.Literal("check-failed"),
 ]);
 export type AppUpdateStatus = Static<typeof AppUpdateStatusSchema>;
@@ -25,22 +24,3 @@ export const AppInfoResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 export type AppInfoResponse = Readonly<Static<typeof AppInfoResponseSchema>>;
-
-export const InstallAppUpdateRequestSchema = Type.Object(
-  { version: SemanticVersionSchema },
-  { additionalProperties: false },
-);
-export type InstallAppUpdateRequest = Readonly<Static<typeof InstallAppUpdateRequestSchema>>;
-
-export const InstallAppUpdateResponseSchema = Type.Object(
-  {
-    appVersion: SemanticVersionSchema,
-    codexVersion: SemanticVersionSchema,
-    latestVersion: SemanticVersionSchema,
-    releaseNotes: Type.Null(),
-    status: Type.Literal("restart-required"),
-    updateAvailable: Type.Literal(false),
-  },
-  { additionalProperties: false },
-);
-export type InstallAppUpdateResponse = Readonly<Static<typeof InstallAppUpdateResponseSchema>>;

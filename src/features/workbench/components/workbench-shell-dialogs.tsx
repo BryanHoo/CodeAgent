@@ -25,7 +25,6 @@ export function WorkbenchShellDialogs({
 }>) {
   const {
     appInfoQuery,
-    appUpdateMutation,
     client,
     closeTaskRenameDialog,
     globalSettingsMutation,
@@ -114,7 +113,6 @@ export function WorkbenchShellDialogs({
             fastModeAvailable={fastModeAvailable}
             initialSection={globalSettingsSection}
             isAppInfoPending={appInfoQuery.isPending}
-            isAppUpdatePending={appUpdateMutation.isPending}
             models={models}
             onClose={() => {
               const triggerId =
@@ -137,7 +135,6 @@ export function WorkbenchShellDialogs({
             onSave={(settings) =>
               globalSettingsMutation.mutateAsync(settings).then(() => undefined)
             }
-            onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
             {...(globalSettingsQuery.data === undefined
               ? {}
               : { settings: globalSettingsQuery.data.settings })}

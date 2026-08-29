@@ -55,14 +55,12 @@ type GlobalSettingsDialogProps = Readonly<{
   fastModeAvailable?: boolean;
   initialSection?: SettingsSectionId;
   isAppInfoPending?: boolean;
-  isAppUpdatePending?: boolean;
   isPending: boolean;
   models: readonly AgentModel[];
   onClose: () => void;
   onRetry: () => unknown;
   onRetryAppInfo?: () => unknown;
   onSave: (settings: AgentGlobalSettings) => Promise<void>;
-  onUpdate?: (version: string) => Promise<void>;
   settings?: AgentGlobalSettings;
 }>;
 
@@ -74,14 +72,12 @@ export function GlobalSettingsDialog({
   fastModeAvailable = false,
   initialSection = "appearance",
   isAppInfoPending = false,
-  isAppUpdatePending = false,
   isPending,
   models,
   onClose,
   onRetry,
   onRetryAppInfo = () => undefined,
   onSave,
-  onUpdate = () => Promise.resolve(),
   settings,
 }: GlobalSettingsDialogProps) {
   const { t } = useTranslation("settings");
@@ -237,9 +233,7 @@ export function GlobalSettingsDialog({
                 {...(appInfo === undefined ? {} : { appInfo })}
                 error={appInfoError}
                 isPending={isAppInfoPending}
-                isUpdatePending={isAppUpdatePending}
                 onRetry={onRetryAppInfo}
-                onUpdate={onUpdate}
               />
 
               {activeSection === "provider" ? (

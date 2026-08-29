@@ -3,7 +3,6 @@ import type {
   AgentCapabilities,
   AppInfoResponse,
   HealthResponse,
-  InstallAppUpdateResponse,
   UploadAgentFeedbackRequest,
   UploadAgentFeedbackResponse,
   WorkbenchPetCatalogResponse,
@@ -52,13 +51,6 @@ export class TauriRuntimeClient extends TauriCatalogClient {
 
   public async getWorkbenchBackground(day: string): Promise<NativeWorkbenchBackgroundResponse> {
     return this.call("get_workbench_background", { day });
-  }
-
-  public async installAppUpdate(
-    _version: string,
-    _options: MutationOptions = {},
-  ): Promise<InstallAppUpdateResponse> {
-    throw new Error("In-app updates are not available in this build");
   }
 
   public async listWorkbenchPets(_options: ReadOptions = {}): Promise<WorkbenchPetCatalogResponse> {

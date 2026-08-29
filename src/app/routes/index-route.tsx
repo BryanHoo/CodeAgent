@@ -5,7 +5,6 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useProjectActions, useProjectData } from "../../features/projects/project-context.js";
 import {
   appInfoQueryOptions,
-  appUpdateMutationOptions,
   globalSettingsMutationOptions,
   globalSettingsQueryOptions,
   modelsQueryOptions,
@@ -41,12 +40,6 @@ function IndexPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const appInfoQuery = useQuery(appInfoQueryOptions(client));
-  const appUpdateMutation = useMutation({
-    ...appUpdateMutationOptions(client),
-    onSuccess(response) {
-      queryClient.setQueryData(["app-info"], response);
-    },
-  });
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const globalSettingsMutation = useMutation({
@@ -120,7 +113,6 @@ function IndexPage() {
             error={globalSettingsQuery.error ?? modelsQuery.error}
             isPending={globalSettingsQuery.isPending || modelsQuery.isPending}
             isAppInfoPending={appInfoQuery.isPending}
-            isAppUpdatePending={appUpdateMutation.isPending}
             models={modelsQuery.data?.data ?? []}
             onClose={() => {
               const triggerId =
@@ -137,7 +129,6 @@ function IndexPage() {
             onSave={(settings) =>
               globalSettingsMutation.mutateAsync(settings).then(() => undefined)
             }
-            onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
             {...(globalSettingsQuery.data === undefined
               ? {}
               : { settings: globalSettingsQuery.data.settings })}

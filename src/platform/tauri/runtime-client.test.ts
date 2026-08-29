@@ -4,6 +4,15 @@ import { type InvokeImplementation } from "./native-client.js";
 import { TauriRuntimeClient } from "./runtime-client.js";
 
 describe("TauriRuntimeClient", () => {
+  it("does not expose unsupported app update installation", () => {
+    const client = new TauriRuntimeClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: vi.fn() as InvokeImplementation,
+    });
+
+    expect("installAppUpdate" in client).toBe(false);
+  });
+
   it("loads the Bing background through the native command", async () => {
     const invoke = vi.fn(async () => ({ assetPath: "/cache/bing.jpg" }));
     const client = new TauriRuntimeClient({

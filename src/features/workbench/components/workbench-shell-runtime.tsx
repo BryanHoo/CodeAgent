@@ -28,7 +28,6 @@ import {
 import { resolveProjectRootFromSelections } from "../../projects/project-root-selection.js";
 import {
   appInfoQueryOptions,
-  appUpdateMutationOptions,
   globalSettingsMutationOptions,
   globalSettingsQueryOptions,
   mcpServersQueryOptions,
@@ -171,12 +170,6 @@ export function useWorkbenchShellRuntime({
     taskId,
   });
   const appInfoQuery = useQuery(appInfoQueryOptions(client));
-  const appUpdateMutation = useMutation({
-    ...appUpdateMutationOptions(client),
-    onSuccess(response) {
-      queryClient.setQueryData(["app-info"], response);
-    },
-  });
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const providerConnectionQuery = useQuery(providerConnectionQueryOptions());
   const mcpServersQuery = useQuery(
@@ -380,7 +373,6 @@ export function useWorkbenchShellRuntime({
   return {
     activeTaskRenameLockRef,
     appInfoQuery,
-    appUpdateMutation,
     backgroundTerminals,
     beginNewChatSubmission,
     capabilities,

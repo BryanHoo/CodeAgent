@@ -3,12 +3,8 @@ export * from "./workbench-pets.js";
 export {
   AppInfoResponseSchema,
   AppUpdateStatusSchema,
-  InstallAppUpdateRequestSchema,
-  InstallAppUpdateResponseSchema,
   type AppInfoResponse,
   type AppUpdateStatus,
-  type InstallAppUpdateRequest,
-  type InstallAppUpdateResponse,
 } from "./app-update.js";
 export {
   AgentProviderAccountSchema,
