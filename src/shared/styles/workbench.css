@@ -15,7 +15,6 @@
 }
 
 .workbench-background__image {
-  object-fit: cover;
   transition: opacity var(--ui-motion-normal) var(--ui-ease-standard);
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { appPreferenceStorage } from "@/platform/tauri/app-storage.js";
 import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
@@ -10,6 +10,12 @@ import {
   WORKBENCH_BACKGROUND_CHANGED_EVENT,
   type WorkbenchBackgroundPreference,
 } from "../../settings/workbench-background-preference.js";
+import {
+  drawPreprocessedWallpaper,
+  getPhysicalWallpaperSize,
+  loadWallpaperImage,
+  type PhysicalWallpaperSize,
+} from "./workbench-wallpaper-processing.js";
 
 export type WorkbenchBackgroundTone = "dark" | "light";
 
@@ -87,25 +93,62 @@ export function getMillisecondsUntilNextLocalDay(date: Date): number {
 }
 
 export function getWorkbenchBackgroundBlurRadius(percentage: number): number {
-  // UI 使用统一的 0–95% 刻度，渲染半径限制在 20px，避免全屏图片产生过高滤镜开销。
+  // UI 使用统一的 0–95% 刻度，预处理半径限制在 20px，避免生成阶段开销过高。
   return Math.round(((percentage / 95) * 20 + Number.EPSILON) * 100) / 100;
+}
+
+type WallpaperViewport = PhysicalWallpaperSize & Readonly<{ pixelRatio: number }>;
+
+function readWallpaperViewport(): WallpaperViewport {
+  const pixelRatio = window.devicePixelRatio || 1;
+  return {
+    ...getPhysicalWallpaperSize(window.innerWidth, window.innerHeight, pixelRatio),
+    pixelRatio,
+  };
+}
+
+function useWallpaperViewport(): WallpaperViewport {
+  const [viewport, setViewport] = useState(readWallpaperViewport);
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const updateViewport = () => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      // 合并连续窗口缩放，拖拽结束后只重新生成一次物理像素画布。
+      timeoutId = setTimeout(() => {
+        const nextViewport = readWallpaperViewport();
+        setViewport((current) =>
+          current.width === nextViewport.width &&
+          current.height === nextViewport.height &&
+          current.pixelRatio === nextViewport.pixelRatio
+            ? current
+            : nextViewport,
+        );
+      }, 120);
+    };
+    window.addEventListener("resize", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+  }, []);
+
+  return viewport;
 }
 
 export function WorkbenchBackgroundFrame({
   backgroundTone,
+  canvasRef,
   children,
   imageLoaded,
   imageSource,
-  onImageError,
-  onImageLoad,
   preference,
 }: Readonly<{
   backgroundTone: WorkbenchBackgroundTone | null;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
   children: ReactNode;
   imageLoaded: boolean;
   imageSource: string | null;
-  onImageError: () => void;
-  onImageLoad: (image: HTMLImageElement) => void;
   preference: WorkbenchBackgroundPreference;
 }>) {
   return (
@@ -117,24 +160,12 @@ export function WorkbenchBackgroundFrame({
       data-workbench-background="true"
     >
       {imageSource === null ? null : (
-        <img
-          alt=""
+        <canvas
           aria-hidden="true"
           className="workbench-background__image"
           data-workbench-background-image="true"
-          decoding="async"
-          onError={onImageError}
-          onLoad={(event) => {
-            onImageLoad(event.currentTarget);
-          }}
-          src={imageSource}
-          style={{
-            filter:
-              preference.blurPercentage === 0
-                ? undefined
-                : `blur(${String(getWorkbenchBackgroundBlurRadius(preference.blurPercentage))}px)`,
-            opacity: imageLoaded ? 1 : 0,
-          }}
+          ref={canvasRef}
+          style={{ opacity: imageLoaded ? 1 : 0 }}
         />
       )}
       {imageLoaded ? (
@@ -158,6 +189,12 @@ export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const [bingImageUrl, setBingImageUrl] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [decodedImage, setDecodedImage] = useState<Readonly<{
+    image: HTMLImageElement;
+    source: string;
+  }> | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const viewport = useWallpaperViewport();
 
   useEffect(() => {
     const handlePreferenceChange = (event: Event) => {
@@ -236,21 +273,47 @@ export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode
   useEffect(() => {
     setImageLoaded(false);
     setBackgroundTone(null);
+    setDecodedImage(null);
+    if (imageSource === null) return;
+
+    const controller = new AbortController();
+    void loadWallpaperImage(imageSource, controller.signal)
+      .then((image) => {
+        if (!controller.signal.aborted) setDecodedImage({ image, source: imageSource });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setDecodedImage(null);
+      });
+    return () => {
+      controller.abort();
+    };
   }, [imageSource]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null || decodedImage === null || decodedImage.source !== imageSource) return;
+    const rendered = drawPreprocessedWallpaper(
+      canvas,
+      decodedImage.image,
+      viewport,
+      getWorkbenchBackgroundBlurRadius(preference.blurPercentage),
+      viewport.pixelRatio,
+    );
+    if (!rendered) {
+      setImageLoaded(false);
+      setBackgroundTone(null);
+      return;
+    }
+    setBackgroundTone(detectWorkbenchBackgroundTone(decodedImage.image));
+    setImageLoaded(true);
+  }, [decodedImage, imageSource, preference.blurPercentage, viewport]);
 
   return (
     <WorkbenchBackgroundFrame
       backgroundTone={backgroundTone}
+      canvasRef={canvasRef}
       imageLoaded={imageLoaded}
       imageSource={imageSource}
-      onImageError={() => {
-        setImageLoaded(false);
-        setBackgroundTone(null);
-      }}
-      onImageLoad={(image) => {
-        setBackgroundTone(detectWorkbenchBackgroundTone(image));
-        setImageLoaded(true);
-      }}
       preference={preference}
     >
       {children}

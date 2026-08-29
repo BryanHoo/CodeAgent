@@ -9,7 +9,7 @@ CodeAgent 是直接连接 `codex app-server` 的桌面工作台。左栏项目�
 - Web：React 19、Vite 8、TypeScript 6、Tailwind CSS 4、shadcn/ui、AI Elements 源码模式。
 - Desktop：Tauri 2、Rust 2024。
 - 质量：pnpm 11、Oxlint 类型感知规则、Vitest、Clippy、GitHub Actions。
-- 预置依赖：Streamdown、`react-virtuoso`；只有业务使用后才进入前端 bundle。
+- 预置依赖：Streamdown；只有业务使用后才进入前端 bundle。
 
 ## 环境
 

@@ -6,6 +6,7 @@
 - 通用控件优先复用 `src/shared/components/core/`，图标使用 `lucide-react`
 - 交互元素提供可访问名称、禁用状态和可见焦点反馈
 - 工作台仅面向桌面端，使用全局设计 tokens 约束三栏布局、颜色、间距和交互状态，不增加移动端适配分支
+- 工作台壁纸必须按视口尺寸与 `devicePixelRatio` 预缩放到物理像素画布，并在画布生成阶段完成模糊；窗口缩放应合并重绘，禁止对全屏原图使用实时 CSS `filter: blur()`
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
 - 对话虚拟列表必须由 React 同步写入 sizer 高度与 `top` 偏移，不得启用 `directDomUpdates` 或为 Turn 创建 transform 合成层；流式 Item 结构修订和桌面前台恢复时立即测量并在下一帧复测已挂载 Turn，仅在仍自动跟随时置底
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
