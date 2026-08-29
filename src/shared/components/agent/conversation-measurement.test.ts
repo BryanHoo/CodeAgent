@@ -64,7 +64,8 @@ describe("measureConversationTurn", () => {
 
   it("defers an above-viewport resize while the user scrolls backward", () => {
     const shouldDefer = shouldDeferConversationTurnResize(
-      { start: 1_000 },
+      { end: 1_100, start: 1_000 },
+      180,
       {
         isScrolling: true,
         scrollAdjustments: 0,
@@ -78,7 +79,8 @@ describe("measureConversationTurn", () => {
 
   it("applies the same resize immediately after backward scrolling settles", () => {
     const shouldDefer = shouldDeferConversationTurnResize(
-      { start: 1_000 },
+      { end: 1_100, start: 1_000 },
+      180,
       {
         isScrolling: false,
         scrollAdjustments: 0,
@@ -92,11 +94,27 @@ describe("measureConversationTurn", () => {
 
   it("does not defer an above-viewport resize while scrolling forward", () => {
     const shouldDefer = shouldDeferConversationTurnResize(
-      { start: 1_000 },
+      { end: 1_100, start: 1_000 },
+      180,
       {
         isScrolling: true,
         scrollAdjustments: 0,
         scrollDirection: "forward",
+        scrollOffset: 1_200,
+      },
+    );
+
+    expect(shouldDefer).toBe(false);
+  });
+
+  it("applies a collapse immediately when it removes the content under the viewport", () => {
+    const shouldDefer = shouldDeferConversationTurnResize(
+      { end: 5_000, start: 1_000 },
+      100,
+      {
+        isScrolling: true,
+        scrollAdjustments: 0,
+        scrollDirection: "backward",
         scrollOffset: 1_200,
       },
     );

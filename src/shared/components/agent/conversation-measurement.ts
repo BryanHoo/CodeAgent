@@ -16,12 +16,13 @@ export function resizeConversationTurn(
   element: HTMLElement,
   resizeItem: (index: number, size: number) => void,
   entry?: ResizeObserverEntry,
+  measuredSize = measureConversationTurn(element, entry),
 ): void {
   const index = Number.parseInt(element.dataset["index"] ?? "", 10);
   if (!Number.isSafeInteger(index) || index < 0) return;
 
   // 直接写入尺寸可绕过 measureElement 在滚动期间跳过同步测量的内部保护。
-  resizeItem(index, measureConversationTurn(element, entry));
+  resizeItem(index, measuredSize);
 }
 
 export function shouldAdjustConversationScrollPositionOnItemSizeChange(
@@ -39,7 +40,8 @@ export function shouldAdjustConversationScrollPositionOnItemSizeChange(
 }
 
 export function shouldDeferConversationTurnResize(
-  item: Readonly<{ start: number }>,
+  item: Readonly<{ end: number; start: number }>,
+  nextSize: number,
   virtualizer: Readonly<{
     isScrolling: boolean;
     scrollAdjustments: number;
@@ -48,11 +50,14 @@ export function shouldDeferConversationTurnResize(
   }>,
 ): boolean {
   const viewportStart = (virtualizer.scrollOffset ?? 0) + virtualizer.scrollAdjustments;
+  const collapseRemovesViewportContent =
+    item.end > viewportStart && item.start + nextSize <= viewportStart;
 
-  // 反向滚动时保持当前估算布局，待滚动结束再校准视口上方的真实高度。
+  // 收缩后不再覆盖视口时必须立即校准，否则旧 sizer 与新 DOM 之间会形成空白区域。
   return (
     virtualizer.isScrolling &&
     virtualizer.scrollDirection === "backward" &&
-    item.start < viewportStart
+    item.start < viewportStart &&
+    !collapseRemovesViewportContent
   );
 }

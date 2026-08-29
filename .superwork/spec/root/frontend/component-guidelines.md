@@ -10,7 +10,7 @@
 - 工作台壁纸必须按视口尺寸与 `devicePixelRatio` 预缩放到物理像素画布，并在画布生成阶段完成模糊；窗口缩放应合并重绘，禁止对全屏原图使用实时 CSS `filter: blur()`
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
-- 对话虚拟列表必须由 React 同步写入 sizer 高度与 `top` 偏移，不得启用 `directDomUpdates` 或为 Turn 创建 transform 合成层；Turn 动态尺寸必须由自管 `ResizeObserver` 与 `resizeItem` 单一管理，反向滚动期间缓存视口上方的最新尺寸，滚动结束后统一提交并同步补偿滚动位置，预渲染 8 个 Turn；流式 Item 结构修订和桌面前台恢复通过微任务读取真实高度并在下一帧复测，不得调用受滚动态门控的 `measureElement`，仅在仍自动跟随时置底
+- 对话虚拟列表必须由 React 同步写入 sizer 高度与 `top` 偏移，不得启用 `directDomUpdates` 或为 Turn 创建 transform 合成层；Turn 动态尺寸必须由自管 `ResizeObserver` 与 `resizeItem` 单一管理，反向滚动期间缓存视口上方的最新尺寸，滚动结束后统一提交并同步补偿滚动位置；若完成收缩会使原本覆盖视口的 Turn 退到视口上方，必须立即提交新高度，避免旧 sizer 与新 DOM 之间出现空白；预渲染 8 个 Turn；流式 Item 结构修订和桌面前台恢复通过微任务读取真实高度并在下一帧复测，不得调用受滚动态门控的 `measureElement`，仅在仍自动跟随时置底
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航
 - 服务端快照通过 TanStack Query 读取，实时任务状态通过功能域 Runtime/Store 的选择器读取，避免订阅无关状态

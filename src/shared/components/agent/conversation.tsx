@@ -19,6 +19,7 @@ import {
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
 import {
+  measureConversationTurn,
   resizeConversationTurn,
   shouldAdjustConversationScrollPositionOnItemSizeChange,
   shouldDeferConversationTurnResize,
@@ -263,8 +264,8 @@ export function ConversationVirtualList<TItem>({
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     shouldAdjustConversationScrollPositionOnItemSizeChange;
   const resizeTurn = useCallback(
-    (turn: HTMLDivElement, entry?: ResizeObserverEntry) => {
-      resizeConversationTurn(turn, virtualizer.resizeItem, entry);
+    (turn: HTMLDivElement, entry?: ResizeObserverEntry, measuredSize?: number) => {
+      resizeConversationTurn(turn, virtualizer.resizeItem, entry, measuredSize);
     },
     [virtualizer],
   );
@@ -287,9 +288,10 @@ export function ConversationVirtualList<TItem>({
     (turn: HTMLDivElement, entry?: ResizeObserverEntry) => {
       const index = Number.parseInt(turn.dataset["index"] ?? "", 10);
       const virtualTurn = virtualizer.getVirtualItems().find((item) => item.index === index);
+      const measuredSize = measureConversationTurn(turn, entry);
       if (
         virtualTurn !== undefined &&
-        shouldDeferConversationTurnResize(virtualTurn, virtualizer)
+        shouldDeferConversationTurnResize(virtualTurn, measuredSize, virtualizer)
       ) {
         // 同一 Turn 只保留最新尺寸，避免快速滚动期间累积无效测量。
         pendingTurnResizeEntriesRef.current.set(turn, entry);
@@ -297,7 +299,7 @@ export function ConversationVirtualList<TItem>({
       }
 
       pendingTurnResizeEntriesRef.current.delete(turn);
-      resizeTurn(turn, entry);
+      resizeTurn(turn, entry, measuredSize);
     },
     [resizeTurn, virtualizer],
   );
