@@ -49,6 +49,25 @@ fn hold_to_quit_action(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct HoldToQuitHudLayout {
+    width: f64,
+    height: f64,
+    corner_radius: f64,
+    label_font_size: f64,
+    horizontal_padding: f64,
+}
+
+const fn hold_to_quit_hud_layout() -> HoldToQuitHudLayout {
+    HoldToQuitHudLayout {
+        width: 236.0,
+        height: 64.0,
+        corner_radius: 14.0,
+        label_font_size: 15.0,
+        horizontal_padding: 24.0,
+    }
+}
+
 fn command_q_key_pressed() -> bool {
     CGEventSource::key_state(
         CGEventSourceStateID::CombinedSessionState,
@@ -162,7 +181,8 @@ pub fn confirm_hold_to_quit() -> bool {
 }
 
 fn create_hold_to_quit_hud(mtm: MainThreadMarker) -> Retained<NSPanel> {
-    let size = NSSize::new(430.0, 82.0);
+    let layout = hold_to_quit_hud_layout();
+    let size = NSSize::new(layout.width, layout.height);
     let frame = NSRect::new(NSPoint::new(0.0, 0.0), size);
     let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
         NSPanel::alloc(mtm),
@@ -175,7 +195,7 @@ fn create_hold_to_quit_hud(mtm: MainThreadMarker) -> Retained<NSPanel> {
     unsafe { panel.setReleasedWhenClosed(false) };
     panel.setOpaque(false);
     panel.setBackgroundColor(Some(&NSColor::clearColor()));
-    panel.setHasShadow(false);
+    panel.setHasShadow(true);
     panel.setLevel(NSFloatingWindowLevel);
     panel.setIgnoresMouseEvents(true);
     panel.setHidesOnDeactivate(false);
@@ -186,21 +206,65 @@ fn create_hold_to_quit_hud(mtm: MainThreadMarker) -> Retained<NSPanel> {
 
     let background = NSBox::initWithFrame(NSBox::alloc(mtm), frame);
     background.setBoxType(NSBoxType::Custom);
-    background.setBorderWidth(0.0);
+    background.setBorderWidth(0.5);
+    background.setBorderColor(&NSColor::colorWithCalibratedWhite_alpha(1.0, 0.14));
     background.setTitlePosition(NSTitlePosition::NoTitle);
-    background.setCornerRadius(18.0);
-    background.setFillColor(&NSColor::colorWithCalibratedWhite_alpha(0.2, 0.78));
+    background.setCornerRadius(layout.corner_radius);
+    background.setFillColor(&NSColor::colorWithCalibratedWhite_alpha(0.12, 0.88));
 
-    let message = NSTextField::labelWithString(&NSString::from_str("按住 ⌘Q 键即可退出"), mtm);
-    message.setFont(Some(&NSFont::boldSystemFontOfSize(24.0)));
-    message.setTextColor(Some(&NSColor::whiteColor()));
-    message.setAlignment(NSTextAlignment::Center);
-    // 文本和背景均由面板内容视图持有，frame 位于固定 HUD 边界内。
-    message.setFrame(NSRect::new(
-        NSPoint::new(0.0, 24.0),
-        NSSize::new(size.width, 32.0),
+    let label_y = 20.0;
+    let label_height = 24.0;
+    let leading_width = 38.0;
+    let key_cap_x = layout.horizontal_padding + leading_width + 10.0;
+    let key_cap_width = 54.0;
+    let trailing_x = key_cap_x + key_cap_width + 10.0;
+    let trailing_width = layout.width - layout.horizontal_padding - trailing_x;
+    let label_color = NSColor::colorWithCalibratedWhite_alpha(1.0, 0.88);
+
+    let leading = NSTextField::labelWithString(&NSString::from_str("按住"), mtm);
+    leading.setFont(Some(&NSFont::systemFontOfSize(layout.label_font_size)));
+    leading.setTextColor(Some(&label_color));
+    leading.setAlignment(NSTextAlignment::Right);
+    leading.setFrame(NSRect::new(
+        NSPoint::new(layout.horizontal_padding, label_y),
+        NSSize::new(leading_width, label_height),
     ));
-    background.addSubview(&message);
+
+    // 独立键帽让快捷键成为视觉锚点，同时保留两侧文字的自然阅读顺序。
+    let key_cap_frame = NSRect::new(
+        NSPoint::new(key_cap_x, 16.0),
+        NSSize::new(key_cap_width, 32.0),
+    );
+    let key_cap = NSBox::initWithFrame(NSBox::alloc(mtm), key_cap_frame);
+    key_cap.setBoxType(NSBoxType::Custom);
+    key_cap.setBorderWidth(0.5);
+    key_cap.setBorderColor(&NSColor::colorWithCalibratedWhite_alpha(1.0, 0.18));
+    key_cap.setTitlePosition(NSTitlePosition::NoTitle);
+    key_cap.setCornerRadius(7.0);
+    key_cap.setFillColor(&NSColor::colorWithCalibratedWhite_alpha(1.0, 0.12));
+
+    let shortcut = NSTextField::labelWithString(&NSString::from_str("⌘ Q"), mtm);
+    shortcut.setFont(Some(&NSFont::boldSystemFontOfSize(14.0)));
+    shortcut.setTextColor(Some(&NSColor::whiteColor()));
+    shortcut.setAlignment(NSTextAlignment::Center);
+    shortcut.setFrame(NSRect::new(
+        NSPoint::new(0.0, 5.0),
+        NSSize::new(key_cap_width, 22.0),
+    ));
+    key_cap.addSubview(&shortcut);
+
+    let trailing = NSTextField::labelWithString(&NSString::from_str("退出"), mtm);
+    trailing.setFont(Some(&NSFont::systemFontOfSize(layout.label_font_size)));
+    trailing.setTextColor(Some(&label_color));
+    trailing.setAlignment(NSTextAlignment::Left);
+    trailing.setFrame(NSRect::new(
+        NSPoint::new(trailing_x, label_y),
+        NSSize::new(trailing_width, label_height),
+    ));
+
+    background.addSubview(&leading);
+    background.addSubview(&key_cap);
+    background.addSubview(&trailing);
     panel.setContentView(Some(&background));
     panel.center();
     panel.orderFrontRegardless();
@@ -248,5 +312,16 @@ mod tests {
             hold_to_quit_action(Duration::from_millis(1_500), false, true),
             HoldToQuitAction::Quit
         );
+    }
+
+    #[test]
+    fn hold_to_quit_hud_uses_compact_proportions() {
+        let layout = hold_to_quit_hud_layout();
+
+        assert_eq!((layout.width, layout.height), (236.0, 64.0));
+        assert!((3.5..=4.0).contains(&(layout.width / layout.height)));
+        assert_eq!(layout.corner_radius, 14.0);
+        assert_eq!(layout.label_font_size, 15.0);
+        assert_eq!(layout.horizontal_padding, 24.0);
     }
 }
