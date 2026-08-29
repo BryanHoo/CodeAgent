@@ -16,18 +16,6 @@ use super::{
 const MAX_GIT_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_COMMIT_CONTEXT_BYTES: usize = 512 * 1024;
 
-#[derive(Debug, Serialize)]
-pub struct WorktreePage {
-    pub worktrees: Vec<Worktree>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Worktree {
-    pub branch: Option<String>,
-    pub current: bool,
-    pub path: String,
-}
-
 #[derive(Debug)]
 pub struct CommitMessageContext {
     pub changes: String,
@@ -68,102 +56,6 @@ pub async fn create_branch(
     let repo = repository_path(root, repository).await?;
     run_git(&repo, &["switch", "-c", branch], MAX_GIT_OUTPUT_BYTES).await?;
     get_git_status(root, repository, true).await
-}
-
-pub async fn list_worktrees(
-    root: &Path,
-    repository: Option<&str>,
-) -> Result<WorktreePage, WorkspaceError> {
-    let repo = repository_path(root, repository).await?;
-    let output = run_git(
-        &repo,
-        &["worktree", "list", "--porcelain"],
-        MAX_GIT_OUTPUT_BYTES,
-    )
-    .await?
-    .0;
-    let current = tokio::fs::canonicalize(&repo).await?;
-    let mut worktrees = Vec::new();
-    for block in String::from_utf8(output)
-        .map_err(|_| WorkspaceError::InvalidPath)?
-        .split("\n\n")
-    {
-        let mut path = None;
-        let mut branch = None;
-        for line in block.lines() {
-            if let Some(value) = line.strip_prefix("worktree ") {
-                path = Some(value.to_owned());
-            } else if let Some(value) = line.strip_prefix("branch refs/heads/") {
-                branch = Some(value.to_owned());
-            }
-        }
-        let Some(path) = path else { continue };
-        let canonical = tokio::fs::canonicalize(&path).await?;
-        worktrees.push(Worktree {
-            branch,
-            current: canonical == current,
-            path: canonical.to_string_lossy().into_owned(),
-        });
-    }
-    Ok(WorktreePage { worktrees })
-}
-
-pub async fn create_worktree(
-    root: &Path,
-    repository: Option<&str>,
-    branch: &str,
-    expected_snapshot: &str,
-) -> Result<Worktree, WorkspaceError> {
-    validate_snapshot(root, repository, expected_snapshot).await?;
-    validate_branch(root, repository, branch).await?;
-    let repo = repository_path(root, repository).await?;
-    let parent = repo.parent().ok_or(WorkspaceError::InvalidPath)?;
-    let base = repo
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or(WorkspaceError::InvalidPath)?;
-    let suffix: String = branch
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let target = parent.join(format!("{base}-{suffix}"));
-    if tokio::fs::try_exists(&target).await? {
-        return Err(WorkspaceError::InvalidPath);
-    }
-    let status = get_git_status(root, repository, false).await?;
-    let target_string = target.to_string_lossy().into_owned();
-    let args = if status.branches.iter().any(|value| value == branch) {
-        vec!["worktree", "add", target_string.as_str(), branch]
-    } else {
-        vec!["worktree", "add", "-b", branch, target_string.as_str()]
-    };
-    run_git(&repo, &args, MAX_GIT_OUTPUT_BYTES).await?;
-    let canonical = tokio::fs::canonicalize(target).await?;
-    Ok(Worktree {
-        branch: Some(branch.to_owned()),
-        current: false,
-        path: canonical.to_string_lossy().into_owned(),
-    })
-}
-
-pub async fn switch_worktree(
-    root: &Path,
-    repository: Option<&str>,
-    path: &str,
-) -> Result<Worktree, WorkspaceError> {
-    let requested = tokio::fs::canonicalize(path).await?;
-    list_worktrees(root, repository)
-        .await?
-        .worktrees
-        .into_iter()
-        .find(|worktree| Path::new(&worktree.path) == requested && !worktree.current)
-        .ok_or(WorkspaceError::InvalidPath)
 }
 
 pub async fn prepare_commit_message(
@@ -435,7 +327,7 @@ async fn create_temporary_index() -> Result<(PathBuf, PathBuf), WorkspaceError> 
     .into())
 }
 
-async fn validate_snapshot(
+pub(super) async fn validate_snapshot(
     root: &Path,
     repository: Option<&str>,
     expected: &str,
@@ -450,7 +342,7 @@ async fn validate_snapshot(
     Ok(status)
 }
 
-async fn validate_branch(
+pub(super) async fn validate_branch(
     root: &Path,
     repository: Option<&str>,
     branch: &str,

@@ -1,8 +1,9 @@
-use std::{fs, process::Command, time::SystemTime};
+use std::{fs, path::Path, process::Command, time::SystemTime};
 
 use super::{
-    WorkspaceError, commit_changes, create_branch, get_commit_diff, get_commit_files,
-    get_git_history, get_git_status, prepare_commit_message, switch_branch,
+    WorkspaceError, commit_changes, create_branch, create_worktree, get_commit_diff,
+    get_commit_files, get_git_history, get_git_status, list_worktrees, prepare_commit_message,
+    switch_branch,
 };
 
 #[tokio::test]
@@ -276,6 +277,68 @@ async fn git_mutations_should_report_invalid_branch_and_missing_upstream() {
         committed.push_error.as_deref(),
         Some("current branch has no upstream")
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn create_worktree_should_preserve_unicode_and_probe_a_numeric_suffix() {
+    let root = create_repository("codeagent-git-worktree");
+    fs::write(root.join("tracked.txt"), "initial\n").unwrap();
+    run(&root, &["add", "."]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    let root = fs::canonicalize(root).unwrap();
+    let base_target = root.with_file_name(format!(
+        "{}-功能-测试",
+        root.file_name().unwrap().to_string_lossy()
+    ));
+    fs::create_dir(&base_target).unwrap();
+    let status = get_git_status(&root, None, false).await.unwrap();
+
+    let worktree = create_worktree(&root, None, "功能/测试", &status.snapshot)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        Path::new(&worktree.path),
+        base_target.with_file_name(format!(
+            "{}-2",
+            base_target.file_name().unwrap().to_string_lossy()
+        ))
+    );
+    fs::remove_dir_all(&worktree.path).unwrap();
+    fs::remove_dir_all(base_target).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn list_worktrees_should_preserve_paths_containing_newlines() {
+    let root = create_repository("codeagent-git-worktree-list");
+    fs::write(root.join("tracked.txt"), "initial\n").unwrap();
+    run(&root, &["add", "."]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    let root = fs::canonicalize(root).unwrap();
+    let target = root.with_file_name(format!(
+        "{}-line\nbreak",
+        root.file_name().unwrap().to_string_lossy()
+    ));
+    run(
+        &root,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "newline-path",
+            target.to_str().unwrap(),
+        ],
+    );
+    let target = fs::canonicalize(target).unwrap();
+
+    let worktrees = list_worktrees(&root, None).await.unwrap();
+
+    assert!(worktrees.worktrees.iter().any(|worktree| {
+        Path::new(&worktree.path) == target && worktree.branch.as_deref() == Some("newline-path")
+    }));
+    fs::remove_dir_all(target).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
 
