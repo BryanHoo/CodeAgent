@@ -7,7 +7,7 @@ use serde_json::{Value, json, value::to_raw_value};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tokio::{
     sync::{Mutex, mpsc},
-    time::{Duration, timeout},
+    time::{Duration, sleep, timeout},
 };
 
 use super::{RuntimeSession, spawn_event_forwarder};
@@ -263,4 +263,80 @@ async fn consecutive_deltas_should_merge_before_crossing_the_channel() {
     assert_eq!(events[0]["data"]["event"]["sequence"], 1);
     assert_eq!(events[1]["data"]["event"]["payload"]["delta"], "bc");
     assert_eq!(events[1]["data"]["event"]["sequence"], 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn saturated_event_channel_should_preserve_every_sequence() {
+    let published = Arc::new(StdMutex::new(Vec::new()));
+    let published_for_channel = Arc::clone(&published);
+    let release_channel = Arc::new(AtomicBool::new(false));
+    let release_channel_callback = Arc::clone(&release_channel);
+    let channel = Channel::new(move |body| {
+        while !release_channel_callback.load(Ordering::Acquire) {
+            std::thread::yield_now();
+        }
+        if let InvokeResponseBody::Json(value) = body {
+            published_for_channel.lock().unwrap().push(value);
+        }
+        Ok(())
+    });
+    let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
+    {
+        let mut session = runtime.lock().await;
+        session.set_event_channel(channel);
+        session
+            .task_projects
+            .insert("thread-a".to_owned(), "project-a".to_owned());
+    }
+    let (sender, receiver) = mpsc::channel(300);
+    let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
+    for index in 0..300 {
+        sender
+            .send(ServerMessage {
+                id: None,
+                method: "mcpServer/startupStatus/updated".to_owned(),
+                params: to_raw_value(&json!({
+                    "threadId": "thread-a",
+                    "name": format!("server-{index}"),
+                    "status": "ready"
+                }))
+                .unwrap(),
+            })
+            .await
+            .unwrap();
+    }
+    drop(sender);
+
+    // 模拟多轮渲染后 WebView 暂时消费不过来的情况，并等待后端完成全部 Sequence 分配。
+    let _ = timeout(Duration::from_millis(500), async {
+        loop {
+            if runtime.lock().await.project_sequences.get("project-a") == Some(&300) {
+                break;
+            }
+            sleep(Duration::from_millis(1)).await;
+        }
+    })
+    .await;
+    release_channel.store(true, Ordering::Release);
+    task.await.expect("event forwarder should stop cleanly");
+    timeout(Duration::from_secs(2), async {
+        while published.lock().unwrap().len() < 300 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("channel should receive every sequenced event");
+
+    let sequences = published
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(event).ok())
+        .filter_map(|event| {
+            event
+                .pointer("/data/event/sequence")
+                .and_then(Value::as_u64)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(sequences, (1..=300).collect::<Vec<_>>());
 }

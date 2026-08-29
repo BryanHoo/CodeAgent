@@ -140,10 +140,14 @@ async fn publish_mapped_event(
         };
         session.pending_requests.insert(request_id, pending);
     }
-    // WebView 销毁期间没有可用 Channel，但 Runtime 必须继续消费并维护原生状态。
+    // WebView 消费变慢时使用有界队列背压，Sequence 已分配后禁止静默丢弃事件。
     let pet_event = event.clone();
-    let _ = session.publish(AppEvent::AgentEvent { event });
+    let event_sender = session.event_sender.clone();
     drop(session);
+    if let Some(sender) = event_sender {
+        // 等待前已释放全局状态锁，慢 WebView 不会阻塞其他命令读取 Runtime 状态。
+        let _ = sender.send(AppEvent::AgentEvent { event }).await;
+    }
     if let Some(app) = app {
         observe_desktop_pet_agent_event(app, &project_id, &pet_event).await;
     }
