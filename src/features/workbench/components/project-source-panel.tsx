@@ -196,7 +196,7 @@ export function ProjectSourcePanel({
     () =>
       sourcePages?.map((page, index) => ({
         code: page.content,
-        key: `${String(index)}:${String(sourcePageParams?.[index] ?? "initial")}`,
+        key: `${String(index)}:${JSON.stringify(sourcePageParams?.[index] ?? "initial")}`,
       })) ?? [],
     [sourcePageParams, sourcePages],
   );

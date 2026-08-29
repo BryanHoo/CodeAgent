@@ -80,6 +80,8 @@ export function useComposerQueue({
 }: ComposerQueueOptions) {
   const queryClient = useQueryClient();
   const queryKey = taskQueueQueryKey(projectId, taskId ?? "");
+  // client 是稳定的传输实现，不参与队列缓存身份，缓存仍按 projectId 与 taskId 共享。
+  // oxlint-disable-next-line @tanstack/query/exhaustive-deps
   const queueQuery = useQuery({
     enabled: taskId !== undefined,
     queryFn: ({ signal }) => listAllQueuedSubmissions(client, projectId, taskId ?? "", signal),

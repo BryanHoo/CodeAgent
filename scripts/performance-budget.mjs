@@ -24,7 +24,7 @@ export function analyzeBundle(manifest, sizes) {
     for (const css of chunk.css ?? []) initialFiles.add(css);
   }
   const toEntry = (file) => ({ bytes: sizes.get(file) ?? 0, file });
-  const initialChunks = [...initialFiles].sort().map(toEntry);
+  const initialChunks = [...initialFiles].sort((left, right) => left.localeCompare(right)).map(toEntry);
   // 动态入口的静态依赖同样会占用解析和传输预算，必须覆盖全部非首屏 JS Chunk。
   const asyncFiles = new Set(
     Object.entries(manifest)
@@ -32,7 +32,7 @@ export function analyzeBundle(manifest, sizes) {
       .map(([, chunk]) => chunk.file),
   );
   return {
-    asyncChunks: [...asyncFiles].sort().map(toEntry),
+    asyncChunks: [...asyncFiles].sort((left, right) => left.localeCompare(right)).map(toEntry),
     initialBytes: initialChunks.reduce((total, chunk) => total + chunk.bytes, 0),
     initialChunks,
   };

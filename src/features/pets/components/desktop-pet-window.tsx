@@ -194,11 +194,12 @@ export function DesktopPetWindow() {
     [],
   );
 
+  const petId = state?.petId;
   useEffect(() => {
     let disposed = false;
     setPet(null);
-    if (state === null) return;
-    void loadDesktopPet(state.petId)
+    if (petId === undefined) return;
+    void loadDesktopPet(petId)
       .then((nextPet) => {
         if (!disposed) setPet(nextPet);
       })
@@ -206,7 +207,7 @@ export function DesktopPetWindow() {
     return () => {
       disposed = true;
     };
-  }, [state?.petId]);
+  }, [petId]);
 
   useEffect(() => {
     if (state === null || pet === null) return;

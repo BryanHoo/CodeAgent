@@ -1,4 +1,5 @@
 /* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- 评论行需要键盘焦点来显示与悬停一致的说明浮层。 */
+/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- 评论行仅响应焦点与悬停以展示说明，不执行按钮操作。 */
 import { MessageSquareText } from "lucide-react";
 import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

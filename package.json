@@ -15,7 +15,7 @@
     "check": "pnpm version:check && pnpm check:web && pnpm check:rust",
     "check:rust": "pnpm rust:fmt:check && pnpm rust:clippy && pnpm rust:test",
     "check:web": "pnpm lint && pnpm typecheck && pnpm test:run && pnpm performance:budget:test && pnpm build && pnpm performance:budget",
-    "lint": "oxlint .",
+    "lint": "oxlint --deny-warnings .",
     "lint:fix": "oxlint --fix .",
     "performance:budget": "node scripts/performance-budget.mjs",
     "performance:budget:test": "node --test scripts/performance-budget.test.mjs",
@@ -62,6 +62,7 @@
   "devDependencies": {
     "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/eslint-plugin-query": "^5.102.8",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

@@ -299,6 +299,8 @@ export function projectPinnedTasksQueryOptions(
   projectId: string,
   client: Pick<NativeClient, "listTasks"> = nativeClient,
 ) {
+  // 注入的 client 不参与项目任务缓存身份，避免破坏既有前缀失效与直接写缓存逻辑。
+  // oxlint-disable-next-line @tanstack/query/exhaustive-deps
   return queryOptions({
     queryFn: ({ signal }) => listPinnedProjectTasks(projectId, client, signal),
     queryKey: ["projects", projectId, "tasks", PROJECT_PINNED_TASKS_KEY] as const,
@@ -310,6 +312,8 @@ export function projectTaskSearchSourceQueryOptions(
   enabled: boolean,
   client: Pick<NativeClient, "listTasks"> = nativeClient,
 ) {
+  // 注入的 client 不参与项目任务缓存身份，避免破坏既有前缀失效与直接写缓存逻辑。
+  // oxlint-disable-next-line @tanstack/query/exhaustive-deps
   return queryOptions({
     enabled,
     queryFn: ({ signal }) => listProjectTasksForSearch(projectId, client, signal),
