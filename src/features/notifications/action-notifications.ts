@@ -30,6 +30,9 @@ function readNotificationOptions(
 }
 
 export function actionErrorMessage(error: unknown): string {
+  if (error instanceof Error && "code" in error && error.code === "GIT_NOT_FOUND") {
+    return i18n.t("errors.gitNotFound", { ns: "common" });
+  }
   if (error instanceof Error && error.message.trim().length > 0) return error.message;
   if (typeof error === "string" && error.trim().length > 0) return error;
   return i18n.t("app.actionFailed", { ns: "common" });

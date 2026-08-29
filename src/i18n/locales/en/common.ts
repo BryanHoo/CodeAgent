@@ -11,6 +11,7 @@ export const common = {
     notificationRegion: "Notifications",
   },
   errors: {
+    gitNotFound: "Git was not found. Install Git and restart CodeAgent.",
     notFoundDescription: "This address does not match a registered application route.",
     notFoundTitle: "Page not found",
     routeErrorLabel: "Route error",

@@ -10,7 +10,7 @@ import type {
 } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import {
@@ -20,6 +20,8 @@ import {
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { providerConnectionQueryOptions } from "../../provider-connection/provider-connection-queries.js";
+import { notifyActionError } from "../../notifications/action-notifications.js";
+import { isGitUnavailableError } from "../../projects/project-git-error.js";
 import {
   useProjectActions,
   useProjectData,
@@ -161,6 +163,11 @@ export function useWorkbenchShellRuntime({
       !temporary && selectedRootPath !== undefined,
     ),
   );
+  useEffect(() => {
+    if (isGitUnavailableError(gitStatusQuery.error)) {
+      notifyActionError(gitStatusQuery.error);
+    }
+  }, [gitStatusQuery.error]);
   const inspectorActivation = deriveWorkbenchInspectorActivation({
     contextOnly: temporary,
     fileOpen: inspectorFileSelection?.projectId === projectId,

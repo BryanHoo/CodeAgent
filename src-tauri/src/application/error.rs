@@ -95,6 +95,19 @@ mod tests {
     }
 
     #[test]
+    fn missing_git_should_preserve_recoverable_error_details() {
+        let value = serde_json::to_value(AppError::from(WorkspaceError::GitNotFound)).unwrap();
+
+        assert_eq!(
+            value,
+            json!({
+                "code": "GIT_NOT_FOUND",
+                "message": "Git was not found; install Git and restart CodeAgent"
+            })
+        );
+    }
+
+    #[test]
     fn active_thread_writer_should_preserve_a_stable_error_code() {
         let error = crate::infrastructure::codex::ConnectionError::Request {
             code: -32600,

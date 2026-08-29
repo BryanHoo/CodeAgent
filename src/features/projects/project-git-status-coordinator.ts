@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { getApplicationDetailViewUpdateGate } from "../../shared/lifecycle/application-visibility.js";
 import { recordInternalWarning } from "../notifications/internal-diagnostics.js";
+import { isGitUnavailableError } from "./project-git-error.js";
 import { type NativeGitStatusClient, projectGitStatusQueryOptions } from "./project-queries.js";
 
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 300_000;
@@ -259,6 +260,15 @@ export class ProjectGitStatusCoordinator {
         }
       })
       .catch((error: unknown) => {
+        if (isGitUnavailableError(error)) {
+          // 安装 Git 前错误不会自行恢复，停止后台轮询，手动刷新仍可重新探测。
+          state.consecutiveFailures = 0;
+          state.isGitProject = false;
+          this.#clearFileChangeTimer(state);
+          this.#clearRetryTimer(state);
+          this.#clearPollingTimer(state);
+          throw error;
+        }
         state.consecutiveFailures += 1;
         this.#clearPollingTimer(state);
         throw error;

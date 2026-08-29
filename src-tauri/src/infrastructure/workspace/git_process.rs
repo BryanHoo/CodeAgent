@@ -1,4 +1,11 @@
-use std::{collections::VecDeque, path::Path, process::ExitStatus, time::Duration};
+use std::{
+    collections::VecDeque,
+    env,
+    path::{Path, PathBuf},
+    process::ExitStatus,
+    sync::OnceLock,
+    time::Duration,
+};
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
@@ -13,6 +20,8 @@ const LOCAL_GIT_TIMEOUT: Duration = Duration::from_secs(30);
 const NETWORK_GIT_TIMEOUT: Duration = Duration::from_secs(120);
 const STDERR_CAPTURE_BYTES: usize = 64 * 1024;
 const READ_BUFFER_BYTES: usize = 16 * 1024;
+const GIT_BINARY_ENV: &str = "CODEAGENT_GIT_BIN";
+static GIT_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Clone, Copy)]
 enum StopReason {
@@ -129,7 +138,7 @@ async fn run_git_command(
     input: Option<&[u8]>,
     timeout: Duration,
 ) -> Result<(Vec<u8>, bool), WorkspaceError> {
-    let mut command = Command::new("git");
+    let mut command = Command::new(git_binary_path()?);
     command
         .args(args)
         .current_dir(repo)
@@ -149,7 +158,13 @@ async fn run_git_command(
         command.env("GIT_INDEX_FILE", index_path);
     }
 
-    let mut child = command.spawn()?;
+    let mut child = command.spawn().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            WorkspaceError::GitNotFound
+        } else {
+            WorkspaceError::Io(error)
+        }
+    })?;
     let process_id = child.id();
     let stdin = child.stdin.take();
     let stdout = child.stdout.take().ok_or(WorkspaceError::InvalidPath)?;
@@ -216,6 +231,69 @@ async fn run_git_command(
         ProcessOutcome::Exited(_) => {}
     }
     Ok((output, stdout_truncated))
+}
+
+fn git_binary_path() -> Result<&'static Path, WorkspaceError> {
+    if let Some(path) = GIT_BINARY_PATH.get() {
+        return Ok(path);
+    }
+    let path = discover_git_binary().ok_or(WorkspaceError::GitNotFound)?;
+    let _ = GIT_BINARY_PATH.set(path);
+    GIT_BINARY_PATH
+        .get()
+        .map(PathBuf::as_path)
+        .ok_or(WorkspaceError::GitNotFound)
+}
+
+fn discover_git_binary() -> Option<PathBuf> {
+    let executable = format!("git{}", env::consts::EXE_SUFFIX);
+    let mut candidates = Vec::new();
+
+    if let Some(explicit) = env::var_os(GIT_BINARY_ENV) {
+        let explicit = PathBuf::from(explicit);
+        if explicit.is_absolute() {
+            candidates.push(explicit);
+        }
+    }
+    if let Some(paths) = env::var_os("PATH") {
+        candidates.extend(env::split_paths(&paths).map(|directory| directory.join(&executable)));
+    }
+    candidates.extend(common_git_paths(&executable));
+
+    // GUI 进程的 PATH 可能落后于安装器写入值，平台常见目录作为低成本回退。
+    first_existing_path(candidates)
+}
+
+fn first_existing_path(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn common_git_paths(executable: &str) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    for variable in ["ProgramFiles", "ProgramFiles(x86)"] {
+        if let Some(root) = env::var_os(variable) {
+            let root = PathBuf::from(root).join("Git");
+            candidates.push(root.join("cmd").join(executable));
+            candidates.push(root.join("bin").join(executable));
+        }
+    }
+    if let Some(root) = env::var_os("LOCALAPPDATA") {
+        candidates.push(
+            PathBuf::from(root)
+                .join("Programs/Git/cmd")
+                .join(executable),
+        );
+    }
+    candidates
+}
+
+#[cfg(not(target_os = "windows"))]
+fn common_git_paths(executable: &str) -> Vec<PathBuf> {
+    ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]
+        .into_iter()
+        .map(|directory| Path::new(directory).join(executable))
+        .collect()
 }
 
 async fn drain_stream<R>(
@@ -341,9 +419,12 @@ fn git_failure(args: &[&str], fallback: String, stderr: &[u8]) -> WorkspaceError
 
 #[cfg(test)]
 mod tests {
-    use std::{path::Path, time::Duration};
+    use std::{env, path::Path, time::Duration};
 
-    use super::{BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, run_git_command};
+    use super::{
+        BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, first_existing_path,
+        run_git_command,
+    };
 
     #[test]
     fn bounded_capture_should_preserve_head_and_tail() {
@@ -355,6 +436,17 @@ mod tests {
     #[test]
     fn network_git_should_allow_more_time_than_local_git() {
         assert!(NETWORK_GIT_TIMEOUT > LOCAL_GIT_TIMEOUT);
+    }
+
+    #[test]
+    fn git_discovery_should_select_the_first_existing_file() {
+        let current_executable = env::current_exe().expect("test executable should exist");
+        let missing = current_executable.join("missing-git");
+
+        assert_eq!(
+            first_existing_path([missing, current_executable.clone()]),
+            Some(current_executable)
+        );
     }
 
     #[cfg(unix)]

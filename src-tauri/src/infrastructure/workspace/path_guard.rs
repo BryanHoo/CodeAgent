@@ -12,6 +12,8 @@ pub enum WorkspaceError {
     InvalidBranch,
     #[error("current branch has no upstream")]
     NoUpstream,
+    #[error("Git was not found; install Git and restart CodeAgent")]
+    GitNotFound,
     #[error("{0}")]
     GitCommandFailed(String),
     #[error("workspace I/O failed: {0}")]
@@ -25,6 +27,7 @@ impl WorkspaceError {
             Self::SnapshotMismatch => "SNAPSHOT_MISMATCH",
             Self::InvalidBranch => "INVALID_BRANCH",
             Self::NoUpstream => "NO_UPSTREAM",
+            Self::GitNotFound => "GIT_NOT_FOUND",
             Self::GitCommandFailed(_) => "GIT_COMMAND_FAILED",
             Self::Io(_) => "IO_FAILED",
         }

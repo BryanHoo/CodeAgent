@@ -27,6 +27,7 @@ import {
   type NativeProjectOpenClient,
   type NativeReadClient,
 } from "./project-query-contracts.js";
+import { shouldRetryGitQuery } from "./project-git-error.js";
 
 type TaskPinMutationInput = Readonly<{
   pinned: boolean;
@@ -277,7 +278,7 @@ export function projectGitStatusQueryOptions(
     queryFn: ({ signal }) => client.getProjectGitStatus(projectId, { rootPath }, { signal }),
     queryKey: ["projects", projectId, rootPath, "git-status"] as const,
     // Project 级协调器负责刷新生命周期，Query 只维护共享服务端状态。
-    retry: 1,
+    retry: shouldRetryGitQuery,
   });
 }
 
@@ -303,7 +304,7 @@ export function projectGitDetailedStatusQueryOptions(
       ),
     // 详情只服务触发它的仓库快照，状态变化后不会复用旧 Diff。
     queryKey: ["projects", projectId, rootPath, "git-status-detail", repository, snapshot] as const,
-    retry: 1,
+    retry: shouldRetryGitQuery,
   });
 }
 
@@ -325,7 +326,7 @@ export function projectGitRepositoryStatusQueryOptions(
             { signal },
           ),
     queryKey: ["projects", projectId, rootPath, "git-status", repository] as const,
-    retry: 1,
+    retry: shouldRetryGitQuery,
   });
 }
 
