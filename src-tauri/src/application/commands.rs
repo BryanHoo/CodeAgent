@@ -72,3 +72,18 @@ pub async fn get_runtime_performance_metrics(
 pub fn cancel_native_request(request_id: String, state: State<'_, AppState>) -> Value {
     json!({ "cancelled": state.cancel_request(&request_id) })
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn main_window_should_allow_runtime_recovery_commands() {
+        let permissions = include_str!("../../permissions/window-command-sets.toml");
+
+        for permission in ["allow-inspect-codex-runtime", "allow-install-codex-runtime"] {
+            assert!(
+                permissions.contains(&format!("\"{permission}\"")),
+                "main-window-commands must include {permission}"
+            );
+        }
+    }
+}

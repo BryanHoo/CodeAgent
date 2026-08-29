@@ -11,6 +11,8 @@ permissions = [
   "allow-update-custom-backgrounds",
   "allow-connect-runtime",
   "allow-start-runtime",
+  "allow-inspect-codex-runtime",
+  "allow-install-codex-runtime",
   "allow-get-app-info",
   "allow-get-runtime-performance-metrics",
   "allow-sync-desktop-pet",
