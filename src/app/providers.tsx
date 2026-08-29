@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { type ReactNode, useEffect } from "react";
 import { Toaster } from "sonner";
 
 import { ProjectProvider } from "../features/projects/project-context.js";
@@ -10,6 +10,10 @@ import { ComposerDraftProvider } from "../features/workbench/composer-draft-cont
 import { getNotificationPreference } from "../features/settings/notification-preference.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
 import { TooltipProvider } from "../shared/components/core/tooltip.js";
+import {
+  getApplicationDetailViewUpdateGate,
+  installApplicationSuspensionEffects,
+} from "../shared/lifecycle/application-visibility.js";
 import { useTranslation } from "../i18n/i18n.js";
 import { installInactiveSnapshotMemoryLimit } from "./snapshot-memory.js";
 
@@ -41,6 +45,25 @@ type AppProvidersProps = Readonly<{
   children: ReactNode;
 }>;
 
+function ApplicationSuspensionEffects() {
+  useEffect(() => {
+    const dispose = installApplicationSuspensionEffects(getApplicationDetailViewUpdateGate(), {
+      setAnimationsSuspended(suspended) {
+        document.documentElement.toggleAttribute("data-detail-view-suspended", suspended);
+      },
+      setPollingActive(active) {
+        focusManager.setFocused(active);
+      },
+    });
+    return () => {
+      dispose();
+      document.documentElement.removeAttribute("data-detail-view-suspended");
+      focusManager.setFocused(undefined);
+    };
+  }, []);
+  return null;
+}
+
 function AppProviderContent({ children }: AppProvidersProps) {
   const { t } = useTranslation("common");
   return (
@@ -67,6 +90,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     <I18nextProvider i18n={i18n}>
       <TooltipProvider>
         <QueryClientProvider client={queryClient}>
+          <ApplicationSuspensionEffects />
           <AppProviderContent>{children}</AppProviderContent>
         </QueryClientProvider>
       </TooltipProvider>

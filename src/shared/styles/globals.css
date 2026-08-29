@@ -306,6 +306,13 @@ html {
   background: var(--ui-color-window);
 }
 
+/* 应用持续处于后台后冻结主窗口动画，恢复时保留原动画进度继续播放。 */
+html[data-detail-view-suspended] *,
+html[data-detail-view-suspended] *::before,
+html[data-detail-view-suspended] *::after {
+  animation-play-state: paused !important;
+}
+
 body {
   margin: 0;
   overflow: hidden;

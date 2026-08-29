@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { getApplicationDetailViewUpdateGate } from "../../shared/lifecycle/application-visibility.js";
 import { recordInternalWarning } from "../notifications/internal-diagnostics.js";
 import { type NativeGitStatusClient, projectGitStatusQueryOptions } from "./project-queries.js";
 
@@ -34,7 +35,7 @@ interface ProjectPollingState {
 }
 
 function defaultPageVisibility(): boolean {
-  return typeof document === "undefined" || document.visibilityState === "visible";
+  return !getApplicationDetailViewUpdateGate().isSuspended();
 }
 
 export class ProjectGitStatusCoordinator {
