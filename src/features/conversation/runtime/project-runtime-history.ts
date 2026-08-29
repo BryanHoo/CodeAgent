@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@/protocol/index.js";
 import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
+import { RingBuffer } from "../../../shared/memory/ring-buffer.js";
 import type { TaskNotifier } from "../../notifications/desktop-task-notifier.js";
 
 export const PROJECT_RUNTIME_IDLE_TIMEOUT_MS = 2 * 60_000;
@@ -48,13 +49,11 @@ type BufferedProjectEvent = Readonly<{
 }>;
 
 export class ProjectEventHistory {
-  #count = 0;
-  #entries: (BufferedProjectEvent | undefined)[];
+  readonly #entries: RingBuffer<BufferedProjectEvent>;
   #floorSequence = 0;
   readonly #maxBytes: number;
   readonly #maxEvents: number;
   #retainedBytes = 0;
-  #start = 0;
 
   public constructor(options: Readonly<{ maxBytes: number; maxEvents: number }>) {
     if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0) {
@@ -65,7 +64,7 @@ export class ProjectEventHistory {
     }
     this.#maxBytes = options.maxBytes;
     this.#maxEvents = options.maxEvents;
-    this.#entries = new Array<BufferedProjectEvent | undefined>(options.maxEvents);
+    this.#entries = new RingBuffer<BufferedProjectEvent>(options.maxEvents);
   }
 
   public get floorSequence(): number {
@@ -78,12 +77,8 @@ export class ProjectEventHistory {
       this.reset(event.sequence);
       return;
     }
-    if (this.#count === this.#maxEvents) {
-      this.#evictOldest();
-    }
-    const insertionIndex = (this.#start + this.#count) % this.#maxEvents;
-    this.#entries[insertionIndex] = { event, retainedBytes };
-    this.#count += 1;
+    const evicted = this.#entries.append({ event, retainedBytes });
+    if (evicted !== undefined) this.#recordEviction(evicted);
     this.#retainedBytes += retainedBytes;
     while (this.#retainedBytes > this.#maxBytes) {
       this.#evictOldest();
@@ -91,32 +86,25 @@ export class ProjectEventHistory {
   }
 
   public forEachAfter(sequence: number, visit: (event: AgentEvent) => void): void {
-    for (let offset = 0; offset < this.#count; offset += 1) {
-      const entry = this.#entries[(this.#start + offset) % this.#maxEvents];
-      if (entry !== undefined && entry.event.sequence > sequence) {
-        visit(entry.event);
-      }
-    }
+    this.#entries.forEach((entry) => {
+      if (entry.event.sequence > sequence) visit(entry.event);
+    });
   }
 
   public reset(floorSequence = this.#floorSequence): void {
-    this.#entries = new Array<BufferedProjectEvent | undefined>(this.#maxEvents);
-    this.#count = 0;
+    this.#entries.clear();
     this.#floorSequence = floorSequence;
     this.#retainedBytes = 0;
-    this.#start = 0;
   }
 
   #evictOldest(): void {
-    const oldestEntry = this.#entries[this.#start];
-    if (oldestEntry === undefined) {
-      return;
-    }
-    this.#entries[this.#start] = undefined;
-    this.#start = (this.#start + 1) % this.#maxEvents;
-    this.#count -= 1;
-    this.#retainedBytes -= oldestEntry.retainedBytes;
-    this.#floorSequence = oldestEntry.event.sequence;
+    const oldestEntry = this.#entries.evictOldest();
+    if (oldestEntry !== undefined) this.#recordEviction(oldestEntry);
+  }
+
+  #recordEviction(entry: BufferedProjectEvent): void {
+    this.#retainedBytes -= entry.retainedBytes;
+    this.#floorSequence = entry.event.sequence;
   }
 }
 

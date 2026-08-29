@@ -32,4 +32,25 @@ describe("Tauri runtime recovery", () => {
 
     expect(invoke.mock.calls.filter(([command]) => command === "start_runtime")).toHaveLength(2);
   });
+
+  it("replays only the latest buffered agent events in sequence order", async () => {
+    const runtime = await import("./runtime.js");
+    await runtime.ensureCodexRuntime();
+    for (let sequence = 1; sequence <= 1_025; sequence += 1) {
+      channelHandler?.({
+        data: { event: { sequence } },
+        type: "agentEvent",
+      });
+    }
+
+    const sequences: number[] = [];
+    runtime.subscribeAgentEvents({
+      afterSequence: 0,
+      onEvent: (event) => sequences.push(event.sequence),
+    });
+
+    expect(sequences).toHaveLength(1_024);
+    expect(sequences[0]).toBe(2);
+    expect(sequences.at(-1)).toBe(1_025);
+  });
 });
