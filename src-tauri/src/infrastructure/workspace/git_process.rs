@@ -1,18 +1,106 @@
-use std::path::Path;
+use std::{collections::VecDeque, path::Path, process::ExitStatus, time::Duration};
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    process::Command,
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
+    process::{Child, Command},
+    sync::mpsc,
+    time::{Instant, sleep_until},
 };
 
 use super::path_guard::WorkspaceError;
+
+const LOCAL_GIT_TIMEOUT: Duration = Duration::from_secs(30);
+const NETWORK_GIT_TIMEOUT: Duration = Duration::from_secs(120);
+const STDERR_CAPTURE_BYTES: usize = 64 * 1024;
+const READ_BUFFER_BYTES: usize = 16 * 1024;
+
+#[derive(Clone, Copy)]
+enum StopReason {
+    StdoutLimit,
+    StderrLimit,
+    Timeout,
+}
+
+enum ProcessOutcome {
+    Exited(ExitStatus),
+    Stopped(StopReason),
+}
+
+enum ProcessEvent {
+    LimitExceeded(StopReason),
+    TaskFinished,
+}
+
+struct BoundedCapture {
+    head: Vec<u8>,
+    tail: VecDeque<u8>,
+    head_limit: usize,
+    tail_limit: usize,
+    total_bytes: usize,
+}
+
+impl BoundedCapture {
+    fn new(limit: usize) -> Self {
+        let head_limit = limit.div_ceil(2);
+        Self {
+            head: Vec::with_capacity(head_limit),
+            tail: VecDeque::with_capacity(limit - head_limit),
+            head_limit,
+            tail_limit: limit - head_limit,
+            total_bytes: 0,
+        }
+    }
+
+    fn push(&mut self, mut bytes: &[u8]) -> bool {
+        self.total_bytes = self.total_bytes.saturating_add(bytes.len());
+        let head_remaining = self.head_limit - self.head.len();
+        let head_bytes = head_remaining.min(bytes.len());
+        self.head.extend_from_slice(&bytes[..head_bytes]);
+        bytes = &bytes[head_bytes..];
+
+        if self.tail_limit > 0 {
+            if bytes.len() >= self.tail_limit {
+                self.tail.clear();
+                self.tail.extend(&bytes[bytes.len() - self.tail_limit..]);
+            } else {
+                let overflow = self
+                    .tail
+                    .len()
+                    .saturating_add(bytes.len())
+                    .saturating_sub(self.tail_limit);
+                self.tail.drain(..overflow);
+                self.tail.extend(bytes);
+            }
+        }
+        self.is_truncated()
+    }
+
+    fn is_truncated(&self) -> bool {
+        self.total_bytes > self.head_limit + self.tail_limit
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        let mut bytes = self.head;
+        bytes.reserve(self.tail.len());
+        bytes.extend(self.tail);
+        bytes
+    }
+}
 
 pub(super) async fn run_git(
     repo: &Path,
     args: &[&str],
     max_bytes: usize,
 ) -> Result<(Vec<u8>, bool), WorkspaceError> {
-    run_git_command(repo, args, max_bytes, None, None).await
+    run_git_command(repo, args, max_bytes, None, None, LOCAL_GIT_TIMEOUT).await
+}
+
+pub(super) async fn run_network_git(
+    repo: &Path,
+    args: &[&str],
+    max_bytes: usize,
+) -> Result<(Vec<u8>, bool), WorkspaceError> {
+    run_git_command(repo, args, max_bytes, None, None, NETWORK_GIT_TIMEOUT).await
 }
 
 pub(super) async fn run_git_with_index(
@@ -22,7 +110,15 @@ pub(super) async fn run_git_with_index(
     index_path: &Path,
     input: Option<&[u8]>,
 ) -> Result<(Vec<u8>, bool), WorkspaceError> {
-    run_git_command(repo, args, max_bytes, Some(index_path), input).await
+    run_git_command(
+        repo,
+        args,
+        max_bytes,
+        Some(index_path),
+        input,
+        LOCAL_GIT_TIMEOUT,
+    )
+    .await
 }
 
 async fn run_git_command(
@@ -31,6 +127,7 @@ async fn run_git_command(
     max_bytes: usize,
     index_path: Option<&Path>,
     input: Option<&[u8]>,
+    timeout: Duration,
 ) -> Result<(Vec<u8>, bool), WorkspaceError> {
     let mut command = Command::new("git");
     command
@@ -45,50 +142,239 @@ async fn run_git_command(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
+    // Git 可能启动 hook、ssh 等后代进程，统一进程组才能在超限或超时时关闭整棵进程树。
+    #[cfg(unix)]
+    command.process_group(0);
     if let Some(index_path) = index_path {
         command.env("GIT_INDEX_FILE", index_path);
     }
+
     let mut child = command.spawn()?;
+    let process_id = child.id();
     let stdin = child.stdin.take();
     let stdout = child.stdout.take().ok_or(WorkspaceError::InvalidPath)?;
     let stderr = child.stderr.take().ok_or(WorkspaceError::InvalidPath)?;
+    let (event_tx, event_rx) = mpsc::unbounded_channel();
+    let stdout_task = drain_stream(stdout, max_bytes, StopReason::StdoutLimit, event_tx.clone());
+    let stderr_task = drain_stream(
+        stderr,
+        STDERR_CAPTURE_BYTES,
+        StopReason::StderrLimit,
+        event_tx.clone(),
+    );
     let input_task = async {
-        if let (Some(mut stdin), Some(input)) = (stdin, input) {
-            stdin.write_all(input).await?;
-            stdin.shutdown().await?;
+        let result = async {
+            if let (Some(mut stdin), Some(input)) = (stdin, input) {
+                stdin.write_all(input).await?;
+                stdin.shutdown().await?;
+            }
+            Ok::<_, std::io::Error>(())
         }
-        Ok::<_, std::io::Error>(())
+        .await;
+        let _ = event_tx.send(ProcessEvent::TaskFinished);
+        result
     };
-    let stdout_task = async {
-        let mut bytes = Vec::new();
-        stdout
-            .take((max_bytes + 1) as u64)
-            .read_to_end(&mut bytes)
-            .await?;
-        Ok::<_, std::io::Error>(bytes)
-    };
-    let stderr_task = async {
-        let mut bytes = Vec::new();
-        stderr.take(64 * 1024).read_to_end(&mut bytes).await?;
-        Ok::<_, std::io::Error>(bytes)
-    };
-    let (_, mut output, stderr) = tokio::try_join!(input_task, stdout_task, stderr_task)?;
-    let status = child.wait().await?;
-    if !status.success() {
-        let stderr = String::from_utf8_lossy(&stderr);
-        let detail = stderr.trim();
-        if detail.contains("has no upstream branch") {
-            return Err(WorkspaceError::NoUpstream);
-        }
-        let operation = args.first().copied().unwrap_or("command");
-        let message = if detail.is_empty() {
-            format!("git {operation} failed with {status}")
-        } else {
-            format!("git {operation} failed: {detail}")
-        };
-        return Err(WorkspaceError::GitCommandFailed(message));
+    let wait_task = wait_for_child(&mut child, process_id, event_rx, timeout);
+
+    // 四个 future 必须同时推进，避免任一管道或 stdin 反向阻塞 Git。
+    let (input_result, stdout_result, stderr_result, outcome_result) =
+        tokio::join!(input_task, stdout_task, stderr_task, wait_task);
+    let outcome = outcome_result?;
+    let stdout = stdout_result?;
+    let stderr = stderr_result?;
+    if !matches!(outcome, ProcessOutcome::Stopped(_)) {
+        input_result?;
     }
-    let truncated = output.len() > max_bytes;
-    output.truncate(max_bytes);
-    Ok((output, truncated))
+
+    let stdout_truncated = stdout.is_truncated();
+    let output = stdout.into_bytes();
+    let stderr = stderr.into_bytes();
+    match outcome {
+        ProcessOutcome::Stopped(StopReason::StdoutLimit) => return Ok((output, true)),
+        ProcessOutcome::Stopped(StopReason::StderrLimit) => {
+            return Err(git_failure(
+                args,
+                format!("output exceeded {STDERR_CAPTURE_BYTES} bytes"),
+                &stderr,
+            ));
+        }
+        ProcessOutcome::Stopped(StopReason::Timeout) => {
+            return Err(git_failure(
+                args,
+                format!("timed out after {} seconds", timeout.as_secs()),
+                &stderr,
+            ));
+        }
+        ProcessOutcome::Exited(status) if !status.success() => {
+            let detail = String::from_utf8_lossy(&stderr);
+            if detail.contains("has no upstream branch") {
+                return Err(WorkspaceError::NoUpstream);
+            }
+            let fallback = format!("failed with {status}");
+            return Err(git_failure(args, fallback, &stderr));
+        }
+        ProcessOutcome::Exited(_) => {}
+    }
+    Ok((output, stdout_truncated))
+}
+
+async fn drain_stream<R>(
+    mut reader: R,
+    limit: usize,
+    reason: StopReason,
+    event_tx: mpsc::UnboundedSender<ProcessEvent>,
+) -> std::io::Result<BoundedCapture>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut capture = BoundedCapture::new(limit);
+    let mut buffer = [0_u8; READ_BUFFER_BYTES];
+    let mut limit_reported = false;
+    let result = async {
+        loop {
+            let read = reader.read(&mut buffer).await?;
+            if read == 0 {
+                return Ok(capture);
+            }
+            if capture.push(&buffer[..read]) && !limit_reported {
+                let _ = event_tx.send(ProcessEvent::LimitExceeded(reason));
+                limit_reported = true;
+            }
+        }
+    }
+    .await;
+    let _ = event_tx.send(ProcessEvent::TaskFinished);
+    result
+}
+
+async fn wait_for_child(
+    child: &mut Child,
+    process_id: Option<u32>,
+    mut event_rx: mpsc::UnboundedReceiver<ProcessEvent>,
+    timeout: Duration,
+) -> std::io::Result<ProcessOutcome> {
+    let deadline = sleep_until(Instant::now() + timeout);
+    tokio::pin!(deadline);
+    let mut status = None;
+    let mut finished_tasks = 0;
+    let mut watch_events = true;
+    loop {
+        if finished_tasks == 3
+            && let Some(status) = status
+        {
+            return Ok(ProcessOutcome::Exited(status));
+        }
+        tokio::select! {
+            result = child.wait(), if status.is_none() => status = Some(result?),
+            event = event_rx.recv(), if watch_events => {
+                match event {
+                    Some(ProcessEvent::LimitExceeded(reason)) => {
+                        terminate_child(child, process_id, status.is_some()).await?;
+                        return Ok(ProcessOutcome::Stopped(reason));
+                    }
+                    Some(ProcessEvent::TaskFinished) => finished_tasks += 1,
+                    None => watch_events = false,
+                }
+            }
+            () = &mut deadline => {
+                terminate_child(child, process_id, status.is_some()).await?;
+                return Ok(ProcessOutcome::Stopped(StopReason::Timeout));
+            }
+        }
+    }
+}
+
+async fn terminate_child(
+    child: &mut Child,
+    process_id: Option<u32>,
+    child_exited: bool,
+) -> std::io::Result<()> {
+    #[cfg(unix)]
+    if let Some(process_id) = process_id {
+        let status = Command::new("/bin/kill")
+            .args(["-KILL", &format!("-{process_id}")])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+        if status.is_ok_and(|status| status.success()) {
+            if !child_exited {
+                child.wait().await?;
+            }
+            return Ok(());
+        }
+    }
+    #[cfg(windows)]
+    if let Some(process_id) = process_id {
+        let status = Command::new("taskkill")
+            .args(["/PID", &process_id.to_string(), "/T", "/F"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+        if status.is_ok_and(|status| status.success()) {
+            if !child_exited {
+                child.wait().await?;
+            }
+            return Ok(());
+        }
+    }
+    if child_exited {
+        return Ok(());
+    }
+    child.kill().await
+}
+
+fn git_failure(args: &[&str], fallback: String, stderr: &[u8]) -> WorkspaceError {
+    let operation = args.first().copied().unwrap_or("command");
+    let detail = String::from_utf8_lossy(stderr);
+    let detail = detail.trim();
+    let message = if detail.is_empty() {
+        format!("git {operation} {fallback}")
+    } else {
+        format!("git {operation} {fallback}: {detail}")
+    };
+    WorkspaceError::GitCommandFailed(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::Path, time::Duration};
+
+    use super::{BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, run_git_command};
+
+    #[test]
+    fn bounded_capture_should_preserve_head_and_tail() {
+        let mut capture = BoundedCapture::new(6);
+        assert!(capture.push(b"0123456789"));
+        assert_eq!(capture.into_bytes(), b"012789");
+    }
+
+    #[test]
+    fn network_git_should_allow_more_time_than_local_git() {
+        assert!(NETWORK_GIT_TIMEOUT > LOCAL_GIT_TIMEOUT);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn timeout_should_kill_git_descendants_holding_pipes() {
+        let args = ["-c", "alias.hang=!sh -c 'sleep 60 &'", "hang"];
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            run_git_command(
+                Path::new("/"),
+                &args,
+                1024,
+                None,
+                None,
+                Duration::from_millis(100),
+            ),
+        )
+        .await
+        .expect("Git descendants should not outlive the timeout");
+
+        assert!(result.is_err());
+    }
 }

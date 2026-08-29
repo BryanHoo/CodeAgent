@@ -8,7 +8,7 @@ use serde::Serialize;
 use tokio::io::AsyncReadExt;
 
 use super::{
-    git_process::{run_git, run_git_with_index},
+    git_process::{run_git, run_git_with_index, run_network_git},
     git_read::{GitStatus, get_git_status, repository_path},
     path_guard::{WorkspaceError, valid_relative},
 };
@@ -284,7 +284,7 @@ pub async fn commit_changes(
             Some(WorkspaceError::NoUpstream.to_string()),
         )
     } else {
-        match run_git(&repo, &["push"], MAX_GIT_OUTPUT_BYTES).await {
+        match run_network_git(&repo, &["push"], MAX_GIT_OUTPUT_BYTES).await {
             Ok(_) => ("pushed", None),
             Err(error @ WorkspaceError::NoUpstream) => ("not_configured", Some(error.to_string())),
             Err(error) => ("failed", Some(error.to_string())),
