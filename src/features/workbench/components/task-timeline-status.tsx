@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { v4 as createUuid } from "uuid";
 
 import { getCurrentLanguage, i18n } from "../../../i18n/i18n.js";
+import {
+  getApplicationDetailViewUpdateGate,
+  runDetailViewInterval,
+} from "../../../shared/lifecycle/application-visibility.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import {
   notifyActionError,
@@ -224,13 +228,12 @@ export function TurnProcessingTime({
       return;
     }
 
-    // 只更新独立计时行，Turn 完成后立即清理并改用服务端终态时间。
-    const intervalId = globalThis.setInterval(() => {
-      setNow(Date.now());
-    }, TURN_PROCESSING_TIMER_INTERVAL_MS);
-    return () => {
-      globalThis.clearInterval(intervalId);
-    };
+    // 后台持续一段时间后停止计时提交，恢复时直接按当前时间校准。
+    return runDetailViewInterval(
+      getApplicationDetailViewUpdateGate(),
+      () => setNow(Date.now()),
+      TURN_PROCESSING_TIMER_INTERVAL_MS,
+    );
   }, [completedAt, startedAt]);
 
   if (startedAt === null) {

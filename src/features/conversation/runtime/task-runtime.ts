@@ -8,6 +8,7 @@ import {
   type AgentTurn,
   type PendingRequest,
 } from "@/protocol/index.js";
+import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
 
 const MAX_BUFFERED_DELTA_BYTES = 1_048_576;
 const MAX_BUFFERED_DELTA_EVENTS = 1_000;
@@ -141,18 +142,15 @@ function deltaKey(event: Extract<AgentEvent, { itemId: string }>): string {
   return `${event.taskId}:${event.turnId}:${event.itemId}:${event.type}:${field}`;
 }
 
-type BufferedDeltaEvent = Readonly<{
-  event: Extract<
-    AgentEvent,
-    { type: "command.output_delta" | "message.delta" | "plan.delta" | "reasoning.delta" }
-  >;
+type BufferedAgentEvent = Readonly<{
+  event: AgentEvent;
   retainedBytes: number;
 }>;
 
 export class AgentEventBuffer {
   readonly #maxBytes: number;
   readonly #maxEvents: number;
-  readonly #events: BufferedDeltaEvent[] = [];
+  readonly #events: BufferedAgentEvent[] = [];
   #bufferedBytes = 0;
 
   public constructor(options: Readonly<{ maxBytes?: number; maxEvents?: number }> = {}) {
@@ -167,33 +165,36 @@ export class AgentEventBuffer {
   }
 
   public push(event: AgentEvent): boolean {
-    if (!isDeltaEvent(event)) {
-      throw new TypeError("Only Agent Event deltas can be buffered");
-    }
-    const key = deltaKey(event);
     const previousEntry = this.#events.at(-1);
     const previous = previousEntry?.event;
-    const mergesPrevious = previous !== undefined && deltaKey(previous) === key;
-    const deltaBytes = textEncoder.encode(event.payload.delta).byteLength;
+    const mergesPrevious =
+      isDeltaEvent(event) &&
+      previous !== undefined &&
+      isDeltaEvent(previous) &&
+      deltaKey(previous) === deltaKey(event);
+    const eventBytes = isDeltaEvent(event)
+      ? textEncoder.encode(event.payload.delta).byteLength
+      : estimateRetainedBytes(event);
     const nextEventCount = this.#events.length + (mergesPrevious ? 0 : 1);
-    if (nextEventCount > this.#maxEvents || this.#bufferedBytes + deltaBytes > this.#maxBytes) {
-      // 溢出后丢弃未确认 Delta，由调用方取消订阅并通过 Snapshot 恢复。
+    if (nextEventCount > this.#maxEvents || this.#bufferedBytes + eventBytes > this.#maxBytes) {
+      // 溢出后丢弃未确认事件，由调用方通过 Snapshot 恢复。
       this.#events.length = 0;
       this.#bufferedBytes = 0;
       return false;
     }
-    this.#bufferedBytes += deltaBytes;
+    this.#bufferedBytes += eventBytes;
     if (!mergesPrevious) {
-      this.#events.push({ event, retainedBytes: deltaBytes });
+      this.#events.push({ event, retainedBytes: eventBytes });
       return true;
     }
+    if (!isDeltaEvent(event) || previous === undefined || !isDeltaEvent(previous)) return true;
     // 仅合并相邻 Delta，避免跨 Item 覆盖较早事件并改变 Timeline 顺序。
     this.#events[this.#events.length - 1] = {
       event: {
         ...event,
         payload: { ...event.payload, delta: `${previous.payload.delta}${event.payload.delta}` },
-      } as BufferedDeltaEvent["event"],
-      retainedBytes: (previousEntry?.retainedBytes ?? 0) + deltaBytes,
+      } as AgentEvent,
+      retainedBytes: (previousEntry?.retainedBytes ?? 0) + eventBytes,
     };
     return true;
   }
@@ -210,5 +211,14 @@ export class AgentEventBuffer {
       this.#bufferedBytes -= entry.retainedBytes;
     }
     return flushed.map(({ event }) => event);
+  }
+
+  public retainAfter(sessionId: string, sequence: number): void {
+    const retained = this.#events.filter(
+      ({ event }) => event.sessionId === sessionId && event.sequence > sequence,
+    );
+    this.#events.length = 0;
+    this.#events.push(...retained);
+    this.#bufferedBytes = retained.reduce((total, entry) => total + entry.retainedBytes, 0);
   }
 }

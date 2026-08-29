@@ -173,8 +173,7 @@ export class ProjectEventRuntime {
       if (store.getState().taskId !== response.snapshot.id) {
         continue;
       }
-      store.getState().reconcile(response);
-      target.resetForSnapshot();
+      target.reconcileSnapshot(response);
       matchingTargets.push(target);
     }
     this.observeSnapshot(response);
@@ -291,8 +290,7 @@ export class ProjectEventRuntime {
       throw new Error("Task store identity does not match the recovered snapshot");
     }
 
-    storeState.reconcile(response);
-    target.resetForSnapshot();
+    target.reconcileSnapshot(response);
     this.#callbacks.onSnapshot(response);
     this.#replayEvents(response.checkpoint, target);
   }

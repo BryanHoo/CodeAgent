@@ -4,6 +4,10 @@ import {
   applicationPerformanceMetrics,
   PERFORMANCE_MONITORING_ENABLED,
 } from "@/shared/performance/performance-metrics.js";
+import {
+  getApplicationDetailViewUpdateGate,
+  type DetailViewUpdateGate,
+} from "../../../shared/lifecycle/application-visibility.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import { AgentEventBuffer } from "./task-runtime.js";
 import type { TaskStore } from "./task-store.js";
@@ -270,29 +274,39 @@ export class TaskEventTarget {
   readonly #recoverSnapshots = new Set<RecoverTaskSnapshot>();
   readonly #recovery: SnapshotRecoveryController<AgentTaskSnapshotResponse>;
   readonly #store: TaskStore;
+  readonly #updateGate: DetailViewUpdateGate;
   #frameId: number | undefined;
+  #pendingConnectionState: AgentEventConnectionState | undefined;
+  #pendingSnapshot: AgentTaskSnapshotResponse | undefined;
+  #suspended: boolean;
+  #suspendedBufferOverflowed = false;
+  #unsubscribeUpdateGate: () => void = () => undefined;
 
   public constructor(
     store: TaskStore,
     recoverSnapshot: RecoverTaskSnapshot,
     onRecoveredSnapshot: (response: AgentTaskSnapshotResponse, target: TaskEventTarget) => void,
+    updateGate: DetailViewUpdateGate = getApplicationDetailViewUpdateGate(),
   ) {
     this.#store = store;
     this.#recoverSnapshots.add(recoverSnapshot);
     this.#onRecoveredSnapshot = onRecoveredSnapshot;
+    this.#updateGate = updateGate;
+    this.#suspended = updateGate.isSuspended();
     this.#recovery = new SnapshotRecoveryController(
       async () => this.#recoverSnapshots.values().next().value?.(),
       (response) => {
         this.#onRecoveredSnapshot(response, this);
       },
       () => {
-        this.#store.getState().setConnectionState("reconnecting");
+        this.setConnectionState("reconnecting");
       },
     );
+    this.#unsubscribeUpdateGate = updateGate.subscribe(() => this.#handleUpdateGateChange());
   }
 
   public get sessionId(): string | undefined {
-    return this.#store.getState().checkpoint?.sessionId;
+    return this.#pendingSnapshot?.checkpoint.sessionId ?? this.#store.getState().checkpoint?.sessionId;
   }
 
   public get taskId(): string {
@@ -315,11 +329,30 @@ export class TaskEventTarget {
       this.#frameId = undefined;
     }
     this.#buffer.drain();
+    this.#pendingSnapshot = undefined;
+    this.#suspendedBufferOverflowed = false;
     this.#recovery.reset();
+  }
+
+  public reconcileSnapshot(response: AgentTaskSnapshotResponse): void {
+    if (this.#suspended) {
+      // 先建立 Snapshot checkpoint 边界，禁止前后 Delta 在后台继续跨基线合并。
+      this.#buffer.retainAfter(response.checkpoint.sessionId, response.checkpoint.sequence);
+      this.#pendingSnapshot = response;
+      return;
+    }
+    this.#store.getState().reconcile(response);
+    this.resetForSnapshot();
   }
 
   public apply(event: AgentEvent): void {
     if (!this.#recovery.isReady) {
+      return;
+    }
+    if (this.#suspended) {
+      if (!this.#suspendedBufferOverflowed && !this.#buffer.push(event)) {
+        this.#suspendedBufferOverflowed = true;
+      }
       return;
     }
     if (isDeltaEvent(event)) {
@@ -353,12 +386,16 @@ export class TaskEventTarget {
   }
 
   public dispose(): void {
+    this.#unsubscribeUpdateGate();
     this.#recovery.dispose();
     if (this.#frameId !== undefined) {
       cancelAnimationFrame(this.#frameId);
       this.#frameId = undefined;
     }
     this.#buffer.drain();
+    this.#pendingConnectionState = undefined;
+    this.#pendingSnapshot = undefined;
+    this.#suspendedBufferOverflowed = false;
   }
 
   public requestRecovery(): void {
@@ -370,10 +407,20 @@ export class TaskEventTarget {
       this.#frameId = undefined;
     }
     this.#buffer.drain();
+    this.#pendingSnapshot = undefined;
+    this.#suspendedBufferOverflowed = false;
     this.#recovery.requestRecovery();
   }
 
   public setConnectionState(state: AgentEventConnectionState): void {
+    if (this.#suspended) {
+      this.#pendingConnectionState = state;
+      return;
+    }
+    this.#applyConnectionState(state);
+  }
+
+  #applyConnectionState(state: AgentEventConnectionState): void {
     // Socket 连通不代表 Snapshot 已校准，恢复状态优先于底层传输状态。
     const visibleState = state === "connected" && !this.#recovery.isReady ? "reconnecting" : state;
     this.#store.getState().setConnectionState(visibleState);
@@ -388,5 +435,44 @@ export class TaskEventTarget {
       this.#frameId = undefined;
     }
     this.#store.getState().applyEvents(this.#buffer.flushThrough(sequence));
+  }
+
+  #handleUpdateGateChange(): void {
+    const suspended = this.#updateGate.isSuspended();
+    if (this.#suspended === suspended) return;
+    this.#suspended = suspended;
+    if (suspended) {
+      if (this.#frameId !== undefined) {
+        cancelAnimationFrame(this.#frameId);
+        this.#frameId = undefined;
+      }
+      return;
+    }
+    if (this.#suspendedBufferOverflowed) {
+      this.#pendingSnapshot = undefined;
+      this.requestRecovery();
+      return;
+    }
+    let pendingEvents = this.#buffer.drain();
+    const pendingSnapshot = this.#pendingSnapshot;
+    this.#pendingSnapshot = undefined;
+    if (pendingSnapshot !== undefined) {
+      this.#store.getState().reconcile(pendingSnapshot);
+      this.#recovery.reset();
+      pendingEvents = pendingEvents.filter(
+        (event) =>
+          event.sessionId === pendingSnapshot.checkpoint.sessionId &&
+          event.sequence > pendingSnapshot.checkpoint.sequence,
+      );
+    }
+    const pendingConnectionState = this.#pendingConnectionState;
+    this.#pendingConnectionState = undefined;
+    if (pendingConnectionState !== undefined) {
+      this.#applyConnectionState(pendingConnectionState);
+    }
+    if (pendingEvents.length > 0) {
+      // 恢复时只通知一次 Store，避免逐条追赶积压造成前台卡顿。
+      this.#store.getState().applyEvents(pendingEvents);
+    }
   }
 }
