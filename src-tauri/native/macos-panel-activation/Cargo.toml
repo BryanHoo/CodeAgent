@@ -8,4 +8,5 @@ publish = false
 block2 = "0.6.2"
 objc2 = "0.6.1"
 objc2-app-kit = "0.3.1"
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["CGEventSource", "CGEventTypes", "CGRemoteOperation"] }
 objc2-foundation = "0.3.1"

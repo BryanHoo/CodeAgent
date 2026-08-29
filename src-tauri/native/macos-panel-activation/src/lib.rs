@@ -13,11 +13,13 @@ use objc2_app_kit::{
     NSPanel, NSTextAlignment, NSTextField, NSTitlePosition, NSWindowCollectionBehavior,
     NSWindowOrderingMode, NSWindowStyleMask,
 };
+use objc2_core_graphics::{CGEventSource, CGEventSourceStateID};
 use objc2_foundation::{NSDate, NSPoint, NSRect, NSSize, NSString, NSTimer};
 
 const PRIMARY_MOUSE_BUTTON_MASK: usize = 1;
 const COMMAND_Q_KEY_CODE: u16 = 12;
-const HOLD_TO_QUIT_THRESHOLD: Duration = Duration::from_millis(1_500);
+// Chromium 在 1500ms 目标时间上保留 1000ms 判定余量，实际约 500ms 即确认退出。
+const HOLD_TO_QUIT_CONFIRM_DELAY: Duration = Duration::from_millis(500);
 const HUD_DISMISS_DELAY_SECONDS: f64 = 1.0;
 const KEY_EVENT_POLL_SECONDS: f64 = 0.05;
 
@@ -25,16 +27,39 @@ const KEY_EVENT_POLL_SECONDS: f64 = 0.05;
 enum HoldToQuitAction {
     Wait,
     Cancel,
+    Confirm,
     Quit,
 }
 
-fn hold_to_quit_action(elapsed: Duration, key_released: bool) -> HoldToQuitAction {
-    if key_released {
-        HoldToQuitAction::Cancel
-    } else if elapsed >= HOLD_TO_QUIT_THRESHOLD {
-        HoldToQuitAction::Quit
+fn hold_to_quit_action(
+    elapsed: Duration,
+    key_pressed: bool,
+    quit_confirmed: bool,
+) -> HoldToQuitAction {
+    if !key_pressed {
+        if quit_confirmed || elapsed >= HOLD_TO_QUIT_CONFIRM_DELAY {
+            HoldToQuitAction::Quit
+        } else {
+            HoldToQuitAction::Cancel
+        }
+    } else if !quit_confirmed && elapsed >= HOLD_TO_QUIT_CONFIRM_DELAY {
+        HoldToQuitAction::Confirm
     } else {
         HoldToQuitAction::Wait
+    }
+}
+
+fn command_q_key_pressed() -> bool {
+    CGEventSource::key_state(
+        CGEventSourceStateID::CombinedSessionState,
+        COMMAND_Q_KEY_CODE,
+    )
+}
+
+fn conceal_application_windows(application: &NSApplication) {
+    // 保持应用处于前台继续消费重复 Cmd+Q，仅隐藏视觉内容，避免组合键转发到下一应用。
+    for window in application.windows().iter() {
+        window.setAlphaValue(0.0);
     }
 }
 
@@ -75,7 +100,7 @@ pub fn attach_child_window(parent: &NSPanel, child: &NSPanel) {
     }
 }
 
-/// 显示与 Chrome 一致的原生 HUD，并在 Command+Q 连续按住 1500ms 后确认退出。
+/// 显示与 Chrome 一致的原生 HUD，确认后等待物理 Q 键释放再退出。
 pub fn confirm_hold_to_quit() -> bool {
     let Some(mtm) = MainThreadMarker::new() else {
         return false;
@@ -96,25 +121,36 @@ pub fn confirm_hold_to_quit() -> bool {
 
     let hud = create_hold_to_quit_hud(mtm);
     let started_at = Instant::now();
+    let mut quit_confirmed = false;
     // SAFETY: AppKit 导出的静态 RunLoop mode 在进程生命周期内始终有效。
     let tracking_mode = unsafe { NSEventTrackingRunLoopMode };
     let action = loop {
         let wait_until = NSDate::dateWithTimeIntervalSinceNow(KEY_EVENT_POLL_SECONDS);
-        let release_event = application.nextEventMatchingMask_untilDate_inMode_dequeue(
-            NSEventMask::KeyUp | NSEventMask::FlagsChanged,
+        let key_up_event = application.nextEventMatchingMask_untilDate_inMode_dequeue(
+            NSEventMask::KeyUp,
             Some(&wait_until),
             tracking_mode,
             true,
         );
-        if let Some(release_event) = release_event.as_deref() {
-            // 清除长按期间积压的重复 Cmd+Q，避免短按取消后再次进入确认流程。
-            application
-                .discardEventsMatchingMask_beforeEvent(NSEventMask::KeyDown, Some(release_event));
-        }
-        let key_released = release_event.is_some();
-        let action = hold_to_quit_action(started_at.elapsed(), key_released);
-        if action != HoldToQuitAction::Wait {
-            break action;
+        let action = hold_to_quit_action(
+            started_at.elapsed(),
+            command_q_key_pressed(),
+            quit_confirmed,
+        );
+        match action {
+            HoldToQuitAction::Confirm => {
+                quit_confirmed = true;
+                conceal_application_windows(&application);
+            }
+            HoldToQuitAction::Wait => {}
+            HoldToQuitAction::Cancel | HoldToQuitAction::Quit => {
+                // 清除抬键前积压的重复 Cmd+Q，防止退出后继续作用于下一聚焦应用。
+                application.discardEventsMatchingMask_beforeEvent(
+                    NSEventMask::Any,
+                    key_up_event.as_deref(),
+                );
+                break action;
+            }
         }
     };
 
@@ -127,7 +163,9 @@ pub fn confirm_hold_to_quit() -> bool {
             hud.orderOut(None);
             true
         }
-        HoldToQuitAction::Wait => unreachable!("hold loop only exits after a decision"),
+        HoldToQuitAction::Wait | HoldToQuitAction::Confirm => {
+            unreachable!("hold loop only exits after a decision")
+        }
     }
 }
 
@@ -201,17 +239,21 @@ mod tests {
     }
 
     #[test]
-    fn hold_to_quit_requires_the_full_threshold() {
+    fn hold_to_quit_confirms_quickly_but_waits_for_key_release() {
         assert_eq!(
-            hold_to_quit_action(Duration::from_millis(300), true),
+            hold_to_quit_action(Duration::from_millis(499), false, false),
             HoldToQuitAction::Cancel
         );
         assert_eq!(
-            hold_to_quit_action(Duration::from_millis(1_499), false),
+            hold_to_quit_action(Duration::from_millis(500), true, false),
+            HoldToQuitAction::Confirm
+        );
+        assert_eq!(
+            hold_to_quit_action(Duration::from_millis(1_500), true, true),
             HoldToQuitAction::Wait
         );
         assert_eq!(
-            hold_to_quit_action(Duration::from_millis(1_500), false),
+            hold_to_quit_action(Duration::from_millis(1_500), false, true),
             HoldToQuitAction::Quit
         );
     }
