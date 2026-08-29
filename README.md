@@ -60,6 +60,6 @@ src-tauri/src/
 
 ## 跨平台构建
 
-GitHub Actions 已覆盖 Windows x64、Ubuntu x64、macOS Apple Silicon 和 Intel。当前仅生成
+GitHub Actions 已覆盖 Windows x64、Ubuntu x64 和 macOS Apple Silicon。当前仅生成
 无签名预览包，不配置证书、公证和自动更新；具体平台基线、发布步骤与安全限制见
 [releasing.md](docs/releasing.md)。

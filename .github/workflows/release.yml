@@ -32,10 +32,6 @@ jobs:
             platform: macos-latest
             args: --target aarch64-apple-darwin --bundles app,dmg --no-sign --ci
             rustTargets: aarch64-apple-darwin
-          - name: macOS Intel
-            platform: macos-latest
-            args: --target x86_64-apple-darwin --bundles app,dmg --no-sign --ci
-            rustTargets: x86_64-apple-darwin
 
     runs-on: ${{ matrix.platform }}
     steps:

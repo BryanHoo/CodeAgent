@@ -29,10 +29,16 @@ jobs:
         include:
           - name: Windows x64
             platform: windows-latest
+            args: ""
+            rustTargets: ""
           - name: Ubuntu x64
             platform: ubuntu-22.04
-          - name: macOS native
+            args: ""
+            rustTargets: ""
+          - name: macOS Apple Silicon
             platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rustTargets: aarch64-apple-darwin
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -55,6 +61,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
+          targets: ${{ matrix.rustTargets }}
 
       - name: Install Tauri system dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -79,4 +86,4 @@ jobs:
         run: pnpm version:check
 
       - name: Build desktop application
-        run: pnpm tauri build --debug --no-bundle --no-sign --ci
+        run: pnpm tauri build ${{ matrix.args }} --debug --no-bundle --no-sign --ci

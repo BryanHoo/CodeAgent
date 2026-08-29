@@ -4,7 +4,7 @@
     "targets": ["app", "dmg"],
     "category": "DeveloperTool",
     "macOS": {
-      "minimumSystemVersion": "13.3"
+      "minimumSystemVersion": "14.0"
     }
   }
 }

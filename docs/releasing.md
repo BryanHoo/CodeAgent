@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | Windows | x86_64 | NSIS | Windows 10/11，安装时下载 WebView2 bootstrapper |
 | Ubuntu | x86_64 | DEB、AppImage | Ubuntu 22.04 LTS |
-| macOS | Apple Silicon、Intel | app、DMG | macOS 13.3 |
+| macOS | Apple Silicon | app、DMG | macOS 14+ |
 
 Windows 暂不生成 MSI，因为 WiX 构建依赖 Windows 的 VBSCRIPT 可选功能。平台覆盖配置位于
 `src-tauri/tauri.windows.conf.json`、`src-tauri/tauri.linux.conf.json` 和

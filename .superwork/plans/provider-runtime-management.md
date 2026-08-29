@@ -42,7 +42,7 @@
 
 ## 发布门禁
 
-- 验证 Windows x64、macOS Apple Silicon/Intel 和 Ubuntu x64 的发现及安装路径。
+- 验证 Windows x64、macOS Apple Silicon 和 Ubuntu x64 的发现及安装路径。
 - 验证官方来源、checksum、签名和许可证或服务条款。
 - 验证 GUI 启动环境缺少终端 `PATH` 时仍能发现常见安装位置。
 - 验证离线、代理、限速、磁盘不足、权限不足和杀毒软件拦截场景。
