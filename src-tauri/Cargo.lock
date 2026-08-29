@@ -531,6 +531,7 @@ name = "codeagent"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "desktop-pet-platform",
  "flate2",
  "futures-util",
  "ignore",
@@ -833,6 +834,13 @@ dependencies = [
  "quote",
  "rustc_version",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "desktop-pet-platform"
+version = "0.1.0"
+dependencies = [
+ "windows",
 ]
 
 [[package]]
