@@ -15,6 +15,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { flushSync } from "react-dom";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
@@ -304,13 +305,15 @@ export function ConversationVirtualList<TItem>({
     [resizeTurn, virtualizer],
   );
   const measureMountedTurns = useCallback(() => {
-    // 离开 React layout lifecycle 后同步读取 DOM，避免 resizeItem 的通知触发 flushSync 警告。
+    // 离开 React layout lifecycle 后批量同步提交，确保完成态收缩在浏览器绘制前更新 sizer。
     queueMicrotask(() => {
       const container = containerRef.current;
       if (container === null) return;
-      for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
-        resizeOrDeferTurn(turn);
-      }
+      flushSync(() => {
+        for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
+          resizeOrDeferTurn(turn);
+        }
+      });
     });
   }, [containerRef, resizeOrDeferTurn]);
   useLayoutEffect(() => {

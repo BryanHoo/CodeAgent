@@ -26,7 +26,7 @@ export function resizeConversationTurn(
 }
 
 export function shouldAdjustConversationScrollPositionOnItemSizeChange(
-  item: Readonly<{ start: number }>,
+  item: Readonly<{ end: number }>,
   _delta: number,
   virtualizer: Readonly<{
     scrollAdjustments: number;
@@ -35,8 +35,8 @@ export function shouldAdjustConversationScrollPositionOnItemSizeChange(
 ): boolean {
   const viewportStart = (virtualizer.scrollOffset ?? 0) + virtualizer.scrollAdjustments;
 
-  // 视口上方的修正必须同步补偿，避免反向滚动时新高度与旧 top 分帧提交。
-  return item.start < viewportStart;
+  // 只补偿完整位于视口上方的 Turn；覆盖视口的完成态收缩由浏览器夹到有效范围。
+  return item.end <= viewportStart;
 }
 
 export function shouldDeferConversationTurnResize(

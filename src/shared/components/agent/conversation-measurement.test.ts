@@ -42,9 +42,9 @@ describe("measureConversationTurn", () => {
     expect(resizeItem).toHaveBeenCalledWith(3, 144);
   });
 
-  it("compensates every resized turn that starts above the viewport", () => {
+  it("compensates a resized turn that ends above the viewport", () => {
     const shouldAdjust = shouldAdjustConversationScrollPositionOnItemSizeChange(
-      { start: 1_000 },
+      { end: 1_100 },
       580,
       { scrollAdjustments: 0, scrollOffset: 1_200 },
     );
@@ -54,8 +54,19 @@ describe("measureConversationTurn", () => {
 
   it("does not compensate a resized turn at or below the viewport start", () => {
     const shouldAdjust = shouldAdjustConversationScrollPositionOnItemSizeChange(
-      { start: 1_200 },
+      { end: 1_300 },
       580,
+      { scrollAdjustments: 0, scrollOffset: 1_200 },
+    );
+
+    expect(shouldAdjust).toBe(false);
+  });
+
+  it("does not compensate a collapsing turn that still covers the viewport", () => {
+    const coveringTurn = { end: 5_000, start: 1_000 };
+    const shouldAdjust = shouldAdjustConversationScrollPositionOnItemSizeChange(
+      coveringTurn,
+      -4_800,
       { scrollAdjustments: 0, scrollOffset: 1_200 },
     );
 
