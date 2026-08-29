@@ -18,6 +18,11 @@ import {
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
+import {
+  resizeConversationTurn,
+  shouldAdjustConversationScrollPositionOnItemSizeChange,
+  shouldDeferConversationTurnResize,
+} from "./conversation-measurement.js";
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
 import {
   observeConversationViewportRecovery,
@@ -44,7 +49,7 @@ const ConversationContext = createContext<ConversationContextValue | null>(null)
 const CONVERSATION_INITIAL_RECT = { height: 768, width: 1_024 };
 const DEFAULT_TURN_ESTIMATED_HEIGHT_PX = 300;
 const TURN_GAP_PX = 24;
-const TURN_OVERSCAN = 3;
+const TURN_OVERSCAN = 8;
 
 function useConversationContext(): ConversationContextValue {
   const context = useContext(ConversationContext);
@@ -228,6 +233,10 @@ export function ConversationVirtualList<TItem>({
   const { containerRef, pauseFollowing, scrollbarWidth } = context;
   const navigationFrameRef = useRef(0);
   const layoutRecoveryFrameRef = useRef(0);
+  const pendingTurnResizeEntriesRef = useRef(
+    new Map<HTMLDivElement, ResizeObserverEntry | undefined>(),
+  );
+  const turnResizeObserverRef = useRef<ResizeObserver | null>(null);
   const getScrollElement = useCallback(() => containerRef.current, [containerRef]);
   const estimateTurnSize = useCallback(
     (index: number) =>
@@ -251,15 +260,90 @@ export function ConversationVirtualList<TItem>({
     overscan: TURN_OVERSCAN,
     scrollEndThreshold: 24,
   });
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+    shouldAdjustConversationScrollPositionOnItemSizeChange;
+  const resizeTurn = useCallback(
+    (turn: HTMLDivElement, entry?: ResizeObserverEntry) => {
+      resizeConversationTurn(turn, virtualizer.resizeItem, entry);
+    },
+    [virtualizer],
+  );
+  const observeTurnElement = useCallback((turn: HTMLDivElement | null) => {
+    if (turn === null) return;
+    turnResizeObserverRef.current?.observe(turn);
+    return () => {
+      pendingTurnResizeEntriesRef.current.delete(turn);
+      turnResizeObserverRef.current?.unobserve(turn);
+    };
+  }, []);
+  const flushPendingTurnResizes = useCallback(() => {
+    const pendingEntries = [...pendingTurnResizeEntriesRef.current];
+    pendingTurnResizeEntriesRef.current.clear();
+    for (const [turn, entry] of pendingEntries) {
+      if (turn.isConnected) resizeTurn(turn, entry);
+    }
+  }, [resizeTurn]);
+  const resizeOrDeferTurn = useCallback(
+    (turn: HTMLDivElement, entry?: ResizeObserverEntry) => {
+      const index = Number.parseInt(turn.dataset["index"] ?? "", 10);
+      const virtualTurn = virtualizer.getVirtualItems().find((item) => item.index === index);
+      if (
+        virtualTurn !== undefined &&
+        shouldDeferConversationTurnResize(virtualTurn, virtualizer)
+      ) {
+        // 同一 Turn 只保留最新尺寸，避免快速滚动期间累积无效测量。
+        pendingTurnResizeEntriesRef.current.set(turn, entry);
+        return;
+      }
+
+      pendingTurnResizeEntriesRef.current.delete(turn);
+      resizeTurn(turn, entry);
+    },
+    [resizeTurn, virtualizer],
+  );
   const measureMountedTurns = useCallback(() => {
+    // 离开 React layout lifecycle 后同步读取 DOM，避免 resizeItem 的通知触发 flushSync 警告。
+    queueMicrotask(() => {
+      const container = containerRef.current;
+      if (container === null) return;
+      for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
+        resizeOrDeferTurn(turn);
+      }
+    });
+  }, [containerRef, resizeOrDeferTurn]);
+  useLayoutEffect(() => {
+    const pendingEntries = pendingTurnResizeEntriesRef.current;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target instanceof HTMLDivElement) {
+          resizeOrDeferTurn(entry.target, entry);
+        }
+      }
+    });
+    turnResizeObserverRef.current = observer;
     const container = containerRef.current;
-    if (container === null) {
-      return;
+    if (container !== null) {
+      for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
+        observer.observe(turn);
+      }
     }
-    for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
-      virtualizer.measureElement(turn);
-    }
-  }, [containerRef, virtualizer]);
+    return () => {
+      pendingEntries.clear();
+      observer.disconnect();
+      if (turnResizeObserverRef.current === observer) {
+        turnResizeObserverRef.current = null;
+      }
+    };
+  }, [containerRef, resizeOrDeferTurn]);
+  const isVirtualizerScrolling = virtualizer.isScrolling;
+  useEffect(() => {
+    if (isVirtualizerScrolling || pendingTurnResizeEntriesRef.current.size === 0) return;
+
+    // 离开 React effect 后提交会触发同步锚点修正，避免 flushSync 生命周期警告。
+    queueMicrotask(() => {
+      if (!virtualizer.isScrolling) flushPendingTurnResizes();
+    });
+  }, [flushPendingTurnResizes, isVirtualizerScrolling, virtualizer]);
   const scrollToVirtualEnd = useCallback(() => {
     if (items.length > 0) {
       virtualizer.scrollToIndex(items.length - 1, { align: "end", behavior: "auto" });
@@ -361,7 +445,7 @@ export function ConversationVirtualList<TItem>({
               data-conversation-turn=""
               data-index={virtualTurn.index}
               key={virtualTurn.key}
-              ref={virtualizer.measureElement}
+              ref={observeTurnElement}
               style={{ top: virtualTurn.start }}
             >
               {renderItem(items[virtualTurn.index] as TItem, virtualTurn.index)}

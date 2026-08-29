@@ -22,4 +22,20 @@ describe("ConversationVirtualList rendering", () => {
     expect(markup).toContain("top:0");
     expect(markup).not.toContain("transform:");
   });
+
+  it("mounts enough turns ahead of the viewport to settle dynamic heights", () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        Conversation,
+        { conversationId: "task-a" },
+        createElement(ConversationVirtualList, {
+          getItemKey: (turnId: unknown) => String(turnId),
+          items: Array.from({ length: 20 }, (_, index) => `turn-${String(index)}`),
+          renderItem: (turnId: unknown) => createElement("p", null, String(turnId)),
+        }),
+      ),
+    );
+
+    expect(markup).toContain('data-index="10"');
+  });
 });
