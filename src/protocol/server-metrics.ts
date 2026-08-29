@@ -4,16 +4,13 @@ const CounterSchema = Type.Integer({ minimum: 0 });
 
 export const EventStreamProjectMetricsSchema = Type.Object(
   {
-    activeClients: CounterSchema,
-    backpressureSignals: CounterSchema,
     coalescedEvents: CounterSchema,
-    pendingDeltas: CounterSchema,
+    ipcEventsPerSecond: Type.Number({ minimum: 0 }),
+    mergeRate: Type.Number({ maximum: 1, minimum: 0 }),
     projectId: Type.String({ minLength: 1 }),
     providerEventsReceived: CounterSchema,
     publishedEvents: CounterSchema,
-    retainedEvents: CounterSchema,
-    retentionEvictions: CounterSchema,
-    slowClientDisconnects: CounterSchema,
+    queueHighWatermark: CounterSchema,
   },
   { additionalProperties: false },
 );

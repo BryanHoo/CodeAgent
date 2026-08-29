@@ -8,6 +8,8 @@ mod git_worktree;
 mod git_write;
 mod open;
 mod path_guard;
+#[cfg(test)]
+mod performance_baseline_tests;
 
 #[cfg(test)]
 mod git_tests;

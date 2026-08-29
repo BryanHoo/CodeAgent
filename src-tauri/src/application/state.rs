@@ -15,6 +15,8 @@ use super::turn_waiters::TurnStartedWaiters;
 mod event_delta_batcher;
 #[path = "state_event_forwarder.rs"]
 mod event_forwarder;
+#[path = "state_performance_metrics.rs"]
+pub(super) mod performance_metrics;
 use crate::{
     domain::runtime::{AppEvent, ProviderKind, RuntimeSnapshot, RuntimeStatus},
     infrastructure::{
@@ -23,6 +25,7 @@ use crate::{
     },
 };
 use event_forwarder::{required_event_string, spawn_event_forwarder};
+use performance_metrics::{RuntimePerformanceMetrics, RuntimePerformanceMetricsSnapshot};
 
 const EVENT_QUEUE_CAPACITY: usize = 256;
 
@@ -46,11 +49,16 @@ struct RuntimeSession {
     model_turn_waiters: ModelTurnWaiters,
     queue_editing_by_task: HashMap<String, String>,
     turn_started_waiters: TurnStartedWaiters,
+    performance_metrics: RuntimePerformanceMetrics,
 }
 
 impl AppState {
     pub fn project_file_search(&self) -> &ProjectFileSearch {
         &self.file_search
+    }
+
+    pub async fn runtime_performance_metrics(&self) -> RuntimePerformanceMetricsSnapshot {
+        self.runtime.lock().await.performance_metrics.snapshot()
     }
 
     pub async fn connect(&self, event_channel: Channel<AppEvent>) -> RuntimeSnapshot {

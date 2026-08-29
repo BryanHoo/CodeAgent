@@ -3,6 +3,8 @@
 /dist/
 /dist-ssr/
 /coverage/
+/playwright-report/
+/test-results/
 /.vite/
 /.vitest/
 /.pnpm-store/

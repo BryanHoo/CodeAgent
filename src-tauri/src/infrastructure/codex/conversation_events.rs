@@ -364,15 +364,17 @@ pub fn map_server_event_now(
     message: ServerMessage,
     sequence: u64,
 ) -> Result<Option<AgentEvent>, ConnectionError> {
-    let seconds = SystemTime::now()
+    let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| ConnectionError::StateUnavailable)?
-        .as_secs();
+        .map_err(|_| ConnectionError::StateUnavailable)?;
+    let received_at_unix_ms =
+        u64::try_from(elapsed.as_millis()).map_err(|_| ConnectionError::StateUnavailable)?;
+    let seconds = elapsed.as_secs();
     let seconds = i64::try_from(seconds).map_err(|_| ConnectionError::StateUnavailable)?;
     let timestamp = unix_seconds_to_rfc3339(seconds);
 
     // Delta 直接从 RawValue 映射到强类型事件，避免构建临时 JSON 树。
-    if let Some(event) = map_delta_message(&message, sequence, &timestamp)? {
+    if let Some(event) = map_delta_message(&message, sequence, &timestamp, received_at_unix_ms)? {
         return Ok(Some(AgentEvent::Delta(event)));
     }
     map_server_message(message, sequence, &timestamp).map(|event| event.map(AgentEvent::Json))

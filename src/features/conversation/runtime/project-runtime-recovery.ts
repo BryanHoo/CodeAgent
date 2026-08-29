@@ -1,5 +1,9 @@
 import type { AgentEventConnectionState } from "@/platform/native-client-types.js";
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@/protocol/index.js";
+import {
+  applicationPerformanceMetrics,
+  PERFORMANCE_MONITORING_ENABLED,
+} from "@/shared/performance/performance-metrics.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import { AgentEventBuffer } from "./task-runtime.js";
 import type { TaskStore } from "./task-store.js";
@@ -319,6 +323,13 @@ export class TaskEventTarget {
       return;
     }
     if (isDeltaEvent(event)) {
+      if (PERFORMANCE_MONITORING_ENABLED && event.receivedAtUnixMs !== undefined) {
+        // 只记录实际进入可见 Task Store 的 Delta，避免后台任务污染 React commit 延迟。
+        applicationPerformanceMetrics.recordDeltaReceived(
+          `${event.sessionId}:${event.taskId}:${String(event.sequence)}`,
+          event.receivedAtUnixMs,
+        );
+      }
       if (this.#frameId === undefined) {
         // 当前帧的首个 Delta 立即进入 Store，避免再叠加一帧首字延迟。
         this.#frameId = requestAnimationFrame(() => {

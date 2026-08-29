@@ -34,6 +34,12 @@ jobs:
       - name: Check web
         run: pnpm check:web
 
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Check source open performance
+        run: pnpm performance:browser
+
   rust:
     name: Rust
     runs-on: ubuntu-22.04

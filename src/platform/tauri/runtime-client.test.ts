@@ -27,4 +27,16 @@ describe("TauriRuntimeClient", () => {
       day: "2026-08-25",
     });
   });
+
+  it("reads runtime IPC performance metrics", async () => {
+    const response = { projects: [], version: 1 as const };
+    const invoke = vi.fn(async () => response);
+    const client = new TauriRuntimeClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: invoke as InvokeImplementation,
+    });
+
+    await expect(client.getPerformanceMetrics()).resolves.toEqual(response);
+    expect(invoke).toHaveBeenCalledWith("get_runtime_performance_metrics");
+  });
 });

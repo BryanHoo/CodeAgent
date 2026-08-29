@@ -24,6 +24,7 @@ pub(super) fn map_delta_message(
     message: &ServerMessage,
     sequence: u64,
     timestamp: &str,
+    received_at_unix_ms: u64,
 ) -> Result<Option<AgentDeltaEvent>, ConnectionError> {
     let (event_type, field, requires_summary_index) = match message.method.as_str() {
         "item/agentMessage/delta" => (AgentDeltaType::Message, None, false),
@@ -54,6 +55,7 @@ pub(super) fn map_delta_message(
             section_index: params.summary_index,
         },
         provider: ProviderKind::Codex,
+        received_at_unix_ms,
         sequence,
         session_id: RUNTIME_SESSION_ID,
         task_id: params.thread_id.to_owned(),
@@ -61,6 +63,7 @@ pub(super) fn map_delta_message(
         turn_id: params.turn_id.to_owned(),
         event_type,
         version: 2,
+        source_event_count: 1,
     }))
 }
 
@@ -85,7 +88,7 @@ mod tests {
             .unwrap(),
         };
 
-        let event = map_delta_message(&message, 3, "2025-01-01T00:00:00Z")
+        let event = map_delta_message(&message, 3, "2025-01-01T00:00:00Z", 1_735_689_600_123)
             .unwrap()
             .unwrap();
 
@@ -95,6 +98,7 @@ mod tests {
                 "itemId": "item-a",
                 "payload": {"delta": "结果", "field": "summary", "sectionIndex": 2},
                 "provider": "codex",
+                "receivedAtUnixMs": 1_735_689_600_123_u64,
                 "sequence": 3,
                 "sessionId": "codeagent-runtime",
                 "taskId": "thread-a",

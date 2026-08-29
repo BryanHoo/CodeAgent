@@ -142,7 +142,14 @@ async fn publish_mapped_event(
     }
     // WebView 消费变慢时使用有界队列背压，Sequence 已分配后禁止静默丢弃事件。
     let pet_event = event.clone();
+    let provider_event_count = event.source_event_count();
     let event_sender = session.event_sender.clone();
+    let queue_depth = event_sender.as_ref().map_or(0, |sender| {
+        (sender.max_capacity().saturating_sub(sender.capacity()) + 1).min(sender.max_capacity())
+    });
+    session
+        .performance_metrics
+        .record_delivery(&project_id, provider_event_count, 1, queue_depth);
     drop(session);
     if let Some(sender) = event_sender {
         // 等待前已释放全局状态锁，慢 WebView 不会阻塞其他命令读取 Runtime 状态。

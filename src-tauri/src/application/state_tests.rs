@@ -10,7 +10,7 @@ use tokio::{
     time::{Duration, sleep, timeout},
 };
 
-use super::{RuntimeSession, spawn_event_forwarder};
+use super::{RuntimePerformanceMetrics, RuntimeSession, spawn_event_forwarder};
 use crate::domain::runtime::{AppEvent, ProviderKind, RuntimeStatus};
 use crate::infrastructure::codex::ServerMessage;
 
@@ -263,6 +263,22 @@ async fn consecutive_deltas_should_merge_before_crossing_the_channel() {
     assert_eq!(events[0]["data"]["event"]["sequence"], 1);
     assert_eq!(events[1]["data"]["event"]["payload"]["delta"], "bc");
     assert_eq!(events[1]["data"]["event"]["sequence"], 2);
+}
+
+#[test]
+fn runtime_performance_metrics_should_report_merge_rate_and_queue_high_watermark() {
+    let mut metrics = RuntimePerformanceMetrics::default();
+    metrics.record_delivery("project-a", 10, 4, 7);
+
+    let snapshot = metrics.snapshot();
+    let project = &snapshot.projects[0];
+    assert_eq!(project.project_id, "project-a");
+    assert_eq!(project.provider_events_received, 10);
+    assert_eq!(project.published_events, 4);
+    assert_eq!(project.coalesced_events, 6);
+    assert_eq!(project.ipc_events_per_second, 4.0);
+    assert_eq!(project.merge_rate, 0.6);
+    assert_eq!(project.queue_high_watermark, 7);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

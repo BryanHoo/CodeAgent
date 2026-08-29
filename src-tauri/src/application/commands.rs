@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State, ipc::Channel};
 
+use super::state::performance_metrics::RuntimePerformanceMetricsSnapshot;
 use super::{error::AppError, state::AppState};
 use crate::domain::runtime::{AppEvent, RuntimeSnapshot};
 
@@ -34,4 +35,11 @@ pub async fn get_app_info(state: State<'_, AppState>) -> Result<Value, AppError>
         "status": "current",
         "updateAvailable": false,
     }))
+}
+
+#[tauri::command]
+pub async fn get_runtime_performance_metrics(
+    state: State<'_, AppState>,
+) -> Result<RuntimePerformanceMetricsSnapshot, AppError> {
+    Ok(state.runtime_performance_metrics().await)
 }

@@ -1,6 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AgentEvent } from "@/protocol/index.js";
 import { RingBuffer } from "@/shared/memory/ring-buffer.js";
+import {
+  applicationPerformanceMetrics,
+  PERFORMANCE_MONITORING_ENABLED,
+} from "@/shared/performance/performance-metrics.js";
 
 export type RuntimeStatus = "failed" | "idle" | "ready" | "starting";
 export type RuntimeSnapshot = Readonly<{
@@ -55,6 +59,9 @@ export function ensureCodexRuntime(): Promise<RuntimeSnapshot> {
         return;
       }
       recentAgentEvents.append(event.data.event);
+      if (PERFORMANCE_MONITORING_ENABLED) {
+        applicationPerformanceMetrics.recordIpcEvent(recentAgentEvents.size, performance.now());
+      }
       for (const listener of agentEventListeners) listener(event.data.event);
     });
     await invoke<RuntimeSnapshot>("connect_runtime", { onEvent: channel });

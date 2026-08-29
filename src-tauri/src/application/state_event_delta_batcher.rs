@@ -133,6 +133,7 @@ mod tests {
                 section_index: None,
             },
             provider: ProviderKind::Codex,
+            received_at_unix_ms: 0,
             sequence: 0,
             session_id: "codeagent-runtime",
             task_id: "task-a".to_owned(),
@@ -140,6 +141,7 @@ mod tests {
             turn_id: "turn-a".to_owned(),
             event_type: AgentDeltaType::Message,
             version: 2,
+            source_event_count: 1,
         })
     }
 

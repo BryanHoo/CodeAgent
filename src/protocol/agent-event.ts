@@ -32,6 +32,7 @@ const realtimeDiffMetadataProperties = {
 
 const eventEnvelopeProperties = {
   provider: Type.String({ minLength: 1 }),
+  receivedAtUnixMs: Type.Optional(Type.Number({ minimum: 0 })),
   sequence: SequenceSchema,
   sessionId: SessionIdSchema,
   taskId: Type.String({ minLength: 1 }),

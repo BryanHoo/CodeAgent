@@ -48,6 +48,7 @@ export default defineConfig({
     },
   },
   build: {
+    manifest: true,
     chunkSizeWarningLimit: 512,
     rolldownOptions: {
       output: {

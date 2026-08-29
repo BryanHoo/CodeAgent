@@ -73,6 +73,7 @@ pub struct AgentDeltaEvent {
     pub item_id: String,
     pub payload: AgentDeltaPayload,
     pub provider: ProviderKind,
+    pub received_at_unix_ms: u64,
     pub sequence: u64,
     pub session_id: &'static str,
     pub task_id: String,
@@ -81,6 +82,8 @@ pub struct AgentDeltaEvent {
     #[serde(rename = "type")]
     pub event_type: AgentDeltaType,
     pub version: u16,
+    #[serde(skip)]
+    pub source_event_count: u64,
 }
 
 impl AgentDeltaEvent {
@@ -95,6 +98,7 @@ impl AgentDeltaEvent {
 
     pub fn append(&mut self, other: Self) {
         self.payload.delta.push_str(&other.payload.delta);
+        self.source_event_count += other.source_event_count;
     }
 }
 
@@ -106,6 +110,12 @@ pub enum AgentEvent {
 }
 
 impl AgentEvent {
+    pub fn source_event_count(&self) -> u64 {
+        match self {
+            Self::Delta(event) => event.source_event_count,
+            Self::Json(_) => 1,
+        }
+    }
     pub fn task_id(&self) -> Option<&str> {
         match self {
             Self::Delta(event) => Some(&event.task_id),

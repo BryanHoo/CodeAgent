@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 
 import { I18nextProvider, i18n, synchronizeLanguagePreference } from "./i18n/i18n.js";
 import { initializeAppStorage } from "./platform/tauri/app-storage.js";
+import { installPerformanceMonitoring } from "./shared/performance/performance-monitoring.js";
+import { PerformanceProfiler } from "./shared/performance/performance-profiler.js";
 import "./shared/styles/globals.css";
 import "./shared/styles/desktop-pet.css";
 import "./shared/styles/workbench.css";
@@ -16,6 +18,7 @@ const applicationRoot = rootElement;
 const windowSurface = new URLSearchParams(window.location.search).get("window");
 const appSurface = windowSurface === "desktop-pet" ? windowSurface : "main";
 document.documentElement.dataset.appSurface = appSurface;
+installPerformanceMonitoring();
 
 async function startApplication(): Promise<void> {
   if (appSurface !== "main") {
@@ -50,7 +53,9 @@ async function startApplication(): Promise<void> {
   createRoot(applicationRoot).render(
     <StrictMode>
       <AppProviders>
-        <App />
+        <PerformanceProfiler>
+          <App />
+        </PerformanceProfiler>
       </AppProviders>
     </StrictMode>,
   );

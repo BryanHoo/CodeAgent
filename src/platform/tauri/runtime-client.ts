@@ -3,6 +3,7 @@ import type {
   AgentCapabilities,
   AppInfoResponse,
   HealthResponse,
+  EventStreamMetricsResponse,
   UploadAgentFeedbackRequest,
   UploadAgentFeedbackResponse,
   WorkbenchPetCatalogResponse,
@@ -19,6 +20,9 @@ import {
 export type NativeWorkbenchBackgroundResponse = Readonly<{ assetPath: string }>;
 
 export class TauriRuntimeClient extends TauriCatalogClient {
+  public async getPerformanceMetrics(): Promise<EventStreamMetricsResponse> {
+    return this.call("get_runtime_performance_metrics");
+  }
   public async getHealth(_options: ReadOptions = {}): Promise<HealthResponse> {
     await this.ensureRuntime();
     return { status: "ok", version: 1 };

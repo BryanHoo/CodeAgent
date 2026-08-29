@@ -18,7 +18,7 @@ use application::{
         logout_provider, retry_mcp_servers, start_official_provider_login, update_global_settings,
         update_project_defaults,
     },
-    commands::{connect_runtime, get_app_info, start_runtime},
+    commands::{connect_runtime, get_app_info, get_runtime_performance_metrics, start_runtime},
     desktop_pet_commands::{
         DesktopPetRuntime, get_desktop_pet_drag_strategy, get_desktop_pet_position,
         get_desktop_pet_state, layout_desktop_pet, move_desktop_pet, open_desktop_pet_task,
@@ -74,6 +74,7 @@ pub fn run() {
             connect_runtime,
             start_runtime,
             get_app_info,
+            get_runtime_performance_metrics,
             sync_desktop_pet,
             get_desktop_pet_state,
             get_desktop_pet_drag_strategy,
