@@ -19,9 +19,14 @@ mod event_forwarder;
 #[path = "state_performance_metrics.rs"]
 pub(super) mod performance_metrics;
 use crate::{
-    domain::runtime::{AppEvent, ProviderKind, RuntimeSnapshot, RuntimeStatus},
+    domain::runtime::{
+        AppEvent, CodexRuntimeAvailability, ProviderKind, RuntimeSnapshot, RuntimeStatus,
+    },
     infrastructure::{
-        codex::{AppServerConnection, CodexProcess, PendingServerRequest},
+        codex::{
+            AppServerConnection, CodexProcess, PendingServerRequest, inspect_codex_runtime,
+            install_codex_runtime,
+        },
         workspace::ProjectFileSearch,
     },
 };
@@ -35,6 +40,7 @@ pub struct AppState {
     file_search: ProjectFileSearch,
     request_cancellations: RequestCancellationRegistry,
     runtime: Arc<Mutex<RuntimeSession>>,
+    runtime_install: Mutex<()>,
 }
 
 #[derive(Default)]
@@ -79,6 +85,22 @@ impl AppState {
 
     pub async fn runtime_performance_metrics(&self) -> RuntimePerformanceMetricsSnapshot {
         self.runtime.lock().await.performance_metrics.snapshot()
+    }
+
+    pub async fn inspect_codex(&self, app_data: &Path) -> CodexRuntimeAvailability {
+        inspect_codex_runtime(app_data).await
+    }
+
+    pub async fn install_codex(
+        &self,
+        app_data: &Path,
+    ) -> Result<CodexRuntimeAvailability, AppError> {
+        // 串行化同一 Provider 的安装，避免双击触发重复下载和目录替换竞争。
+        let _install_guard = self.runtime_install.lock().await;
+        install_codex_runtime(app_data).await.map_err(|error| {
+            eprintln!("codex private runtime installation failed: {error}");
+            AppError::CodexRuntimeInstallFailed
+        })
     }
 
     pub async fn connect(&self, event_channel: Channel<AppEvent>) -> RuntimeSnapshot {

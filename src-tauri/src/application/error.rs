@@ -11,6 +11,8 @@ pub enum AppError {
     RuntimeEventDeliveryFailed,
     #[error("failed to start Codex runtime")]
     CodexRuntimeStartFailed,
+    #[error("failed to install Codex runtime")]
+    CodexRuntimeInstallFailed,
     #[error("Codex runtime is unavailable")]
     CodexRuntimeUnavailable,
     #[error("Codex request failed")]

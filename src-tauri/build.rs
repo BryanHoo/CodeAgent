@@ -8,6 +8,8 @@ fn main() {
         "update_custom_backgrounds",
         "connect_runtime",
         "start_runtime",
+        "inspect_codex_runtime",
+        "install_codex_runtime",
         "get_app_info",
         "get_runtime_performance_metrics",
         "sync_desktop_pet",

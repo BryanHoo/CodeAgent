@@ -20,7 +20,7 @@ use application::{
     },
     commands::{
         cancel_native_request, connect_runtime, get_app_info, get_runtime_performance_metrics,
-        start_runtime,
+        inspect_codex_runtime, install_codex_runtime, start_runtime,
     },
     desktop_pet_commands::{
         DesktopPetRuntime, get_desktop_pet_drag_strategy, get_desktop_pet_position,
@@ -76,6 +76,8 @@ pub fn run() {
             update_custom_backgrounds,
             connect_runtime,
             start_runtime,
+            inspect_codex_runtime,
+            install_codex_runtime,
             cancel_native_request,
             get_app_info,
             get_runtime_performance_metrics,

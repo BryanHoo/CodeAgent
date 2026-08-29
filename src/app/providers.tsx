@@ -6,6 +6,7 @@ import { ProjectProvider } from "../features/projects/project-context.js";
 import { createDesktopTaskNotifier } from "../features/notifications/desktop-task-notifier.js";
 import { createActionMutationCache } from "../features/notifications/action-notifications.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
+import { CodexRuntimeGate } from "../features/runtime/components/codex-runtime-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { getNotificationPreference } from "../features/settings/notification-preference.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
@@ -68,11 +69,13 @@ function AppProviderContent({ children }: AppProvidersProps) {
   const { t } = useTranslation("common");
   return (
     <>
-      <ProviderConnectionGate>
-        <ProjectProvider taskNotifier={taskNotifier}>
-          <ComposerDraftProvider>{children}</ComposerDraftProvider>
-        </ProjectProvider>
-      </ProviderConnectionGate>
+      <CodexRuntimeGate>
+        <ProviderConnectionGate>
+          <ProjectProvider taskNotifier={taskNotifier}>
+            <ComposerDraftProvider>{children}</ComposerDraftProvider>
+          </ProjectProvider>
+        </ProviderConnectionGate>
+      </CodexRuntimeGate>
       <Toaster
         containerAriaLabel={t("app.notificationRegion")}
         duration={5_000}

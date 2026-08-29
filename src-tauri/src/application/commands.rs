@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State, ipc::Channel};
 
 use super::state::performance_metrics::RuntimePerformanceMetricsSnapshot;
 use super::{error::AppError, state::AppState};
-use crate::domain::runtime::{AppEvent, RuntimeSnapshot};
+use crate::domain::runtime::{AppEvent, CodexRuntimeAvailability, RuntimeSnapshot};
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn connect_runtime(
@@ -23,6 +23,30 @@ pub async fn start_runtime(
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
     state.start_codex(&app, &app_data).await
+}
+
+#[tauri::command]
+pub async fn inspect_codex_runtime(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<CodexRuntimeAvailability, AppError> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    Ok(state.inspect_codex(&app_data).await)
+}
+
+#[tauri::command]
+pub async fn install_codex_runtime(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<CodexRuntimeAvailability, AppError> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    state.install_codex(&app_data).await
 }
 
 #[tauri::command]

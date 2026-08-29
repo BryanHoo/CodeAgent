@@ -18,6 +18,7 @@ mod conversation_runtime_events;
 mod generated_image_store;
 mod process;
 mod protocol;
+mod runtime_manager;
 mod settings;
 mod sidebar;
 mod tasks;
@@ -46,6 +47,9 @@ mod conversation_item_tests;
 #[cfg(test)]
 #[path = "conversation_tests.rs"]
 mod conversation_tests;
+#[cfg(test)]
+#[path = "runtime_manager_tests.rs"]
+mod runtime_manager_tests;
 #[cfg(test)]
 #[path = "settings_tests.rs"]
 mod settings_tests;
@@ -81,6 +85,7 @@ pub use conversation_requests::{
     PendingServerRequest, map_server_request_now, resolved_request_id, response_for_resolution,
 };
 pub use process::CodexProcess;
+pub use runtime_manager::{inspect_codex_runtime, install_codex_runtime};
 pub use settings::{
     get_global_settings, get_project_defaults, update_global_settings, update_project_defaults,
 };

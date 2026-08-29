@@ -16,7 +16,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
-| 运行时与健康 | `getHealth`, `getCapabilities` | Rust 子进程握手、精确版本校验、失败恢复、有界消息队列 | 已实现 |
+| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页精确检测 `0.149.0`；支持全局安装提示、官方 npm 包校验后写入应用私有目录、手动复检、Rust 子进程握手与失败恢复 | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
 | 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 按系统安装状态探测编辑器、终端与文件管理器，再通过受限应用 ID 打开 | 已实现 |
@@ -81,6 +81,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - 架构依据：`docs/architecture-research.md`
 - Rust app-server 连接：`src-tauri/src/infrastructure/codex/connection.rs`
 - 进程与版本：`src-tauri/src/infrastructure/codex/process.rs`
+- 运行时发现与按需下载：`src-tauri/src/infrastructure/codex/runtime_manager.rs`
 - 历史与 Item：`src-tauri/src/infrastructure/codex/conversation.rs`
 - Tauri 事件状态：`src-tauri/src/application/state.rs`
 - 左栏客户端：`src/platform/tauri/sidebar-client.ts`

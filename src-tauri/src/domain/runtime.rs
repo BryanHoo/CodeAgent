@@ -20,6 +20,24 @@ pub enum RuntimeStatus {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub enum CodexRuntimeAvailabilityStatus {
+    Compatible,
+    Missing,
+    Incompatible,
+    Failed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexRuntimeAvailability {
+    pub status: CodexRuntimeAvailabilityStatus,
+    pub required_version: &'static str,
+    pub detected_version: Option<String>,
+    pub global_install_command: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSnapshot {
     pub schema_version: u16,
     pub status: RuntimeStatus,
@@ -180,7 +198,10 @@ pub enum AppEvent {
 mod tests {
     use serde_json::json;
 
-    use super::{AppEvent, ProviderKind, RuntimeStatus};
+    use super::{
+        AppEvent, CodexRuntimeAvailability, CodexRuntimeAvailabilityStatus, ProviderKind,
+        RuntimeStatus,
+    };
 
     #[test]
     fn runtime_event_should_match_frontend_contract() {
@@ -216,6 +237,26 @@ mod tests {
             json!({
                 "type": "agentEvent",
                 "data": {"event": {"sequence": 8, "type": "message.delta"}}
+            })
+        );
+    }
+
+    #[test]
+    fn codex_runtime_availability_should_expose_recovery_details() {
+        let availability = CodexRuntimeAvailability {
+            detected_version: Some("0.150.0".to_owned()),
+            global_install_command: "npm install -g @openai/codex@0.149.0",
+            required_version: "0.149.0",
+            status: CodexRuntimeAvailabilityStatus::Incompatible,
+        };
+
+        assert_eq!(
+            serde_json::to_value(availability).unwrap(),
+            json!({
+                "detectedVersion": "0.150.0",
+                "globalInstallCommand": "npm install -g @openai/codex@0.149.0",
+                "requiredVersion": "0.149.0",
+                "status": "incompatible"
             })
         );
     }

@@ -16,8 +16,8 @@ use tokio::{
 };
 
 use super::connection::{AppServerConnection, ConnectionError};
+use super::runtime_manager::{RuntimeDiscoveryError, find_compatible_codex_binary};
 
-const CODEX_BINARY_ENV: &str = "CODEAGENT_CODEX_BIN";
 pub const SUPPORTED_CODEX_VERSION: &str = "0.149.0";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -32,10 +32,6 @@ const SHELL_PATH_PROBE: &str = r#"printf '\036%s\037' "$PATH""#;
 pub enum ProcessError {
     #[error("failed to spawn codex app-server")]
     Spawn(#[source] std::io::Error),
-    #[error("compatible Codex binary was not found")]
-    BinaryNotFound,
-    #[error("CODEAGENT_CODEX_BIN must be an absolute executable path")]
-    InvalidBinaryPath,
     #[error("failed to probe Codex version")]
     VersionProbe(#[source] std::io::Error),
     #[error("Codex version probe timed out")]
@@ -44,6 +40,8 @@ pub enum ProcessError {
     VersionOutputTooLarge,
     #[error("unsupported Codex version; expected 0.149.0")]
     UnsupportedVersion,
+    #[error(transparent)]
+    RuntimeDiscovery(#[from] RuntimeDiscoveryError),
     #[error("codex app-server did not expose required stdio pipes")]
     MissingPipe,
     #[error("codex app-server handshake failed")]
@@ -63,8 +61,8 @@ pub struct CodexProcess {
 
 impl CodexProcess {
     pub async fn start(app_data: &Path) -> Result<Self, ProcessError> {
-        let program = configured_binary()?;
-        let version = probe_codex_version(&program).await?;
+        let program = find_compatible_codex_binary(app_data).await?;
+        let version = SUPPORTED_CODEX_VERSION.to_owned();
         let runtime_path = resolve_login_shell_path().await;
         let mut child = build_app_server_command(program.as_os_str(), runtime_path.as_deref())
             .spawn()
@@ -128,31 +126,7 @@ impl Drop for CodexProcess {
     }
 }
 
-fn configured_binary() -> Result<PathBuf, ProcessError> {
-    if let Some(explicit) = env::var_os(CODEX_BINARY_ENV) {
-        let path = PathBuf::from(explicit);
-        if !path.is_absolute() {
-            return Err(ProcessError::InvalidBinaryPath);
-        }
-        return executable_path(&path).ok_or(ProcessError::InvalidBinaryPath);
-    }
-    let executable = OsString::from(format!("codex{}", env::consts::EXE_SUFFIX));
-    if let Some(path) = env::var_os("PATH") {
-        for directory in env::split_paths(&path) {
-            if let Some(path) = executable_path(&directory.join(&executable)) {
-                return Ok(path);
-            }
-        }
-    }
-    for candidate in common_binary_paths(&executable) {
-        if let Some(path) = executable_path(&candidate) {
-            return Ok(path);
-        }
-    }
-    Err(ProcessError::BinaryNotFound)
-}
-
-fn executable_path(path: &Path) -> Option<PathBuf> {
+pub(super) fn executable_path(path: &Path) -> Option<PathBuf> {
     let canonical = path.canonicalize().ok()?;
     let metadata = canonical.metadata().ok()?;
     if !metadata.is_file() {
@@ -168,26 +142,7 @@ fn executable_path(path: &Path) -> Option<PathBuf> {
     Some(canonical)
 }
 
-fn common_binary_paths(executable: &OsStr) -> Vec<PathBuf> {
-    let mut paths = vec![
-        PathBuf::from("/opt/homebrew/bin").join(executable),
-        PathBuf::from("/usr/local/bin").join(executable),
-        PathBuf::from("/usr/bin").join(executable),
-    ];
-    if let Some(home) = env::var_os("HOME") {
-        paths.push(PathBuf::from(home).join(".local/bin").join(executable));
-    }
-    if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-        paths.push(
-            PathBuf::from(local_app_data)
-                .join("Programs/Codex")
-                .join(executable),
-        );
-    }
-    paths
-}
-
-async fn probe_codex_version(program: &Path) -> Result<String, ProcessError> {
+pub(super) async fn probe_codex_version(program: &Path) -> Result<String, ProcessError> {
     let mut child = Command::new(program)
         .arg("--version")
         .stdin(Stdio::null())
@@ -217,7 +172,7 @@ async fn probe_codex_version(program: &Path) -> Result<String, ProcessError> {
         return Err(ProcessError::UnsupportedVersion);
     }
     let output = std::str::from_utf8(&stdout).map_err(|_| ProcessError::UnsupportedVersion)?;
-    parse_codex_version(output)
+    parse_codex_cli_version(output)
         .map(str::to_owned)
         .ok_or(ProcessError::UnsupportedVersion)
 }
@@ -234,10 +189,23 @@ async fn read_limited<R: AsyncRead + Unpin>(reader: R, limit: usize) -> Result<V
     Ok(output)
 }
 
+#[cfg(test)]
 fn parse_codex_version(output: &str) -> Option<&str> {
+    let version = parse_codex_cli_version(output)?;
+    (version == SUPPORTED_CODEX_VERSION).then_some(version)
+}
+
+fn parse_codex_cli_version(output: &str) -> Option<&str> {
     let mut parts = output.trim().split_ascii_whitespace();
     match (parts.next(), parts.next(), parts.next()) {
-        (Some("codex-cli"), Some(SUPPORTED_CODEX_VERSION), None) => Some(SUPPORTED_CODEX_VERSION),
+        (Some("codex-cli"), Some(version), None)
+            if version.len() <= 64
+                && version.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+')
+                }) =>
+        {
+            Some(version)
+        }
         _ => None,
     }
 }
