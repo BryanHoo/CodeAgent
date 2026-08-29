@@ -1,4 +1,6 @@
 use std::path::Path;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use std::path::PathBuf;
 
 use serde::Serialize;
 use tokio::process::Command;
@@ -224,19 +226,35 @@ fn macos_apps_for_paths(home: Option<&Path>, exists: impl Fn(&Path) -> bool) -> 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn available_path_apps(apps: Vec<OpenApp>) -> Vec<OpenApp> {
     apps.into_iter()
-        .filter(|app| executable_in_path(command_name(app.id)))
+        .filter(|app| executable_path(command_name(app.id)).is_some())
         .collect()
 }
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-fn executable_in_path(name: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|paths| {
-        std::env::split_paths(&paths).any(|directory| {
-            let candidate = directory.join(name);
-            candidate.is_file()
-                || cfg!(target_os = "windows") && candidate.with_extension("exe").is_file()
-        })
-    })
+fn executable_path(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths).find_map(|directory| executable_in_directory(&directory, name))
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn executable_in_directory(directory: &Path, name: &str) -> Option<PathBuf> {
+    let candidate = directory.join(name);
+    if candidate.is_file() {
+        return Some(candidate);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows CLI 工具常通过 .cmd shim 安装，检测结果也必须能直接用于启动。
+        for extension in ["exe", "cmd"] {
+            let candidate = candidate.with_extension(extension);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
 }
 
 #[cfg(target_os = "linux")]
@@ -335,7 +353,21 @@ fn platform_command(app_id: &str, path: &Path) -> Result<Command, WorkspaceError
         "xfce-terminal" => Command::new("xfce4-terminal"),
         _ => return Err(WorkspaceError::InvalidPath),
     };
-    command.arg(path);
+    match app_id {
+        "terminal" => {
+            // 通用终端没有统一的位置参数，继承 cwd 可避免把目录当成待执行命令。
+            command.current_dir(path);
+        }
+        "gnome-terminal" | "xfce-terminal" => {
+            command.arg("--working-directory").arg(path);
+        }
+        "konsole" => {
+            command.arg("--workdir").arg(path);
+        }
+        _ => {
+            command.arg(path);
+        }
+    }
     Ok(command)
 }
 
@@ -344,9 +376,77 @@ fn platform_command(app_id: &str, path: &Path) -> Result<Command, WorkspaceError
     let mut command = match app_id {
         "system-default" | "explorer" => Command::new("explorer"),
         "windows-terminal" => Command::new("wt"),
-        "visual-studio-code" => Command::new("code"),
+        "visual-studio-code" => {
+            Command::new(executable_path("code").unwrap_or_else(|| PathBuf::from("code")))
+        }
         _ => return Err(WorkspaceError::InvalidPath),
     };
+    if app_id == "windows-terminal" {
+        command.arg("-d");
+    }
     command.arg(path);
     Ok(command)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use std::{ffi::OsStr, path::Path};
+
+    use super::platform_command;
+
+    #[test]
+    fn linux_terminals_should_use_their_working_directory_arguments() {
+        let path = Path::new("/tmp/project");
+
+        for (app_id, option) in [
+            ("gnome-terminal", "--working-directory"),
+            ("konsole", "--workdir"),
+            ("xfce-terminal", "--working-directory"),
+        ] {
+            let command = platform_command(app_id, path).expect("terminal command should build");
+            let args: Vec<_> = command.as_std().get_args().collect();
+            assert_eq!(args, [OsStr::new(option), path.as_os_str()]);
+        }
+    }
+
+    #[test]
+    fn generic_linux_terminal_should_inherit_the_requested_directory() {
+        let path = Path::new("/tmp/project");
+        let command = platform_command("terminal", path).expect("terminal command should build");
+
+        assert_eq!(command.as_std().get_current_dir(), Some(path));
+        assert_eq!(command.as_std().get_args().count(), 0);
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_tests {
+    use std::{ffi::OsStr, fs, path::Path};
+
+    use super::{executable_in_directory, platform_command};
+
+    #[test]
+    fn windows_terminal_should_use_starting_directory_argument() {
+        let path = Path::new(r"C:\workspace\project");
+        let command =
+            platform_command("windows-terminal", path).expect("terminal command should build");
+        let args: Vec<_> = command.as_std().get_args().collect();
+
+        assert_eq!(args, [OsStr::new("-d"), path.as_os_str()]);
+    }
+
+    #[test]
+    fn windows_executable_detection_should_find_cmd_shims() {
+        let directory = std::env::temp_dir().join(format!(
+            "codeagent-open-command-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).expect("test directory should be created");
+        let shim = directory.join("code.cmd");
+        fs::write(&shim, "@echo off\r\n").expect("cmd shim should be created");
+
+        assert_eq!(executable_in_directory(&directory, "code"), Some(shim));
+
+        fs::remove_dir_all(directory).expect("test directory should be removed");
+    }
 }
