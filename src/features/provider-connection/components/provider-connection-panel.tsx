@@ -30,6 +30,7 @@ import {
   providerConnectionQueryOptions,
   startOfficialProviderLoginMutationOptions,
 } from "../provider-connection-queries.js";
+import { openOfficialAuthUrl } from "../official-auth-navigation.js";
 import { CustomModelEditor, type CustomModelDraft } from "./custom-model-editor.js";
 
 type ConnectionMode = "custom" | "official";
@@ -302,14 +303,6 @@ export function createCustomProviderInput({
   };
 }
 
-function openOfficialAuthUrl(authUrl: string): void {
-  const url = new URL(authUrl);
-  if (url.protocol !== "https:") {
-    throw new Error("Official login URL must use HTTPS");
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 export function ProviderConnectionPanel() {
   const queryClient = useQueryClient();
   const connectionQuery = useQuery(providerConnectionQueryOptions());
@@ -389,9 +382,9 @@ export function ProviderConnectionPanel() {
       onStartOfficialLogin={() => {
         void officialLogin
           .mutateAsync()
-          .then((result) => {
+          .then(async (result) => {
             try {
-              openOfficialAuthUrl(result.authUrl);
+              await openOfficialAuthUrl(result.authUrl);
             } catch (error) {
               notifyActionError(error);
             }

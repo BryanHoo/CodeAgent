@@ -13,6 +13,7 @@
 - 对话虚拟列表必须由 React 同步写入 sizer 高度与 `top` 偏移，不得启用 `directDomUpdates` 或为 Turn 创建 transform 合成层；Turn 动态尺寸必须由自管 `ResizeObserver` 与 `resizeItem` 单一管理，反向滚动期间缓存视口上方的最新尺寸，滚动结束后统一提交并同步补偿滚动位置；若完成收缩会使原本覆盖视口的 Turn 退到视口上方，必须立即提交新高度，避免旧 sizer 与新 DOM 之间出现空白；预渲染 8 个 Turn；流式 Item 结构修订和桌面前台恢复通过微任务读取真实高度并在下一帧复测，不得调用受滚动态门控的 `measureElement`，仅在仍自动跟随时置底
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航
+- Provider 官方认证仅允许打开 `https` URL，并必须通过 `src/platform/tauri/` 调用系统 URL opener；不得使用 WebView `window.open()`
 - 服务端快照通过 TanStack Query 读取，实时任务状态通过功能域 Runtime/Store 的选择器读取，避免订阅无关状态
 - `temporary` 是合成任务作用域；依赖真实 Project 或根目录的查询必须在该作用域禁用
 - Inspector 始终显示可用 Tab；数据模块仅在存在实体时渲染，无内容时在面板内容区显示空状态
