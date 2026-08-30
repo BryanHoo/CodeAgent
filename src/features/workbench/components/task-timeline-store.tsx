@@ -428,6 +428,7 @@ export function TaskStoreTimeline({
     <Conversation
       aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
       conversationId={`${projectId}:${taskId}`}
+      layoutRevision={itemStructureRevision}
       {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
     >
       {hasOlderHistory ? (

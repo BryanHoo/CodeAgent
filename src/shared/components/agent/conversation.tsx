@@ -17,11 +17,15 @@ import {
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
-import { createConversationAutoScrollController } from "./conversation-scroll.js";
+import {
+  createConversationAutoScrollController,
+  scheduleConversationLayoutRecovery,
+} from "./conversation-scroll.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
     conversationId: string;
+    layoutRevision?: number;
     scrollToBottomSignal?: number;
   }>;
 
@@ -50,12 +54,14 @@ export function Conversation({
   children,
   className = "",
   conversationId,
+  layoutRevision,
   onScroll,
   scrollToBottomSignal,
   style,
   ...props
 }: ConversationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const layoutRecoveryFrameRef = useRef(0);
   const previousScrollToBottomSignalRef = useRef(scrollToBottomSignal);
   const [atBottom, setAtBottom] = useState(true);
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
@@ -95,6 +101,25 @@ export function Conversation({
       cancelAnimationFrame(animationFrameId);
     };
   }, [autoScrollController, conversationId]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (container === null || layoutRevision === undefined) {
+      return;
+    }
+
+    layoutRecoveryFrameRef.current = scheduleConversationLayoutRecovery({
+      cancelFrame: cancelAnimationFrame,
+      frameId: layoutRecoveryFrameRef.current,
+      recover: () => {
+        autoScrollController.handleLayoutRevision(container);
+      },
+      requestFrame: requestAnimationFrame,
+    });
+    return () => {
+      cancelAnimationFrame(layoutRecoveryFrameRef.current);
+    };
+  }, [autoScrollController, layoutRevision]);
 
   useLayoutEffect(() => {
     if (

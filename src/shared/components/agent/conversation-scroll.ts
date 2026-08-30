@@ -7,6 +7,25 @@ export type ConversationScrollTarget = Pick<
 
 type AtBottomChangeHandler = (atBottom: boolean) => void;
 
+type ConversationLayoutRecoveryOptions = Readonly<{
+  cancelFrame: (frameId: number) => void;
+  frameId: number;
+  recover: () => void;
+  requestFrame: (callback: () => void) => number;
+}>;
+
+export function scheduleConversationLayoutRecovery({
+  cancelFrame,
+  frameId,
+  recover,
+  requestFrame,
+}: ConversationLayoutRecoveryOptions): number {
+  cancelFrame(frameId);
+  // 当前提交先同步校正，下一帧再覆盖 WKWebView 延迟更新滚动范围的情况。
+  recover();
+  return requestFrame(recover);
+}
+
 export function createConversationAutoScrollController(onAtBottomChange: AtBottomChangeHandler) {
   let conversationRendering = false;
   let lastObservedClientHeight: number | undefined;
@@ -45,6 +64,23 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
 
       // 流式内容增长时直接跟随，避免连续 smooth 动画相互堆叠。
       scrollToBottom(scrollTarget, "auto");
+    },
+    handleLayoutRevision(scrollTarget: ConversationScrollTarget) {
+      lastObservedClientHeight = scrollTarget.clientHeight;
+      lastObservedScrollHeight = scrollTarget.scrollHeight;
+      if (shouldFollowNewContent) {
+        scrollToBottom(scrollTarget, "auto");
+        return;
+      }
+
+      const maximumScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+      if (scrollTarget.scrollTop <= maximumScrollTop) {
+        return;
+      }
+
+      // 用户离底时只夹紧已失效的位置，避免终态收缩后把有效阅读位置强制拉到底部。
+      scrollTarget.scrollTo({ behavior: "auto", top: maximumScrollTop });
+      updateFollowState(true);
     },
     handleScroll(scrollTarget: ConversationScrollTarget) {
       if (conversationRendering) {
