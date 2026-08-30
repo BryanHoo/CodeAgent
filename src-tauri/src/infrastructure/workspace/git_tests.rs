@@ -281,6 +281,64 @@ async fn git_mutations_should_report_invalid_branch_and_missing_upstream() {
 }
 
 #[tokio::test]
+async fn commit_and_push_should_publish_a_new_branch_and_set_its_upstream() {
+    let root = create_repository("codeagent-git-new-branch-push");
+    let remote = root.with_file_name(format!(
+        "{}-remote.git",
+        root.file_name().unwrap().to_string_lossy()
+    ));
+    fs::create_dir_all(&remote).unwrap();
+    run(&remote, &["init", "--bare"]);
+    fs::write(root.join("tracked.txt"), "initial\n").unwrap();
+    run(&root, &["add", "."]);
+    run(&root, &["commit", "-m", "initial commit"]);
+    run(
+        &root,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    run(&root, &["push", "--set-upstream", "origin", "main"]);
+    let root = fs::canonicalize(root).unwrap();
+
+    let clean = get_git_status(&root, None, false).await.unwrap();
+    create_branch(&root, None, "feature/new-branch", &clean.snapshot)
+        .await
+        .unwrap();
+    fs::write(root.join("tracked.txt"), "changed\n").unwrap();
+    let changed = get_git_status(&root, None, false).await.unwrap();
+    let committed = commit_changes(
+        &root,
+        None,
+        &["tracked.txt".to_owned()],
+        "fix(workspace): 更新测试文件",
+        "commit_and_push",
+        &changed.snapshot,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(committed.push_status, "pushed");
+    assert_eq!(committed.push_error, None);
+    assert_eq!(
+        output(
+            &root,
+            &[
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}"
+            ]
+        ),
+        "origin/feature/new-branch"
+    );
+    assert_eq!(
+        output(&remote, &["rev-parse", "refs/heads/feature/new-branch"]),
+        committed.commit_sha
+    );
+    fs::remove_dir_all(remote).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
 async fn create_worktree_should_preserve_unicode_and_probe_a_numeric_suffix() {
     let root = create_repository("codeagent-git-worktree");
     fs::write(root.join("tracked.txt"), "initial\n").unwrap();

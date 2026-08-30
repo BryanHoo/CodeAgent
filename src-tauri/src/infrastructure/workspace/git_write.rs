@@ -278,16 +278,15 @@ pub async fn commit_changes(
     let branch = optional_line(&repo, &["branch", "--show-current"]).await?;
     let (push_status, push_error) = if action == "commit" {
         ("not_requested", None)
-    } else if optional_line(&repo, &["remote"]).await?.is_none() {
-        (
-            "not_configured",
-            Some(WorkspaceError::NoUpstream.to_string()),
-        )
     } else {
-        match run_network_git(&repo, &["push"], MAX_GIT_OUTPUT_BYTES).await {
-            Ok(_) => ("pushed", None),
-            Err(error @ WorkspaceError::NoUpstream) => ("not_configured", Some(error.to_string())),
-            Err(error) => ("failed", Some(error.to_string())),
+        let remotes = remote_names(&repo).await?;
+        if remotes.is_empty() {
+            (
+                "not_configured",
+                Some(WorkspaceError::NoUpstream.to_string()),
+            )
+        } else {
+            push_current_branch(&repo, branch.as_deref(), &remotes).await
         }
     };
     Ok(CommitChangesResponse {
@@ -297,6 +296,51 @@ pub async fn commit_changes(
         push_error,
         push_status,
     })
+}
+
+async fn push_current_branch(
+    repo: &Path,
+    branch: Option<&str>,
+    remotes: &[String],
+) -> (&'static str, Option<String>) {
+    match run_network_git(repo, &["push"], MAX_GIT_OUTPUT_BYTES).await {
+        Ok(_) => ("pushed", None),
+        Err(WorkspaceError::NoUpstream) => {
+            let remote = remotes
+                .iter()
+                .find(|remote| remote.as_str() == "origin")
+                .or_else(|| (remotes.len() == 1).then(|| &remotes[0]));
+            let (Some(branch), Some(remote)) = (branch, remote) else {
+                return (
+                    "not_configured",
+                    Some(WorkspaceError::NoUpstream.to_string()),
+                );
+            };
+            // 新建分支首次推送时一次性建立 upstream，后续继续走普通 push。
+            match run_network_git(
+                repo,
+                &["push", "--set-upstream", remote, branch],
+                MAX_GIT_OUTPUT_BYTES,
+            )
+            .await
+            {
+                Ok(_) => ("pushed", None),
+                Err(error) => ("failed", Some(error.to_string())),
+            }
+        }
+        Err(error) => ("failed", Some(error.to_string())),
+    }
+}
+
+async fn remote_names(repo: &Path) -> Result<Vec<String>, WorkspaceError> {
+    let output = run_git(repo, &["remote"], MAX_GIT_OUTPUT_BYTES).await?.0;
+    Ok(String::from_utf8(output)
+        .map_err(|_| WorkspaceError::InvalidPath)?
+        .lines()
+        .map(str::trim)
+        .filter(|remote| !remote.is_empty())
+        .map(str::to_owned)
+        .collect())
 }
 
 fn literal_path(path: &str) -> String {
