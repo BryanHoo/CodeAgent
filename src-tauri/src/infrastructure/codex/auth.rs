@@ -71,7 +71,7 @@ pub async fn get_provider_connection(
             .get("state")
             .and_then(Value::as_str)
             .unwrap_or("pending")
-    // Codex 149 中无需 OpenAI 认证的 provider 即使没有 account 也已可用。
+    // Codex 151 中无需 OpenAI 认证的 provider 即使没有 account 也已可用。
     } else if account.is_some() || !requires_openai_auth {
         "connected"
     } else {
@@ -251,7 +251,7 @@ fn selected_provider_id(config: &Value) -> &str {
 }
 
 fn provider_mode(config: &Value) -> &'static str {
-    // Codex 149 以 model_provider 选择服务，openai_base_url 会改写内置 OpenAI 端点。
+    // Codex 151 以 model_provider 选择服务，openai_base_url 会改写内置 OpenAI 端点。
     if selected_provider_id(config) != "openai" || configured_openai_base_url(config).is_some() {
         "custom"
     } else {

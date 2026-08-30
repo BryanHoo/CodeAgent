@@ -19,7 +19,7 @@ CodeAgent 是直接连接 `codex app-server` 的桌面工作台。左栏项目�
 - 对应平台的 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 开发环境默认从 `PATH` 和平台常见目录查找 `codex`，也可通过 `CODEAGENT_CODEX_BIN` 指定
-绝对路径。当前适配器严格要求 `codex-cli 0.149.0`，并继承用户的 `CODEX_HOME`；未配置时由
+绝对路径。当前适配器严格要求 `codex-cli 0.151.0`，并继承用户的 `CODEX_HOME`；未配置时由
 Codex 使用官方默认目录，因此 CLI 与 CodeAgent 共享认证、配置和会话。
 
 生产版本不将 Codex、Claude Code 等 Provider 可执行文件作为 Sidecar 打包。当前版本只复用

@@ -46,7 +46,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prompt_text_should_follow_codex_149_wire_schema() {
+    fn prompt_text_should_follow_codex_151_wire_schema() {
         let input = AgentPromptInput::text("读取附件");
         let native = map_prompt_input(&input).expect("prompt should map");
 

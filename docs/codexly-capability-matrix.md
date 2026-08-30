@@ -9,14 +9,14 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ```
 
 运行时不再使用 Codexly HTTP、WebSocket 或 mock。协议基线固定为本地
-`/Users/bryanhu/Develop/person/codex` 的 `rust-v0.149.0`，运行时只接受
-`codex-cli 0.149.0`。
+`/Users/bryanhu/Develop/person/codex` 的 `rust-v0.151.0`，运行时只接受
+`codex-cli 0.151.0`。
 
 ## 逐项矩阵
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
-| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页精确检测 `0.149.0`；支持全局安装提示、官方 npm 包校验后写入应用私有目录、手动复检、Rust 子进程握手与失败恢复 | 已实现 |
+| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页精确检测 `0.151.0`；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检、Rust 子进程握手与失败恢复 | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
 | 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 按系统安装状态探测编辑器、终端与文件管理器，再通过受限应用 ID 打开 | 已实现 |
@@ -32,18 +32,18 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；单调序号、缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
 | 后台通知 | Task 终态、失败与待处理请求 | WebView 只归约事件；受限 Tauri command 通过官方 notification 插件调用系统通知中心 | 已实现 |
-| Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.149 官方 Item；未知类型降级为可见活动 | 已实现 |
+| Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.151 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 命令、文件变更、工具、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、遵守 ignore 规则的缓存索引、会话取消和结果上限 | 已实现 |
-| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.149 `text`/`localImage` 输入；文件通过 `text_elements.placeholder` 保留名称与媒体类型，队列与历史恢复为附件 | 已实现 |
+| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.151 `text`/`localImage` 输入；文件通过 `text_elements.placeholder` 保留名称与媒体类型，队列与历史恢复为附件 | 已实现 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
 | 右栏检查器 | 文件、Sources、Changes、历史 | 全部由上述 Tauri 文件/Git接口驱动 | 已实现 |
 | 模型与 Skills | `listModels`, `listSkills` | 原生 `model/list`, `skills/list` | 已实现 |
-| MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/mcpServer/reload`；启动状态通知驱动清单刷新 | 已实现 |
+| MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/mcpServer/reload`；使用 0.151 `runtimeStatus` 区分连接、认证失败、失败、取消与禁用状态 | 已实现 |
 | Provider 认证 | login/cancel/logout/custom provider | 原生账号协议与受限配置写入；密钥不持久化到 WebView | 已实现 |
 | 全局/项目设置 | get/update settings/defaults | Codex `config/read` + 应用原子配置 | 已实现 |
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
@@ -55,7 +55,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 
 ## 协议事件覆盖
 
-| 类别 | Codex 0.149 通知 |
+| 类别 | Codex 0.151 通知 |
 | --- | --- |
 | 回合 | `turn/started`, `turn/completed`, `turn/plan/updated` |
 | 文本与推理 | `item/agentMessage/delta`, reasoning delta/summary 通知 |
@@ -63,6 +63,11 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 运行时 | warning/error、token usage、model reroute/safety/verification |
 | 生命周期 | thread status/name/archive/delete、goal、queue |
 | 扩展流程 | hook、auto approval review、background terminal、认证、MCP status |
+
+`mcpServer/event/stream/notification` 仅由实验性 hosted app 事件订阅触发；三类
+`thread/realtime/item/*` 通知仅属于完整 Realtime 语音会话。当前桌面产品没有对应的订阅、采集、
+播放和转写交互，因此初始化时显式关闭这四类通知，避免无效 JSONL 传输与解析。后续只有在成组
+实现对应产品工作流时才启用。
 
 ## 传输与性能证据
 
@@ -93,6 +98,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ## 参考资料
 
 - [Codex app-server README](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)
+- [Codex 0.151.0 官方更新日志](https://developers.openai.com/codex/changelog)
 - [Tauri Rust 到前端通信](https://v2.tauri.app/develop/calling-frontend/)
 - [Tauri 前端调用 Rust](https://v2.tauri.app/develop/calling-rust/)
 - [Tauri Notification 插件](https://v2.tauri.app/plugin/notification/)

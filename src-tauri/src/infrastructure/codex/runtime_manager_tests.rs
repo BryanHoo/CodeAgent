@@ -9,24 +9,62 @@ use crate::domain::runtime::CodexRuntimeAvailabilityStatus;
 fn private_runtime_should_use_the_provider_version_directory() {
     assert_eq!(
         private_codex_binary_path(Path::new("/application-data")),
-        Path::new("/application-data/providers/codex/bin/0.149.0/bin")
+        Path::new("/application-data/providers/codex/bin/0.151.0/bin")
             .join(format!("codex{}", std::env::consts::EXE_SUFFIX))
     );
 }
 
 #[test]
 fn distribution_should_be_fixed_to_the_official_supported_package() {
-    let distribution = distribution_for("macos", "aarch64").unwrap();
+    let cases = [
+        (
+            "macos",
+            "aarch64",
+            "aarch64-apple-darwin",
+            "darwin-arm64",
+            "g7YzpaCZGCw19R/gly3vRPjnLqaW7JcBAu2WQQ6e8PIlvBPmS/gMplIUURMgNO6gi8LsPzdlQtLqkwoeOOlIdg==",
+        ),
+        (
+            "linux",
+            "aarch64",
+            "aarch64-unknown-linux-musl",
+            "linux-arm64",
+            "CsLgFeX4TQ6I2Gdrxd2r5UbgIbDLCdtcLAlnMYjr06bCL057MTNGec7Ewb3+Z2DBiMuXCljdTBGqLOePkMV0sQ==",
+        ),
+        (
+            "linux",
+            "x86_64",
+            "x86_64-unknown-linux-musl",
+            "linux-x64",
+            "xcVyY1FtwvVYhh2JBmz8fX8CQqFAxO/lxJ2IXsh8x5uwxZVHVl5fZHFHf8JdRaOGG0vpkYmu/DKKVoLd56/DDQ==",
+        ),
+        (
+            "windows",
+            "aarch64",
+            "aarch64-pc-windows-msvc",
+            "win32-arm64",
+            "zDWzOoh9wHm+Om1Nhn7os47rAVeSGPh0SnM3YOttdq6iPJz2zn4vBnbGUZjeih1qW/3mvNF3Oyd4owlaHmphmg==",
+        ),
+        (
+            "windows",
+            "x86_64",
+            "x86_64-pc-windows-msvc",
+            "win32-x64",
+            "sLT7xvID3jhU6tkzcwRPnMEclKRwUPbpo0mtfxIF9KpdZH3VJV7sM2/kXWXyvUM7Zt/YeyOaeATTEysbRz8Yog==",
+        ),
+    ];
 
-    assert_eq!(distribution.target, "aarch64-apple-darwin");
-    assert_eq!(
-        distribution.url,
-        "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-darwin-arm64.tgz"
-    );
-    assert_eq!(
-        distribution.integrity,
-        "GsZJbzBWiD48RETrO8VHGAQNgfSrUVxItXZFeD87wswatPi0+lKuQo8Dx4nMYmOZhZrVtwr3al/feRrZxnDV8Q=="
-    );
+    for (os, arch, target, package_suffix, integrity) in cases {
+        let distribution = distribution_for(os, arch).unwrap();
+        assert_eq!(distribution.target, target);
+        assert_eq!(
+            distribution.url,
+            format!(
+                "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-{package_suffix}.tgz"
+            )
+        );
+        assert_eq!(distribution.integrity, integrity);
+    }
 }
 
 #[test]
@@ -56,7 +94,7 @@ async fn inspection_should_find_the_compatible_private_runtime() {
     let app_data = std::env::temp_dir().join(format!("codeagent-runtime-{unique}"));
     let binary = private_codex_binary_path(&app_data);
     std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, "#!/bin/sh\necho 'codex-cli 0.149.0'\n").unwrap();
+    std::fs::write(&binary, "#!/bin/sh\necho 'codex-cli 0.151.0'\n").unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let availability = inspect_codex_runtime(&app_data).await;
@@ -65,6 +103,6 @@ async fn inspection_should_find_the_compatible_private_runtime() {
         availability.status,
         CodexRuntimeAvailabilityStatus::Compatible
     );
-    assert_eq!(availability.detected_version.as_deref(), Some("0.149.0"));
+    assert_eq!(availability.detected_version.as_deref(), Some("0.151.0"));
     std::fs::remove_dir_all(app_data).unwrap();
 }

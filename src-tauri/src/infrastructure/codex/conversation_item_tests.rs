@@ -67,6 +67,57 @@ fn official_thread_items_should_keep_visible_semantics() {
 }
 
 #[test]
+fn codex_151_items_should_keep_native_tool_semantics() {
+    let function_output = map_item(json!({
+        "id": "function-output-a",
+        "name": "search",
+        "namespace": "docs",
+        "output": "found",
+        "type": "functionCallOutput",
+    }))
+    .expect("function output should map");
+    let function_output = to_value(function_output).unwrap();
+    assert_eq!(function_output["type"], "tool");
+    assert_eq!(function_output["name"], "docs/search");
+    assert_eq!(function_output["output"], "found");
+    assert_eq!(function_output["status"], "completed");
+
+    for (native_tool, mapped_tool) in [
+        ("sendMessage", "agent/send_message"),
+        ("followupTask", "agent/followup_task"),
+        ("interruptAgent", "agent/interrupt"),
+        ("listAgents", "agent/list"),
+    ] {
+        let mapped = map_item(json!({
+            "agentsStates": {},
+            "id": format!("collab-{native_tool}"),
+            "model": null,
+            "prompt": null,
+            "reasoningEffort": null,
+            "receiverThreadIds": [],
+            "senderThreadId": "thread-a",
+            "status": "completed",
+            "tool": native_tool,
+            "type": "collabAgentToolCall",
+        }))
+        .expect("Codex 0.151 collaboration tool should map");
+        assert_eq!(to_value(mapped).unwrap()["name"], mapped_tool);
+    }
+
+    let completed = map_item(json!({
+        "agentPath": "reviewer",
+        "agentThreadId": "thread-b",
+        "id": "sub-completed",
+        "kind": "completed",
+        "type": "subAgentActivity",
+    }))
+    .expect("completed subagent activity should map");
+    let completed = to_value(completed).unwrap();
+    assert_eq!(completed["detail"], "已完成");
+    assert_eq!(completed["status"], "completed");
+}
+
+#[test]
 fn command_output_should_keep_bounded_utf8_head_and_tail() {
     let output = format!(
         "{}{}{}",

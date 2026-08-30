@@ -42,6 +42,9 @@ mod conversation_advanced_tests;
 #[path = "conversation_command_tests.rs"]
 mod conversation_command_tests;
 #[cfg(test)]
+#[path = "conversation_error_tests.rs"]
+mod conversation_error_tests;
+#[cfg(test)]
 #[path = "conversation_item_tests.rs"]
 mod conversation_item_tests;
 #[cfg(test)]

@@ -38,11 +38,48 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
             ),
             (
                 "mcpServerStatus/list",
-                json!({"data": [{
-                    "name": "docs", "pluginId": null,
-                    "serverInfo": {"name": "docs", "title": "Docs", "version": "1.2.0", "description": "Documentation", "icons": null, "websiteUrl": null},
-                    "tools": {"search": {"name": "search"}}, "resources": [], "resourceTemplates": [], "authStatus": "oAuth"
-                }], "nextCursor": null}),
+                json!({"data": [
+                    {
+                        "name": "docs", "pluginId": null, "runtimeStatus": "connected",
+                        "serverInfo": {"name": "docs", "title": "Docs", "version": "1.2.0", "description": "Documentation", "icons": null, "websiteUrl": null},
+                        "tools": {"search": {"name": "search"}}, "resources": [], "resourceTemplates": [], "authStatus": "oAuth"
+                    },
+                    {
+                        "name": "login", "pluginId": null,
+                        "runtimeStatus": "authenticationRequired", "serverInfo": null,
+                        "tools": {}, "resources": [], "resourceTemplates": [], "authStatus": "notLoggedIn"
+                    },
+                    {
+                        "name": "failed", "pluginId": null, "runtimeStatus": "failed",
+                        "serverInfo": {"name": "failed"}, "tools": {}, "resources": [],
+                        "resourceTemplates": [], "authStatus": "unknown"
+                    },
+                    {
+                        "name": "disabled", "pluginId": null, "runtimeStatus": "disabled",
+                        "serverInfo": null, "tools": {}, "resources": [],
+                        "resourceTemplates": [], "authStatus": "unsupported"
+                    },
+                    {
+                        "name": "not-started", "pluginId": null, "runtimeStatus": "notStarted",
+                        "serverInfo": null, "tools": {}, "resources": [],
+                        "resourceTemplates": [], "authStatus": "unknown"
+                    },
+                    {
+                        "name": "starting", "pluginId": null, "runtimeStatus": "starting",
+                        "serverInfo": null, "tools": {}, "resources": [],
+                        "resourceTemplates": [], "authStatus": "unknown"
+                    },
+                    {
+                        "name": "cancelled", "pluginId": null, "runtimeStatus": "cancelled",
+                        "serverInfo": null, "tools": {}, "resources": [],
+                        "resourceTemplates": [], "authStatus": "unknown"
+                    },
+                    {
+                        "name": "unavailable", "pluginId": null, "runtimeStatus": null,
+                        "serverInfo": null, "tools": {}, "resources": [],
+                        "resourceTemplates": [], "authStatus": "unknown"
+                    }
+                ], "nextCursor": null}),
             ),
         ];
 
@@ -81,5 +118,16 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
     let servers = list_mcp_servers(&connection, "thread-a").await.unwrap();
     assert_eq!(servers["data"][0]["status"], "ready");
     assert_eq!(servers["data"][0]["tools"], json!(["search"]));
+    assert_eq!(servers["data"][1]["status"], "failed");
+    assert_eq!(
+        servers["data"][1]["failureReason"],
+        "reauthenticationRequired"
+    );
+    assert_eq!(servers["data"][2]["status"], "failed");
+    assert_eq!(servers["data"][3]["status"], "cancelled");
+    assert_eq!(servers["data"][4]["status"], "starting");
+    assert_eq!(servers["data"][5]["status"], "starting");
+    assert_eq!(servers["data"][6]["status"], "cancelled");
+    assert_eq!(servers["data"][7]["status"], "starting");
     server_task.await.unwrap();
 }

@@ -27,6 +27,7 @@ pub const IGNORED_NOTIFICATION_METHODS: &[&str] = &[
     "externalAgentConfig/import/progress",
     "item/commandExecution/terminalInteraction",
     "item/fileChange/outputDelta",
+    "mcpServer/event/stream/notification",
     "mcpServer/oauthLogin/completed",
     "process/exited",
     "process/outputDelta",
@@ -42,6 +43,9 @@ pub const IGNORED_NOTIFICATION_METHODS: &[&str] = &[
     "thread/realtime/closed",
     "thread/realtime/error",
     "thread/realtime/itemAdded",
+    "thread/realtime/item/completed",
+    "thread/realtime/item/started",
+    "thread/realtime/item/transcript/delta",
     "thread/realtime/outputAudio/delta",
     "thread/realtime/sdp",
     "thread/realtime/started",
@@ -175,6 +179,18 @@ mod tests {
             })
         );
         assert_eq!(message.last(), Some(&b'\n'));
+    }
+
+    #[test]
+    fn unsupported_codex_151_streams_should_be_disabled_at_initialization() {
+        for method in [
+            "mcpServer/event/stream/notification",
+            "thread/realtime/item/completed",
+            "thread/realtime/item/started",
+            "thread/realtime/item/transcript/delta",
+        ] {
+            assert!(IGNORED_NOTIFICATION_METHODS.contains(&method));
+        }
     }
 
     #[test]

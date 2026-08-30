@@ -148,7 +148,7 @@ fn validate_content(kind: &str, name: &str, bytes: &[u8]) -> Result<&'static str
         return Err(WorkspaceError::InvalidPath);
     }
     match kind {
-        // 149 app-server 没有通用文件输入，文本在缓存边界完成 UTF-8 与大小校验。
+        // 151 app-server 没有通用文件输入，文本在缓存边界完成 UTF-8 与大小校验。
         "file" | "text" if bytes.len() <= MAX_TEXT_BYTES && std::str::from_utf8(bytes).is_ok() => {
             Ok(if kind == "text" { "text" } else { "file" })
         }
@@ -254,7 +254,7 @@ mod tests {
             store_attachment(&root, "project-a", "file", "document.pdf", b"%PDF-\xff\xfe").await;
         assert!(
             binary.is_err(),
-            "binary files are not supported by Codex 0.149 input"
+            "binary files are not supported by Codex 0.151 input"
         );
 
         fs::remove_dir_all(root).unwrap();

@@ -33,6 +33,24 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
             skills: None,
             text: required_string(item, "text")?.to_owned(),
         }),
+        "functionCallOutput" => {
+            let name = required_string(item, "name")?;
+            let name = optional_string(item, "namespace")?
+                .map(|namespace| format!("{namespace}/{name}"))
+                .unwrap_or_else(|| name.to_owned());
+            let output = item
+                .get("output")
+                .filter(|output| output.is_string() || output.is_array())
+                .cloned()
+                .ok_or(ConnectionError::InvalidMessage)?;
+            Ok(AgentItem::Tool {
+                id,
+                input: None,
+                name,
+                output: Some(output),
+                status: "completed",
+            })
+        }
         "reasoning" => Ok(AgentItem::Reasoning {
             content: string_array(item, "content")?.join("\n"),
             id,
@@ -135,6 +153,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
                 "started" => ("已启动", "completed"),
                 "interacted" => ("已交互", "completed"),
                 "interrupted" => ("已中断", "interrupted"),
+                "completed" => ("已完成", "completed"),
                 _ => return Err(ConnectionError::InvalidMessage),
             };
             activity(
@@ -251,8 +270,12 @@ fn activity(
 fn collaboration_tool_name(value: &str) -> Result<&'static str, ConnectionError> {
     match value {
         "closeAgent" => Ok("agent/close"),
+        "followupTask" => Ok("agent/followup_task"),
+        "interruptAgent" => Ok("agent/interrupt"),
+        "listAgents" => Ok("agent/list"),
         "resumeAgent" => Ok("agent/resume"),
         "sendInput" => Ok("agent/send_input"),
+        "sendMessage" => Ok("agent/send_message"),
         "spawnAgent" => Ok("agent/spawn"),
         "wait" => Ok("agent/wait"),
         _ => Err(ConnectionError::InvalidMessage),

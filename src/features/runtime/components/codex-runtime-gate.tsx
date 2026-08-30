@@ -93,8 +93,8 @@ function RuntimeSetup({
   const { t } = useTranslation("common");
   const [copied, setCopied] = useState(false);
   const command =
-    availability?.globalInstallCommand ?? "npm install -g @openai/codex@0.149.0";
-  const requiredVersion = availability?.requiredVersion ?? "0.149.0";
+    availability?.globalInstallCommand ?? "npm install -g @openai/codex@0.151.0";
+  const requiredVersion = availability?.requiredVersion ?? "0.151.0";
   const failed = detectionFailed || availability?.status === "failed";
 
   useEffect(() => {

@@ -81,7 +81,7 @@ export async function installWebviewMocks(): Promise<WebviewMocks> {
         },
         get_app_info: {
           appVersion: "0.1.0",
-          codexVersion: "0.149.0",
+          codexVersion: "0.151.0",
           latestVersion: "0.1.0",
           releaseNotes: null,
           status: "current",
@@ -99,9 +99,9 @@ export async function installWebviewMocks(): Promise<WebviewMocks> {
           "codeagent.language-preference": JSON.stringify({ language: "zh-CN", version: 1 }),
         },
         inspect_codex_runtime: {
-          detectedVersion: "0.149.0",
-          globalInstallCommand: "npm install -g @openai/codex@0.149.0",
-          requiredVersion: "0.149.0",
+          detectedVersion: "0.151.0",
+          globalInstallCommand: "npm install -g @openai/codex@0.151.0",
+          requiredVersion: "0.151.0",
           status: "compatible",
         },
         list_background_terminals: { data: [] },

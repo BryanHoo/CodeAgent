@@ -23,7 +23,7 @@ use crate::domain::runtime::{
 };
 
 const CODEX_BINARY_ENV: &str = "CODEAGENT_CODEX_BIN";
-const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.149.0";
+const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.151.0";
 const MAX_DOWNLOAD_BYTES: u64 = 192 * 1024 * 1024;
 const MAX_UNPACKED_BYTES: u64 = 512 * 1024 * 1024;
 static INSTALL_ID: AtomicU64 = AtomicU64::new(1);
@@ -449,26 +449,26 @@ async fn write_active_runtime(app_data: &Path, binary_path: &Path) -> Result<(),
 
 const DARWIN_ARM64: Distribution = Distribution {
     target: "aarch64-apple-darwin",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-darwin-arm64.tgz",
-    integrity: "GsZJbzBWiD48RETrO8VHGAQNgfSrUVxItXZFeD87wswatPi0+lKuQo8Dx4nMYmOZhZrVtwr3al/feRrZxnDV8Q==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-darwin-arm64.tgz",
+    integrity: "g7YzpaCZGCw19R/gly3vRPjnLqaW7JcBAu2WQQ6e8PIlvBPmS/gMplIUURMgNO6gi8LsPzdlQtLqkwoeOOlIdg==",
 };
 const LINUX_ARM64: Distribution = Distribution {
     target: "aarch64-unknown-linux-musl",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-linux-arm64.tgz",
-    integrity: "fAXPpvIob+11RNZJS9CVVTsKb+V4Hw3woGFPj42D7fU2wBJUKI2jfAc4fLJNtrpwRecLeW601mtkMHOSIbWuuA==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-linux-arm64.tgz",
+    integrity: "CsLgFeX4TQ6I2Gdrxd2r5UbgIbDLCdtcLAlnMYjr06bCL057MTNGec7Ewb3+Z2DBiMuXCljdTBGqLOePkMV0sQ==",
 };
 const LINUX_X64: Distribution = Distribution {
     target: "x86_64-unknown-linux-musl",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-linux-x64.tgz",
-    integrity: "uZXaN9JPxu0/jjnqqJeTd4kRYPnjVZK3MiVndfG1mHhEaoDKL7ScWHfPqvAEOjwsSDEmQSlMfUkmvYp/CHciYw==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-linux-x64.tgz",
+    integrity: "xcVyY1FtwvVYhh2JBmz8fX8CQqFAxO/lxJ2IXsh8x5uwxZVHVl5fZHFHf8JdRaOGG0vpkYmu/DKKVoLd56/DDQ==",
 };
 const WINDOWS_ARM64: Distribution = Distribution {
     target: "aarch64-pc-windows-msvc",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-win32-arm64.tgz",
-    integrity: "pUd8MzuwtqT5DhM1NUE1gETWIZ9fkDA1XB7tt9YNIi/peUgLuziQgZd7o0bNON4cNzgbil1YUN1qDTgQm0g3pg==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-win32-arm64.tgz",
+    integrity: "zDWzOoh9wHm+Om1Nhn7os47rAVeSGPh0SnM3YOttdq6iPJz2zn4vBnbGUZjeih1qW/3mvNF3Oyd4owlaHmphmg==",
 };
 const WINDOWS_X64: Distribution = Distribution {
     target: "x86_64-pc-windows-msvc",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-win32-x64.tgz",
-    integrity: "qKbwSOOO/fdhQ5MlXE2fts6taPxRPZ/zqeC+eqHD72hLRymV9rFCUbUxOCquognUPRPvS/2/kRCV0UVhoDd3yQ==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-win32-x64.tgz",
+    integrity: "sLT7xvID3jhU6tkzcwRPnMEclKRwUPbpo0mtfxIF9KpdZH3VJV7sM2/kXWXyvUM7Zt/YeyOaeATTEysbRz8Yog==",
 };

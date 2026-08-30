@@ -68,7 +68,7 @@ export const MAX_AGENT_HISTORY_IMAGES = 1_500;
 export const MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES = 512 * 1024 * 1024;
 
 export const AGENT_IMAGE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
-// Codex 0.149 的 turn input 仅原生支持文本和图片；二进制文档不进入附件上传链路。
+// Codex 0.151 的 turn input 仅原生支持文本和图片；二进制文档不进入附件上传链路。
 export const AGENT_FILE_EXTENSIONS = [
   ".asm",
   ".astro",

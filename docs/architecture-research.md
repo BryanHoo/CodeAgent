@@ -300,7 +300,7 @@ CodeAgent 当前不为 UI 数据引入 SQLite。Codex 线程历史仍由 `app-se
 ### 阶段一：Codex 最小闭环
 
 - 建立 Tauri 2、React 19 和 Vite 工程。
-- 从显式路径或 `PATH` 启动 Codex `0.149.0`，并完成 `app-server` 初始化握手。
+- 从显式路径或 `PATH` 启动 Codex `0.151.0`，并完成 `app-server` 初始化握手。
 - 实现线程创建、用户输入、流式文本和取消执行。
 - 建立稳定 `Channel`、请求路由和基础日志。
 - 使用 AI Elements 完成会话、消息和输入区域。

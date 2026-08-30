@@ -59,7 +59,7 @@ function HostFileNodes({
   onRetry,
 }: HostFileNodesProps) {
   const { t } = useTranslation("workbench");
-  // 宿主选择器与拖放入口共享扩展名规则，避免展示必然被 149 拒绝的二进制文件。
+  // 宿主选择器与拖放入口共享扩展名规则，避免展示必然被 151 拒绝的二进制文件。
   return entries.filter((entry) => isVisibleHostEntry(entry, kind)).map((entry) => {
     if (entry.type === "file") {
       return <FileTreeFile key={entry.path} name={entry.name} path={entry.path} />;

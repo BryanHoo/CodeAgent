@@ -7,7 +7,7 @@ import {
   MAX_AGENT_TEXT_BYTES,
 } from "./agent-attachments.js";
 
-describe("Codex 0.149 attachment contract", () => {
+describe("Codex 0.151 attachment contract", () => {
   it("accepts bounded text inputs and excludes unsupported binary documents", () => {
     expect(MAX_AGENT_FILE_BYTES).toBe(MAX_AGENT_TEXT_BYTES);
     expect(AGENT_FILE_EXTENSIONS).toContain(".md");

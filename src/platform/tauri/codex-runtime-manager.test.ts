@@ -13,14 +13,14 @@ describe("Codex runtime manager", () => {
     invoke
       .mockResolvedValueOnce({
         detectedVersion: null,
-        globalInstallCommand: "npm install -g @openai/codex@0.149.0",
-        requiredVersion: "0.149.0",
+        globalInstallCommand: "npm install -g @openai/codex@0.151.0",
+        requiredVersion: "0.151.0",
         status: "compatible",
       })
       .mockResolvedValueOnce({
-        detectedVersion: "0.149.0",
-        globalInstallCommand: "npm install -g @openai/codex@0.149.0",
-        requiredVersion: "0.149.0",
+        detectedVersion: "0.151.0",
+        globalInstallCommand: "npm install -g @openai/codex@0.151.0",
+        requiredVersion: "0.151.0",
         status: "compatible",
       });
     const { downloadAndInspectCodexRuntime } = await import("./codex-runtime-manager.js");

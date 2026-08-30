@@ -252,18 +252,13 @@ fn provider_error_event(
         .get("error")
         .and_then(Value::as_object)
         .ok_or(ConnectionError::InvalidMessage)?;
+    let (code, http_status_code) = map_codex_error_info(error.get("codexErrorInfo"));
     let mut payload = json!({
-        "code": "other",
+        "code": code,
         "message": required_string(error, "message")?,
         "willRetry": params.get("willRetry").and_then(Value::as_bool).ok_or(ConnectionError::InvalidMessage)?,
     });
-    if let Some(status) = error
-        .get("codexErrorInfo")
-        .and_then(Value::as_object)
-        .and_then(|info| info.get("httpStatusCode"))
-        .and_then(Value::as_u64)
-        .filter(|status| (100..=599).contains(status))
-    {
+    if let Some(status) = http_status_code {
         payload["httpStatusCode"] = Value::from(status);
     }
     Ok(envelope(
@@ -276,6 +271,41 @@ fn provider_error_event(
             "type": "provider.error",
         }),
     ))
+}
+
+fn map_codex_error_info(value: Option<&Value>) -> (&'static str, Option<u64>) {
+    // 将上游开放枚举收敛为稳定 IPC 分类；未知新值继续以 other 安全展示。
+    let code = match value.and_then(Value::as_str) {
+        Some("contextWindowExceeded") => "context_window_exceeded",
+        Some("sessionBudgetExceeded") => "session_budget_exceeded",
+        Some("usageLimitExceeded") => "usage_limit_exceeded",
+        Some("rateLimitExceeded") => "rate_limit_exceeded",
+        Some("serverOverloaded") => "server_overloaded",
+        Some("cyberPolicy" | "misalignmentPolicyViolation") => "policy_blocked",
+        Some("internalServerError") => "internal_error",
+        Some("unauthorized") => "unauthorized",
+        Some("badRequest") => "bad_request",
+        Some("sandboxError") => "sandbox_error",
+        Some(_) | None => "other",
+    };
+    let Some(info) = value.and_then(Value::as_object) else {
+        return (code, None);
+    };
+    for variant in [
+        "httpConnectionFailed",
+        "responseStreamConnectionFailed",
+        "responseStreamDisconnected",
+        "responseTooManyFailedAttempts",
+    ] {
+        if let Some(details) = info.get(variant).and_then(Value::as_object) {
+            let status = details
+                .get("httpStatusCode")
+                .and_then(Value::as_u64)
+                .filter(|status| (100..=599).contains(status));
+            return ("connection_failed", status);
+        }
+    }
+    ("other", None)
 }
 
 fn file_change_updated_event(

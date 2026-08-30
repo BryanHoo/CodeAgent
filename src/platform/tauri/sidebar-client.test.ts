@@ -471,7 +471,7 @@ describe("TauriSidebarClient", () => {
   it("reads application and verified Codex versions from Rust", async () => {
     const appInfo = {
       appVersion: "0.1.0",
-      codexVersion: "0.149.0",
+      codexVersion: "0.151.0",
       latestVersion: null,
       releaseNotes: null,
       status: "current" as const,

@@ -18,7 +18,7 @@ use tokio::{
 use super::connection::{AppServerConnection, ConnectionError};
 use super::runtime_manager::{RuntimeDiscoveryError, find_compatible_codex_binary};
 
-pub const SUPPORTED_CODEX_VERSION: &str = "0.149.0";
+pub const SUPPORTED_CODEX_VERSION: &str = "0.151.0";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const VERSION_OUTPUT_LIMIT: usize = 4 * 1024;
@@ -38,7 +38,7 @@ pub enum ProcessError {
     VersionProbeTimeout,
     #[error("Codex version output exceeded the limit")]
     VersionOutputTooLarge,
-    #[error("unsupported Codex version; expected 0.149.0")]
+    #[error("unsupported Codex version; expected 0.151.0")]
     UnsupportedVersion,
     #[error(transparent)]
     RuntimeDiscovery(#[from] RuntimeDiscoveryError),
@@ -268,7 +268,7 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     if let Some(runtime_path) = runtime_path {
-        // Codex 0.149 会从自身环境复制 PATH，再用它解析 npx 等 stdio MCP 命令。
+        // Codex 0.151 会从自身环境复制 PATH，再用它解析 npx 等 stdio MCP 命令。
         command.env("PATH", runtime_path);
     }
     command
@@ -317,15 +317,15 @@ mod tests {
     #[test]
     fn codex_version_should_require_the_exact_supported_cli_output() {
         assert_eq!(
-            parse_codex_version("codex-cli 0.149.0\n"),
+            parse_codex_version("codex-cli 0.151.0\n"),
             Some(SUPPORTED_CODEX_VERSION)
         );
-        assert_eq!(parse_codex_version("codex-cli 0.148.0\n"), None);
-        assert_eq!(parse_codex_version("codex-cli 0.149.0 unexpected\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.150.1\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.151.0 unexpected\n"), None);
     }
 
     #[tokio::test]
-    #[ignore = "requires the installed codex-cli 0.149.0 binary"]
+    #[ignore = "requires the installed codex-cli 0.151.0 binary"]
     async fn installed_codex_should_complete_real_app_server_lifecycle() {
         let process = CodexProcess::start(&std::env::temp_dir())
             .await

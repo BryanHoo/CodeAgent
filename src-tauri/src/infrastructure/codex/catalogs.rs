@@ -185,6 +185,23 @@ fn map_skill(skill: &Value) -> Option<Value> {
 fn map_mcp_server(server: Value) -> Option<Value> {
     let name = server.get("name")?.as_str()?;
     let info = server.get("serverInfo").filter(|value| !value.is_null());
+    // 0.151 的 null 表示运行态暂不可用或配置刚变化，保留条目并等待后续状态通知。
+    let (status, failure_reason) = match server.get("runtimeStatus")? {
+        Value::Null => ("starting", Value::Null),
+        Value::String(value) if matches!(value.as_str(), "notStarted" | "starting") => {
+            ("starting", Value::Null)
+        }
+        Value::String(value) if value == "connected" => ("ready", Value::Null),
+        Value::String(value) if value == "authenticationRequired" => (
+            "failed",
+            Value::String("reauthenticationRequired".to_owned()),
+        ),
+        Value::String(value) if value == "failed" => ("failed", Value::Null),
+        Value::String(value) if matches!(value.as_str(), "cancelled" | "disabled") => {
+            ("cancelled", Value::Null)
+        }
+        _ => return None,
+    };
     let mut tools = server
         .get("tools")
         .and_then(Value::as_object)
@@ -195,9 +212,9 @@ fn map_mcp_server(server: Value) -> Option<Value> {
         "authStatus": server.get("authStatus").cloned().unwrap_or(Value::Null),
         "description": info.and_then(|value| value.get("description")).cloned().unwrap_or(Value::Null),
         "error": Value::Null,
-        "failureReason": Value::Null,
+        "failureReason": failure_reason,
         "name": name,
-        "status": if info.is_some() { "ready" } else { "starting" },
+        "status": status,
         "title": info.and_then(|value| value.get("title")).cloned().unwrap_or(Value::Null),
         "tools": tools,
         "version": info.and_then(|value| value.get("version")).cloned().unwrap_or(Value::Null),
