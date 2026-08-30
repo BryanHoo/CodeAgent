@@ -1,4 +1,4 @@
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke } from "./native-invoke.js";
 
 export type DesktopNotification = Readonly<{
   body: string;

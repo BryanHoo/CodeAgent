@@ -1,4 +1,4 @@
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke } from "./native-invoke.js";
 
 // WebView 仅保留同步内存镜像，所有持久化统一通过受限 Tauri 命令完成。
 

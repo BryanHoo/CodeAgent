@@ -60,6 +60,10 @@ pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
+    #[cfg(all(debug_assertions, feature = "webview-tests"))]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
     let result = builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())

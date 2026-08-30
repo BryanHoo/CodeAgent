@@ -8,6 +8,7 @@ import { PerformanceProfiler } from "./shared/performance/performance-profiler.j
 import "./shared/styles/globals.css";
 import "./shared/styles/desktop-pet.css";
 import "./shared/styles/workbench.css";
+import { prepareWebviewTestBridge } from "./webview-test-bootstrap.js";
 
 const rootElement = document.querySelector("#root");
 
@@ -21,6 +22,7 @@ document.documentElement.dataset.appSurface = appSurface;
 installPerformanceMonitoring();
 
 async function startApplication(): Promise<void> {
+  await prepareWebviewTestBridge();
   if (appSurface !== "main") {
     const { DesktopPetWindow } = await import(
       "./features/pets/components/desktop-pet-window.js"

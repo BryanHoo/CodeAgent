@@ -1,5 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { CodexRuntimeAvailability } from "@/protocol/index.js";
+
+import { invoke } from "./native-invoke.js";
 
 export function inspectCodexRuntime(): Promise<CodexRuntimeAvailability> {
   return invoke<CodexRuntimeAvailability>("inspect_codex_runtime");

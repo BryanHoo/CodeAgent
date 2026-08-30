@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { analyzeBundle } from "./performance-budget.mjs";
 
-test("analyzeBundle separates initial and asynchronous chunks", () => {
+void test("analyzeBundle separates initial and asynchronous chunks", () => {
   const manifest = {
     "src/main.tsx": { file: "assets/main.js", imports: ["vendor"], isEntry: true },
     vendor: { file: "assets/vendor.js", imports: [] },

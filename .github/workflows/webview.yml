@@ -1,0 +1,99 @@
+name: Native WebView
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/webview.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "src/**"
+      - "src-tauri/**"
+      - "tests/webview/**"
+      - "vite.config.ts"
+      - "wdio.conf.ts"
+  pull_request:
+    paths:
+      - ".github/workflows/webview.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "src/**"
+      - "src-tauri/**"
+      - "tests/webview/**"
+      - "vite.config.ts"
+      - "wdio.conf.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-webview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows WebView2
+            platform: windows-latest
+          - name: Ubuntu WebKitGTK
+            platform: ubuntu-22.04
+          - name: macOS WKWebView
+            platform: macos-latest
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            xdg-utils \
+            xvfb
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native WebView test application
+        run: pnpm test:webview:build
+
+      - name: Run native WebView tests
+        if: matrix.platform != 'ubuntu-22.04'
+        run: pnpm test:webview
+
+      - name: Run native WebView tests on WebKitGTK
+        if: matrix.platform == 'ubuntu-22.04'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" pnpm test:webview

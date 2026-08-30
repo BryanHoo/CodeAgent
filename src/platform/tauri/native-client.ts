@@ -1,6 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-
 import { ensureCodexRuntime, subscribeAgentEvents } from "./runtime.js";
+import { invoke } from "./native-invoke.js";
 
 export type InvokeImplementation = <T>(
   command: string,

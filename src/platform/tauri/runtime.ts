@@ -1,10 +1,12 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
 import type { AgentEvent } from "@/protocol/index.js";
 import { RingBuffer } from "@/shared/memory/ring-buffer.js";
 import {
   applicationPerformanceMetrics,
   PERFORMANCE_MONITORING_ENABLED,
 } from "@/shared/performance/performance-metrics.js";
+
+import { invoke } from "./native-invoke.js";
 
 export type RuntimeStatus = "failed" | "idle" | "ready" | "starting";
 export type RuntimeSnapshot = Readonly<{
