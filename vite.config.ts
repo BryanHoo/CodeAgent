@@ -70,7 +70,8 @@ export default defineConfig({
         },
       },
     },
-    target: ["chrome116", "firefox124", "safari17.4"],
+    // Windows 使用 WebView2，其余桌面平台使用 WebKit，避免为无关浏览器额外转译。
+    target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome116" : "safari17.4",
     sourcemap: process.env.TAURI_ENV_DEBUG === "true",
   },
   test: {
