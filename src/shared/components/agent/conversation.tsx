@@ -133,6 +133,7 @@ export function Conversation({
         autoScrollController.handleLayoutRevision(container);
       },
       requestFrame: requestAnimationFrame,
+      scrollTarget: container,
       windowTarget: window,
     });
   }, [autoScrollController]);

@@ -60,18 +60,24 @@ describe("conversation layout recovery", () => {
     expect(recover).toHaveBeenCalledTimes(2);
   });
 
-  it("重新聚焦后同步并在下一帧再次恢复布局", () => {
+  it("重新聚焦后跨帧轻微滚动并恢复原位置以触发重绘", () => {
     const documentTarget = new FakeRecoveryEventTarget();
     const windowTarget = new FakeRecoveryEventTarget();
     const recover = vi.fn();
-    let frame: (() => void) | undefined;
+    const frames: Array<() => void> = [];
+    const scrollTarget = createScrollTarget();
+    const scrollTo = vi.fn((options: ScrollToOptions) => {
+      scrollTarget.scrollTop = options.top ?? scrollTarget.scrollTop;
+    });
+    scrollTarget.scrollTo = scrollTo;
     const dispose = observeConversationLayoutRecovery({
       cancelFrame: vi.fn(),
       documentTarget,
       recover,
+      scrollTarget,
       requestFrame(callback) {
-        frame = callback;
-        return 1;
+        frames.push(callback);
+        return frames.length;
       },
       windowTarget,
     });
@@ -79,8 +85,12 @@ describe("conversation layout recovery", () => {
     windowTarget.dispatch("focus");
 
     expect(recover).toHaveBeenCalledTimes(1);
-    frame?.();
+    frames.shift()?.();
     expect(recover).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 1_599 });
+
+    frames.shift()?.();
+    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 1_600 });
     dispose();
   });
 
@@ -93,6 +103,7 @@ describe("conversation layout recovery", () => {
       documentTarget,
       recover,
       requestFrame: vi.fn(() => 1),
+      scrollTarget: createScrollTarget(),
       windowTarget,
     });
 

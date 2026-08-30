@@ -24,6 +24,7 @@ type ConversationLayoutRecoveryObserverOptions = Readonly<{
   documentTarget: RecoveryEventTarget & Readonly<{ visibilityState: DocumentVisibilityState }>;
   recover: () => void;
   requestFrame: (callback: () => void) => number;
+  scrollTarget: ConversationScrollTarget;
   windowTarget: RecoveryEventTarget;
 }>;
 
@@ -44,24 +45,47 @@ export function observeConversationLayoutRecovery({
   documentTarget,
   recover,
   requestFrame,
+  scrollTarget,
   windowTarget,
 }: ConversationLayoutRecoveryObserverOptions): () => void {
-  let frameId = 0;
+  let layoutFrameId = 0;
+  let restoreFrameId = 0;
+  let restoreScrollTop: number | undefined;
+  const restoreScrollPosition = () => {
+    if (restoreScrollTop === undefined) return;
+    const maximumScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+    scrollTarget.scrollTo({
+      behavior: "auto",
+      top: Math.min(restoreScrollTop, maximumScrollTop),
+    });
+    restoreScrollTop = undefined;
+  };
   const recoverVisibleLayout = () => {
     if (documentTarget.visibilityState !== "visible") return;
-    // WebKit 回到前台后会延迟重建滚动范围，因此激活时重新执行双阶段校准。
-    frameId = scheduleConversationLayoutRecovery({
-      cancelFrame,
-      frameId,
-      recover,
-      requestFrame,
+    cancelFrame(layoutFrameId);
+    cancelFrame(restoreFrameId);
+    restoreScrollPosition();
+    recover();
+    layoutFrameId = requestFrame(() => {
+      recover();
+      const maximumScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+      const currentScrollTop = Math.min(Math.max(0, scrollTarget.scrollTop), maximumScrollTop);
+      const nextScrollTop = currentScrollTop > 0 ? currentScrollTop - 1 : Math.min(1, maximumScrollTop);
+      if (nextScrollTop === currentScrollTop) return;
+
+      // 真实滚动失效才能唤醒 WKWebView 已休眠的滚动合成层，下一帧恢复原位置避免可见跳动。
+      restoreScrollTop = currentScrollTop;
+      scrollTarget.scrollTo({ behavior: "auto", top: nextScrollTop });
+      restoreFrameId = requestFrame(restoreScrollPosition);
     });
   };
 
   documentTarget.addEventListener("visibilitychange", recoverVisibleLayout);
   windowTarget.addEventListener("focus", recoverVisibleLayout);
   return () => {
-    cancelFrame(frameId);
+    cancelFrame(layoutFrameId);
+    cancelFrame(restoreFrameId);
+    restoreScrollPosition();
     documentTarget.removeEventListener("visibilitychange", recoverVisibleLayout);
     windowTarget.removeEventListener("focus", recoverVisibleLayout);
   };
