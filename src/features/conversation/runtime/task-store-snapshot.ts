@@ -183,6 +183,8 @@ export function reconcileSnapshot(
     ...response,
     snapshot: {
       ...response.snapshot,
+      // App Server 的线程快照不携带用量，保留事件流最近值直到下一次 usage.updated。
+      contextUsage: response.snapshot.contextUsage ?? currentSnapshot.contextUsage,
       turns: [
         ...retainedOlderTurns,
         ...response.snapshot.turns.map((snapshotTurn) => {
