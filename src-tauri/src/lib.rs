@@ -6,7 +6,7 @@ pub mod domain;
 mod infrastructure;
 
 use application::{
-    app_lifecycle::{MainWindowLifecycle, handle_window_event},
+    app_lifecycle::{MainWindowLifecycle, handle_run_event, handle_window_event},
     app_storage_commands::{
         initialize_app_storage, list_custom_backgrounds, read_custom_background,
         update_app_preferences, update_custom_backgrounds,
@@ -179,9 +179,14 @@ pub fn run() {
             unsubscribe_task,
             delete_task
         ])
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!());
 
-    if let Err(error) = result {
-        eprintln!("failed to run CodeAgent: {error}");
-    }
+    let app = match result {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("failed to build CodeAgent: {error}");
+            return;
+        }
+    };
+    app.run(|_, event| handle_run_event(event));
 }

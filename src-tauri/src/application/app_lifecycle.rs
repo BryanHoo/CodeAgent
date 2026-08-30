@@ -6,8 +6,8 @@ use std::{
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuItem, MenuItemKind};
 use tauri::{
-    AppHandle, Manager as _, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window,
-    WindowEvent,
+    AppHandle, Manager as _, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    Window, WindowEvent,
 };
 
 use super::desktop_pet_commands::acknowledge_completed_desktop_pet_route;
@@ -123,6 +123,20 @@ pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
         tokio::time::sleep(main_window_destroy_delay(entropy)).await;
         destroy_main_window_if_current(&app, generation);
     });
+}
+
+pub(crate) fn handle_run_event(event: RunEvent) {
+    let RunEvent::ExitRequested { code, api, .. } = event else {
+        return;
+    };
+    // 销毁最后一个隐藏窗口只释放 WebView 资源，后台运行时和托盘必须继续存活。
+    if should_keep_background_runtime_alive(code) {
+        api.prevent_exit();
+    }
+}
+
+fn should_keep_background_runtime_alive(exit_code: Option<i32>) -> bool {
+    exit_code.is_none()
 }
 
 pub(super) fn show_main_window(app: &AppHandle) {
@@ -262,6 +276,12 @@ mod tests {
             close_request_action("main"),
             CloseRequestAction::HideMainWindow
         );
+    }
+
+    #[test]
+    fn background_runtime_only_survives_implicit_exit_requests() {
+        assert!(should_keep_background_runtime_alive(None));
+        assert!(!should_keep_background_runtime_alive(Some(0)));
     }
 
     #[test]
