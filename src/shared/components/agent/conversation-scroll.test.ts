@@ -2,9 +2,29 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createConversationAutoScrollController,
+  observeConversationLayoutRecovery,
   scheduleConversationLayoutRecovery,
   type ConversationScrollTarget,
 } from "./conversation-scroll.js";
+
+class FakeRecoveryEventTarget {
+  public visibilityState: DocumentVisibilityState = "visible";
+  readonly #listeners = new Map<string, Set<() => void>>();
+
+  public addEventListener(type: string, listener: () => void): void {
+    const listeners = this.#listeners.get(type) ?? new Set();
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  public dispatch(type: string): void {
+    for (const listener of this.#listeners.get(type) ?? []) listener();
+  }
+
+  public removeEventListener(type: string, listener: () => void): void {
+    this.#listeners.get(type)?.delete(listener);
+  }
+}
 
 function createScrollTarget(overrides: Partial<ConversationScrollTarget> = {}) {
   return {
@@ -38,6 +58,55 @@ describe("conversation layout recovery", () => {
 
     frame?.();
     expect(recover).toHaveBeenCalledTimes(2);
+  });
+
+  it("重新聚焦后同步并在下一帧再次恢复布局", () => {
+    const documentTarget = new FakeRecoveryEventTarget();
+    const windowTarget = new FakeRecoveryEventTarget();
+    const recover = vi.fn();
+    let frame: (() => void) | undefined;
+    const dispose = observeConversationLayoutRecovery({
+      cancelFrame: vi.fn(),
+      documentTarget,
+      recover,
+      requestFrame(callback) {
+        frame = callback;
+        return 1;
+      },
+      windowTarget,
+    });
+
+    windowTarget.dispatch("focus");
+
+    expect(recover).toHaveBeenCalledTimes(1);
+    frame?.();
+    expect(recover).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
+  it("只在对话重新可见时恢复并在卸载后停止监听", () => {
+    const documentTarget = new FakeRecoveryEventTarget();
+    const windowTarget = new FakeRecoveryEventTarget();
+    const recover = vi.fn();
+    const dispose = observeConversationLayoutRecovery({
+      cancelFrame: vi.fn(),
+      documentTarget,
+      recover,
+      requestFrame: vi.fn(() => 1),
+      windowTarget,
+    });
+
+    documentTarget.visibilityState = "hidden";
+    documentTarget.dispatch("visibilitychange");
+    expect(recover).not.toHaveBeenCalled();
+
+    documentTarget.visibilityState = "visible";
+    documentTarget.dispatch("visibilitychange");
+    expect(recover).toHaveBeenCalledTimes(1);
+
+    dispose();
+    windowTarget.dispatch("focus");
+    expect(recover).toHaveBeenCalledTimes(1);
   });
 
   it("restores the followed bottom after terminal content collapses", () => {

@@ -19,6 +19,7 @@ import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
 import {
   createConversationAutoScrollController,
+  observeConversationLayoutRecovery,
   scheduleConversationLayoutRecovery,
 } from "./conversation-scroll.js";
 
@@ -120,6 +121,21 @@ export function Conversation({
       cancelAnimationFrame(layoutRecoveryFrameRef.current);
     };
   }, [autoScrollController, layoutRevision]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return;
+
+    return observeConversationLayoutRecovery({
+      cancelFrame: cancelAnimationFrame,
+      documentTarget: document,
+      recover: () => {
+        autoScrollController.handleLayoutRevision(container);
+      },
+      requestFrame: requestAnimationFrame,
+      windowTarget: window,
+    });
+  }, [autoScrollController]);
 
   useLayoutEffect(() => {
     if (

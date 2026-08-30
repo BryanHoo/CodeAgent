@@ -10,7 +10,7 @@
 - 工作台壁纸必须按视口尺寸与 `devicePixelRatio` 预缩放到物理像素画布，并在画布生成阶段完成模糊；窗口缩放应合并重绘，禁止对全屏原图使用实时 CSS `filter: blur()`
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
-- 对话 Turn 列表必须使用自然文档流，禁止使用虚拟 sizer、绝对定位、transform 位移或持续动态测高；运行中与最近 3 个 Turn 保持热渲染，更早的终态 Turn 使用 `content-visibility: auto` 和 `contain-intrinsic-block-size` 作为可降级的浏览器原生优化；该 CSS 优化不得参与正确性判断，不支持时必须退化为完整自然流；历史导航直接定位已挂载锚点，流式置底由滚动容器级 `ResizeObserver` 管理，终态结构收缩必须按结构修订在当前布局和下一帧夹紧 WebKit 的失效滚动位置
+- 对话 Turn 列表必须使用自然文档流，禁止使用虚拟 sizer、绝对定位、transform 位移或持续动态测高；运行中与最近 3 个 Turn 保持热渲染，更早的终态 Turn 使用 `content-visibility: auto` 和 `contain-intrinsic-block-size` 作为可降级的浏览器原生优化；该 CSS 优化不得参与正确性判断，不支持时必须退化为完整自然流；历史导航直接定位已挂载锚点，流式置底由滚动容器级 `ResizeObserver` 管理；终态结构收缩及应用重新聚焦或可见时，必须在当前布局和下一帧夹紧 WebKit 的失效滚动位置
 - 时间线右侧轻量导航必须使用自然文档流完整挂载，不得使用虚拟 sizer、尺寸测量或绝对位移；固定行高虚拟化仅用于可达万级数据的源码行和项目文件树
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航

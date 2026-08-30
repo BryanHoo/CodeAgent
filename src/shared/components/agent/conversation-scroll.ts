@@ -14,6 +14,19 @@ type ConversationLayoutRecoveryOptions = Readonly<{
   requestFrame: (callback: () => void) => number;
 }>;
 
+type RecoveryEventTarget = Readonly<{
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
+}>;
+
+type ConversationLayoutRecoveryObserverOptions = Readonly<{
+  cancelFrame: (frameId: number) => void;
+  documentTarget: RecoveryEventTarget & Readonly<{ visibilityState: DocumentVisibilityState }>;
+  recover: () => void;
+  requestFrame: (callback: () => void) => number;
+  windowTarget: RecoveryEventTarget;
+}>;
+
 export function scheduleConversationLayoutRecovery({
   cancelFrame,
   frameId,
@@ -24,6 +37,34 @@ export function scheduleConversationLayoutRecovery({
   // 当前提交先同步校正，下一帧再覆盖 WKWebView 延迟更新滚动范围的情况。
   recover();
   return requestFrame(recover);
+}
+
+export function observeConversationLayoutRecovery({
+  cancelFrame,
+  documentTarget,
+  recover,
+  requestFrame,
+  windowTarget,
+}: ConversationLayoutRecoveryObserverOptions): () => void {
+  let frameId = 0;
+  const recoverVisibleLayout = () => {
+    if (documentTarget.visibilityState !== "visible") return;
+    // WebKit 回到前台后会延迟重建滚动范围，因此激活时重新执行双阶段校准。
+    frameId = scheduleConversationLayoutRecovery({
+      cancelFrame,
+      frameId,
+      recover,
+      requestFrame,
+    });
+  };
+
+  documentTarget.addEventListener("visibilitychange", recoverVisibleLayout);
+  windowTarget.addEventListener("focus", recoverVisibleLayout);
+  return () => {
+    cancelFrame(frameId);
+    documentTarget.removeEventListener("visibilitychange", recoverVisibleLayout);
+    windowTarget.removeEventListener("focus", recoverVisibleLayout);
+  };
 }
 
 export function createConversationAutoScrollController(onAtBottomChange: AtBottomChangeHandler) {
