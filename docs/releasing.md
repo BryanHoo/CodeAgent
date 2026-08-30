@@ -8,7 +8,7 @@
 | 平台 | 目标 | 包格式 | 最低基线 |
 | --- | --- | --- | --- |
 | Windows | x86_64 | NSIS | Windows 10/11，安装时下载 WebView2 bootstrapper |
-| Ubuntu | x86_64 | DEB、AppImage | Ubuntu 22.04 LTS |
+| Ubuntu | x86_64 | DEB、AppImage | Ubuntu 24.04 LTS+ |
 | macOS | Apple Silicon | app、DMG | macOS 14+ |
 
 Windows 暂不生成 MSI，因为 WiX 构建依赖 Windows 的 VBSCRIPT 可选功能。平台覆盖配置位于
@@ -18,19 +18,14 @@ Windows 暂不生成 MSI，因为 WiX 构建依赖 Windows 的 VBSCRIPT 可选�
 ## Ubuntu 安装
 
 DEB 不依赖 AppImage 的 FUSE 挂载机制，Ubuntu 用户应优先选择 DEB。AppImage 需要 FUSE 2
-运行库；Ubuntu 默认安装的 FUSE 3 不能替代该运行库。根据系统版本安装对应软件包：
+运行库；Ubuntu 默认安装的 FUSE 3 不能替代该运行库。Ubuntu 24.04 或更高版本安装：
 
 ```bash
-# Ubuntu 22.04
-sudo apt update
-sudo apt install libfuse2
-
-# Ubuntu 24.04
 sudo apt update
 sudo apt install libfuse2t64
 ```
 
-不要在 Ubuntu 22.04 或更高版本上安装 `fuse` 软件包，否则可能移除系统默认的 `fuse3`。
+不要安装 `fuse` 软件包，否则可能移除系统默认的 `fuse3`。
 如果无法安装 FUSE，可使用 AppImage 的解压运行模式，但每次启动都会产生额外解压开销：
 
 ```bash

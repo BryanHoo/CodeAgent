@@ -43,7 +43,7 @@ jobs:
           - name: Windows WebView2
             platform: windows-latest
           - name: Ubuntu WebKitGTK
-            platform: ubuntu-22.04
+            platform: ubuntu-24.04
           - name: macOS WKWebView
             platform: macos-latest
 
@@ -68,7 +68,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Tauri system dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -100,17 +100,17 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-features --locked installed_codex_should_complete_real_app_server_lifecycle -- --ignored --nocapture
 
       - name: Run native WebView tests
-        if: matrix.platform != 'ubuntu-22.04'
+        if: matrix.platform != 'ubuntu-24.04'
         run: pnpm test:webview
 
       - name: Run native WebView tests on WebKitGTK
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" pnpm test:webview
 
       - name: Run real Codex WebView chain
-        if: matrix.platform != 'ubuntu-22.04'
+        if: matrix.platform != 'ubuntu-24.04'
         run: pnpm test:webview:real
 
       - name: Run real Codex WebView chain on WebKitGTK
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" pnpm test:webview:real
