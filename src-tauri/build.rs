@@ -12,6 +12,7 @@ fn main() {
         "install_codex_runtime",
         "get_app_info",
         "get_runtime_performance_metrics",
+        "sync_tray_tasks",
         "sync_desktop_pet",
         "get_desktop_pet_state",
         "get_desktop_pet_drag_strategy",

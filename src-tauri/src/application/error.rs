@@ -35,6 +35,8 @@ pub enum AppError {
     WorkbenchBackgroundUnavailable,
     #[error("failed to show desktop notification")]
     NotificationFailed,
+    #[error("tray operation failed")]
+    TrayOperationFailed,
 }
 
 impl Serialize for AppError {

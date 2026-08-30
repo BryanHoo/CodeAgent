@@ -6,7 +6,7 @@ pub mod domain;
 mod infrastructure;
 
 use application::{
-    app_lifecycle::{MainWindowLifecycle, handle_window_event, setup_tray},
+    app_lifecycle::{MainWindowLifecycle, handle_window_event},
     app_storage_commands::{
         initialize_app_storage, list_custom_backgrounds, read_custom_background,
         update_app_preferences, update_custom_backgrounds,
@@ -42,6 +42,7 @@ use application::{
     },
     sidebar_directory_commands::list_project_directories,
     state::AppState,
+    tray_commands::{TrayRuntime, setup_tray, sync_tray_tasks},
     workflow_commands::{
         add_queued_submission, clear_task_goal, delete_queued_submission,
         list_background_terminals, list_queued_submissions, reorder_queued_submissions,
@@ -73,6 +74,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .manage(DesktopPetRuntime::default())
+        .manage(TrayRuntime::default())
         .manage(MainWindowLifecycle::default())
         .setup(|app| setup_tray(app.handle()).map_err(Into::into))
         .on_window_event(handle_window_event)
@@ -89,6 +91,7 @@ pub fn run() {
             cancel_native_request,
             get_app_info,
             get_runtime_performance_metrics,
+            sync_tray_tasks,
             sync_desktop_pet,
             get_desktop_pet_state,
             get_desktop_pet_drag_strategy,

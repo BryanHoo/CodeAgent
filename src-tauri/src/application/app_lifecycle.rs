@@ -4,12 +4,10 @@ use std::{
 };
 
 #[cfg(target_os = "macos")]
-use tauri::menu::MenuItemKind;
+use tauri::menu::{MenuItem, MenuItemKind};
 use tauri::{
     AppHandle, Manager as _, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window,
     WindowEvent,
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
 use super::desktop_pet_commands::acknowledge_completed_desktop_pet_route;
@@ -17,12 +15,8 @@ use super::desktop_pet_commands::acknowledge_completed_desktop_pet_route;
 const MAIN_WINDOW_LABEL: &str = "main";
 const MAIN_WINDOW_DESTROY_MIN_SECS: u64 = 30;
 const MAIN_WINDOW_DESTROY_MAX_SECS: u64 = 60;
-const SHOW_MAIN_MENU_ID: &str = "show-main";
-const QUIT_APP_MENU_ID: &str = "quit-app";
 #[cfg(target_os = "macos")]
 const HOLD_TO_QUIT_MENU_ID: &str = "hold-to-quit-app";
-#[cfg(target_os = "macos")]
-const MACOS_TRAY_ICON: tauri::image::Image<'_> = tauri::include_image!("./icons/tray-icon.png");
 
 #[derive(Default)]
 pub(crate) struct MainWindowLifecycle {
@@ -67,15 +61,6 @@ enum CloseRequestAction {
     AllowClose,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TrayMenuAction {
-    ShowMainWindow,
-    QuitApplication,
-    #[cfg(target_os = "macos")]
-    ConfirmQuitApplication,
-    Ignore,
-}
-
 fn close_request_action(window_label: &str) -> CloseRequestAction {
     if window_label == MAIN_WINDOW_LABEL {
         CloseRequestAction::HideMainWindow
@@ -84,66 +69,8 @@ fn close_request_action(window_label: &str) -> CloseRequestAction {
     }
 }
 
-fn tray_menu_action(menu_id: &str) -> TrayMenuAction {
-    match menu_id {
-        SHOW_MAIN_MENU_ID => TrayMenuAction::ShowMainWindow,
-        QUIT_APP_MENU_ID => TrayMenuAction::QuitApplication,
-        #[cfg(target_os = "macos")]
-        HOLD_TO_QUIT_MENU_ID => TrayMenuAction::ConfirmQuitApplication,
-        _ => TrayMenuAction::Ignore,
-    }
-}
-
-pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    #[cfg(target_os = "macos")]
-    configure_macos_hold_to_quit_menu(app)?;
-
-    let show_main =
-        MenuItem::with_id(app, SHOW_MAIN_MENU_ID, "打开 CodeAgent", true, None::<&str>)?;
-    let quit_app = MenuItem::with_id(app, QUIT_APP_MENU_ID, "退出 CodeAgent", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_main, &quit_app])?;
-    let mut tray = TrayIconBuilder::with_id("codeagent-tray")
-        .tooltip("CodeAgent")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match tray_menu_action(event.id().as_ref()) {
-            TrayMenuAction::ShowMainWindow => show_main_window(app),
-            TrayMenuAction::QuitApplication => app.exit(0),
-            #[cfg(target_os = "macos")]
-            TrayMenuAction::ConfirmQuitApplication => {
-                if macos_panel_activation::confirm_hold_to_quit() {
-                    app.exit(0);
-                }
-            }
-            TrayMenuAction::Ignore => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if matches!(
-                event,
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                }
-            ) {
-                show_main_window(tray.app_handle());
-            }
-        });
-    #[cfg(target_os = "macos")]
-    {
-        // Template 模式让图标自动匹配菜单栏明暗外观和交互状态。
-        tray = tray.icon(MACOS_TRAY_ICON).icon_as_template(true);
-    }
-    #[cfg(not(target_os = "macos"))]
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
-    }
-    tray.build(app)?;
-    Ok(())
-}
-
 #[cfg(target_os = "macos")]
-fn configure_macos_hold_to_quit_menu(app: &AppHandle) -> tauri::Result<()> {
+pub(crate) fn configure_macos_hold_to_quit_menu(app: &AppHandle) -> tauri::Result<()> {
     let Some(menu) = app.menu() else {
         return Ok(());
     };
@@ -198,7 +125,7 @@ pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
     });
 }
 
-fn show_main_window(app: &AppHandle) {
+pub(super) fn show_main_window(app: &AppHandle) {
     queue_main_window_restore(app, None);
 }
 
@@ -342,24 +269,6 @@ mod tests {
         assert_eq!(
             close_request_action("desktop-pet"),
             CloseRequestAction::AllowClose
-        );
-    }
-
-    #[test]
-    fn tray_menu_actions_are_mapped_without_affecting_unknown_items() {
-        assert_eq!(
-            tray_menu_action("show-main"),
-            TrayMenuAction::ShowMainWindow
-        );
-        assert_eq!(
-            tray_menu_action("quit-app"),
-            TrayMenuAction::QuitApplication
-        );
-        assert_eq!(tray_menu_action("unknown"), TrayMenuAction::Ignore);
-        #[cfg(target_os = "macos")]
-        assert_eq!(
-            tray_menu_action("hold-to-quit-app"),
-            TrayMenuAction::ConfirmQuitApplication
         );
     }
 

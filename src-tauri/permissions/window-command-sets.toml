@@ -15,6 +15,7 @@ permissions = [
   "allow-install-codex-runtime",
   "allow-get-app-info",
   "allow-get-runtime-performance-metrics",
+  "allow-sync-tray-tasks",
   "allow-sync-desktop-pet",
   "allow-show-task-notification",
   "allow-get-workbench-background",

@@ -19,6 +19,9 @@ mod request_cancellation;
 pub mod sidebar_commands;
 pub mod sidebar_directory_commands;
 pub mod state;
+pub mod tray_commands;
+#[cfg(test)]
+mod tray_commands_tests;
 mod turn_waiters;
 pub mod workflow_commands;
 pub mod workspace_commands;

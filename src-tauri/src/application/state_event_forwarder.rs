@@ -8,7 +8,10 @@ use tokio::{
     time::{Instant, sleep_until},
 };
 
-use super::super::{desktop_pet_commands::observe_desktop_pet_agent_event, error::AppError};
+use super::super::{
+    desktop_pet_commands::observe_desktop_pet_agent_event, error::AppError,
+    tray_commands::observe_tray_agent_event,
+};
 use super::{
     RuntimeSession,
     event_delta_batcher::{BatchAction, DeltaBatcher},
@@ -157,6 +160,7 @@ async fn publish_mapped_event(
     }
     if let Some(app) = app {
         observe_desktop_pet_agent_event(app, &project_id, &pet_event).await;
+        observe_tray_agent_event(app, &project_id, &pet_event).await;
     }
     true
 }

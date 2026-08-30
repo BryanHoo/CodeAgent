@@ -7,6 +7,7 @@ import { createDesktopTaskNotifier } from "../features/notifications/desktop-tas
 import { createActionMutationCache } from "../features/notifications/action-notifications.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { CodexRuntimeGate } from "../features/runtime/components/codex-runtime-gate.js";
+import { TrayTaskSync } from "../features/tray/components/tray-task-sync.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { getNotificationPreference } from "../features/settings/notification-preference.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
@@ -72,6 +73,7 @@ function AppProviderContent({ children }: AppProvidersProps) {
       <CodexRuntimeGate>
         <ProviderConnectionGate>
           <ProjectProvider taskNotifier={taskNotifier}>
+            <TrayTaskSync />
             <ComposerDraftProvider>{children}</ComposerDraftProvider>
           </ProjectProvider>
         </ProviderConnectionGate>

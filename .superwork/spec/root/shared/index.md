@@ -11,6 +11,12 @@
 - `DesktopPetState` 只同步宠物标识、活动动画、本地访问标志和最多 256 条任务气泡摘要；macOS 由原生窗口维护拖动，并以 AppKit 物理主键状态确认释放，前端维护动画生命周期，Linux 与 Windows 按帧合并物理坐标
 - 宠物移动、状态更新和任务跳转使用固定 `desktop-pet://*` 事件，独立窗口不得连接 Provider Runtime
 
+## 状态栏任务契约
+
+- 主 WebView 通过 `sync_tray_tasks` 增量同步最多 256 条任务运行态摘要，运行任务优先进入有界载荷；空快照不得清除 Rust 已持有的后台任务状态
+- Rust 必须直接归约 `turn.started`、`turn.completed`、失败与任务移除事件并更新状态栏数量和右键菜单，使主 WebView 隐藏或销毁后仍保持实时状态
+- 状态栏任务点击必须恢复主窗口并跳转对应任务；普通 Project 使用 `/p/:projectId/t/:taskId`，`temporary` 作用域使用 `/temporary/t/:taskId`
+
 ## 性能观测契约
 
 - Rust 映射实时 Delta 时写入 Unix 毫秒字段 `receivedAtUnixMs`；合并 Delta 保留该合并组首个事件的接收时间，前端只对实际进入可见 Task Store 的事件计算 React commit 延迟
@@ -26,3 +32,4 @@
 - 覆盖生成图片落盘、Base64 移除和时间线附件映射行为
 - 覆盖性能分位数、IPC 合并统计、源码虚拟化 DOM 上限和生产 Chunk 预算
 - 覆盖 MCP form/URL Resolution Schema 差异，以及 URL 外部打开成功后才提交 `accept` 的交互顺序
+- 覆盖状态栏计数、Provider 终态归约、菜单目标解析和普通/`temporary` 任务跳转
