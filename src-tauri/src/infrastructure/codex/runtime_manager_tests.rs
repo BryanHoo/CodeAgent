@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use super::runtime_manager::{distribution_for, inspect_codex_runtime, private_codex_binary_path};
+use super::runtime_manager::{
+    codex_executable_names, distribution_for, inspect_codex_runtime, private_codex_binary_path,
+};
 use crate::domain::runtime::CodexRuntimeAvailabilityStatus;
 
 #[test]
@@ -25,6 +27,16 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
         distribution.integrity,
         "GsZJbzBWiD48RETrO8VHGAQNgfSrUVxItXZFeD87wswatPi0+lKuQo8Dx4nMYmOZhZrVtwr3al/feRrZxnDV8Q=="
     );
+}
+
+#[test]
+fn windows_runtime_should_include_the_npm_cmd_shim() {
+    assert_eq!(
+        codex_executable_names("windows"),
+        &["codex.exe", "codex.cmd"]
+    );
+    assert_eq!(codex_executable_names("macos"), &["codex"]);
+    assert_eq!(codex_executable_names("linux"), &["codex"]);
 }
 
 #[cfg(unix)]

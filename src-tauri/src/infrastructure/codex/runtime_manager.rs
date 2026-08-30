@@ -1,7 +1,6 @@
 use std::{
     collections::HashSet,
     env,
-    ffi::OsString,
     io::{self, Write},
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -169,7 +168,7 @@ fn availability(
 }
 
 fn candidate_paths(app_data: &Path) -> (Vec<PathBuf>, bool) {
-    let executable = OsString::from(format!("codex{}", env::consts::EXE_SUFFIX));
+    let executable_names = codex_executable_names(env::consts::OS);
     let mut raw_paths = Vec::new();
     let mut invalid_explicit_path = false;
 
@@ -183,9 +182,13 @@ fn candidate_paths(app_data: &Path) -> (Vec<PathBuf>, bool) {
     }
     raw_paths.push(private_codex_binary_path(app_data));
     if let Some(path) = env::var_os("PATH") {
-        raw_paths.extend(env::split_paths(&path).map(|directory| directory.join(&executable)));
+        raw_paths.extend(env::split_paths(&path).flat_map(|directory| {
+            executable_names
+                .iter()
+                .map(move |executable| directory.join(executable))
+        }));
     }
-    raw_paths.extend(common_binary_paths(&executable));
+    raw_paths.extend(common_binary_paths(executable_names));
 
     let mut seen = HashSet::new();
     let candidates = raw_paths
@@ -196,23 +199,39 @@ fn candidate_paths(app_data: &Path) -> (Vec<PathBuf>, bool) {
     (candidates, invalid_explicit_path)
 }
 
-fn common_binary_paths(executable: &OsString) -> Vec<PathBuf> {
-    let mut paths = vec![
-        PathBuf::from("/opt/homebrew/bin").join(executable),
-        PathBuf::from("/usr/local/bin").join(executable),
-        PathBuf::from("/usr/bin").join(executable),
+pub(super) fn codex_executable_names(os: &str) -> &'static [&'static str] {
+    if os == "windows" {
+        // npm 在 Windows 全局安装时生成 codex.cmd shim，必须与独立版 codex.exe 一并检测。
+        &["codex.exe", "codex.cmd"]
+    } else {
+        &["codex"]
+    }
+}
+
+fn common_binary_paths(executable_names: &[&str]) -> Vec<PathBuf> {
+    let mut directories = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
     ];
     if let Some(home) = env::var_os("HOME") {
-        paths.push(PathBuf::from(home).join(".local/bin").join(executable));
+        directories.push(PathBuf::from(home).join(".local/bin"));
+    }
+    if let Some(app_data) = env::var_os("APPDATA") {
+        // 默认 npm global prefix 位于 %APPDATA%\npm，应用安装期间 PATH 不更新也能立即闭环。
+        directories.push(PathBuf::from(app_data).join("npm"));
     }
     if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-        paths.push(
-            PathBuf::from(local_app_data)
-                .join("Programs/Codex")
-                .join(executable),
-        );
+        directories.push(PathBuf::from(local_app_data).join("Programs/Codex"));
     }
-    paths
+    directories
+        .into_iter()
+        .flat_map(|directory| {
+            executable_names
+                .iter()
+                .map(move |executable| directory.join(executable))
+        })
+        .collect()
 }
 
 pub(super) fn private_codex_binary_path(app_data: &Path) -> PathBuf {
