@@ -15,6 +15,31 @@ Windows 暂不生成 MSI，因为 WiX 构建依赖 Windows 的 VBSCRIPT 可选�
 `src-tauri/tauri.windows.conf.json`、`src-tauri/tauri.linux.conf.json` 和
 `src-tauri/tauri.macos.conf.json`，Tauri 会根据构建主机自动合并对应文件。
 
+## Ubuntu 安装
+
+DEB 不依赖 AppImage 的 FUSE 挂载机制，Ubuntu 用户应优先选择 DEB。AppImage 需要 FUSE 2
+运行库；Ubuntu 默认安装的 FUSE 3 不能替代该运行库。根据系统版本安装对应软件包：
+
+```bash
+# Ubuntu 22.04
+sudo apt update
+sudo apt install libfuse2
+
+# Ubuntu 24.04
+sudo apt update
+sudo apt install libfuse2t64
+```
+
+不要在 Ubuntu 22.04 或更高版本上安装 `fuse` 软件包，否则可能移除系统默认的 `fuse3`。
+如果无法安装 FUSE，可使用 AppImage 的解压运行模式，但每次启动都会产生额外解压开销：
+
+```bash
+chmod +x CodeAgent.AppImage
+./CodeAgent.AppImage --appimage-extract-and-run
+```
+
+具体排障步骤见 [AppImage FUSE 文档](https://docs.appimage.org/user-guide/troubleshooting/fuse.html)。
+
 ## 自动化
 
 - `Quality`：在 Ubuntu 上执行 Web 和 Rust 的 lint、测试与构建。

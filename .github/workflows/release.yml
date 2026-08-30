@@ -89,6 +89,9 @@ jobs:
           releaseBody: |
             Unsigned preview artifacts for Windows, Ubuntu, and macOS.
             Review the platform security warnings before installing.
+            Ubuntu AppImage requires FUSE 2: install `libfuse2` on 22.04 or `libfuse2t64` on 24.04.
+            The DEB package does not require AppImage FUSE.
+            FUSE help: https://docs.appimage.org/user-guide/troubleshooting/fuse.html
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: false
