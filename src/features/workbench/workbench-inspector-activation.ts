@@ -22,6 +22,30 @@ type InspectorTabAvailability = Readonly<{
   fileOpen?: boolean;
 }>;
 
+export type WorkbenchInspectorContextArtifactState = Readonly<{
+  goal: boolean;
+  plan: boolean;
+  scopeKey: string;
+}>;
+
+export function getDefaultWorkbenchInspectorTab(
+  contextOnly: boolean,
+): WorkbenchInspectorTab {
+  return contextOnly ? "context" : "project";
+}
+
+export function deriveWorkbenchInspectorContextActivation(
+  previous: WorkbenchInspectorContextArtifactState,
+  current: WorkbenchInspectorContextArtifactState,
+) {
+  const scopeChanged = previous.scopeKey !== current.scopeKey;
+  return {
+    activateContext:
+      (current.goal && (scopeChanged || !previous.goal)) ||
+      (current.plan && (scopeChanged || !previous.plan)),
+  } as const;
+}
+
 export function shouldEnableProjectGitDetails({
   activePanel,
   gitStatus,
@@ -54,9 +78,9 @@ export function getAvailableWorkbenchInspectorTabs(
     if (fileOpen) tabs.push("file");
     return tabs;
   }
-  // 标签顺序是稳定的，能力消失时由激活策略统一回落到项目标签。
-  if (taskId !== undefined) tabs.push("context");
+  // 项目浏览保持首位，能力消失时由激活策略统一回落到项目标签。
   tabs.push("project");
+  if (taskId !== undefined) tabs.push("context");
   if (hasGitChanges) tabs.push("changes");
   if (isGitProject) tabs.push("history");
   // 文件标签只代表当前选择，不保留空面板或历史文件列表。

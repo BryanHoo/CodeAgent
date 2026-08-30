@@ -53,7 +53,10 @@ import type {
 } from "./workbench-inspector.js";
 import {
   deriveWorkbenchInspectorActivation,
+  deriveWorkbenchInspectorContextActivation,
+  getDefaultWorkbenchInspectorTab,
   shouldEnableProjectGitDetails,
+  type WorkbenchInspectorContextArtifactState,
 } from "../workbench-inspector-activation.js";
 import { shouldEnableWorkbenchSkills } from "../workbench-query-availability.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
@@ -144,7 +147,7 @@ export function useWorkbenchShellRuntime({
     workbenchShellRef,
   } = useWorkbenchPanelLayout();
   const inspectorScopeKey = `${projectId}:${taskId ?? "draft"}`;
-  const defaultInspectorTab: WorkbenchInspectorTab = taskId === undefined ? "project" : "context";
+  const defaultInspectorTab: WorkbenchInspectorTab = getDefaultWorkbenchInspectorTab(temporary);
   const [inspectorTabState, setInspectorTabState] = useState<{
     scopeKey: string;
     tab: WorkbenchInspectorTab;
@@ -152,7 +155,7 @@ export function useWorkbenchShellRuntime({
   const [inspectorFileSelection, setInspectorFileSelection] = useState<
     (WorkbenchInspectorFileSelection & { projectId: string }) | null
   >(null);
-  // 标签选择绑定当前路由身份；Task 首屏进入上下文，草稿页仍以项目浏览为主。
+  // 标签选择绑定当前路由身份；普通 Task 启动后继续展示项目面板。
   const inspectorTab =
     inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : defaultInspectorTab;
   const gitStatusQuery = useQuery(
@@ -365,6 +368,28 @@ export function useWorkbenchShellRuntime({
     void runtime.metadata;
     return inspectorOpen ? (runtime.readSnapshot() ?? startingSnapshot) : startingSnapshot;
   }, [inspectorOpen, runtime, startingSnapshot]);
+  const hasInspectorGoal = inspectorTask?.goal !== null && inspectorTask?.goal !== undefined;
+  const hasInspectorPlan = inspectorTask?.plan !== null && inspectorTask?.plan !== undefined;
+  const previousInspectorContextArtifactState = useRef<WorkbenchInspectorContextArtifactState>({
+    goal: false,
+    plan: false,
+    scopeKey: inspectorScopeKey,
+  });
+  useEffect(() => {
+    const currentArtifactState = {
+      goal: hasInspectorGoal,
+      plan: hasInspectorPlan,
+      scopeKey: inspectorScopeKey,
+    };
+    const activation = deriveWorkbenchInspectorContextActivation(
+      previousInspectorContextArtifactState.current,
+      currentArtifactState,
+    );
+    previousInspectorContextArtifactState.current = currentArtifactState;
+    if (activation.activateContext) {
+      setInspectorTab("context");
+    }
+  }, [hasInspectorGoal, hasInspectorPlan, inspectorScopeKey, setInspectorTab]);
   const subagents = useMemo(() => collectSubagents(inspectorTask), [inspectorTask]);
   const selectedSubagent =
     subagentDialogSelection?.projectId === projectId &&

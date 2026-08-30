@@ -18,6 +18,7 @@
 - 服务端快照通过 TanStack Query 读取，实时任务状态通过功能域 Runtime/Store 的选择器读取，避免订阅无关状态
 - `temporary` 是合成任务作用域；依赖真实 Project 或根目录的查询必须在该作用域禁用
 - Inspector 始终显示可用 Tab；数据模块仅在存在实体时渲染，无内容时在面板内容区显示空状态
+- Inspector 的项目 Tab 固定排在上下文 Tab 前；普通 Task 启动后保持项目 Tab，仅当计划或目标出现时自动切换到上下文 Tab
 - `@pierre/diffs` 首次显示前按当前文件语言预加载高亮器，避免首个 Diff 异步初始化后保持空白
 - Composer 提交消息时必须保留完整 `AgentMessageAttachment`，不得退化为仅含 `id` 的引用
 - Composer 必须将 `CODEX_THREAD_BUSY` 映射为本地化的可操作提示；未知原生拒绝不得显示硬编码英文兜底文案
