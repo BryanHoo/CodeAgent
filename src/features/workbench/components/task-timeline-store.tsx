@@ -1,14 +1,14 @@
 import type { PendingRequest } from "@/protocol/index.js";
 import { AlertTriangle, Info } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useStore } from "zustand";
 
 import { i18n } from "../../../i18n/i18n.js";
 
 import {
   Conversation,
+  ConversationList,
   ConversationScrollButton,
-  ConversationVirtualList,
 } from "../../../shared/components/agent/conversation.js";
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type {
@@ -22,6 +22,7 @@ import { PendingRequestCard, type PendingRequestResolution } from "./pending-req
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
 import { resolveCompletedTurnProcessItemIds } from "./task-timeline-process.js";
+import { getTaskTurnRenderMode } from "./task-timeline-render-mode.js";
 import { TaskTimelinePagination } from "./task-timeline-pagination.js";
 import {
   TaskTimelineNavigation,
@@ -148,7 +149,7 @@ export function StoredAssistantGroup({
   );
 }
 
-export function StoreTurnTimelineSection({
+export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
   onBuildPlan,
   onForkTask,
   onOpenFileDiff,
@@ -263,7 +264,7 @@ export function StoreTurnTimelineSection({
       )}
     </section>
   );
-}
+});
 
 function TaskNoticeRow({ notice }: Readonly<{ notice: TaskNotice }>) {
   const isWarning = notice.payload.level === "warning";
@@ -436,7 +437,7 @@ export function TaskStoreTimeline({
           onLoad={onLoadOlderHistory}
         />
       ) : null}
-      <ConversationVirtualList
+      <ConversationList
         {...(hasVisiblePendingRequest || showPendingSubmission || hasNotices
           ? {
               footer: (
@@ -460,15 +461,17 @@ export function TaskStoreTimeline({
             }
           : {})}
         getItemKey={getTurnIdKey}
+        getItemRenderMode={(turnId, turnIndex) =>
+          getTaskTurnRenderMode(store.getState().turnsById[turnId], turnIndex, turnIds.length)
+        }
         items={turnIds}
-        layoutRevision={itemStructureRevision}
-        renderNavigation={(navigateToItem, scrollbarWidth, scrollContainerRef) => (
+        renderNavigation={(navigateToAnchor, scrollbarWidth, scrollContainerRef) => (
           <TaskTimelineNavigation
             items={navigationItems}
             scrollContainerRef={scrollContainerRef}
             scrollbarWidth={scrollbarWidth}
             onNavigate={(item) => {
-              navigateToItem(item.turnIndex, item.anchorId);
+              navigateToAnchor(item.anchorId);
             }}
           />
         )}

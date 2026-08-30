@@ -72,7 +72,7 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
       updateFollowState(distanceFromBottom < BOTTOM_PROXIMITY_THRESHOLD_PX);
     },
     pauseFollowing() {
-      // 历史导航会触发虚拟列表重新测量，先停用贴底以保留目标滚动位置。
+      // 历史导航前停用贴底，避免内容尺寸变化把用户重新带回最新消息。
       updateFollowState(false);
     },
     scrollToBottom(scrollTarget: ConversationScrollTarget) {

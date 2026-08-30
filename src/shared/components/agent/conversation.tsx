@@ -1,4 +1,3 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import {
   useCallback,
@@ -15,21 +14,10 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { flushSync } from "react-dom";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
-import {
-  measureConversationTurn,
-  resizeConversationTurn,
-  shouldAdjustConversationScrollPositionOnItemSizeChange,
-  shouldDeferConversationTurnResize,
-} from "./conversation-measurement.js";
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
-import {
-  observeConversationViewportRecovery,
-  scheduleConversationViewportRecovery,
-} from "./conversation-viewport-recovery.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
@@ -48,15 +36,12 @@ type ConversationContextValue = Readonly<{
 }>;
 
 const ConversationContext = createContext<ConversationContextValue | null>(null);
-const CONVERSATION_INITIAL_RECT = { height: 768, width: 1_024 };
-const DEFAULT_TURN_ESTIMATED_HEIGHT_PX = 300;
-const TURN_GAP_PX = 24;
-const TURN_OVERSCAN = 8;
+const COLD_TURN_INTRINSIC_BLOCK_SIZE_PX = 300;
 
 function useConversationContext(): ConversationContextValue {
   const context = useContext(ConversationContext);
   if (context === null) {
-    throw new Error("Conversation virtual components must be used within Conversation");
+    throw new Error("Conversation components must be used within Conversation");
   }
   return context;
 }
@@ -101,29 +86,11 @@ export function Conversation({
       return;
     }
 
-    // 先开启强制跟随，再等待长 Timeline 的延迟布局连续稳定后执行最终置底。
+    // 切换会话后保持置底到下一帧，后续异步内容变化由 ResizeObserver 继续跟随。
     autoScrollController.handleConversationChange(container);
-    let previousScrollHeight = -1;
-    let stableFrameCount = 0;
-    let observedFrameCount = 0;
-    let animationFrameId = 0;
-
-    const settleConversationAtBottom = () => {
-      autoScrollController.handleContentResize(container);
-      const currentScrollHeight = container.scrollHeight;
-      stableFrameCount = currentScrollHeight === previousScrollHeight ? stableFrameCount + 1 : 0;
-      previousScrollHeight = currentScrollHeight;
-      observedFrameCount += 1;
-
-      // 连续两帧高度稳定即可视为消息布局完成；上限避免持续流式内容无限占用动画帧。
-      if (stableFrameCount >= 2 || observedFrameCount >= 60) {
-        autoScrollController.handleConversationRenderComplete(container);
-        return;
-      }
-      animationFrameId = requestAnimationFrame(settleConversationAtBottom);
-    };
-
-    animationFrameId = requestAnimationFrame(settleConversationAtBottom);
+    const animationFrameId = requestAnimationFrame(() => {
+      autoScrollController.handleConversationRenderComplete(container);
+    });
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
@@ -187,7 +154,7 @@ export function Conversation({
         ref={containerRef}
         role="log"
         aria-live="off"
-        style={{ ...style, overflowAnchor: "none" }}
+        style={style}
         {...props}
       >
         {children}
@@ -205,261 +172,81 @@ export function ConversationContent({ className = "", ...props }: ConversationCo
   );
 }
 
-export type ConversationVirtualListProps<TItem> = Omit<HTMLAttributes<HTMLDivElement>, "children"> &
+export type ConversationItemRenderMode = "cold" | "hot";
+
+export type ConversationListProps<TItem> = Omit<HTMLAttributes<HTMLDivElement>, "children"> &
   Readonly<{
-    estimateSize?: (item: TItem, index: number) => number;
     footer?: ReactNode;
     getItemKey: (item: TItem, index: number) => Key;
+    getItemRenderMode?: (item: TItem, index: number) => ConversationItemRenderMode;
     items: readonly TItem[];
-    layoutRevision?: number;
     renderNavigation?: (
-      navigateToItem: (index: number, anchorId: string) => void,
+      navigateToAnchor: (anchorId: string) => void,
       scrollbarWidth: number,
       scrollContainerRef: RefObject<HTMLDivElement | null>,
     ) => ReactNode;
     renderItem: (item: TItem, index: number) => ReactNode;
   }>;
 
-export function ConversationVirtualList<TItem>({
+export function ConversationList<TItem>({
   className = "",
-  estimateSize,
   footer,
   getItemKey,
+  getItemRenderMode,
   items,
-  layoutRevision,
   renderNavigation,
   renderItem,
   ...props
-}: ConversationVirtualListProps<TItem>) {
-  const context = useConversationContext();
-  const { containerRef, pauseFollowing, scrollbarWidth } = context;
-  const navigationFrameRef = useRef(0);
-  const layoutRecoveryFrameRef = useRef(0);
-  const pendingTurnResizeEntriesRef = useRef(
-    new Map<HTMLDivElement, ResizeObserverEntry | undefined>(),
-  );
-  const turnResizeObserverRef = useRef<ResizeObserver | null>(null);
-  const getScrollElement = useCallback(() => containerRef.current, [containerRef]);
-  const estimateTurnSize = useCallback(
-    (index: number) =>
-      estimateSize?.(items[index] as TItem, index) ?? DEFAULT_TURN_ESTIMATED_HEIGHT_PX,
-    [estimateSize, items],
-  );
-  const getTurnKey = useCallback(
-    (index: number) => getItemKey(items[index] as TItem, index),
-    [getItemKey, items],
-  );
-  // Turn 是最小虚拟化边界；内部 项目 Agent 组件 保持完整挂载，由动态测量处理流式高度变化。
-  const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    anchorTo: "end",
-    count: items.length,
-    estimateSize: estimateTurnSize,
-    followOnAppend: "auto",
-    gap: TURN_GAP_PX,
-    getItemKey: getTurnKey,
-    getScrollElement,
-    initialRect: CONVERSATION_INITIAL_RECT,
-    overscan: TURN_OVERSCAN,
-    scrollEndThreshold: 24,
-  });
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
-    shouldAdjustConversationScrollPositionOnItemSizeChange;
-  const resizeTurn = useCallback(
-    (turn: HTMLDivElement, entry?: ResizeObserverEntry, measuredSize?: number) => {
-      resizeConversationTurn(turn, virtualizer.resizeItem, entry, measuredSize);
-    },
-    [virtualizer],
-  );
-  const observeTurnElement = useCallback((turn: HTMLDivElement | null) => {
-    if (turn === null) return;
-    turnResizeObserverRef.current?.observe(turn);
-    return () => {
-      pendingTurnResizeEntriesRef.current.delete(turn);
-      turnResizeObserverRef.current?.unobserve(turn);
-    };
-  }, []);
-  const flushPendingTurnResizes = useCallback(() => {
-    const pendingEntries = [...pendingTurnResizeEntriesRef.current];
-    pendingTurnResizeEntriesRef.current.clear();
-    for (const [turn, entry] of pendingEntries) {
-      if (turn.isConnected) resizeTurn(turn, entry);
-    }
-  }, [resizeTurn]);
-  const resizeOrDeferTurn = useCallback(
-    (turn: HTMLDivElement, entry?: ResizeObserverEntry) => {
-      const index = Number.parseInt(turn.dataset["index"] ?? "", 10);
-      const virtualTurn = virtualizer.getVirtualItems().find((item) => item.index === index);
-      const measuredSize = measureConversationTurn(turn, entry);
-      if (
-        virtualTurn !== undefined &&
-        shouldDeferConversationTurnResize(virtualTurn, measuredSize, virtualizer)
-      ) {
-        // 同一 Turn 只保留最新尺寸，避免快速滚动期间累积无效测量。
-        pendingTurnResizeEntriesRef.current.set(turn, entry);
-        return;
-      }
-
-      pendingTurnResizeEntriesRef.current.delete(turn);
-      resizeTurn(turn, entry, measuredSize);
-    },
-    [resizeTurn, virtualizer],
-  );
-  const measureMountedTurns = useCallback(() => {
-    // 离开 React layout lifecycle 后批量同步提交，确保完成态收缩在浏览器绘制前更新 sizer。
-    queueMicrotask(() => {
-      const container = containerRef.current;
-      if (container === null) return;
-      flushSync(() => {
-        for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
-          resizeOrDeferTurn(turn);
-        }
-      });
-    });
-  }, [containerRef, resizeOrDeferTurn]);
-  useLayoutEffect(() => {
-    const pendingEntries = pendingTurnResizeEntriesRef.current;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target instanceof HTMLDivElement) {
-          resizeOrDeferTurn(entry.target, entry);
-        }
-      }
-    });
-    turnResizeObserverRef.current = observer;
-    const container = containerRef.current;
-    if (container !== null) {
-      for (const turn of container.querySelectorAll<HTMLDivElement>("[data-conversation-turn]")) {
-        observer.observe(turn);
-      }
-    }
-    return () => {
-      pendingEntries.clear();
-      observer.disconnect();
-      if (turnResizeObserverRef.current === observer) {
-        turnResizeObserverRef.current = null;
-      }
-    };
-  }, [containerRef, resizeOrDeferTurn]);
-  const isVirtualizerScrolling = virtualizer.isScrolling;
-  useEffect(() => {
-    if (isVirtualizerScrolling || pendingTurnResizeEntriesRef.current.size === 0) return;
-
-    // 离开 React effect 后提交会触发同步锚点修正，避免 flushSync 生命周期警告。
-    queueMicrotask(() => {
-      if (!virtualizer.isScrolling) flushPendingTurnResizes();
-    });
-  }, [flushPendingTurnResizes, isVirtualizerScrolling, virtualizer]);
-  const scrollToVirtualEnd = useCallback(() => {
-    if (items.length > 0) {
-      virtualizer.scrollToIndex(items.length - 1, { align: "end", behavior: "auto" });
-    }
-  }, [items.length, virtualizer]);
-  // 流式 Item 重组和 Turn 终态都会改变真实高度，提交后立即校准虚拟列表。
-  useLayoutEffect(() => {
-    if (layoutRevision === undefined || items.length === 0) {
-      return;
-    }
-
-    layoutRecoveryFrameRef.current = scheduleConversationViewportRecovery({
-      cancelFrame: cancelAnimationFrame,
-      frameId: layoutRecoveryFrameRef.current,
-      isFollowing: () => context.atBottom,
-      measure: measureMountedTurns,
-      requestFrame: (callback) => requestAnimationFrame(callback),
-      scrollToEnd: scrollToVirtualEnd,
-    });
-    return () => {
-      cancelAnimationFrame(layoutRecoveryFrameRef.current);
-    };
-  }, [context.atBottom, items.length, layoutRevision, measureMountedTurns, scrollToVirtualEnd]);
-  useEffect(() => {
-    if (items.length === 0) {
-      return;
-    }
-
-    return observeConversationViewportRecovery({
-      cancelFrame: cancelAnimationFrame,
-      documentTarget: document,
-      isFollowing: () => context.atBottom,
-      measure: measureMountedTurns,
-      requestFrame: (callback) => requestAnimationFrame(callback),
-      scrollToEnd: scrollToVirtualEnd,
-      windowTarget: window,
-    });
-  }, [context.atBottom, items.length, measureMountedTurns, scrollToVirtualEnd]);
-  const navigateToItem = useCallback(
-    (index: number, anchorId: string) => {
+}: ConversationListProps<TItem>) {
+  const { containerRef, pauseFollowing, scrollbarWidth } = useConversationContext();
+  const navigateToAnchor = useCallback(
+    (anchorId: string) => {
       const container = containerRef.current;
       if (container === null) {
         return;
       }
-      cancelAnimationFrame(navigationFrameRef.current);
-
-      const findAnchor = () =>
-        Array.from(container.querySelectorAll<HTMLElement>("[data-conversation-anchor]")).find(
-          (element) => element.dataset["conversationAnchor"] === anchorId,
-        );
-      const mountedAnchor = findAnchor();
-      if (mountedAnchor !== undefined) {
-        pauseFollowing();
-        mountedAnchor.scrollIntoView({ block: "start" });
-        return;
-      }
+      const anchor = Array.from(
+        container.querySelectorAll<HTMLElement>("[data-conversation-anchor]"),
+      ).find((element) => element.dataset["conversationAnchor"] === anchorId);
+      if (anchor === undefined) return;
 
       pauseFollowing();
-      virtualizer.scrollToIndex(index, { align: "start" });
-      let remainingFrames = 12;
-      const finishNavigation = () => {
-        const anchor = findAnchor();
-        if (anchor !== undefined) {
-          anchor.scrollIntoView({ block: "start" });
-          return;
-        }
-        remainingFrames -= 1;
-        if (remainingFrames > 0) {
-          // 动态测高可能覆盖首次定位，目标锚点挂载前持续校准对应 Turn。
-          virtualizer.scrollToIndex(index, { align: "start" });
-          navigationFrameRef.current = requestAnimationFrame(finishNavigation);
-        }
-      };
-      navigationFrameRef.current = requestAnimationFrame(finishNavigation);
+      anchor.scrollIntoView({ block: "start" });
     },
-    [containerRef, pauseFollowing, virtualizer],
-  );
-
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(navigationFrameRef.current);
-    },
-    [],
+    [containerRef, pauseFollowing],
   );
 
   return (
     <>
-      {renderNavigation?.(navigateToItem, scrollbarWidth, containerRef)}
+      {renderNavigation?.(navigateToAnchor, scrollbarWidth, containerRef)}
       <div
-        className={`mx-auto w-full max-w-content px-4 py-6 sm:px-6 sm:py-7 ${className}`}
+        className={`mx-auto flex w-full max-w-content flex-col gap-6 px-4 py-6 sm:px-6 sm:py-7 ${className}`}
         data-conversation-content=""
         {...props}
       >
-        {/* React 同步提交 sizer 与 top，避免 WKWebView 在流式内容切换完成态时漏绘 transform 合成层。 */}
-        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-          {virtualizer.getVirtualItems().map((virtualTurn) => (
+        {items.map((item, index) => {
+          const renderMode = getItemRenderMode?.(item, index) ?? "hot";
+          return (
             <div
-              className="absolute left-0 top-0 w-full"
+              className="w-full"
               data-conversation-turn=""
-              data-index={virtualTurn.index}
-              key={virtualTurn.key}
-              ref={observeTurnElement}
-              style={{ top: virtualTurn.start }}
+              data-index={index}
+              data-render-mode={renderMode}
+              key={getItemKey(item, index)}
+              style={
+                renderMode === "cold"
+                  ? {
+                      containIntrinsicBlockSize: `auto ${String(COLD_TURN_INTRINSIC_BLOCK_SIZE_PX)}px`,
+                      contentVisibility: "auto",
+                    }
+                  : undefined
+              }
             >
-              {renderItem(items[virtualTurn.index] as TItem, virtualTurn.index)}
+              {renderItem(item, index)}
             </div>
-          ))}
-        </div>
-        {footer === undefined ? null : (
-          <div className={items.length === 0 ? "space-y-6" : "mt-6 space-y-6"}>{footer}</div>
-        )}
+          );
+        })}
+        {footer === undefined ? null : <div className="space-y-6">{footer}</div>}
       </div>
     </>
   );
