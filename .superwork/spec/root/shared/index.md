@@ -16,8 +16,13 @@
 - Rust 映射实时 Delta 时写入 Unix 毫秒字段 `receivedAtUnixMs`；合并 Delta 保留该合并组首个事件的接收时间，前端只对实际进入可见 Task Store 的事件计算 React commit 延迟
 - `get_runtime_performance_metrics` 按项目返回 Provider 接收数、IPC 发布数、最近 1 秒 events/s、合并率与有界事件队列高水位
 
+## MCP Elicitation 契约
+
+- form 模式仅在 `accept` 时携带结构化 `content`；URL 模式的 `accept` 只发送 `action`，`decline` 与 `cancel` 均不发送 `content`
+
 ## 验证要求
 
 - 覆盖普通文件提交后在队列编辑与历史恢复中的附件 chip 保留行为
 - 覆盖生成图片落盘、Base64 移除和时间线附件映射行为
 - 覆盖性能分位数、IPC 合并统计、源码虚拟化 DOM 上限和生产 Chunk 预算
+- 覆盖 MCP form/URL Resolution Schema 差异，以及 URL 外部打开成功后才提交 `accept` 的交互顺序

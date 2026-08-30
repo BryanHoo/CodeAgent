@@ -1,5 +1,6 @@
 import type {
   McpElicitationField,
+  McpFormElicitationResolution,
   McpElicitationResolution,
   PendingRequest,
 } from "@/protocol/index.js";
@@ -15,9 +16,9 @@ import {
   ConfirmationTitle,
   type ConfirmationState,
 } from "../../../shared/components/agent/confirmation.js";
-import { Button } from "../../../shared/components/core/button.js";
 import { Input } from "../../../shared/components/core/input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
+import { openExternalUrl } from "../../../platform/tauri/external-url.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import {
   notifyActionError,
@@ -31,7 +32,7 @@ import {
 
 type McpElicitationRequest = Extract<PendingRequest, { type: "mcp_elicitation" }>;
 type FormRequest = Extract<McpElicitationRequest, { mode: "form" }>;
-type FormContent = Extract<McpElicitationResolution, { action: "accept" }>["content"];
+type FormContent = Extract<McpFormElicitationResolution, { action: "accept" }>["content"];
 
 type McpElicitationRequestCardProps = Readonly<{
   interactive: boolean;
@@ -50,13 +51,17 @@ function useMcpResolution({ interactive, onResolve, request }: McpElicitationReq
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
   const lockRef = useRef(createAsyncActionLock());
   const canSubmit = interactive && request.status === "pending" && !submitting;
-  const resolve = (resolution: McpElicitationResolution) =>
+  const resolveAfter = (
+    beforeResolve: (() => Promise<void>) | undefined,
+    resolution: McpElicitationResolution,
+  ) =>
     lockRef.current.run(async () => {
       if (!canSubmit) return;
       const nextAttempt = resolvePendingRequestAttempt(attempt, resolution);
       setAttempt(nextAttempt);
       setSubmitting(true);
       try {
+        await beforeResolve?.();
         await onResolve(request, resolution, nextAttempt.key);
         notifyActionSuccess();
       } catch (error) {
@@ -64,7 +69,18 @@ function useMcpResolution({ interactive, onResolve, request }: McpElicitationReq
         setSubmitting(false);
       }
     });
-  return { canSubmit, resolve, submitting };
+  const resolve = (resolution: McpElicitationResolution) => resolveAfter(undefined, resolution);
+  return { canSubmit, resolve, resolveAfter, submitting };
+}
+
+function parseExternalElicitationUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    // 系统浏览器入口仅接收 Web URL，阻止自定义协议触发本地应用或特权处理器。
+    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+  } catch {
+    return null;
+  }
 }
 
 function initialFormContent(fields: readonly McpElicitationField[]): FormContent {
@@ -281,14 +297,14 @@ function McpFormRequestCard({
           <ConfirmationActions>
             <ConfirmationAction
               disabled={!canSubmit}
-              onClick={() => void resolve({ action: "cancel", content: null })}
+              onClick={() => void resolve({ action: "cancel" })}
               type="button"
             >
               {t("pending.cancel")}
             </ConfirmationAction>
             <ConfirmationAction
               disabled={!canSubmit}
-              onClick={() => void resolve({ action: "decline", content: null })}
+              onClick={() => void resolve({ action: "decline" })}
               tone="danger"
               type="button"
             >
@@ -310,11 +326,12 @@ function McpConfirmationRequestCard({
   request,
 }: McpElicitationRequestCardProps) {
   const { t } = useTranslation("workbench");
-  const { canSubmit, resolve, submitting } = useMcpResolution({
+  const { canSubmit, resolve, resolveAfter, submitting } = useMcpResolution({
     interactive,
     onResolve,
     request,
   });
+  const externalUrl = request.mode === "url" ? parseExternalElicitationUrl(request.url) : null;
 
   return (
     <Confirmation
@@ -326,6 +343,22 @@ function McpConfirmationRequestCard({
       </ConfirmationTitle>
       <ConfirmationRequest>
         <p>{request.message}</p>
+        {request.mode === "url" ? (
+          <dl className="mt-3 space-y-2 border-t border-separator pt-2.5">
+            <div>
+              <dt className="text-meta text-muted-foreground">{t("pending.targetDomain")}</dt>
+              <dd className="mt-0.5 font-semibold text-foreground">
+                {externalUrl?.hostname ?? t("pending.invalidUrl")}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-meta text-muted-foreground">{t("pending.targetUrl")}</dt>
+              <dd className="mt-0.5 select-text break-all font-mono text-label text-foreground">
+                {request.url}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
         {request.mode === "unsupported" ? (
           <p className="mt-2 text-label text-muted-foreground">{t("pending.unsupportedForm")}</p>
         ) : null}
@@ -340,36 +373,30 @@ function McpConfirmationRequestCard({
           <ConfirmationActions>
             <ConfirmationAction
               disabled={!canSubmit}
-              onClick={() => void resolve({ action: "cancel", content: null })}
+              onClick={() => void resolve({ action: "cancel" })}
             >
               {t("pending.cancel")}
             </ConfirmationAction>
             <ConfirmationAction
               disabled={!canSubmit}
-              onClick={() => void resolve({ action: "decline", content: null })}
+              onClick={() => void resolve({ action: "decline" })}
               tone="danger"
             >
               {t("pending.deny")}
             </ConfirmationAction>
             {request.mode === "url" ? (
-              <Button asChild size="compact">
-                <a
-                  aria-disabled={!canSubmit}
-                  href={request.url}
-                  onClick={(event) => {
-                    if (!canSubmit) {
-                      event.preventDefault();
-                      return;
-                    }
-                    void resolve({ action: "accept", content: {} });
-                  }}
-                  rel="noreferrer noopener"
-                  target="_blank"
-                >
-                  <ExternalLink aria-hidden="true" />
-                  {t("pending.openUrl")}
-                </a>
-              </Button>
+              <ConfirmationAction
+                disabled={!canSubmit || externalUrl === null}
+                onClick={() => {
+                  if (externalUrl === null) return;
+                  // 只有系统浏览器确认接管 URL 后，才向 MCP server 回传用户同意。
+                  void resolveAfter(() => openExternalUrl(externalUrl.href), { action: "accept" });
+                }}
+                tone="primary"
+              >
+                <ExternalLink aria-hidden="true" />
+                {t("pending.openUrl")}
+              </ConfirmationAction>
             ) : null}
           </ConfirmationActions>
         </>

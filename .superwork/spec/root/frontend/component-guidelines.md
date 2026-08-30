@@ -15,6 +15,7 @@
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航
 - Provider 官方认证仅允许打开 `https` URL，并必须通过 `src/platform/tauri/` 调用系统 URL opener；不得使用 WebView `window.open()`
+- MCP URL elicitation 必须使用 `new URL()` 严格解析并仅允许 `http/https`，在用户操作前展示完整 URL、突出 `hostname` 并明确征得同意；同意后必须先通过 `src/platform/tauri/` 在系统浏览器打开，成功后才能提交 `accept`，不得使用 WebView 链接导航
 - 服务端快照通过 TanStack Query 读取，实时任务状态通过功能域 Runtime/Store 的选择器读取，避免订阅无关状态
 - `temporary` 是合成任务作用域；依赖真实 Project 或根目录的查询必须在该作用域禁用
 - Inspector 始终显示可用 Tab；数据模块仅在存在实体时渲染，无内容时在面板内容区显示空状态
