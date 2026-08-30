@@ -32,6 +32,7 @@
     "test:run": "vitest run",
     "test:webview": "wdio run wdio.conf.ts",
     "test:webview:build": "cross-env VITE_WEBVIEW_TEST=1 node scripts/run-tauri.mjs build --debug --features webview-tests --no-bundle --no-sign --ci --config src-tauri/tauri.webview-test.conf.json",
+    "test:webview:real": "cross-env CODEAGENT_REAL_RUNTIME_TEST=1 wdio run wdio.conf.ts",
     "tauri:constraints:test": "node --test scripts/run-tauri.test.mjs",
     "typecheck": "tsc -b",
     "version:check": "node scripts/check-version.mjs",

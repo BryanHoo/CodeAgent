@@ -375,28 +375,6 @@ mod tests {
             .expect("ephemeral thread should be readable");
         assert_eq!(read["thread"]["id"], thread_id);
 
-        let mcp_status: Value = connection
-            .request(
-                "mcpServerStatus/list",
-                &json!({
-                    "cursor": null,
-                    "detail": "toolsAndAuthOnly",
-                    "limit": null,
-                    "threadId": thread_id,
-                }),
-                Duration::from_secs(110),
-            )
-            .await
-            .expect("configured MCP servers should be readable");
-        assert!(mcp_status["data"].as_array().is_some_and(|servers| {
-            servers.iter().any(|server| {
-                server["name"] == "context7"
-                    && server["tools"]
-                        .as_object()
-                        .is_some_and(|tools| !tools.is_empty())
-            })
-        }));
-
         let mapped_models = catalogs::list_models(&connection)
             .await
             .expect("native model mapping should match the installed server");

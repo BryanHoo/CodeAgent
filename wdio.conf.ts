@@ -2,7 +2,10 @@ import { resolve } from "node:path";
 import type { Options } from "@wdio/types";
 
 const executable = process.platform === "win32" ? "codeagent.exe" : "codeagent";
-const appBinaryPath = resolve("src-tauri", "target", "debug", executable);
+const targetPath =
+  process.platform === "darwin" ? ["target", "aarch64-apple-darwin"] : ["target"];
+const appBinaryPath = resolve("src-tauri", ...targetPath, "debug", executable);
+const realRuntimeEnabled = process.env.CODEAGENT_REAL_RUNTIME_TEST === "1";
 
 export const config: Options.Testrunner = {
   bail: 0,
@@ -30,6 +33,8 @@ export const config: Options.Testrunner = {
       },
     ],
   ],
-  specs: ["./tests/webview/**/*.spec.ts"],
+  specs: realRuntimeEnabled
+    ? ["./tests/webview/real-codex-runtime.spec.ts"]
+    : ["./tests/webview/critical-flows.spec.ts"],
   waitforTimeout: 10_000,
 };

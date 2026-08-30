@@ -1,3 +1,5 @@
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+
 declare global {
   interface Window {
     __CODEAGENT_RUNTIME_CHANNEL__?: { onmessage: (value: unknown) => void };
@@ -6,6 +8,7 @@ declare global {
       defaults: Record<string, unknown>;
       handlers: Record<string, (args: Record<string, unknown>) => unknown>;
       once: Record<string, unknown[]>;
+      passthrough: Set<string>;
     };
     __CODEAGENT_WEBVIEW_TEST_READY__?: boolean;
   }
@@ -21,6 +24,7 @@ export async function prepareWebviewTestBridge(): Promise<void> {
     defaults: {},
     handlers: {},
     once: {},
+    passthrough: new Set(),
   };
   window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__ = bridge;
   window.__CODEAGENT_WEBVIEW_TEST_INVOKE__ = async <T>(
@@ -28,6 +32,10 @@ export async function prepareWebviewTestBridge(): Promise<void> {
     args: Record<string, unknown> = {},
   ): Promise<T> => {
     (bridge.calls[command] ??= []).push(args);
+    if (bridge.passthrough.has(command)) {
+      // 真实链路仅透传显式命令，其他启动查询继续使用隔离 Mock。
+      return tauriInvoke<T>(command, args);
+    }
     if (command === "connect_runtime" && "onEvent" in args) {
       window.__CODEAGENT_RUNTIME_CHANNEL__ = args.onEvent as NonNullable<
         Window["__CODEAGENT_RUNTIME_CHANNEL__"]

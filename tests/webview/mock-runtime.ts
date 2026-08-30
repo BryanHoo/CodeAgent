@@ -136,6 +136,14 @@ export async function releaseApplicationStartup(): Promise<void> {
   });
 }
 
+export async function passthroughNativeCommands(commands: readonly string[]): Promise<void> {
+  await browser.execute((commandNames) => {
+    const bridge = window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__;
+    if (bridge === undefined) throw new Error("WebView test bridge is unavailable");
+    for (const command of commandNames) bridge.passthrough.add(command);
+  }, commands);
+}
+
 export async function emitAgentEvent(event: Record<string, unknown>): Promise<void> {
   await browser.execute((payload) => {
     const channel = window.__CODEAGENT_RUNTIME_CHANNEL__;

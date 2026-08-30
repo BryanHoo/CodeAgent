@@ -306,7 +306,8 @@ where
     R: AsyncRead + Unpin,
 {
     let mut capture = BoundedCapture::new(limit);
-    let mut buffer = [0_u8; READ_BUFFER_BYTES];
+    // 读取缓冲区放到堆上，避免组合多个 Git future 时撑爆 WebView 宿主的工作线程栈。
+    let mut buffer = vec![0_u8; READ_BUFFER_BYTES];
     let mut limit_reported = false;
     let result = async {
         loop {
