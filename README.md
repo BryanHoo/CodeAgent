@@ -33,7 +33,7 @@ pnpm install
 pnpm check:web
 pnpm check:rust
 pnpm check
-pnpm tauri build --no-sign
+pnpm tauri build --target aarch64-apple-darwin --no-sign
 ```
 
 开发时可使用 `pnpm tauri dev`，本次脚手架交付不自动启动开发服务器。

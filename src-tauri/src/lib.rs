@@ -1,3 +1,6 @@
+#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+compile_error!("CodeAgent only supports aarch64-apple-darwin on macOS");
+
 mod application;
 pub mod domain;
 mod infrastructure;

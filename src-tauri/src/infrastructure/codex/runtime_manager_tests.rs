@@ -30,6 +30,11 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
 }
 
 #[test]
+fn macos_intel_runtime_should_not_be_supported() {
+    assert!(distribution_for("macos", "x86_64").is_none());
+}
+
+#[test]
 fn windows_runtime_should_include_the_npm_cmd_shim() {
     assert_eq!(
         codex_executable_names("windows"),

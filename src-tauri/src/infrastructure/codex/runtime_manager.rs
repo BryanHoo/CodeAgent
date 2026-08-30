@@ -245,7 +245,6 @@ pub(super) fn private_codex_binary_path(app_data: &Path) -> PathBuf {
 pub(super) fn distribution_for(os: &str, arch: &str) -> Option<&'static Distribution> {
     match (os, arch) {
         ("macos", "aarch64") => Some(&DARWIN_ARM64),
-        ("macos", "x86_64") => Some(&DARWIN_X64),
         ("linux", "aarch64") => Some(&LINUX_ARM64),
         ("linux", "x86_64") => Some(&LINUX_X64),
         ("windows", "aarch64") => Some(&WINDOWS_ARM64),
@@ -452,11 +451,6 @@ const DARWIN_ARM64: Distribution = Distribution {
     target: "aarch64-apple-darwin",
     url: "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-darwin-arm64.tgz",
     integrity: "GsZJbzBWiD48RETrO8VHGAQNgfSrUVxItXZFeD87wswatPi0+lKuQo8Dx4nMYmOZhZrVtwr3al/feRrZxnDV8Q==",
-};
-const DARWIN_X64: Distribution = Distribution {
-    target: "x86_64-apple-darwin",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.149.0-darwin-x64.tgz",
-    integrity: "H+mMgW3Nhc5QzGWEklCoFqACuOc0cVpgPkPQRw0LShoK7P5664T6BRnyl1yzT6orKPKv49cXry7DIWWZ19SanQ==",
 };
 const LINUX_ARM64: Distribution = Distribution {
     target: "aarch64-unknown-linux-musl",
