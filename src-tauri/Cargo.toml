@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "CodeAgent desktop runtime"
 edition = "2024"
 rust-version = "1.97"
+publish = false
 
 [lib]
 name = "codeagent_lib"
@@ -36,12 +37,12 @@ tokio = { version = "1.50.0", features = ["fs", "io-util", "macros", "process", 
 tokio-util = "0.7.18"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-macos-panel-activation = { path = "native/macos-panel-activation" }
-tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
+macos-panel-activation = { path = "native/macos-panel-activation", version = "=0.1.0" }
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "c9ec2130422200f0863b23dfdad02b133a529b07", version = "=2.1.0" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 atomicwrites = "0.4.4"
-desktop-pet-platform = { path = "native/desktop-pet-platform" }
+desktop-pet-platform = { path = "native/desktop-pet-platform", version = "=0.1.0" }
 
 [lints.rust]
 unsafe_code = "forbid"
