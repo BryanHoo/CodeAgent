@@ -6,7 +6,7 @@ use std::{
 
 use super::app_storage::{
     CustomBackgroundInput, initialize_storage, list_custom_backgrounds, read_custom_background,
-    update_custom_backgrounds, update_preferences,
+    replace_file_atomic, update_custom_backgrounds, update_preferences,
 };
 
 fn test_root() -> std::path::PathBuf {
@@ -122,5 +122,21 @@ async fn storage_should_reject_untrusted_keys_and_ids() {
     );
     assert!(read_custom_background(&root, "../auth.json").await.is_err());
 
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn storage_should_replace_existing_files_atomically() {
+    let root = test_root();
+    fs::create_dir_all(&root).unwrap();
+    let target = root.join("app.json");
+    let replacement = root.join(".app.json.tmp");
+    fs::write(&target, b"old").unwrap();
+    fs::write(&replacement, b"new").unwrap();
+
+    replace_file_atomic(&replacement, &target).await.unwrap();
+
+    assert_eq!(fs::read(&target).unwrap(), b"new");
+    assert!(!replacement.exists());
     fs::remove_dir_all(root).unwrap();
 }

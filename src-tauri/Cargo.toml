@@ -36,6 +36,9 @@ tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 desktop-pet-platform = { path = "native/desktop-pet-platform" }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+atomicwrites = "0.4.4"
+
 [lints.rust]
 unsafe_code = "forbid"
 

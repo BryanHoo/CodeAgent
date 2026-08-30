@@ -313,17 +313,26 @@ async fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), AppStorageE
         TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed)
     ));
     fs::write(&temporary, bytes).await?;
-    if let Err(error) = fs::rename(&temporary, path).await {
-        if error.kind() != io::ErrorKind::AlreadyExists
-            && error.kind() != io::ErrorKind::PermissionDenied
-        {
-            let _ = fs::remove_file(&temporary).await;
-            return Err(error.into());
-        }
-        let _ = fs::remove_file(path).await;
-        fs::rename(&temporary, path).await?;
+    if let Err(error) = replace_file_atomic(&temporary, path).await {
+        let _ = fs::remove_file(&temporary).await;
+        return Err(error.into());
     }
     Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(super) async fn replace_file_atomic(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(source, destination).await
+}
+
+#[cfg(target_os = "windows")]
+pub(super) async fn replace_file_atomic(source: &Path, destination: &Path) -> io::Result<()> {
+    let source = source.to_owned();
+    let destination = destination.to_owned();
+    // MoveFileExW 原子覆盖并等待磁盘提交，放入阻塞线程避免占用 Tokio 调度线程。
+    tokio::task::spawn_blocking(move || atomicwrites::replace_atomic(&source, &destination))
+        .await
+        .map_err(io::Error::other)?
 }
 
 fn storage_path(app_data: &Path) -> PathBuf {
