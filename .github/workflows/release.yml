@@ -14,8 +14,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality:
+    name: Quality Gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/quality.yml
+
+  native-webview:
+    name: Native WebView Gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/webview.yml
+    with:
+      run_performance: true
+
   release:
     name: ${{ matrix.name }}
+    needs: [quality, native-webview]
     strategy:
       fail-fast: false
       matrix:

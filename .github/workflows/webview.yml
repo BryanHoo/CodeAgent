@@ -1,7 +1,16 @@
 name: Native WebView
 
 on:
+  workflow_call:
+    inputs:
+      run_performance:
+        description: Run release-mode native performance baselines
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * 6"
   push:
     branches: [main]
     paths:
@@ -42,10 +51,16 @@ jobs:
         include:
           - name: Windows WebView2
             platform: windows-latest
+            renderBudgetMs: 500
+            startupBudgetMs: 5000
           - name: Ubuntu WebKitGTK
             platform: ubuntu-24.04
+            renderBudgetMs: 500
+            startupBudgetMs: 5000
           - name: macOS WKWebView
             platform: macos-latest
+            renderBudgetMs: 400
+            startupBudgetMs: 4000
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -114,3 +129,21 @@ jobs:
       - name: Run real Codex WebView chain on WebKitGTK
         if: matrix.platform == 'ubuntu-24.04'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" pnpm test:webview:real
+
+      - name: Build release native performance application
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.run_performance
+        run: pnpm performance:webview:build
+
+      - name: Check native WebView performance
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.run_performance) && matrix.platform != 'ubuntu-24.04'
+        env:
+          CODEAGENT_RENDER_BUDGET_MS: ${{ matrix.renderBudgetMs }}
+          CODEAGENT_STARTUP_BUDGET_MS: ${{ matrix.startupBudgetMs }}
+        run: pnpm performance:webview
+
+      - name: Check native WebView performance on WebKitGTK
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.run_performance) && matrix.platform == 'ubuntu-24.04'
+        env:
+          CODEAGENT_RENDER_BUDGET_MS: ${{ matrix.renderBudgetMs }}
+          CODEAGENT_STARTUP_BUDGET_MS: ${{ matrix.startupBudgetMs }}
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" pnpm performance:webview

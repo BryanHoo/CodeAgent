@@ -63,7 +63,8 @@ pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
-    #[cfg(all(debug_assertions, feature = "webview-tests"))]
+    // 测试驱动只由显式 feature 注入，使 release 性能构建与正式 release 完全隔离。
+    #[cfg(feature = "webview-tests")]
     let builder = builder
         .plugin(tauri_plugin_wdio::init())
         .plugin(tauri_plugin_wdio_webdriver::init());

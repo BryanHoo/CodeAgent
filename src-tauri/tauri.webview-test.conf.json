@@ -8,7 +8,7 @@
         "desktop-pet",
         {
           "identifier": "webview-tests",
-          "description": "Debug-only WebdriverIO access for native WebView tests",
+          "description": "Test-only WebdriverIO access for native WebView tests",
           "windows": ["main", "desktop-pet"],
           "permissions": ["wdio:default", "wdio-webdriver:default"]
         }
