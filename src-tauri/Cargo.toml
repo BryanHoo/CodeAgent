@@ -39,11 +39,9 @@ tokio-util = "0.7.18"
 macos-panel-activation = { path = "native/macos-panel-activation" }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-desktop-pet-platform = { path = "native/desktop-pet-platform" }
-
 [target.'cfg(target_os = "windows")'.dependencies]
 atomicwrites = "0.4.4"
+desktop-pet-platform = { path = "native/desktop-pet-platform" }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -1,8 +1,3 @@
-#[cfg(any(target_os = "linux", test))]
-fn should_force_x11(session_type: Option<&str>, has_wayland_display: bool) -> bool {
-    has_wayland_display || session_type.is_some_and(|value| value.eq_ignore_ascii_case("wayland"))
-}
-
 #[cfg(any(target_os = "windows", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DesktopFollowAction {
@@ -141,28 +136,9 @@ pub fn configure_windows_desktop_pet(hwnd: isize) -> Result<(), String> {
     windows_overlay::configure(hwnd)
 }
 
-#[cfg(target_os = "linux")]
-pub fn prepare_linux_window_backend() {
-    let session_type = std::env::var("XDG_SESSION_TYPE").ok();
-    if should_force_x11(
-        session_type.as_deref(),
-        std::env::var_os("WAYLAND_DISPLAY").is_some(),
-    ) {
-        // 必须在 GTK 创建线程前设置；XWayland 提供桌宠所需的全局窗口坐标与层级控制。
-        std::env::set_var("GDK_BACKEND", "x11");
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn forces_x11_only_for_wayland_sessions() {
-        assert!(should_force_x11(Some("wayland"), false));
-        assert!(should_force_x11(None, true));
-        assert!(!should_force_x11(Some("x11"), false));
-    }
 
     #[test]
     fn follows_windows_virtual_desktop_without_busy_work() {
