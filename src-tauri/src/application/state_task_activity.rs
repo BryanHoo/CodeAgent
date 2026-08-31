@@ -74,6 +74,21 @@ impl AppState {
                 .collect(),
         );
     }
+
+    pub async fn promote_task_title(
+        &self,
+        project_id: &str,
+        task_id: &str,
+        task_name: &str,
+    ) -> bool {
+        let mut runtime = self.runtime.lock().await;
+        runtime
+            .task_projects
+            .insert(task_id.to_owned(), project_id.to_owned());
+        runtime
+            .task_activity
+            .promote_placeholder_title(project_id, task_id, task_name)
+    }
 }
 
 fn remember_project_root(state: &mut TaskActivityState, project: &Project) {

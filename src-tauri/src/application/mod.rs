@@ -20,6 +20,7 @@ pub mod pet_commands;
 mod request_cancellation;
 pub mod sidebar_commands;
 pub mod sidebar_directory_commands;
+mod sidebar_prompt_title;
 mod sidebar_task_settings;
 pub mod state;
 mod task_activity;

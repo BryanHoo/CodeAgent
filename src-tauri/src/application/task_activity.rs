@@ -262,6 +262,32 @@ impl TaskActivityState {
         }
     }
 
+    pub(super) fn promote_placeholder_title(
+        &mut self,
+        project_id: &str,
+        task_id: &str,
+        task_name: &str,
+    ) -> bool {
+        let Some(task_name) = normalized(Some(task_name)) else {
+            return false;
+        };
+        // 首轮输入只能替换默认占位标题，不能覆盖用户或 Provider 已设置的标题。
+        if self
+            .metadata
+            .get(task_id)
+            .is_some_and(|metadata| metadata.task_name != "新聊天")
+        {
+            return false;
+        }
+        let root_path = self
+            .metadata
+            .get(task_id)
+            .and_then(|metadata| metadata.root_path.as_deref())
+            .map(str::to_owned);
+        self.remember_task(project_id, task_id, task_name, root_path.as_deref());
+        true
+    }
+
     pub(super) fn snapshot(&self) -> Vec<TaskActivitySnapshot> {
         self.activities
             .iter()

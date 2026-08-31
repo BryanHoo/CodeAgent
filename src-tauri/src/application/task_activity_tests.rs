@@ -83,6 +83,27 @@ fn first_running_status_event_should_trigger_native_activity_refresh() {
 }
 
 #[test]
+fn prompt_title_should_only_replace_the_new_chat_placeholder() {
+    let mut state = TaskActivityState::default();
+    state.remember_task("project-1", "task-1", "新聊天", None);
+
+    assert!(state.promote_placeholder_title("project-1", "task-1", "修复后台标题"));
+    assert_eq!(state.task_name("task-1"), Some("修复后台标题"));
+    state.apply_event(
+        "project-1",
+        &event(json!({
+            "payload": {"turn": {"status": "inProgress"}},
+            "taskId": "task-1",
+            "turnId": "turn-1",
+            "type": "turn.started"
+        })),
+    );
+    assert_eq!(state.snapshot()[0].task_name, "修复后台标题");
+    assert!(!state.promote_placeholder_title("project-1", "task-1", "不要覆盖已有标题"));
+    assert_eq!(state.task_name("task-1"), Some("修复后台标题"));
+}
+
+#[test]
 fn runtime_failure_should_fail_every_active_task() {
     let mut state = TaskActivityState::default();
     state.remember_task_snapshot("project-1", "task-1", "运行任务", "running", Vec::new());

@@ -4,7 +4,10 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State};
 use tokio::time::timeout;
 
-use super::{error::AppError, sidebar_task_settings::effective_task_settings, state::AppState};
+use super::{
+    error::AppError, sidebar_prompt_title::prompt_task_title,
+    sidebar_task_settings::effective_task_settings, state::AppState,
+};
 use crate::{
     domain::conversation::{
         AgentPromptInput, AgentTaskSettings, AgentTaskSnapshotResponse, AgentTurnActionResponse,
@@ -181,6 +184,11 @@ pub async fn start_turn(
     let connection = state.codex_connection().await?;
     // App Server 可能先推送 turn/started，再返回 turn/start 响应，必须提前建立归属。
     state.remember_tasks(&project_id, [task_id.as_str()]).await;
+    if let Some(task_title) = prompt_task_title(&input) {
+        state
+            .promote_task_title(&project_id, &task_id, task_title)
+            .await;
+    }
     let settings = AgentTaskSettings::from(&options);
     write_task_settings(&app_data, &project_id, &task_id, &settings)
         .await
