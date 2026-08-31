@@ -26,6 +26,26 @@ void test("macOS builds should reject an Intel target", () => {
   );
 });
 
+void test("Windows builds should default to an unpackaged executable", () => {
+  assert.deepEqual(resolveTauriArguments(["build", "--no-sign"], "win32"), [
+    "build",
+    "--no-bundle",
+    "--no-sign",
+  ]);
+});
+
+void test("Windows release should upload the unpackaged executable", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workflow, /name: Windows x64 Portable/);
+  assert.match(workflow, /args: --no-bundle --no-sign --ci/);
+  assert.match(workflow, /uploadPlainBinary: true/);
+  assert.match(workflow, /\[name\]_\[version\]_\[arch\]_portable\[ext\]/);
+});
+
 void test("non-macOS commands should remain unchanged", () => {
   const argumentsList = ["build", "--no-sign"];
 

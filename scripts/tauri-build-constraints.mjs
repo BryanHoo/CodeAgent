@@ -13,9 +13,31 @@ function findTarget(argumentsList) {
   return undefined;
 }
 
+function hasBundleSelection(argumentsList) {
+  return argumentsList.some(
+    (argument) =>
+      argument === "--no-bundle" ||
+      argument === "--bundles" ||
+      argument === "-b" ||
+      argument.startsWith("--bundles="),
+  );
+}
+
 export function resolveTauriArguments(argumentsList, platform = process.platform) {
   const resolved = [...argumentsList];
-  if (platform !== "darwin" || resolved[0] !== "build") {
+  if (resolved[0] !== "build") {
+    return resolved;
+  }
+
+  if (platform === "win32") {
+    if (!hasBundleSelection(resolved)) {
+      // Windows 默认输出可直接运行的 EXE，避免生成需要安装的 NSIS/MSI 包。
+      resolved.splice(1, 0, "--no-bundle");
+    }
+    return resolved;
+  }
+
+  if (platform !== "darwin") {
     return resolved;
   }
 

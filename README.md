@@ -33,15 +33,15 @@ CodeAgent 将 AI 编程任务、对话、审批、项目文件和 Git 操作集�
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载适合当前平台的安装包。
-2. 安装并启动 CodeAgent。
+1. 从 [Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载适合当前平台的发布包。
+2. Windows 直接运行免安装 EXE；其他平台安装后启动 CodeAgent。
 3. 首次启动时按照界面提示完成配置，然后添加项目并创建任务。
 
 当前提供无签名预览包，系统可能显示来源或安全提示。支持平台如下：
 
 | 平台 | 架构 | 安装包 |
 | --- | --- | --- |
-| Windows 10/11 | x86_64 | NSIS |
+| Windows 10/11 | x86_64 | EXE（免安装） |
 | Ubuntu 24.04+ | x86_64 | DEB、AppImage |
 | macOS 14+ | Apple Silicon | app、DMG |
 

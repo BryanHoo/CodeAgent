@@ -33,15 +33,15 @@ CodeAgent brings AI coding tasks, conversations, approvals, project files, and G
 
 ## Quick Start
 
-1. Download the package for your platform from [Releases](https://github.com/BryanHoo/CodeAgent/releases).
-2. Install and launch CodeAgent.
+1. Download the release artifact for your platform from [Releases](https://github.com/BryanHoo/CodeAgent/releases).
+2. On Windows, run the portable EXE directly; on other platforms, install and launch CodeAgent.
 3. Follow the on-screen setup on first launch, then add a project and create a task.
 
 Current packages are unsigned previews, so your system may display source or security warnings. Supported platforms are:
 
 | Platform | Architecture | Package |
 | --- | --- | --- |
-| Windows 10/11 | x86_64 | NSIS |
+| Windows 10/11 | x86_64 | Portable EXE |
 | Ubuntu 24.04+ | x86_64 | DEB, AppImage |
 | macOS 14+ | Apple Silicon | app, DMG |
 

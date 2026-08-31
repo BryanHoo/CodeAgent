@@ -7,13 +7,15 @@
 
 | 平台 | 目标 | 包格式 | 最低基线 |
 | --- | --- | --- | --- |
-| Windows | x86_64 | NSIS | Windows 10/11，安装时下载 WebView2 bootstrapper |
+| Windows | x86_64 | EXE（免安装） | Windows 10/11，使用系统 WebView2 Runtime |
 | Ubuntu | x86_64 | DEB、AppImage | Ubuntu 24.04 LTS+ |
 | macOS | Apple Silicon | app、DMG | macOS 14+ |
 
-Windows 暂不生成 MSI，因为 WiX 构建依赖 Windows 的 VBSCRIPT 可选功能。平台覆盖配置位于
-`src-tauri/tauri.windows.conf.json`、`src-tauri/tauri.linux.conf.json` 和
-`src-tauri/tauri.macos.conf.json`，Tauri 会根据构建主机自动合并对应文件。
+Windows 按 Tauri 官方 `tauri build --no-bundle` 方式生成未封装的 EXE，并通过官方
+`tauri-action` 的 `uploadPlainBinary` 上传为 `portable.exe` 发布资产。Tauri 不提供独立的
+portable bundle target；该产物免安装，但仍使用 Windows 10/11 自带并维护的 WebView2 Runtime，
+应用数据也仍写入系统应用数据目录。Linux 和 macOS 的平台覆盖配置分别位于
+`src-tauri/tauri.linux.conf.json` 和 `src-tauri/tauri.macos.conf.json`。
 
 ## Ubuntu 安装
 
@@ -39,7 +41,7 @@ chmod +x CodeAgent.AppImage
 
 - `Quality`：在 Ubuntu 上执行 Web 和 Rust 的 lint、测试与构建。
 - `Platform Build`：Pull Request 上验证 Windows、Ubuntu、macOS 的原生编译。
-- `Draft Release`：`v*` 标签或手动触发后，构建各平台安装包并创建 GitHub draft release。
+- `Draft Release`：`v*` 标签或手动触发后，构建 Windows 免安装 EXE 与其他平台安装包，并创建 GitHub draft release。
 
 所有桌面构建显式使用 `--no-sign`。发布工作流不生成 updater JSON 或 updater 签名，避免让
 无签名预览产物进入自动更新链路。
@@ -71,6 +73,7 @@ CodeAgent 发布包不得包含 Codex、Claude Code 等 Provider 可执行文件
 
 - [Tauri GitHub Pipelines](https://v2.tauri.app/distribute/pipelines/github/)
 - [Tauri Platform-Specific Configuration](https://v2.tauri.app/develop/configuration-files/)
+- [Tauri GitHub Action](https://github.com/tauri-apps/tauri-action#usage)
 - [Tauri Windows Installer](https://v2.tauri.app/distribute/windows-installer/)
 - [Tauri Windows Code Signing](https://v2.tauri.app/distribute/sign/windows/)
 - [Tauri macOS Code Signing](https://v2.tauri.app/distribute/sign/macos/)
