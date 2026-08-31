@@ -1,8 +1,8 @@
+use super::task_activity::{TaskActivitySnapshot, TaskActivityStatus};
 use super::tray_commands::{
-    TrayMenuAction, TrayTask, TrayTaskState, apply_agent_event_to_tray_state, tray_menu_action,
-    tray_show_menu_on_left_click, tray_task_menu_id, tray_task_route, tray_title, tray_tooltip,
+    TrayMenuAction, TrayTask, tray_menu_action, tray_show_menu_on_left_click, tray_task_menu_id,
+    tray_task_route, tray_tasks_from_activities, tray_title, tray_tooltip,
 };
-use crate::domain::runtime::AgentEvent;
 
 fn running_task() -> TrayTask {
     TrayTask {
@@ -26,45 +26,32 @@ fn tray_left_click_opens_the_menu() {
 }
 
 #[test]
-fn started_runtime_events_add_tasks_without_waiting_for_the_webview() {
-    let mut state = TrayTaskState::default();
-    let started = AgentEvent::from(serde_json::json!({
-        "taskId": "task-1",
-        "type": "turn.started"
-    }));
+fn tray_projects_the_rust_owned_active_task_snapshot() {
+    let activities = vec![
+        TaskActivitySnapshot {
+            project_id: "project-1".to_owned(),
+            root_path: None,
+            status: TaskActivityStatus::Running,
+            task_id: "task-1".to_owned(),
+            task_name: "底层任务标题".to_owned(),
+        },
+        TaskActivitySnapshot {
+            project_id: "project-1".to_owned(),
+            root_path: None,
+            status: TaskActivityStatus::Completed,
+            task_id: "task-2".to_owned(),
+            task_name: "已完成任务".to_owned(),
+        },
+    ];
 
-    assert!(apply_agent_event_to_tray_state(
-        &mut state,
-        "project-1",
-        &started,
-        Some("底层任务标题"),
-    ));
     assert_eq!(
-        state.tasks(),
-        &[TrayTask {
+        tray_tasks_from_activities(&activities),
+        vec![TrayTask {
             project_id: "project-1".to_owned(),
             task_id: "task-1".to_owned(),
             task_name: "底层任务标题".to_owned(),
         }]
     );
-}
-
-#[test]
-fn metadata_events_update_running_task_names_in_rust() {
-    let mut state = TrayTaskState::from_tasks(vec![running_task()]);
-    let metadata_changed = AgentEvent::from(serde_json::json!({
-        "payload": {"title": "更新后的任务标题"},
-        "taskId": "task-1",
-        "type": "task.metadata_changed"
-    }));
-
-    assert!(apply_agent_event_to_tray_state(
-        &mut state,
-        "project-1",
-        &metadata_changed,
-        Some("更新后的任务标题"),
-    ));
-    assert_eq!(state.tasks()[0].task_name, "更新后的任务标题");
 }
 
 #[test]
@@ -100,22 +87,4 @@ fn tray_task_menu_ids_round_trip_to_navigation_targets() {
         tray_task_route("temporary", "task-2").unwrap(),
         "temporary/t/task-2"
     );
-}
-
-#[test]
-fn terminal_runtime_events_remove_tasks_from_the_tray_count() {
-    let mut state = TrayTaskState::from_tasks(vec![running_task()]);
-    let completed = AgentEvent::from(serde_json::json!({
-        "payload": {"turn": {"status": "completed"}},
-        "taskId": "task-1",
-        "type": "turn.completed"
-    }));
-
-    assert!(apply_agent_event_to_tray_state(
-        &mut state,
-        "project-1",
-        &completed,
-        Some("Implement tray status"),
-    ));
-    assert!(state.tasks().is_empty());
 }

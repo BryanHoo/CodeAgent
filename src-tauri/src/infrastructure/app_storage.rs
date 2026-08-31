@@ -118,6 +118,15 @@ pub async fn update_preferences(
     write_json_atomic(&storage_path(app_data), &storage).await
 }
 
+pub fn validate_preference_updates(
+    updates: &BTreeMap<String, Option<String>>,
+) -> Result<(), AppStorageError> {
+    for (key, value) in updates {
+        validate_preference(key, value.as_deref().unwrap_or_default())?;
+    }
+    Ok(())
+}
+
 pub async fn list_custom_backgrounds(
     app_data: &Path,
 ) -> Result<Vec<CustomBackgroundMetadata>, AppStorageError> {

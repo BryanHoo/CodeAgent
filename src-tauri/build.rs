@@ -12,8 +12,11 @@ fn main() {
         "install_codex_runtime",
         "get_app_info",
         "get_runtime_performance_metrics",
-        "get_running_tasks",
-        "sync_desktop_pet",
+        "get_task_activities",
+        "acknowledge_task_activity",
+        "release_task_subscription",
+        "retain_task_subscription",
+        "configure_desktop_pet",
         "get_desktop_pet_state",
         "get_desktop_pet_drag_strategy",
         "get_desktop_pet_position",
@@ -96,7 +99,6 @@ fn main() {
         "pin_task",
         "archive_task",
         "unarchive_task",
-        "unsubscribe_task",
         "delete_task",
     ]);
 

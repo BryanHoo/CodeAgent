@@ -49,7 +49,7 @@ export type NativeProjectOpenClient = Pick<
 >;
 export type NativeRuntimeClient = Pick<
   NativeClient,
-  "readTask" | "subscribeEvents" | "unsubscribeTask"
+  "readTask" | "releaseTaskSubscription" | "retainTaskSubscription" | "subscribeEvents"
 >;
 export type NativeBackgroundTerminalClient = Pick<
   NativeClient,

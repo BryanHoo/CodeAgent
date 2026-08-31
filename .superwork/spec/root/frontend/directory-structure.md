@@ -16,6 +16,6 @@
 - `src/protocol/` 不依赖 React 或具体传输实现，`src/client/` 仅消费公开协议
 - `src/shared/` 不反向依赖具体功能域；应用装配可以组合各层，但不承载领域逻辑
 - 后端尚未接入时，客户端必须注入 `src/mock/` 的 fetch 与 WebSocket 工厂，禁止回退到真实网络
-- CodeAgent 偏好、自定义背景和草稿统一通过 `src/platform/tauri/app-storage.ts` 持久化；业务模块不得直接把应用数据写入 WebView `localStorage` 或 IndexedDB
-- 后台任务通知必须经 `src/platform/tauri/` 的受限 IPC 交给 Rust notification 插件发送；业务模块不得直接使用 Web Notification API，也不得保留桌面端无效的 Web 权限申请链
+- CodeAgent 偏好、自定义背景和草稿统一通过 `src/platform/tauri/app-storage.ts` 提交；合并、重试和原子落盘由 Rust actor 负责，业务模块不得直接把应用数据写入 WebView `localStorage` 或 IndexedDB
+- 后台任务系统通知由 Rust Provider 事件归约直接触发；业务模块不得发送 Web Notification、调用通知 IPC 或保留桌面端无效的 Web 权限申请链
 - CodeAgent 仅使用本地 Tauri Runtime，不得保留 Web/LAN Access 配对门禁、会话退出或远程访问模式分支

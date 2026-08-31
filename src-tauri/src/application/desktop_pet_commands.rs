@@ -10,18 +10,15 @@ use tokio::sync::Mutex;
 
 use super::{
     app_lifecycle::show_main_window_at_route,
-    desktop_pet_activity::{
-        acknowledge_completed_task, apply_agent_event_to_desktop_pet_state,
-        preserve_hidden_completed_tasks,
-    },
     desktop_pet_window::{
         DESKTOP_PET_EVENT, DESKTOP_PET_LABEL, create_desktop_pet_window, desktop_pet_position,
         desktop_pet_size, destroy_desktop_pet_window, drag_pet_position, layout_desktop_pet_window,
         monitor_bounds, move_pet_position, persist_position, set_desktop_pet_position,
     },
     error::AppError,
+    state::AppState,
+    task_activity::{TaskActivitySnapshot, TaskActivityStatus},
 };
-use crate::domain::runtime::AgentEvent;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -85,7 +82,7 @@ impl From<PhysicalPosition<i32>> for DesktopPetPosition {
 pub struct DesktopPetRuntime {
     #[cfg(not(target_os = "macos"))]
     position_generation: AtomicU64,
-    state: Mutex<Option<DesktopPetState>>,
+    pet_id: Mutex<Option<String>>,
 }
 
 impl DesktopPetRuntime {
@@ -114,47 +111,30 @@ fn ensure_desktop_pet_window(window: &WebviewWindow) -> Result<(), AppError> {
     }
 }
 
-fn state_is_valid(state: &DesktopPetState) -> bool {
-    !state.pet_id.is_empty()
-        && state.pet_id.len() <= 128
-        && state.tasks.len() <= 256
-        && state.tasks.iter().all(|task| {
-            !task.project_id.is_empty()
-                && task.project_id.len() <= 128
-                && !task.task_id.is_empty()
-                && task.task_id.len() <= 128
-                && !task.task_name.is_empty()
-                && task.task_name.len() <= 512
-                && task
-                    .root_path
-                    .as_ref()
-                    .is_none_or(|path| path.len() <= 4096)
-        })
-}
-
 #[tauri::command(rename_all = "camelCase")]
-pub async fn sync_desktop_pet(
+pub async fn configure_desktop_pet(
     app: AppHandle,
     runtime: State<'_, DesktopPetRuntime>,
-    state: Option<DesktopPetState>,
+    state: State<'_, AppState>,
+    pet_id: Option<String>,
 ) -> Result<(), AppError> {
-    if state.as_ref().is_some_and(|state| !state_is_valid(state)) {
+    if pet_id
+        .as_deref()
+        .is_some_and(|pet_id| pet_id.is_empty() || pet_id.len() > 128)
+    {
         return Err(AppError::DesktopPetWindowFailed);
     }
-    let mut stored_state = runtime.state.lock().await;
-    let mut state = state;
-    if app
-        .get_webview_window("main")
-        .and_then(|window| window.is_visible().ok())
-        != Some(true)
-        && let (Some(current), Some(next)) = (stored_state.as_ref(), state.as_mut())
-    {
-        preserve_hidden_completed_tasks(current, next);
-    }
-    *stored_state = state.clone();
-    drop(stored_state);
+    *runtime.pet_id.lock().await = pet_id;
+    render_desktop_pet_task_activities(&app, &state.task_activity_snapshot().await).await
+}
 
-    render_desktop_pet_state(&app, state).await
+pub(super) async fn render_desktop_pet_task_activities(
+    app: &AppHandle,
+    activities: &[TaskActivitySnapshot],
+) -> Result<(), AppError> {
+    let runtime = app.state::<DesktopPetRuntime>();
+    let pet_id = runtime.pet_id.lock().await.clone();
+    render_desktop_pet_state(app, desktop_pet_state(pet_id, activities)).await
 }
 
 async fn render_desktop_pet_state(
@@ -174,36 +154,70 @@ async fn render_desktop_pet_state(
         .map_err(|_| AppError::DesktopPetWindowFailed)
 }
 
-pub(super) async fn observe_desktop_pet_agent_event(
-    app: &AppHandle,
-    project_id: &str,
-    event: &AgentEvent,
-) {
-    let runtime = app.state::<DesktopPetRuntime>();
-    let next_state = {
-        let mut stored_state = runtime.state.lock().await;
-        let Some(state) = stored_state.as_mut() else {
-            return;
-        };
-        if !apply_agent_event_to_desktop_pet_state(state, project_id, event) {
-            return;
-        }
-        state.clone()
+fn desktop_pet_state(
+    pet_id: Option<String>,
+    activities: &[TaskActivitySnapshot],
+) -> Option<DesktopPetState> {
+    let pet_id = pet_id?;
+    let animation_name = if activities
+        .iter()
+        .any(|activity| activity.status == TaskActivityStatus::Failed)
+    {
+        DesktopPetAnimation::Failed
+    } else if activities
+        .iter()
+        .any(|activity| activity.status == TaskActivityStatus::Waiting)
+    {
+        DesktopPetAnimation::Waiting
+    } else if activities
+        .iter()
+        .any(|activity| activity.status == TaskActivityStatus::Running)
+    {
+        DesktopPetAnimation::Running
+    } else if activities
+        .iter()
+        .any(|activity| activity.status == TaskActivityStatus::Completed)
+    {
+        DesktopPetAnimation::Review
+    } else {
+        DesktopPetAnimation::Idle
     };
-
-    // 主 WebView 不存在时由 Rust 直接刷新独立宠物窗口。
-    if let Err(error) = render_desktop_pet_state(app, Some(next_state)).await {
-        eprintln!("failed to update desktop pet from runtime event: {error}");
-    }
+    let tasks = activities
+        .iter()
+        .filter_map(|activity| {
+            let status = match activity.status {
+                TaskActivityStatus::Completed => DesktopPetTaskStatus::Completed,
+                TaskActivityStatus::Running => DesktopPetTaskStatus::Running,
+                TaskActivityStatus::Waiting => DesktopPetTaskStatus::Waiting,
+                TaskActivityStatus::Failed => return None,
+            };
+            Some(DesktopPetTask {
+                project_id: activity.project_id.clone(),
+                root_path: activity.root_path.clone(),
+                status,
+                task_id: activity.task_id.clone(),
+                task_name: activity.task_name.clone(),
+            })
+        })
+        .collect();
+    Some(DesktopPetState {
+        animation_name,
+        pet_id,
+        tasks,
+    })
 }
 
 #[tauri::command]
 pub async fn get_desktop_pet_state(
     window: WebviewWindow,
     runtime: State<'_, DesktopPetRuntime>,
+    state: State<'_, AppState>,
 ) -> Result<Option<DesktopPetState>, AppError> {
     ensure_desktop_pet_window(&window)?;
-    Ok(runtime.state.lock().await.clone())
+    Ok(desktop_pet_state(
+        runtime.pet_id.lock().await.clone(),
+        &state.task_activity_snapshot().await,
+    ))
 }
 
 #[tauri::command]
@@ -320,36 +334,28 @@ pub(super) async fn acknowledge_completed_desktop_pet_task(
     project_id: &str,
     task_id: &str,
 ) -> Result<(), AppError> {
-    let runtime = app.state::<DesktopPetRuntime>();
-    let next_state = {
-        let mut stored_state = runtime.state.lock().await;
-        let Some(state) = stored_state.as_mut() else {
-            return Ok(());
-        };
-        if !acknowledge_completed_task(state, project_id, task_id) {
-            return Ok(());
-        }
-        state.clone()
-    };
-    render_desktop_pet_state(app, Some(next_state)).await
+    let state = app.state::<AppState>();
+    if state.acknowledge_task_activity(project_id, task_id).await {
+        render_desktop_pet_task_activities(app, &state.task_activity_snapshot().await).await?;
+    }
+    Ok(())
 }
 
 pub(super) async fn acknowledge_completed_desktop_pet_route(app: &AppHandle, route: &str) {
     let route = route.split(['?', '#']).next().unwrap_or(route);
     let target = {
-        let runtime = app.state::<DesktopPetRuntime>();
-        let stored_state = runtime.state.lock().await;
-        stored_state.as_ref().and_then(|state| {
-            state
-                .tasks
-                .iter()
-                .find(|task| {
-                    task.status == DesktopPetTaskStatus::Completed
-                        && desktop_pet_task_route(&task.project_id, &task.task_id)
-                            .is_ok_and(|task_route| task_route == route)
-                })
-                .map(|task| (task.project_id.clone(), task.task_id.clone()))
-        })
+        app.state::<AppState>()
+            .task_activity_snapshot()
+            .await
+            .into_iter()
+            .find(|task| {
+                matches!(
+                    task.status,
+                    TaskActivityStatus::Completed | TaskActivityStatus::Failed
+                ) && desktop_pet_task_route(&task.project_id, &task.task_id)
+                    .is_ok_and(|task_route| task_route == route)
+            })
+            .map(|task| (task.project_id, task.task_id))
     };
     let Some((project_id, task_id)) = target else {
         return;

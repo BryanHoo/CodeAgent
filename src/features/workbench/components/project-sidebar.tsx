@@ -288,7 +288,7 @@ export function ProjectSidebar({
         }
         removeRetainedTaskRuntime(task.projectId, task.id);
         // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
-        void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
+        void client.releaseTaskSubscription(task.projectId, task.id).catch(() => undefined);
       } catch {
         // 根级 MutationCache 已展示失败 toast。
       }

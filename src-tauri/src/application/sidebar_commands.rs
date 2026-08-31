@@ -23,9 +23,11 @@ use crate::{
 #[tauri::command]
 pub async fn list_projects(state: State<'_, AppState>) -> Result<ProjectPage, AppError> {
     let connection = state.codex_connection().await?;
-    codex::list_projects(&connection)
+    let response = codex::list_projects(&connection)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    state.remember_project_page(&response).await;
+    Ok(response)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -34,9 +36,11 @@ pub async fn add_project(
     state: State<'_, AppState>,
 ) -> Result<ProjectMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    codex::add_project(&connection, root_paths)
+    let response = codex::add_project(&connection, root_paths)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    state.remember_project(&response.project).await;
+    Ok(response)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -46,9 +50,11 @@ pub async fn rename_project(
     state: State<'_, AppState>,
 ) -> Result<ProjectMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    codex::rename_project(&connection, project_id, name)
+    let response = codex::rename_project(&connection, project_id, name)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    state.remember_project(&response.project).await;
+    Ok(response)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -64,6 +70,7 @@ pub async fn remove_project(
     delete_project_task_settings(&app_data_dir(&app)?, &project_id)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
+    state.forget_project_activity(&project_id).await;
     Ok(response)
 }
 
@@ -73,9 +80,11 @@ pub async fn reorder_projects(
     state: State<'_, AppState>,
 ) -> Result<ProjectPage, AppError> {
     let connection = state.codex_connection().await?;
-    codex::reorder_projects(&connection, project_ids)
+    let response = codex::reorder_projects(&connection, project_ids)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    state.remember_project_page(&response).await;
+    Ok(response)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -129,15 +138,7 @@ pub async fn read_task(
             response.snapshot.settings =
                 effective_task_settings(&app, &connection, &project_id, &task_id).await?;
             response.checkpoint.sequence = state.project_sequence(&project_id).await;
-            state
-                .remember_task_metadata(
-                    &project_id,
-                    [(
-                        response.snapshot.id.as_str(),
-                        response.snapshot.title.as_str(),
-                    )],
-                )
-                .await;
+            state.remember_task_snapshot(&response.snapshot).await;
             Ok(response)
         })
         .await
@@ -477,18 +478,6 @@ pub async fn delete_task(
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
     Ok(response)
-}
-
-#[tauri::command(rename_all = "camelCase")]
-pub async fn unsubscribe_task(
-    project_id: String,
-    task_id: String,
-    state: State<'_, AppState>,
-) -> Result<AgentTaskStatusResponse, AppError> {
-    let connection = state.codex_connection().await?;
-    codex::unsubscribe_task(&connection, &project_id, &task_id)
-        .await
-        .map_err(|_| AppError::CodexRequestFailed)
 }
 
 fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {

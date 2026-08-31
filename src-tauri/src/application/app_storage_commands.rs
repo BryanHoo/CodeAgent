@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, ipc::Response};
+use tauri::{AppHandle, Manager, State, ipc::Response};
 
-use super::error::AppError;
+use super::{app_storage_runtime::AppStorageRuntime, error::AppError};
 use crate::infrastructure::app_storage::{self, CustomBackgroundInput, CustomBackgroundMetadata};
 
 #[derive(Serialize)]
@@ -30,11 +30,12 @@ pub async fn initialize_app_storage(
 #[tauri::command(rename_all = "camelCase")]
 pub async fn update_app_preferences(
     app: AppHandle,
+    runtime: State<'_, AppStorageRuntime>,
     updates: BTreeMap<String, Option<String>>,
 ) -> Result<(), AppError> {
-    app_storage::update_preferences(&app_data_dir(&app)?, updates)
-        .await
-        .map_err(|_| AppError::FilesystemRequestFailed)
+    app_storage::validate_preference_updates(&updates)
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    runtime.enqueue(app_data_dir(&app)?, updates).await
 }
 
 #[tauri::command(rename_all = "camelCase")]

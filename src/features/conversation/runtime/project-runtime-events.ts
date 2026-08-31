@@ -19,7 +19,6 @@ import {
   ActiveTaskSnapshotRecoveryController,
   TaskEventTarget,
 } from "./project-runtime-recovery.js";
-import { TaskUnsubscribeRetryController } from "./task-unsubscribe-retry.js";
 
 type ProjectRuntimeCallbacks = Readonly<{
   getTaskActivity: () => TaskActivityMap;
@@ -35,7 +34,6 @@ export class ProjectEventRuntime {
   readonly #idleTimeoutMs: number;
   readonly #projectId: string;
   readonly #activeTaskRecovery: ActiveTaskSnapshotRecoveryController<AgentTaskSnapshotResponse>;
-  readonly #taskUnsubscribe: TaskUnsubscribeRetryController;
   readonly #targets = new Map<TaskStore, TaskEventTarget>();
   #connectionCleanup: (() => void) | undefined;
   #connectionState: AgentEventConnectionState = "closed";
@@ -66,13 +64,6 @@ export class ProjectEventRuntime {
         this.#callbacks.onSnapshot(response);
       },
     );
-    this.#taskUnsubscribe = new TaskUnsubscribeRetryController(
-      projectId,
-      client,
-      (error, taskId) => {
-        recordInternalWarning("task_unsubscribe_failed", error, { projectId, taskId });
-      },
-    );
   }
 
   public attachTaskStore(
@@ -81,7 +72,12 @@ export class ProjectEventRuntime {
     recoverSnapshot: RecoverTaskSnapshot,
   ): () => void {
     this.#assertSnapshotProject(response);
-    this.#taskUnsubscribe.cancel(response.snapshot.id);
+    void this.#client.retainTaskSubscription(response.snapshot.id).catch((error: unknown) => {
+      recordInternalWarning("task_subscription_retain_failed", error, {
+        projectId: this.#projectId,
+        taskId: response.snapshot.id,
+      });
+    });
     const storeState = store.getState();
     if (storeState.projectId !== this.#projectId || storeState.taskId !== response.snapshot.id) {
       throw new Error("Task store identity does not match the Project Runtime snapshot");
@@ -117,7 +113,7 @@ export class ProjectEventRuntime {
       }
       currentTarget.dispose();
       this.#targets.delete(store);
-      this.#taskUnsubscribe.request(store.getState().taskId);
+      this.#releaseTaskSubscription(store.getState().taskId);
       this.#touch();
       this.#reevaluateIdleRelease();
     };
@@ -130,7 +126,6 @@ export class ProjectEventRuntime {
     this.#disposed = true;
     this.#clearIdleTimer();
     this.#activeTaskRecovery.dispose();
-    this.#taskUnsubscribe.dispose();
     this.#stopConnection();
     for (const target of this.#targets.values()) {
       target.dispose();
@@ -140,7 +135,6 @@ export class ProjectEventRuntime {
   }
 
   public forgetTask(taskId: string): void {
-    this.#taskUnsubscribe.cancel(taskId);
     this.#activeTaskRecovery.forgetTask(taskId);
     this.#reevaluateIdleRelease();
   }
@@ -247,9 +241,6 @@ export class ProjectEventRuntime {
             target.apply(event);
           }
         }
-        if (event.type === "turn.completed" && !this.#hasTaskConsumers(event.taskId)) {
-          this.#taskUnsubscribe.request(event.taskId);
-        }
         this.#reevaluateIdleRelease();
       },
       onResyncRequired: () => {
@@ -267,13 +258,15 @@ export class ProjectEventRuntime {
     this.#connectionCleanup = cleanup;
   }
 
-  #hasTaskConsumers(taskId: string): boolean {
-    for (const store of this.#targets.keys()) {
-      if (store.getState().taskId === taskId) {
-        return true;
-      }
-    }
-    return false;
+  #releaseTaskSubscription(taskId: string): void {
+    void this.#client
+      .releaseTaskSubscription(this.#projectId, taskId)
+      .catch((error: unknown) => {
+        recordInternalWarning("task_subscription_release_failed", error, {
+          projectId: this.#projectId,
+          taskId,
+        });
+      });
   }
 
   #hydrateRecoveredSnapshot(

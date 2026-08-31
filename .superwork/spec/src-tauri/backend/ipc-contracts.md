@@ -18,6 +18,7 @@
 ## Provider 运行时
 
 - WebView 必须先通过 `connect_runtime` 建立模块级 Channel，再调用 `start_runtime`
+- Provider 状态与故障恢复不得依赖 WebView Channel 是否存在；Rust supervisor 对启动失败和异常退出使用 1–30 秒有界退避，稳定运行后重置退避
 - Provider 可执行文件不得作为 Tauri Sidecar 打包
 - `start_runtime` 只启动后端已发现并验证的绝对路径，不接收 WebView 传入的程序路径
 - WebView 不得控制下载地址、安装目录、校验值或进程参数
@@ -46,6 +47,9 @@
 - Bing 壁纸只允许 Rust 访问固定 HTTPS 元数据与图片端点；响应必须限制大小、校验 JPEG 并原子写入单日缓存，再按文件动态授权 asset protocol
 - 新增或修改工作台能力时，同步更新 `docs/codexly-capability-matrix.md` 并运行真实 Codex 0.151 生命周期测试
 - CodeAgent 自身偏好写入 Tauri `app_data_dir()/app.json`，自定义背景写入 `app_data_dir()/backgrounds/custom/`；写入必须有界、校验资源标识并原子替换
+- 偏好与草稿更新必须进入 Rust 单写者有界队列，由底层覆盖合并和失败重试；WebView 不得持有定时合并器或持久化 Promise 队列
+- Rust `TaskActivityState` 是任务运行、等待、完成、失败及项目/标题元数据的唯一原生事实来源，并统一驱动系统通知、状态栏、桌面宠物和 WebView 恢复快照
+- 任务取消订阅的终态触发、busy 重试和新回合取消必须由 Rust lease 管理器执行；WebView 只声明任务消费者挂载或卸载
 - 桌面宠物透明窗口由 Rust 创建和销毁；宠物与按需气泡必须共用一个 WebView，命令校验固定窗口标签，并按气泡实际高度调整透明、无边框、置顶窗口的紧凑点击区域
 - macOS 桌面宠物窗口必须注册为带 `FullScreenAuxiliary`、`CanJoinAllSpaces` 与非激活样式的浮动 `NSPanel`；`tauri-nspanel` 的转换、配置和销毁必须通过 `run_on_main_thread` 执行，动态转换后需补齐防激活标记；CodeAgent 未激活时面板必须拒绝成为 key window，已激活时继续支持键盘操作
 - macOS 桌面宠物拖动只向主线程提交一次原生拖拽，并低开销轮询 AppKit 主键状态直至物理释放；释放后在应用已激活时恢复 main key window，并一次性钳制、布局和持久化；单一 `NSPanel` 调整气泡布局时必须保持宠物屏幕坐标稳定，其他平台的物理坐标命令继续按帧合并

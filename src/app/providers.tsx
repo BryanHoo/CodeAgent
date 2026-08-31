@@ -3,7 +3,7 @@ import { type ReactNode, useEffect } from "react";
 import { Toaster } from "sonner";
 
 import { ProjectProvider } from "../features/projects/project-context.js";
-import { RunningTaskRestore } from "../features/conversation/runtime/running-task-restore.js";
+import { TaskActivityRestore } from "../features/conversation/runtime/task-activity-restore.js";
 import { createActionMutationCache } from "../features/notifications/action-notifications.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { CodexRuntimeGate } from "../features/runtime/components/codex-runtime-gate.js";
@@ -67,7 +67,7 @@ function AppProviderContent({ children }: AppProvidersProps) {
       <CodexRuntimeGate>
         <ProviderConnectionGate>
           <ProjectProvider>
-            <RunningTaskRestore />
+            <TaskActivityRestore />
             <ComposerDraftProvider>{children}</ComposerDraftProvider>
           </ProjectProvider>
         </ProviderConnectionGate>

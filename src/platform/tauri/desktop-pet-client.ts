@@ -16,8 +16,8 @@ import {
 const DESKTOP_PET_STATE_EVENT = "desktop-pet://state";
 const DESKTOP_PET_MOVED_EVENT = "desktop-pet://moved";
 
-export async function syncDesktopPet(state: DesktopPetState | null): Promise<void> {
-  await invoke("sync_desktop_pet", { state });
+export async function configureDesktopPet(petId: string | null): Promise<void> {
+  await invoke("configure_desktop_pet", { petId });
 }
 
 export async function getDesktopPetState(): Promise<DesktopPetState | null> {

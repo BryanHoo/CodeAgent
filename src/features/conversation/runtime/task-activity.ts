@@ -1,4 +1,9 @@
-import type { AgentEvent, AgentTaskSnapshot, PendingRequest } from "@/protocol/index.js";
+import type {
+  AgentEvent,
+  AgentTaskSnapshot,
+  PendingRequest,
+  TaskActivitySnapshot,
+} from "@/protocol/index.js";
 
 export type TaskAttention = "approval" | "completed" | "failed" | null;
 
@@ -92,6 +97,27 @@ export function recordRunningTaskActivity(
     pendingApprovalRequestIds: currentRecord?.pendingApprovalRequestIds ?? new Set(),
     projectId,
     taskId,
+  });
+}
+
+export function recordNativeTaskActivity(
+  activity: TaskActivityMap,
+  snapshot: TaskActivitySnapshot,
+): TaskActivityMap {
+  const waiting = snapshot.status === "waiting";
+  return replaceTaskActivity(activity, snapshot.projectId, snapshot.taskId, {
+    attention:
+      snapshot.status === "completed"
+        ? "completed"
+        : snapshot.status === "failed"
+          ? "failed"
+          : waiting
+            ? "approval"
+            : null,
+    isRunning: snapshot.status === "running" || waiting,
+    pendingApprovalRequestIds: waiting ? new Set(["native"]) : new Set(),
+    projectId: snapshot.projectId,
+    taskId: snapshot.taskId,
   });
 }
 

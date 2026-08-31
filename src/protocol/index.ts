@@ -1,6 +1,6 @@
 // 统一协议、JSON Schema 与事件信封只能从此公开入口导出。
 export * from "./workbench-pets.js";
-export * from "./running-task.js";
+export * from "./task-activity.js";
 export type {
   CodexRuntimeAvailability,
   CodexRuntimeAvailabilityStatus,
@@ -293,7 +293,6 @@ export {
   UpdateAgentGoalResponseSchema,
   UnarchiveAgentTaskRequestSchema,
   UnarchiveAgentTaskResponseSchema,
-  UnsubscribeAgentTaskResponseSchema,
   TerminateAgentBackgroundTerminalResponseSchema,
   AGENT_FILE_ACCEPT,
   AGENT_FILE_EXTENSIONS,
@@ -489,6 +488,5 @@ export {
   type UpdateAgentGoalResponse,
   type UnarchiveAgentTaskRequest,
   type UnarchiveAgentTaskResponse,
-  type UnsubscribeAgentTaskResponse,
   type TerminateAgentBackgroundTerminalResponse,
 } from "./project.js";

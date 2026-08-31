@@ -70,22 +70,6 @@ export const DeleteAgentTaskResponseSchema = Type.Object(
 );
 export type DeleteAgentTaskResponse = Readonly<Static<typeof DeleteAgentTaskResponseSchema>>;
 
-export const UnsubscribeAgentTaskResponseSchema = Type.Object(
-  {
-    status: Type.Union([
-      Type.Literal("busy"),
-      Type.Literal("notLoaded"),
-      Type.Literal("notSubscribed"),
-      Type.Literal("unsubscribed"),
-    ]),
-    taskId: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-export type UnsubscribeAgentTaskResponse = Readonly<
-  Static<typeof UnsubscribeAgentTaskResponseSchema>
->;
-
 export const ReviewAgentTaskRequestSchema = Type.Object(
   { target: AgentReviewTargetSchema },
   { additionalProperties: false },

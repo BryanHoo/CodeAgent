@@ -5,7 +5,6 @@ import { invoke as tauriInvoke } from "./native-invoke.js";
 const CODEAGENT_KEY_PREFIXES = ["codeagent.", "codeagent:"] as const;
 const LEGACY_BACKGROUND_DATABASE = "codeagent-workbench";
 const LEGACY_BACKGROUND_STORE = "background-images";
-const PREFERENCE_WRITE_DELAY_MS = 100;
 
 type AppStorageInvoke = (
   command: string,
@@ -40,9 +39,6 @@ type InitializeAppStorageOptions = Readonly<{
 const values = new Map<string, string>();
 let nativeInvoke: AppStorageInvoke = tauriInvoke;
 let initialized = false;
-const pendingPreferenceUpdates = new Map<string, string | null>();
-let preferenceWriteTimer: ReturnType<typeof setTimeout> | undefined;
-let writeQueue = Promise.resolve();
 
 function isCodeAgentKey(key: string): boolean {
   return CODEAGENT_KEY_PREFIXES.some((prefix) => key.startsWith(prefix));
@@ -133,20 +129,10 @@ function clearLegacyStorage(storage: LegacyStorage | undefined, keys: readonly s
   }
 }
 
-function enqueuePreferenceWrite(key: string, value: string | null): void {
+function submitPreferenceUpdate(key: string, value: string | null): void {
   if (!initialized) return;
-  pendingPreferenceUpdates.set(key, value);
-  preferenceWriteTimer ??= setTimeout(flushPreferenceWrites, PREFERENCE_WRITE_DELAY_MS);
-}
-
-function flushPreferenceWrites(): void {
-  preferenceWriteTimer = undefined;
-  if (pendingPreferenceUpdates.size === 0) return;
-  const updates = Object.fromEntries(pendingPreferenceUpdates);
-  pendingPreferenceUpdates.clear();
-  writeQueue = writeQueue
-    .then(() => nativeInvoke("update_app_preferences", { updates }))
-    .then(() => undefined, () => undefined);
+  // Rust actor 负责合并、限流、重试和原子落盘，WebView 只发送最新变化。
+  void nativeInvoke("update_app_preferences", { updates: { [key]: value } }).catch(() => undefined);
 }
 
 export const appPreferenceStorage = {
@@ -155,11 +141,11 @@ export const appPreferenceStorage = {
   },
   removeItem(key: string): void {
     values.delete(key);
-    enqueuePreferenceWrite(key, null);
+    submitPreferenceUpdate(key, null);
   },
   setItem(key: string, value: string): void {
     values.set(key, value);
-    enqueuePreferenceWrite(key, value);
+    submitPreferenceUpdate(key, value);
   },
 };
 
@@ -204,11 +190,7 @@ export async function updateNativeCustomBackgrounds(
 }
 
 export function resetAppStorageForTest(): void {
-  if (preferenceWriteTimer !== undefined) clearTimeout(preferenceWriteTimer);
   values.clear();
-  pendingPreferenceUpdates.clear();
-  preferenceWriteTimer = undefined;
   nativeInvoke = tauriInvoke;
   initialized = false;
-  writeQueue = Promise.resolve();
 }

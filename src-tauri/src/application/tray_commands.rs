@@ -1,16 +1,14 @@
-use serde::Serialize;
 use tauri::{
-    AppHandle, Manager, State, Url,
+    AppHandle, Url,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
 };
-use tokio::sync::Mutex;
 
+use super::task_activity::{TaskActivitySnapshot, TaskActivityStatus};
 use super::{
     app_lifecycle::{show_main_window, show_main_window_at_route},
     error::AppError,
 };
-use crate::domain::runtime::AgentEvent;
 
 #[cfg(target_os = "macos")]
 const HOLD_TO_QUIT_MENU_ID: &str = "hold-to-quit-app";
@@ -24,34 +22,11 @@ const RUNNING_TASK_MENU_PREFIX: &str = "running-task:";
 const SHOW_MAIN_MENU_ID: &str = "show-main";
 const TRAY_ICON_ID: &str = "codeagent-tray";
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TrayTask {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct TrayTask {
     pub(super) project_id: String,
     pub(super) task_id: String,
     pub(super) task_name: String,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(super) struct TrayTaskState {
-    tasks: Vec<TrayTask>,
-}
-
-impl TrayTaskState {
-    #[cfg(test)]
-    pub(super) fn from_tasks(tasks: Vec<TrayTask>) -> Self {
-        Self { tasks }
-    }
-
-    #[cfg(test)]
-    pub(super) fn tasks(&self) -> &[TrayTask] {
-        &self.tasks
-    }
-}
-
-#[derive(Default)]
-pub struct TrayRuntime {
-    state: Mutex<TrayTaskState>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,119 +82,29 @@ pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-#[tauri::command]
-pub async fn get_running_tasks(runtime: State<'_, TrayRuntime>) -> Result<Vec<TrayTask>, AppError> {
-    Ok(runtime.state.lock().await.tasks.clone())
-}
-
-pub(super) async fn observe_tray_agent_event(
+pub(super) fn render_tray_task_activities(
     app: &AppHandle,
-    project_id: &str,
-    event: &AgentEvent,
-    task_name: Option<&str>,
-) {
-    if !matches!(
-        event.event_type(),
-        Some(
-            "provider.error"
-                | "task.removed"
-                | "task.metadata_changed"
-                | "task.status_updated"
-                | "turn.completed"
-                | "turn.started"
-        )
-    ) {
-        return;
-    }
-    let (changed, next_tasks) = {
-        let runtime = app.state::<TrayRuntime>();
-        let mut state = runtime.state.lock().await;
-        let changed = apply_agent_event_to_tray_state(&mut state, project_id, event, task_name);
-        (changed, state.tasks.clone())
-    };
-    if changed && let Err(error) = render_tray_state(app, &next_tasks) {
-        eprintln!("failed to update tray from runtime event: {error}");
-    }
+    activities: &[TaskActivitySnapshot],
+) -> Result<(), AppError> {
+    render_tray_state(app, &tray_tasks_from_activities(activities))
 }
 
-pub(super) fn apply_agent_event_to_tray_state(
-    state: &mut TrayTaskState,
-    project_id: &str,
-    event: &AgentEvent,
-    task_name: Option<&str>,
-) -> bool {
-    let Some(task_id) = event.task_id() else {
-        return false;
-    };
-    let task_index = state
-        .tasks
+pub(super) fn tray_tasks_from_activities(activities: &[TaskActivitySnapshot]) -> Vec<TrayTask> {
+    activities
         .iter()
-        .position(|task| task.project_id == project_id && task.task_id == task_id);
-    let payload = event.as_json().and_then(|event| event.get("payload"));
-    let should_remove = match event.event_type() {
-        Some("turn.completed" | "task.removed") => true,
-        Some("provider.error") => {
-            payload
-                .and_then(|payload| payload.get("willRetry"))
-                .and_then(serde_json::Value::as_bool)
-                == Some(false)
-        }
-        Some("task.status_updated") => payload
-            .and_then(|payload| payload.get("status"))
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|status| status == "failed"),
-        _ => false,
-    };
-    if should_remove {
-        if let Some(task_index) = task_index {
-            state.tasks.remove(task_index);
-            return true;
-        }
-        return false;
-    }
-    if event.event_type() == Some("task.metadata_changed") {
-        let Some(task_index) = task_index else {
-            return false;
-        };
-        let Some(task_name) = normalized_task_name(task_name) else {
-            return false;
-        };
-        if state.tasks[task_index].task_name == task_name {
-            return false;
-        }
-        state.tasks[task_index].task_name = task_name.to_owned();
-        return true;
-    }
-    let should_add = event.event_type() == Some("turn.started")
-        || (event.event_type() == Some("task.status_updated")
-            && payload
-                .and_then(|payload| payload.get("status"))
-                .and_then(serde_json::Value::as_str)
-                == Some("running"));
-    if !should_add {
-        return false;
-    }
-    if let Some(task_index) = task_index {
-        let Some(task_name) = normalized_task_name(task_name) else {
-            return false;
-        };
-        if state.tasks[task_index].task_name == task_name {
-            return false;
-        }
-        state.tasks[task_index].task_name = task_name.to_owned();
-        return true;
-    }
-    if state.tasks.len() >= MAX_TRAY_TASKS {
-        return false;
-    }
-    state.tasks.push(TrayTask {
-        project_id: project_id.to_owned(),
-        task_id: task_id.to_owned(),
-        task_name: normalized_task_name(task_name)
-            .unwrap_or(task_id)
-            .to_owned(),
-    });
-    true
+        .filter(|activity| {
+            matches!(
+                activity.status,
+                TaskActivityStatus::Running | TaskActivityStatus::Waiting
+            )
+        })
+        .take(MAX_TRAY_TASKS)
+        .map(|activity| TrayTask {
+            project_id: activity.project_id.clone(),
+            task_id: activity.task_id.clone(),
+            task_name: activity.task_name.clone(),
+        })
+        .collect()
 }
 
 fn render_tray_state(app: &AppHandle, tasks: &[TrayTask]) -> Result<(), AppError> {
@@ -350,12 +235,6 @@ pub(super) fn tray_task_route(project_id: &str, task_id: &str) -> Result<String,
     }
     drop(segments);
     Ok(url.path().trim_start_matches('/').to_owned())
-}
-
-fn normalized_task_name(task_name: Option<&str>) -> Option<&str> {
-    task_name
-        .map(str::trim)
-        .filter(|task_name| !task_name.is_empty())
 }
 
 fn truncate_menu_task_name(task_name: &str) -> String {

@@ -55,7 +55,7 @@ export function useTaskDeletion({
             : navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" }));
         }
 
-        void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
+        void client.releaseTaskSubscription(task.projectId, task.id).catch(() => undefined);
       } catch {
         // 根级 MutationCache 已展示 Provider 原始错误，保留 Dialog 供用户重试。
       }

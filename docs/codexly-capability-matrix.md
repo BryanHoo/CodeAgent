@@ -16,12 +16,12 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
-| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页精确检测 `0.151.0`；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检、Rust 子进程握手与失败恢复 | 已实现 |
+| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页精确检测 `0.151.0`；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检；Rust supervisor 独立维护状态并按 1–30 秒有界退避恢复，不依赖 WebView 通道 | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
 | 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 按系统安装状态探测编辑器、终端与文件管理器，再通过受限应用 ID 打开 | 已实现 |
 | 任务列表 | `listTasks`, `startTask`, `renameTask`, `pinTask` | 原生 `thread/list`, `thread/start`, `thread/name/set`, `thread/section/set` | 已实现 |
-| 归档与删除 | `archiveTask`, `unarchiveTask`, `deleteTask`, `unsubscribeTask` | 原生 thread 生命周期；活跃任务禁止错误释放 | 已实现 |
+| 归档与删除 | `archiveTask`, `unarchiveTask`, `deleteTask`, `unsubscribeTask` | 原生 thread 生命周期；Rust lease 管理器在终态触发释放，活跃任务保持 busy 并有界退避重试，WebView 只声明消费者挂载/卸载 | 已实现 |
 | 会话快照 | `readTask` | `thread/read(includeTurns:false)` + `thread/turns/list` | 已实现 |
 | 长历史分页 | `readTask` cursor | `legacy` 使用 `full`；`paginated` 使用 `notLoaded` + 并发 `thread/items/list` | 已实现 |
 | 回合控制 | `startTurn`, `steerTurn`, `interruptTurn` | 原生 `turn/start`, `turn/steer`, `turn/interrupt` | 已实现 |
@@ -32,7 +32,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；单调序号、缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
 | 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
-| 状态栏任务 | Task 运行态与任务跳转 | Rust 独占并归约 Provider 事件；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取完整运行态快照 | 已实现 |
+| 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |
 | Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.151 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 0.151 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
@@ -48,9 +48,9 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Provider 认证 | login/cancel/logout/custom provider | 原生账号协议与受限配置写入；密钥不持久化到 WebView | 已实现 |
 | 全局/项目设置 | get/update settings/defaults | Codex `config/read` + 应用原子配置 | 已实现 |
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
-| 宠物 | `listWorkbenchPets`, `downloadWorkbenchPet` | 内置 CDN 下载、WebP 校验、自定义 `pets`/旧 `avatars` 扫描、动态资产授权、全屏置顶桌面面板、拖动动画、任务气泡与跨显示器位置恢复 | 已实现 |
+| 宠物 | `listWorkbenchPets`, `downloadWorkbenchPet` | 内置 CDN 下载、WebP 校验、自定义 `pets`/旧 `avatars` 扫描、动态资产授权、全屏置顶桌面面板、拖动动画、Rust 任务活动投影与跨显示器位置恢复 | 已实现 |
 | Bing 每日壁纸 | `/v1/workbench-background/bing` | Rust 固定来源有界下载、JPEG 校验、原子缓存、Tauri asset protocol | 已实现 |
-| CodeAgent 本地偏好与自定义背景 | WebView `localStorage`、IndexedDB | `appData/app.json`、`appData/backgrounds/custom/`，首次启动自动迁移；已落盘图片使用动态授权 asset URL，显式读取使用 raw IPC | 已实现 |
+| CodeAgent 本地偏好与自定义背景 | WebView `localStorage`、IndexedDB | `appData/app.json`、`appData/backgrounds/custom/`，首次启动自动迁移；偏好与草稿由 Rust 有界 actor 合并、重试并原子落盘；图片使用动态授权 asset URL，显式读取使用 raw IPC | 已实现 |
 | 本地访问模式 | 无 Web 访问接口 | 桌面端固定 `local`，无 HTTP 服务和 LAN 认证面 | 原生实现 |
 | 应用版本信息 | `getAppInfo` | 返回应用/Codex 真实版本；更新安装由外部分发渠道负责 | 已实现 |
 

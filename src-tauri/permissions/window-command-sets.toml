@@ -15,8 +15,11 @@ permissions = [
   "allow-install-codex-runtime",
   "allow-get-app-info",
   "allow-get-runtime-performance-metrics",
-  "allow-get-running-tasks",
-  "allow-sync-desktop-pet",
+  "allow-get-task-activities",
+  "allow-acknowledge-task-activity",
+  "allow-release-task-subscription",
+  "allow-retain-task-subscription",
+  "allow-configure-desktop-pet",
   "allow-get-workbench-background",
   "allow-list-workbench-pets",
   "allow-download-workbench-pet",
@@ -90,7 +93,6 @@ permissions = [
   "allow-pin-task",
   "allow-archive-task",
   "allow-unarchive-task",
-  "allow-unsubscribe-task",
   "allow-delete-task",
 ]
 

@@ -2,13 +2,14 @@ import type {
   AgentTask,
   AgentTaskSnapshotResponse,
   EventCheckpoint,
-  RunningTaskSnapshot,
+  TaskActivitySnapshot,
 } from "@/protocol/index.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 import {
   clearTaskAttention,
   getTaskActivity,
+  recordNativeTaskActivity,
   recordRunningTaskActivity,
   recordTaskActivitySnapshot,
   reduceTaskActivityEvent,
@@ -169,23 +170,25 @@ export class ProjectRuntimeManager {
     this.#getProject(response.snapshot.projectId).reconcileTaskSnapshot(response);
   }
 
-  public async restoreRunningTasks(tasks: readonly RunningTaskSnapshot[]): Promise<void> {
+  public async restoreTaskActivities(tasks: readonly TaskActivitySnapshot[]): Promise<void> {
     let nextActivity = this.#taskActivity;
     for (const task of tasks) {
       this.#rememberTaskTitle({ id: task.taskId, projectId: task.projectId, title: task.taskName });
-      nextActivity = recordRunningTaskActivity(nextActivity, task.projectId, task.taskId);
+      nextActivity = recordNativeTaskActivity(nextActivity, task);
     }
     this.#updateTaskActivity(nextActivity);
 
     // 每个 Task 都需经 readTask 登记归属；同 Project 的 Snapshot 仍只会复用一条事件连接。
     await Promise.all(
-      tasks.map(async ({ projectId, taskId }) => {
-        try {
-          this.observeSnapshot(await this.client.readTask(projectId, taskId));
-        } catch (error) {
-          recordInternalWarning("running_task_restore_failed", error, { projectId, taskId });
-        }
-      }),
+      tasks
+        .filter(({ status }) => status === "running" || status === "waiting")
+        .map(async ({ projectId, taskId }) => {
+          try {
+            this.observeSnapshot(await this.client.readTask(projectId, taskId));
+          } catch (error) {
+            recordInternalWarning("task_activity_restore_failed", error, { projectId, taskId });
+          }
+        }),
     );
   }
 

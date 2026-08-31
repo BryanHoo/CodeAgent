@@ -1,10 +1,12 @@
 pub(super) mod app_lifecycle;
 pub mod app_storage_commands;
+pub(crate) mod app_storage_runtime;
+#[cfg(test)]
+mod app_storage_runtime_tests;
 pub mod attachment_commands;
 pub mod background_commands;
 pub mod catalog_commands;
 pub mod commands;
-mod desktop_pet_activity;
 pub mod desktop_pet_commands;
 #[cfg(target_os = "macos")]
 mod desktop_pet_panel;
@@ -20,6 +22,14 @@ pub mod sidebar_commands;
 pub mod sidebar_directory_commands;
 mod sidebar_task_settings;
 pub mod state;
+mod task_activity;
+pub mod task_activity_commands;
+#[cfg(test)]
+mod task_activity_tests;
+mod task_subscription;
+pub mod task_subscription_commands;
+#[cfg(test)]
+mod task_subscription_tests;
 pub mod tray_commands;
 #[cfg(test)]
 mod tray_commands_tests;

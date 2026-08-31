@@ -10,6 +10,7 @@ use tokio::{
     time::{Duration, sleep, timeout},
 };
 
+use super::runtime_supervisor::runtime_restart_plan;
 use super::{RuntimePerformanceMetrics, RuntimeSession, spawn_event_forwarder};
 use crate::domain::runtime::{AppEvent, ProviderKind, RuntimeStatus};
 use crate::infrastructure::codex::ServerMessage;
@@ -35,6 +36,30 @@ fn runtime_status_should_advance_monotonic_sequence() {
     assert_eq!(runtime.snapshot.status, RuntimeStatus::Ready);
     assert_eq!(runtime.snapshot.provider, Some(ProviderKind::Codex));
     assert_eq!(runtime.snapshot.last_seq, 2);
+}
+
+#[test]
+fn runtime_restart_should_use_bounded_backoff_and_reset_after_stable_uptime() {
+    assert_eq!(
+        runtime_restart_plan(0, Duration::ZERO),
+        (1, Duration::from_secs(1))
+    );
+    assert_eq!(
+        runtime_restart_plan(1, Duration::ZERO),
+        (2, Duration::from_secs(2))
+    );
+    assert_eq!(
+        runtime_restart_plan(5, Duration::ZERO),
+        (6, Duration::from_secs(30))
+    );
+    assert_eq!(
+        runtime_restart_plan(20, Duration::ZERO),
+        (21, Duration::from_secs(30))
+    );
+    assert_eq!(
+        runtime_restart_plan(5, Duration::from_secs(60)),
+        (1, Duration::from_secs(1))
+    );
 }
 
 #[tokio::test]

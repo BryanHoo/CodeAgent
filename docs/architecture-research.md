@@ -68,7 +68,7 @@ Tauri Rust 层负责 `codex app-server` 的完整生命周期：
 - 持有并串行写入子进程 `stdin`。
 - 使用 Tokio `BufReader` 按行读取 `stdout` JSONL。
 - 独立读取 `stderr` 并写入诊断日志，禁止与协议输出混合。
-- 处理异常退出、超时和有限次数重启。
+- 处理异常退出、超时，并按 1–30 秒有界指数退避持续恢复；稳定运行 60 秒后重置退避。
 - 应用退出时终止当前 provider 的子进程。
 
 发布版本应固定 Codex 二进制及其协议 Schema。可使用以下官方命令生成匹配当前二进制的类型定义：
@@ -252,6 +252,10 @@ Codex 的状态数据不写入 `appData/providers/codex/`。启动 `codex app-se
 `CODEX_HOME`；存在用户配置时继承该值，否则使用官方默认 `~/.codex`。
 
 CodeAgent 的偏好和自定义背景不依赖 WebView `localStorage` 或 IndexedDB。升级后首次启动会将旧数据迁入上述应用目录，成功后清理旧副本。Provider 启动后，本次应用运行期间不再创建另一个 provider 的运行时。
+
+WebView 只保留同步渲染镜像。偏好与草稿变化通过受限命令进入 Rust 单写者有界队列，由底层在
+100ms 窗口内覆盖合并、失败保留并重试，再原子替换 `app.json`；窗口隐藏或销毁不会中断写入。
+任务运行、等待、完成和失败状态同样由 Rust 归约，并统一驱动系统通知、状态栏和桌面宠物。
 
 CodeAgent 当前不为 UI 数据引入 SQLite。Codex 线程历史仍由 `app-server` 和官方 `CODEX_HOME` 管理，不能复制整份会话形成第二个事实来源。后续如引入应用 SQLite，仅用于：
 

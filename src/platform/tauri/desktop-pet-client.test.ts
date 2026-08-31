@@ -10,25 +10,20 @@ describe("desktop pet native client", () => {
     invoke.mockResolvedValue(undefined);
   });
 
-  it("synchronizes the selected pet and activity animation", async () => {
-    const { syncDesktopPet } = await import("./desktop-pet-client.js");
-    const state = {
-      animationName: "running" as const,
-      petId: "codex",
-      tasks: [],
-    };
+  it("configures only the selected pet while Rust owns activity", async () => {
+    const { configureDesktopPet } = await import("./desktop-pet-client.js");
 
-    await syncDesktopPet(state);
+    await configureDesktopPet("codex");
 
-    expect(invoke).toHaveBeenCalledWith("sync_desktop_pet", { state });
+    expect(invoke).toHaveBeenCalledWith("configure_desktop_pet", { petId: "codex" });
   });
 
   it("destroys the native pet window when the feature is disabled", async () => {
-    const { syncDesktopPet } = await import("./desktop-pet-client.js");
+    const { configureDesktopPet } = await import("./desktop-pet-client.js");
 
-    await syncDesktopPet(null);
+    await configureDesktopPet(null);
 
-    expect(invoke).toHaveBeenCalledWith("sync_desktop_pet", { state: null });
+    expect(invoke).toHaveBeenCalledWith("configure_desktop_pet", { petId: null });
   });
 
   it("uses the native drag session when the runtime can report its release", async () => {

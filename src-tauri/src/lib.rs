@@ -11,6 +11,7 @@ use application::{
         initialize_app_storage, list_custom_backgrounds, read_custom_background,
         update_app_preferences, update_custom_backgrounds,
     },
+    app_storage_runtime::AppStorageRuntime,
     attachment_commands::{
         cache_project_image, import_host_attachment, list_host_files, upload_attachment,
     },
@@ -26,10 +27,10 @@ use application::{
         inspect_codex_runtime, install_codex_runtime, start_runtime,
     },
     desktop_pet_commands::{
-        DesktopPetRuntime, get_desktop_pet_drag_strategy, get_desktop_pet_position,
-        get_desktop_pet_state, layout_desktop_pet, move_desktop_pet, open_desktop_pet_task,
-        set_desktop_pet_drag_position, show_desktop_pet, start_desktop_pet_native_drag,
-        sync_desktop_pet,
+        DesktopPetRuntime, configure_desktop_pet, get_desktop_pet_drag_strategy,
+        get_desktop_pet_position, get_desktop_pet_state, layout_desktop_pet, move_desktop_pet,
+        open_desktop_pet_task, set_desktop_pet_drag_position, show_desktop_pet,
+        start_desktop_pet_native_drag,
     },
     notification_commands::NotificationRuntime,
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
@@ -38,11 +39,13 @@ use application::{
         add_project, archive_task, compact_task, delete_task, fork_task, get_task_settings,
         interrupt_turn, list_projects, list_tasks, pin_task, read_task, remove_project,
         rename_project, rename_task, reorder_projects, resolve_pending_request, start_review,
-        start_task, start_turn, steer_turn, unarchive_task, unsubscribe_task, update_task_settings,
+        start_task, start_turn, steer_turn, unarchive_task, update_task_settings,
     },
     sidebar_directory_commands::list_project_directories,
     state::AppState,
-    tray_commands::{TrayRuntime, get_running_tasks, setup_tray},
+    task_activity_commands::{acknowledge_task_activity, get_task_activities},
+    task_subscription_commands::{release_task_subscription, retain_task_subscription},
+    tray_commands::setup_tray,
     workflow_commands::{
         add_queued_submission, clear_task_goal, delete_queued_submission,
         list_background_terminals, list_queued_submissions, reorder_queued_submissions,
@@ -73,9 +76,9 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
+        .manage(AppStorageRuntime::default())
         .manage(DesktopPetRuntime::default())
         .manage(NotificationRuntime::default())
-        .manage(TrayRuntime::default())
         .manage(MainWindowLifecycle::default())
         .setup(|app| setup_tray(app.handle()).map_err(Into::into))
         .on_window_event(handle_window_event)
@@ -92,8 +95,11 @@ pub fn run() {
             cancel_native_request,
             get_app_info,
             get_runtime_performance_metrics,
-            get_running_tasks,
-            sync_desktop_pet,
+            get_task_activities,
+            acknowledge_task_activity,
+            release_task_subscription,
+            retain_task_subscription,
+            configure_desktop_pet,
             get_desktop_pet_state,
             get_desktop_pet_drag_strategy,
             get_desktop_pet_position,
@@ -176,7 +182,6 @@ pub fn run() {
             pin_task,
             archive_task,
             unarchive_task,
-            unsubscribe_task,
             delete_task
         ])
         .build(tauri::generate_context!());

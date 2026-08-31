@@ -97,9 +97,6 @@ describe("TauriSidebarClient", () => {
       if (command === "start_turn") {
         return { checkpoint: { sequence: 2, sessionId: "runtime-a" }, taskId: "thread-a" };
       }
-      if (command === "unsubscribe_task") {
-        return { status: "unsubscribed", taskId: "thread-a" };
-      }
       return { status: command === "steer_turn" ? "accepted" : "interrupting" };
     });
     const client = new TauriSidebarClient({
@@ -121,10 +118,8 @@ describe("TauriSidebarClient", () => {
     });
     await client.steerTurn("project-a", "thread-a", "turn-a", input);
     await client.interruptTurn("project-a", "thread-a", "turn-a");
-    await expect(client.unsubscribeTask("project-a", "thread-a")).resolves.toEqual({
-      status: "unsubscribed",
-      taskId: "thread-a",
-    });
+    await expect(client.releaseTaskSubscription("project-a", "thread-a")).resolves.toBeUndefined();
+    await expect(client.retainTaskSubscription("thread-a")).resolves.toBeUndefined();
 
     expect(invoke).toHaveBeenNthCalledWith(1, "start_task", { projectId: "project-a" });
     expect(invoke).toHaveBeenNthCalledWith(2, "start_turn", {
@@ -144,8 +139,11 @@ describe("TauriSidebarClient", () => {
       taskId: "thread-a",
       turnId: "turn-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(5, "unsubscribe_task", {
+    expect(invoke).toHaveBeenNthCalledWith(5, "release_task_subscription", {
       projectId: "project-a",
+      taskId: "thread-a",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(6, "retain_task_subscription", {
       taskId: "thread-a",
     });
 

@@ -46,7 +46,6 @@ import type {
   SteerAgentTurnResponse,
   TerminateAgentBackgroundTerminalResponse,
   UnarchiveAgentTaskResponse,
-  UnsubscribeAgentTaskResponse,
   UpdateAgentGoalRequest,
   UpdateAgentGoalResponse,
   UpdateAgentQueuedSubmissionResponse,
@@ -399,11 +398,15 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     return response;
   }
 
-  public async unsubscribeTask(
+  public async releaseTaskSubscription(
     projectId: string,
     taskId: string,
-  ): Promise<UnsubscribeAgentTaskResponse> {
-    return this.call("unsubscribe_task", { projectId, taskId });
+  ): Promise<void> {
+    await this.call("release_task_subscription", { projectId, taskId });
+  }
+
+  public async retainTaskSubscription(taskId: string): Promise<void> {
+    await this.call("retain_task_subscription", { taskId });
   }
 
   public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {

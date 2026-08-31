@@ -18,6 +18,14 @@ mod event_delta_batcher;
 mod event_forwarder;
 #[path = "state_performance_metrics.rs"]
 pub(super) mod performance_metrics;
+#[path = "state_runtime_supervisor.rs"]
+mod runtime_supervisor;
+#[path = "state_task_activity.rs"]
+mod task_activity_state;
+#[path = "state_task_subscriptions.rs"]
+mod task_subscriptions;
+use super::task_activity::TaskActivityState;
+use super::task_subscription::TaskSubscriptionLeases;
 use crate::{
     domain::runtime::{
         AppEvent, CodexRuntimeAvailability, ProviderKind, RuntimeSnapshot, RuntimeStatus,
@@ -32,6 +40,10 @@ use crate::{
 };
 use event_forwarder::{required_event_string, spawn_event_forwarder};
 use performance_metrics::{RuntimePerformanceMetrics, RuntimePerformanceMetricsSnapshot};
+use runtime_supervisor::{
+    invalidate_runtime_restart, mark_runtime_started, prepare_runtime_restart,
+    schedule_runtime_restart,
+};
 
 const EVENT_QUEUE_CAPACITY: usize = 256;
 
@@ -51,7 +63,8 @@ struct RuntimeSession {
     _event_task: Option<JoinHandle<()>>,
     project_sequences: HashMap<String, u64>,
     task_projects: HashMap<String, String>,
-    task_titles: HashMap<String, String>,
+    task_activity: TaskActivityState,
+    task_subscription_leases: TaskSubscriptionLeases,
     pending_requests: HashMap<String, PendingServerRequest>,
     provider_login: Option<Value>,
     mcp_statuses: HashMap<String, Value>,
@@ -59,6 +72,9 @@ struct RuntimeSession {
     queue_editing_by_task: HashMap<String, String>,
     turn_started_waiters: TurnStartedWaiters,
     performance_metrics: RuntimePerformanceMetrics,
+    runtime_started_at: Option<tokio::time::Instant>,
+    restart_attempt: u32,
+    restart_generation: u64,
 }
 
 impl AppState {
@@ -125,34 +141,49 @@ impl AppState {
             ) {
                 return Ok(runtime.snapshot);
             }
+            invalidate_runtime_restart(&mut runtime);
             let event = runtime.transition(RuntimeStatus::Starting, Some(ProviderKind::Codex));
-            runtime.publish(event)?;
+            let _ = runtime.publish(event);
         }
 
         match CodexProcess::start(app_data).await {
             Ok(process) => {
-                let messages = process
-                    .connection()
-                    .take_server_messages()
-                    .await
-                    .map_err(|_| AppError::CodexRuntimeStartFailed)?;
+                let messages = match process.connection().take_server_messages().await {
+                    Ok(messages) => messages,
+                    Err(error) => {
+                        eprintln!("failed to attach Codex runtime event stream: {error}");
+                        self.fail_codex_start(app).await;
+                        return Err(AppError::CodexRuntimeStartFailed);
+                    }
+                };
                 let event_task =
                     spawn_event_forwarder(Arc::clone(&self.runtime), messages, Some(app.clone()));
                 let mut runtime = self.runtime.lock().await;
                 runtime.codex_process = Some(process);
                 runtime._event_task = Some(event_task);
+                mark_runtime_started(&mut runtime);
                 let event = runtime.transition(RuntimeStatus::Ready, Some(ProviderKind::Codex));
-                runtime.publish(event)?;
+                let _ = runtime.publish(event);
                 Ok(runtime.snapshot)
             }
             Err(error) => {
-                let mut runtime = self.runtime.lock().await;
                 eprintln!("codex runtime startup failed: {error}");
-                let event = runtime.transition(RuntimeStatus::Failed, Some(ProviderKind::Codex));
-                runtime.publish(event)?;
+                self.fail_codex_start(app).await;
                 Err(AppError::CodexRuntimeStartFailed)
             }
         }
+    }
+
+    async fn fail_codex_start(&self, app: &AppHandle) {
+        let (generation, delay) = {
+            let mut runtime = self.runtime.lock().await;
+            runtime.codex_process = None;
+            runtime.runtime_started_at = None;
+            let event = runtime.transition(RuntimeStatus::Failed, Some(ProviderKind::Codex));
+            let _ = runtime.publish(event);
+            prepare_runtime_restart(&mut runtime)
+        };
+        schedule_runtime_restart(app.clone(), generation, delay);
     }
 
     pub async fn codex_connection(&self) -> Result<Arc<AppServerConnection>, AppError> {
@@ -199,29 +230,6 @@ impl AppState {
             runtime
                 .task_projects
                 .insert(task_id.to_owned(), project_id.to_owned());
-        }
-    }
-
-    pub async fn remember_task_metadata<'a>(
-        &self,
-        project_id: &str,
-        tasks: impl IntoIterator<Item = (&'a str, &'a str)>,
-    ) {
-        let mut runtime = self.runtime.lock().await;
-        runtime
-            .project_sequences
-            .entry(project_id.to_owned())
-            .or_default();
-        for (task_id, title) in tasks {
-            runtime
-                .task_projects
-                .insert(task_id.to_owned(), project_id.to_owned());
-            let title = title.trim();
-            if !title.is_empty() {
-                runtime
-                    .task_titles
-                    .insert(task_id.to_owned(), title.to_owned());
-            }
         }
     }
 

@@ -55,7 +55,7 @@ describe("native app storage", () => {
     expect(removeItem).not.toHaveBeenCalled();
   });
 
-  it("mirrors writes immediately and coalesces native updates", async () => {
+  it("mirrors writes immediately and delegates persistence to Rust", async () => {
     const invoke = vi.fn(async () => ({}));
     await initializeAppStorage({ invoke, readLegacyBackgrounds: async () => [] });
 
@@ -64,15 +64,16 @@ describe("native app storage", () => {
     appPreferenceStorage.setItem("codeagent.theme-preference", "dark");
     expect(appPreferenceStorage.getItem("codeagent.language-preference")).toBe("en");
 
-    await vi.waitFor(() => {
-      expect(invoke).toHaveBeenLastCalledWith("update_app_preferences", {
-        updates: {
-          "codeagent.language-preference": "en",
-          "codeagent.theme-preference": "dark",
-        },
-      });
+    expect(invoke).toHaveBeenNthCalledWith(2, "update_app_preferences", {
+      updates: { "codeagent.language-preference": "zh-CN" },
     });
-    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke).toHaveBeenNthCalledWith(3, "update_app_preferences", {
+      updates: { "codeagent.language-preference": "en" },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, "update_app_preferences", {
+      updates: { "codeagent.theme-preference": "dark" },
+    });
+    expect(invoke).toHaveBeenCalledTimes(4);
   });
 
   it("reads custom background bytes from a binary IPC response", async () => {
