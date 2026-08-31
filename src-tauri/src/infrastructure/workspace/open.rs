@@ -1,11 +1,16 @@
 use std::path::Path;
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-use std::path::PathBuf;
 
 use serde::Serialize;
 use tokio::process::Command;
 
 use super::path_guard::WorkspaceError;
+
+#[cfg(any(target_os = "linux", target_os = "windows", test))]
+mod catalog;
+
+#[cfg(test)]
+#[path = "open/tests.rs"]
+mod cross_platform_tests;
 
 #[cfg(test)]
 mod completion_tests {
@@ -132,90 +137,12 @@ pub fn platform_apps() -> (&'static str, Vec<OpenApp>) {
 
 #[cfg(target_os = "linux")]
 pub fn platform_apps() -> (&'static str, Vec<OpenApp>) {
-    (
-        "linux",
-        available_path_apps(vec![
-            OpenApp {
-                id: "system-default",
-                kind: "system-default",
-                name: "默认应用",
-            },
-            OpenApp {
-                id: "file-manager",
-                kind: "file-manager",
-                name: "文件管理器",
-            },
-            OpenApp {
-                id: "terminal",
-                kind: "terminal",
-                name: "Terminal",
-            },
-            OpenApp {
-                id: "visual-studio-code",
-                kind: "editor",
-                name: "Visual Studio Code",
-            },
-            OpenApp {
-                id: "zed",
-                kind: "editor",
-                name: "Zed",
-            },
-            OpenApp {
-                id: "windsurf",
-                kind: "editor",
-                name: "Windsurf",
-            },
-            OpenApp {
-                id: "android-studio",
-                kind: "editor",
-                name: "Android Studio",
-            },
-            OpenApp {
-                id: "gnome-terminal",
-                kind: "terminal",
-                name: "GNOME Terminal",
-            },
-            OpenApp {
-                id: "konsole",
-                kind: "terminal",
-                name: "Konsole",
-            },
-            OpenApp {
-                id: "xfce-terminal",
-                kind: "terminal",
-                name: "Xfce Terminal",
-            },
-        ]),
-    )
+    ("linux", catalog::installed_apps("linux"))
 }
 
 #[cfg(target_os = "windows")]
 pub fn platform_apps() -> (&'static str, Vec<OpenApp>) {
-    (
-        "win32",
-        available_path_apps(vec![
-            OpenApp {
-                id: "system-default",
-                kind: "system-default",
-                name: "默认应用",
-            },
-            OpenApp {
-                id: "explorer",
-                kind: "file-manager",
-                name: "Explorer",
-            },
-            OpenApp {
-                id: "windows-terminal",
-                kind: "terminal",
-                name: "Windows Terminal",
-            },
-            OpenApp {
-                id: "visual-studio-code",
-                kind: "editor",
-                name: "Visual Studio Code",
-            },
-        ]),
-    )
+    ("win32", catalog::installed_apps("windows"))
 }
 
 #[cfg(target_os = "macos")]
@@ -235,66 +162,6 @@ fn macos_apps_for_paths(home: Option<&Path>, exists: impl Fn(&Path) -> bool) -> 
         (global || user).then_some(candidate.app)
     }));
     apps
-}
-
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-fn available_path_apps(apps: Vec<OpenApp>) -> Vec<OpenApp> {
-    apps.into_iter()
-        .filter(|app| executable_path(command_name(app.id)).is_some())
-        .collect()
-}
-
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-fn executable_path(name: &str) -> Option<PathBuf> {
-    let paths = std::env::var_os("PATH")?;
-    std::env::split_paths(&paths).find_map(|directory| executable_in_directory(&directory, name))
-}
-
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-fn executable_in_directory(directory: &Path, name: &str) -> Option<PathBuf> {
-    let candidate = directory.join(name);
-    if candidate.is_file() {
-        return Some(candidate);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Windows CLI 工具常通过 .cmd shim 安装，检测结果也必须能直接用于启动。
-        for extension in ["exe", "cmd"] {
-            let candidate = candidate.with_extension(extension);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
-}
-
-#[cfg(target_os = "linux")]
-fn command_name(app_id: &str) -> &str {
-    match app_id {
-        "system-default" | "file-manager" => "xdg-open",
-        "terminal" => "x-terminal-emulator",
-        "visual-studio-code" => "code",
-        "zed" => "zed",
-        "windsurf" => "windsurf",
-        "android-studio" => "android-studio",
-        "gnome-terminal" => "gnome-terminal",
-        "konsole" => "konsole",
-        "xfce-terminal" => "xfce4-terminal",
-        _ => "",
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn command_name(app_id: &str) -> &str {
-    match app_id {
-        "system-default" | "explorer" => "explorer",
-        "windows-terminal" => "wt",
-        "visual-studio-code" => "code",
-        _ => "",
-    }
 }
 
 pub async fn open_path(app_id: &str, path: &Path) -> Result<(), WorkspaceError> {
@@ -365,21 +232,11 @@ mod tests {
 
 #[cfg(target_os = "linux")]
 fn platform_command(app_id: &str, path: &Path) -> Result<Command, WorkspaceError> {
-    let mut command = match app_id {
-        "system-default" | "file-manager" => Command::new("xdg-open"),
-        "terminal" => Command::new("x-terminal-emulator"),
-        "visual-studio-code" => Command::new("code"),
-        "zed" => Command::new("zed"),
-        "windsurf" => Command::new("windsurf"),
-        "android-studio" => Command::new("android-studio"),
-        "gnome-terminal" => Command::new("gnome-terminal"),
-        "konsole" => Command::new("konsole"),
-        "xfce-terminal" => Command::new("xfce4-terminal"),
-        _ => return Err(WorkspaceError::InvalidPath),
-    };
+    let program = catalog::launch_program("linux", app_id).ok_or(WorkspaceError::InvalidPath)?;
+    let mut command = Command::new(program);
     match app_id {
-        "terminal" => {
-            // 通用终端没有统一的位置参数，继承 cwd 可避免把目录当成待执行命令。
+        "terminal" | "ghostty" => {
+            // 终端继承目标目录，避免把目录误解析为待执行命令。
             command.current_dir(path);
         }
         "gnome-terminal" | "xfce-terminal" => {
@@ -397,18 +254,19 @@ fn platform_command(app_id: &str, path: &Path) -> Result<Command, WorkspaceError
 
 #[cfg(target_os = "windows")]
 fn platform_command(app_id: &str, path: &Path) -> Result<Command, WorkspaceError> {
-    let mut command = match app_id {
-        "system-default" | "explorer" => Command::new("explorer"),
-        "windows-terminal" => Command::new("wt"),
-        "visual-studio-code" => {
-            Command::new(executable_path("code").unwrap_or_else(|| PathBuf::from("code")))
+    let program = catalog::launch_program("windows", app_id).ok_or(WorkspaceError::InvalidPath)?;
+    let mut command = Command::new(program);
+    match app_id {
+        "windows-terminal" => {
+            command.arg("-d").arg(path);
         }
-        _ => return Err(WorkspaceError::InvalidPath),
-    };
-    if app_id == "windows-terminal" {
-        command.arg("-d");
+        "command-prompt" => {
+            command.args(["/K", "cd", "/D"]).arg(path);
+        }
+        _ => {
+            command.arg(path);
+        }
     }
-    command.arg(path);
     Ok(command)
 }
 
@@ -447,7 +305,7 @@ mod linux_tests {
 mod windows_tests {
     use std::{ffi::OsStr, fs, path::Path};
 
-    use super::{executable_in_directory, platform_command};
+    use super::{catalog::executable_in_directory, platform_command};
 
     #[test]
     fn windows_terminal_should_use_starting_directory_argument() {
