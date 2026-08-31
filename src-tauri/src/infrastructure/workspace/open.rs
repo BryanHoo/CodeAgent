@@ -7,6 +7,20 @@ use tokio::process::Command;
 
 use super::path_guard::WorkspaceError;
 
+#[cfg(test)]
+mod completion_tests {
+    use super::should_wait_for_exit;
+
+    #[test]
+    fn windows_explorer_should_not_wait_for_exit_status() {
+        assert!(!should_wait_for_exit("windows", "system-default"));
+        assert!(!should_wait_for_exit("windows", "explorer"));
+        assert!(should_wait_for_exit("windows", "windows-terminal"));
+        assert!(should_wait_for_exit("windows", "visual-studio-code"));
+        assert!(should_wait_for_exit("macos", "system-default"));
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct OpenApp {
     pub id: &'static str,
@@ -287,11 +301,21 @@ pub async fn open_path(app_id: &str, path: &Path) -> Result<(), WorkspaceError> 
     if !path.exists() {
         return Err(WorkspaceError::InvalidPath);
     }
-    let status = platform_command(app_id, path)?.status().await?;
+    let mut command = platform_command(app_id, path)?;
+    if !should_wait_for_exit(std::env::consts::OS, app_id) {
+        // Explorer 会把请求转交给现有 shell，进程退出码不能表示窗口是否打开。
+        command.spawn()?;
+        return Ok(());
+    }
+    let status = command.status().await?;
     status
         .success()
         .then_some(())
         .ok_or(WorkspaceError::InvalidPath)
+}
+
+fn should_wait_for_exit(platform: &str, app_id: &str) -> bool {
+    platform != "windows" || !matches!(app_id, "system-default" | "explorer")
 }
 
 #[cfg(target_os = "macos")]
