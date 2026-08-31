@@ -5,7 +5,13 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
-import { Checkbox } from "../../../shared/components/core/checkbox.js";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../shared/components/core/select.js";
 import {
   downloadWorkbenchPetMutationOptions,
   petCatalogQueryOptions,
@@ -71,17 +77,24 @@ export function GlobalSettingsPetsView({
           {t("pets.refresh")}
         </Button>
       </div>
-      <label className="flex min-h-12 items-center justify-between gap-3 border-b border-separator py-3 text-body-small font-medium">
+      <div className="flex min-h-12 items-center justify-between gap-3 border-b border-separator py-3 text-body-small font-medium">
         <span>{t("pets.enabled")}</span>
-        <Checkbox
-          aria-label={t("pets.enabled")}
-          checked={settings.enabled}
+        <Select
           disabled={isLoading || pets.length === 0}
-          onCheckedChange={(checked) => {
-            onEnabledChange(checked === true);
+          onValueChange={(value) => {
+            onEnabledChange(value === "enabled");
           }}
-        />
-      </label>
+          value={settings.enabled ? "enabled" : "disabled"}
+        >
+          <SelectTrigger aria-label={t("pets.enabled")} className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="enabled">{t("pets.options.enabled")}</SelectItem>
+            <SelectItem value="disabled">{t("pets.options.disabled")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       {isLoading ? (
         <p
           className="grid min-h-36 place-items-center text-body-small text-muted-foreground"

@@ -53,24 +53,13 @@ html[data-app-surface^="desktop-pet"] #root {
   display: flex;
   max-height: 320px;
   flex-direction: column;
+  gap: 6px;
   overflow-y: auto;
 }
 
 .workbench-pet-bubble-item {
-  position: relative;
   height: var(--workbench-pet-bubble-height);
   flex: 0 0 var(--workbench-pet-bubble-height);
-  transition: margin-top var(--ui-motion-fast) var(--ui-ease-standard);
-}
-
-/* 折叠时只露出后续气泡底部，悬停或键盘聚焦后完整展开。 */
-.workbench-pet-bubble-item + .workbench-pet-bubble-item {
-  margin-top: calc(var(--workbench-pet-bubble-height) * -0.6667);
-}
-
-.workbench-pet-bubbles:hover .workbench-pet-bubble-item + .workbench-pet-bubble-item,
-.workbench-pet-bubbles:focus-within .workbench-pet-bubble-item + .workbench-pet-bubble-item {
-  margin-top: 6px;
 }
 
 .workbench-pet-bubble-button {

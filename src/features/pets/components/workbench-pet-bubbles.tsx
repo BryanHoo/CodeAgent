@@ -3,13 +3,6 @@ import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
 import { useTranslation } from "../../../i18n/i18n.js";
 import type { DesktopPetTask } from "../../../protocol/desktop-pet.js";
 
-function compareBubblePriority(left: DesktopPetTask, right: DesktopPetTask): number {
-  if (left.status === right.status) return 0;
-  if (left.status === "completed") return -1;
-  if (right.status === "completed") return 1;
-  return 0;
-}
-
 function TaskBubble({
   activity,
   onTaskSelect,
@@ -56,20 +49,15 @@ export function WorkbenchPetBubbles({
   const { t } = useTranslation("workbench");
   if (tasks.length === 0) return null;
   const waitingCount = tasks.filter((activity) => activity.status === "waiting").length;
-  // 完成提醒在折叠态置于最高层，其余气泡保持原有顺序。
-  const orderedTasks = tasks.toSorted(compareBubblePriority);
   return (
     <div className="workbench-pet-bubbles">
       <span aria-live="polite" className="sr-only">
         {t("pet.activitySummary", { count: tasks.length, waiting: waitingCount })}
       </span>
       <ol aria-label={t("pet.activeTasks")} className="workbench-pet-bubble-list">
-        {orderedTasks.map((activity, index) => (
-          <li
-            className="workbench-pet-bubble-item"
-            key={`${activity.projectId}:${activity.taskId}`}
-            style={{ zIndex: orderedTasks.length - index }}
-          >
+        {/* 保持任务活动的投影顺序，状态变化不再重排可见气泡。 */}
+        {tasks.map((activity) => (
+          <li className="workbench-pet-bubble-item" key={`${activity.projectId}:${activity.taskId}`}>
             <TaskBubble activity={activity} onTaskSelect={onTaskSelect} />
           </li>
         ))}

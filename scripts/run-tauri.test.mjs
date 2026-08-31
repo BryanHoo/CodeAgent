@@ -10,6 +10,15 @@ void test("the project Tauri command should enforce platform build constraints",
   assert.equal(packageJson.scripts.tauri, "node scripts/run-tauri.mjs");
 });
 
+void test("the main window should allow SPA navigation event subscriptions", async () => {
+  const capability = JSON.parse(
+    await readFile(new URL("../src-tauri/capabilities/default.json", import.meta.url)),
+  );
+
+  assert.ok(capability.permissions.includes("core:event:allow-listen"));
+  assert.ok(capability.permissions.includes("core:event:allow-unlisten"));
+});
+
 void test("macOS builds should default to the Apple Silicon target", () => {
   assert.deepEqual(resolveTauriArguments(["build", "--no-sign"], "darwin"), [
     "build",

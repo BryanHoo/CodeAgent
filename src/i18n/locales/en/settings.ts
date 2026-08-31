@@ -136,13 +136,17 @@ export const settings = {
       downloadable: "Download required",
       ready: "Ready",
     },
-    enabled: "Enable workbench pet",
+    enabled: "Enable desktop pet",
     errors: {
       load: "Unable to load pet assets. Try again.",
     },
     loading: "Loading pet assets",
+    options: {
+      disabled: "Off",
+      enabled: "On",
+    },
     refresh: "Refresh list",
-    selectionLabel: "Choose a workbench pet",
+    selectionLabel: "Choose a desktop pet",
   },
   sandbox: {
     dangerFullAccess: "Full access",
@@ -156,7 +160,7 @@ export const settings = {
     background: "Workbench background",
     commit: "Commit messages",
     integration: "App integrations",
-    pets: "Workbench pet",
+    pets: "Desktop pet",
     provider: "Model service",
   },
   title: "Global settings",
