@@ -91,8 +91,10 @@ impl TaskActivityState {
             }
             Some("task.removed") => self.remove_task(project_id, task_id),
             Some("turn.started") => {
+                let inserted = self.activity_index(project_id, task_id).is_none();
                 let record = self.ensure_activity(project_id, task_id);
-                let changed = record.snapshot.status != TaskActivityStatus::Running
+                let changed = inserted
+                    || record.snapshot.status != TaskActivityStatus::Running
                     || !record.pending_request_ids.is_empty();
                 record.snapshot.status = TaskActivityStatus::Running;
                 record.pending_request_ids.clear();
@@ -153,8 +155,9 @@ impl TaskActivityState {
                 .and_then(serde_json::Value::as_str)
             {
                 Some("running") => {
+                    let inserted = self.activity_index(project_id, task_id).is_none();
                     let record = self.ensure_activity(project_id, task_id);
-                    let changed = record.snapshot.status != TaskActivityStatus::Running;
+                    let changed = inserted || record.snapshot.status != TaskActivityStatus::Running;
                     record.snapshot.status = TaskActivityStatus::Running;
                     changed
                 }

@@ -12,7 +12,7 @@ fn rust_owns_the_complete_task_activity_lifecycle() {
     let mut state = TaskActivityState::default();
     state.remember_task("project-1", "task-1", "底层任务", Some("/workspace"));
 
-    state.apply_event(
+    let changed = state.apply_event(
         "project-1",
         &event(json!({
             "payload": {"turn": {"status": "inProgress"}},
@@ -21,6 +21,7 @@ fn rust_owns_the_complete_task_activity_lifecycle() {
             "type": "turn.started"
         })),
     );
+    assert!(changed, "首次运行事件必须触发原生活动状态刷新");
     assert_eq!(state.snapshot()[0].status, TaskActivityStatus::Running);
 
     state.apply_event(
@@ -61,6 +62,24 @@ fn rust_owns_the_complete_task_activity_lifecycle() {
 
     assert!(state.acknowledge("project-1", "task-1"));
     assert!(state.snapshot().is_empty());
+}
+
+#[test]
+fn first_running_status_event_should_trigger_native_activity_refresh() {
+    let mut state = TaskActivityState::default();
+    state.remember_task("project-1", "task-1", "首次运行任务", None);
+
+    let changed = state.apply_event(
+        "project-1",
+        &event(json!({
+            "payload": {"status": "running"},
+            "taskId": "task-1",
+            "type": "task.status_updated"
+        })),
+    );
+
+    assert!(changed, "首次运行状态必须触发托盘和桌宠刷新");
+    assert_eq!(state.snapshot()[0].status, TaskActivityStatus::Running);
 }
 
 #[test]
