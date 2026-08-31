@@ -108,7 +108,7 @@ jobs:
             The DEB package does not require AppImage FUSE.
             FUSE help: https://docs.appimage.org/user-guide/troubleshooting/fuse.html
           releaseDraft: true
-          prerelease: false
+          prerelease: true
           uploadUpdaterJson: false
           uploadUpdaterSignatures: false
           uploadWorkflowArtifacts: true

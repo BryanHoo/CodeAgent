@@ -48,6 +48,13 @@ void test("quality CI should audit production dependencies", async () => {
   assert.match(qualityWorkflow, /command:\s*check advisories bans licenses sources/);
 });
 
+void test("unsigned preview releases should remain prereleases", async () => {
+  const releaseWorkflow = await readProjectFile(".github/workflows/release.yml");
+
+  assert.match(releaseWorkflow, /releaseDraft:\s*true/);
+  assert.match(releaseWorkflow, /prerelease:\s*true/);
+});
+
 void test("cargo-deny should enforce dependency policy", async () => {
   const denyConfig = await readProjectFile("deny.toml");
 
