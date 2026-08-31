@@ -168,6 +168,7 @@ export {
   AgentMessagePhaseSchema,
   AgentMessageSkillSchema,
   CommandApprovalPendingRequestSchema,
+  TerminalInputApprovalPendingRequestSchema,
   FileChangeApprovalPendingRequestSchema,
   PermissionApprovalPendingRequestSchema,
   McpElicitationPendingRequestSchema,

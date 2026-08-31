@@ -449,7 +449,7 @@ fn approval_requests_should_map_and_encode_native_responses() {
             id: Some(9),
             method: "item/commandExecution/requestApproval".to_owned(),
             params: to_raw_value(&json!({
-                "threadId": "thread-a", "turnId": "turn-a", "itemId": "item-a",
+                "threadId": "thread-a", "turnId": "turn-a", "itemId": "item-a", "kind": "command",
                 "startedAtMs": 1735689600000_i64, "command": "pnpm check", "cwd": "/work/a",
                 "reason": "需要执行测试", "networkApprovalContext": null,
                 "availableDecisions": ["accept", "acceptForSession", "decline"]

@@ -1,6 +1,7 @@
 use serde_json::{Map, Value, json};
 
 use super::connection::ConnectionError;
+use super::conversation_collaboration::{collaboration_tool_name, map_collaboration_agents};
 use super::conversation_file_input::read_file_text_input;
 use super::generated_image_store::IMAGE_ATTACHMENT_FIELD;
 use crate::domain::conversation::{AgentCommandOutputOmission, AgentFileChange, AgentItem};
@@ -99,9 +100,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
                 "senderTaskId": required_string(item, "senderThreadId")?,
             })),
             name: collaboration_tool_name(required_string(item, "tool")?)?.to_owned(),
-            output: Some(
-                json!({"agents": item.get("agentsStates").cloned().unwrap_or_else(|| json!({}))}),
-            ),
+            output: Some(json!({"agents": map_collaboration_agents(item)?})),
             status: map_status(required_string(item, "status")?, false)?,
         }),
         "webSearch" => Ok(AgentItem::Tool {
@@ -265,21 +264,6 @@ fn activity(
         status,
         transient,
     })
-}
-
-fn collaboration_tool_name(value: &str) -> Result<&'static str, ConnectionError> {
-    match value {
-        "closeAgent" => Ok("agent/close"),
-        "followupTask" => Ok("agent/followup_task"),
-        "interruptAgent" => Ok("agent/interrupt"),
-        "listAgents" => Ok("agent/list"),
-        "resumeAgent" => Ok("agent/resume"),
-        "sendInput" => Ok("agent/send_input"),
-        "sendMessage" => Ok("agent/send_message"),
-        "spawnAgent" => Ok("agent/spawn"),
-        "wait" => Ok("agent/wait"),
-        _ => Err(ConnectionError::InvalidMessage),
-    }
 }
 
 fn map_review_target(review: &str) -> Value {

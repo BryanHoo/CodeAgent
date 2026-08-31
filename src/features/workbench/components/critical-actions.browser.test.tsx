@@ -5,6 +5,7 @@ import { render } from "vitest-browser-react";
 import { I18nextProvider, i18n } from "../../../i18n/i18n.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { CommitChangesPanel } from "./commit-changes-panel.js";
+import { PendingRequestCard } from "./pending-request.js";
 import { PermissionApprovalRequestCard } from "./permission-approval-request.js";
 
 const permissionRequest = {
@@ -44,6 +45,24 @@ const gitStatus = {
   ],
 } as const satisfies ProjectGitStatus;
 
+const terminalInputRequest = {
+  approvalId: "approval-stdin-a",
+  availableDecisions: ["allow", "deny"],
+  createdAt: "2026-08-31T08:00:00.000Z",
+  cwd: "/workspace/CodeAgent",
+  expiresAt: null,
+  itemId: "command-a",
+  processId: "42",
+  projectId: "codeagent",
+  reason: "命令正在等待输入",
+  requestId: "approval-stdin-a",
+  status: "pending",
+  stdin: "yes\n",
+  taskId: "task-1",
+  turnId: "turn-1",
+  type: "terminal_input_approval",
+} as const satisfies PendingRequest;
+
 function TestProviders({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <I18nextProvider i18n={i18n}>
@@ -53,6 +72,26 @@ function TestProviders({ children }: Readonly<{ children: React.ReactNode }>) {
 }
 
 describe("关键操作组件", () => {
+  it("展示终端输入上下文并提交审批决定", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const onResolve = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(
+      <TestProviders>
+        <PendingRequestCard interactive onResolve={onResolve} request={terminalInputRequest} />
+      </TestProviders>,
+    );
+
+    await expect.element(screen.getByText("终端输入审批")).toBeVisible();
+    await expect.element(screen.getByText("会话 42")).toBeVisible();
+    await expect.element(screen.getByText("/workspace/CodeAgent")).toBeVisible();
+    await expect.element(screen.getByText("yes")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "允许" })).toHaveFocus();
+    await screen.getByRole("button", { name: "拒绝" }).click();
+
+    expect(onResolve).toHaveBeenCalledOnce();
+    expect(onResolve.mock.calls[0]?.[1]).toEqual({ decision: "deny" });
+  });
+
   it("默认聚焦批准操作并提交用户选择的权限范围", async () => {
     await i18n.changeLanguage("zh-CN");
     const onResolve = vi.fn().mockResolvedValue(undefined);

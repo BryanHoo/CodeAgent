@@ -178,6 +178,9 @@ export function ApprovalReviewItem({
             ns: "conversation",
           })}
         </TaskItem>
+        {item.action.type === "terminal_input" ? (
+          <TaskItem>{`${item.action.processId} · ${item.action.cwd}`}</TaskItem>
+        ) : null}
         {item.riskLevel === undefined ? null : (
           <TaskItem>
             {i18n.t("timeline.approvalReview.risk", {

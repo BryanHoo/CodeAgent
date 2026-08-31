@@ -109,19 +109,31 @@ export const AgentApprovalReviewStatusSchema = Type.Union([
   Type.Literal("aborted"),
 ]);
 
-export const AgentApprovalReviewActionSchema = Type.Object(
-  {
-    detail: Type.String(),
-    type: Type.Union([
-      Type.Literal("command"),
-      Type.Literal("file_change"),
-      Type.Literal("network_access"),
-      Type.Literal("mcp_tool_call"),
-      Type.Literal("permissions"),
-    ]),
-  },
-  { additionalProperties: false },
-);
+export const AgentApprovalReviewActionSchema = Type.Union([
+  Type.Object(
+    {
+      detail: Type.String(),
+      type: Type.Union([
+        Type.Literal("command"),
+        Type.Literal("file_change"),
+        Type.Literal("network_access"),
+        Type.Literal("mcp_tool_call"),
+        Type.Literal("permissions"),
+      ]),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      approvalId: Type.String({ minLength: 1 }),
+      cwd: Type.String({ minLength: 1 }),
+      detail: Type.String(),
+      processId: Type.String({ minLength: 1 }),
+      type: Type.Literal("terminal_input"),
+    },
+    { additionalProperties: false },
+  ),
+]);
 
 export const AgentApprovalReviewItemSchema = Type.Object(
   {

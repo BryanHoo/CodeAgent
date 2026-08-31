@@ -220,6 +220,8 @@ export const workbench = {
     allowSession: "本次会话允许",
     answerFailed: "回答提交失败，请重试",
     commandApproval: "命令审批",
+    terminalInputApproval: "终端输入审批",
+    terminalSession: "会话 {{processId}}",
     cancel: "取消",
     deny: "拒绝",
     expired: "请求已过期",

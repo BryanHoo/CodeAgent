@@ -222,6 +222,8 @@ export const workbench = {
     allowSession: "Allow for this session",
     answerFailed: "Unable to submit the answer. Please retry.",
     commandApproval: "Command approval",
+    terminalInputApproval: "Terminal input approval",
+    terminalSession: "Session {{processId}}",
     cancel: "Cancel",
     deny: "Deny",
     expired: "Request expired",

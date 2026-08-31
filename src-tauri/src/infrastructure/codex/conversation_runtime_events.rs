@@ -245,6 +245,16 @@ fn map_review_action(action: &Map<String, Value>) -> Result<Value, ConnectionErr
                     .join(" "),
             )
         }
+        "writeStdin" => {
+            // Guardian 对终端输入使用独立 action，保留会话与工作目录供界面核验。
+            return Ok(json!({
+                "approvalId": required_string(action, "approvalId")?,
+                "cwd": required_string(action, "cwd")?,
+                "detail": required_string(action, "stdin")?,
+                "processId": required_string(action, "processId")?,
+                "type": "terminal_input",
+            }));
+        }
         "applyPatch" => {
             let files = action
                 .get("files")

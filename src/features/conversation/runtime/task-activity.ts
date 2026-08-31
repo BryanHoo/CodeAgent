@@ -31,6 +31,7 @@ function createTaskActivityKey(projectId: string, taskId: string): string {
 function isApprovalRequest(request: PendingRequest): boolean {
   return (
     request.type === "command_approval" ||
+    request.type === "terminal_input_approval" ||
     request.type === "file_change_approval" ||
     request.type === "permissions_approval" ||
     request.type === "mcp_elicitation"

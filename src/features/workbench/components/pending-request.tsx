@@ -40,7 +40,7 @@ type PendingRequestCardProps = Readonly<{
 
 type ApprovalRequest = Extract<
   PendingRequest,
-  { type: "command_approval" | "file_change_approval" }
+  { type: "command_approval" | "file_change_approval" | "terminal_input_approval" }
 >;
 type CommandApprovalRequest = Extract<PendingRequest, { type: "command_approval" }>;
 type UserInputRequest = Extract<PendingRequest, { type: "user_input" }>;
@@ -78,13 +78,17 @@ function ApprovalRequestCard({
   const resolutionLockRef = useRef(createAsyncActionLock());
   const networkAccess = request.type === "command_approval" ? request.networkAccess : null;
   const title =
-    networkAccess !== null
+    request.type === "terminal_input_approval"
+      ? t("pending.terminalInputApproval")
+      : networkAccess !== null
       ? t("pending.networkApproval")
       : request.type === "command_approval"
         ? t("pending.commandApproval")
         : t("pending.fileChangeApproval");
   const detail =
-    networkAccess !== null
+    request.type === "terminal_input_approval"
+      ? request.stdin
+      : networkAccess !== null
       ? `${formatNetworkProtocol(networkAccess.protocol)}\n${networkAccess.host}`
       : request.type === "command_approval"
         ? [request.command, request.cwd].filter(Boolean).join("\n")
@@ -120,6 +124,16 @@ function ApprovalRequestCard({
     <Confirmation approval={{ id: request.requestId }} state={approvalState(request, submitting)}>
       <ConfirmationTitle>{title}</ConfirmationTitle>
       <ConfirmationRequest>
+        {request.type === "terminal_input_approval" ? (
+          <div className="mb-2 flex min-w-0 items-center gap-3 text-label text-muted-foreground">
+            <span className="shrink-0">
+              {t("pending.terminalSession", { processId: request.processId })}
+            </span>
+            <span className="min-w-0 truncate" title={request.cwd}>
+              {request.cwd}
+            </span>
+          </div>
+        ) : null}
         <pre className="whitespace-pre-wrap font-mono text-meta">{detail}</pre>
         {request.type === "command_approval" && request.additionalPermissions != null ? (
           <div className="mt-3 space-y-2 border-t border-border pt-2">

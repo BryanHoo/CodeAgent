@@ -175,19 +175,41 @@ fn map_command_request(
     request_id: &str,
     task_id: &str,
 ) -> Result<Value, ConnectionError> {
+    let kind = required_string(params, "kind")?;
     let mut request = approval_identity(params, request_id, task_id)?;
     let request = request
         .as_object_mut()
         .ok_or(ConnectionError::InvalidMessage)?;
-    request.extend(json!({
-        "additionalPermissions": params.get("additionalPermissions").filter(|value| !value.is_null()).map(|value| map_permission_profile(value.as_object().ok_or(ConnectionError::InvalidMessage)?)).transpose()?,
-        "availableDecisions": map_approval_decisions(params.get("availableDecisions"))?,
-        "command": optional_value(params, "command"),
-        "cwd": optional_value(params, "cwd"),
-        "networkAccess": params.get("networkApprovalContext").cloned().unwrap_or(Value::Null),
-        "reason": optional_value(params, "reason"),
-        "type": "command_approval",
-    }).as_object().unwrap().clone());
+    let fields = match kind {
+        "command" => json!({
+            "additionalPermissions": params.get("additionalPermissions").filter(|value| !value.is_null()).map(|value| map_permission_profile(value.as_object().ok_or(ConnectionError::InvalidMessage)?)).transpose()?,
+            "availableDecisions": map_approval_decisions(params.get("availableDecisions"))?,
+            "command": optional_value(params, "command"),
+            "cwd": optional_value(params, "cwd"),
+            "networkAccess": params.get("networkApprovalContext").cloned().unwrap_or(Value::Null),
+            "reason": optional_value(params, "reason"),
+            "type": "command_approval",
+        }),
+        "writeStdin" => {
+            let command = required_string(params, "command")?;
+            let parts = shlex::split(command).ok_or(ConnectionError::InvalidMessage)?;
+            // Codex 0.151 将终端输入编码为固定四段命令，严格解析可避免误判普通命令。
+            if parts.len() != 4 || parts[0] != "write_stdin" || parts[1] != "--session-id" {
+                return Err(ConnectionError::InvalidMessage);
+            }
+            json!({
+                "approvalId": required_string(params, "approvalId")?,
+                "availableDecisions": map_approval_decisions(params.get("availableDecisions"))?,
+                "cwd": required_string(params, "cwd")?,
+                "processId": parts[2],
+                "reason": optional_value(params, "reason"),
+                "stdin": parts[3],
+                "type": "terminal_input_approval",
+            })
+        }
+        _ => return Err(ConnectionError::InvalidMessage),
+    };
+    request.extend(fields.as_object().unwrap().clone());
     Ok(Value::Object(request.clone()))
 }
 

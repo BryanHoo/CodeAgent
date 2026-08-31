@@ -5,6 +5,7 @@ mod connection;
 mod conversation;
 mod conversation_advanced;
 mod conversation_background;
+mod conversation_collaboration;
 mod conversation_commands;
 mod conversation_delta_events;
 mod conversation_events;
@@ -38,6 +39,9 @@ mod connection_retry_tests;
 #[cfg(test)]
 #[path = "conversation_advanced_tests.rs"]
 mod conversation_advanced_tests;
+#[cfg(test)]
+#[path = "conversation_approval_tests.rs"]
+mod conversation_approval_tests;
 #[cfg(test)]
 #[path = "conversation_command_tests.rs"]
 mod conversation_command_tests;

@@ -192,6 +192,20 @@ export const CommandApprovalPendingRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const TerminalInputApprovalPendingRequestSchema = Type.Object(
+  {
+    ...PendingRequestIdentityProperties,
+    approvalId: Type.String({ minLength: 1 }),
+    availableDecisions: Type.Array(PendingApprovalDecisionSchema, { minItems: 1 }),
+    cwd: Type.String({ minLength: 1 }),
+    processId: Type.String({ minLength: 1 }),
+    reason: Type.Union([Type.String(), Type.Null()]),
+    stdin: Type.String(),
+    type: Type.Literal("terminal_input_approval"),
+  },
+  { additionalProperties: false },
+);
+
 export const PermissionApprovalPendingRequestSchema = Type.Object(
   {
     ...PendingRequestIdentityProperties,
@@ -254,6 +268,7 @@ export const McpElicitationPendingRequestSchema = Type.Union([
 
 export const PendingRequestSchema = Type.Union([
   CommandApprovalPendingRequestSchema,
+  TerminalInputApprovalPendingRequestSchema,
   FileChangeApprovalPendingRequestSchema,
   PermissionApprovalPendingRequestSchema,
   UserInputPendingRequestSchema,
@@ -266,6 +281,10 @@ function createPendingRequestStatusSchema<TStatus extends "expired" | "pending" 
   return Type.Union([
     Type.Object(
       { ...CommandApprovalPendingRequestSchema.properties, status: Type.Literal(status) },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { ...TerminalInputApprovalPendingRequestSchema.properties, status: Type.Literal(status) },
       { additionalProperties: false },
     ),
     Type.Object(
@@ -332,6 +351,14 @@ export const ResolvePendingRequestRequestSchema = Type.Union([
       ...PendingRequestResolutionIdentityProperties,
       resolution: ApprovalResolutionSchema,
       type: Type.Literal("command_approval"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingRequestResolutionIdentityProperties,
+      resolution: ApprovalResolutionSchema,
+      type: Type.Literal("terminal_input_approval"),
     },
     { additionalProperties: false },
   ),

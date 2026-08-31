@@ -35,7 +35,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 状态栏任务 | Task 运行态与任务跳转 | 图标旁实时显示运行数量；Rust 直接归约 Provider 事件并动态更新右键任务菜单 | 已实现 |
 | Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.151 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
-| 审批与输入 | `resolvePendingRequest` | 命令、文件变更、工具、用户输入、MCP elicitation 原生回写 | 已实现 |
+| 审批与输入 | `resolvePendingRequest` | 严格区分 0.151 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、遵守 ignore 规则的缓存索引、会话取消和结果上限 | 已实现 |
 | 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.151 `text`/`localImage` 输入；文件通过 `text_elements.placeholder` 保留名称与媒体类型，队列与历史恢复为附件 | 已实现 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
@@ -60,10 +60,10 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | --- | --- |
 | 回合 | `turn/started`, `turn/completed`, `turn/plan/updated` |
 | 文本与推理 | `item/agentMessage/delta`, reasoning delta/summary 通知 |
-| 工具与文件 | command output、MCP progress、file patch、item started/completed |
+| 工具与文件 | command output、MCP progress、file patch、`functionCallOutput`、九类协作 Agent 工具、item started/completed |
 | 运行时 | warning/error、token usage、model reroute/safety/verification |
 | 生命周期 | thread status/name/archive/delete、goal、queue |
-| 扩展流程 | hook、auto approval review、background terminal、认证、MCP status |
+| 扩展流程 | hook、含 `writeStdin` 的 auto approval review、background terminal、认证、MCP status |
 
 `mcpServer/event/stream/notification` 仅由实验性 hosted app 事件订阅触发；三类
 `thread/realtime/item/*` 通知仅属于完整 Realtime 语音会话。当前桌面产品没有对应的订阅、采集、

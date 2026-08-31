@@ -38,6 +38,8 @@
 - 附件必须映射为 Codex 0.151 原生 `text` 或 `localImage` 输入；文本在 Rust 缓存边界校验 UTF-8 且不超过 1 MiB，前端不得展示 PDF、Office 等无原生输入支持的二进制格式
 - `McpServerStatus.runtimeStatus` 必须映射 `notStarted`、`starting`、`connected`、`authenticationRequired`、`failed`、`cancelled` 与 `disabled`；`null` 按配置切换中的过渡状态处理，不得丢弃服务
 - `functionCallOutput` 必须作为已完成工具项进入时间线；`sendMessage`、`followupTask`、`interruptAgent` 与 `listAgents` 必须映射为稳定的 Agent 工具标识
+- `item/commandExecution/requestApproval.kind` 必须严格接受 `command` 或 `writeStdin`；终端输入必须按 0.151 固定命令结构解析并保留 `approvalId`、`processId`、`stdin` 与 `cwd`，未知或畸形请求必须拒绝
+- Guardian `writeStdin` action 必须映射为独立的终端输入审批时间线项；WebView 必须使用 `terminal_input_approval` 独立判别并展示终端会话上下文
 - `CodexErrorInfo.rateLimitExceeded` 必须映射为稳定的 `rate_limit_exceeded` IPC 错误码，不得退化为未知错误
 - `mcpServer/event/stream/notification` 与三类 `thread/realtime/item/*` 通知在没有完整 Hosted MCP 订阅或 Realtime 音频产品流程时显式忽略，避免暴露不可操作状态和引入高频无效传输
 - 附件上传与宿主文件导入是应用私有缓存能力，不得调用 `project/read`；必须支持没有真实 Codex Project 的 `temporary` 作用域，任务发送阶段再校验 Project/Task 归属

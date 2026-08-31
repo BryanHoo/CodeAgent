@@ -5,7 +5,15 @@ import type { TaskStatus } from "../../../shared/components/agent/task.js";
 import { i18n } from "../../../i18n/i18n.js";
 
 export type SubagentOperationName =
-  "agent/close" | "agent/resume" | "agent/send_input" | "agent/spawn" | "agent/wait";
+  | "agent/close"
+  | "agent/followup_task"
+  | "agent/interrupt"
+  | "agent/list"
+  | "agent/resume"
+  | "agent/send_input"
+  | "agent/send_message"
+  | "agent/spawn"
+  | "agent/wait";
 
 export type SubagentOperation = Readonly<{
   agents: readonly SubagentOperationAgent[];
@@ -37,8 +45,12 @@ export type SubagentSelection = Readonly<{
 
 const subagentOperationNames = new Set<SubagentOperationName>([
   "agent/close",
+  "agent/followup_task",
+  "agent/interrupt",
+  "agent/list",
   "agent/resume",
   "agent/send_input",
+  "agent/send_message",
   "agent/spawn",
   "agent/wait",
 ]);
@@ -46,8 +58,12 @@ const subagentOperationNames = new Set<SubagentOperationName>([
 export function getSubagentOperationTitle(name: SubagentOperationName): string {
   const titleKeys: Readonly<Record<SubagentOperationName, string>> = {
     "agent/close": "subagent.operationTitles.close",
+    "agent/followup_task": "subagent.operationTitles.followupTask",
+    "agent/interrupt": "subagent.operationTitles.interrupt",
+    "agent/list": "subagent.operationTitles.list",
     "agent/resume": "subagent.operationTitles.resume",
     "agent/send_input": "subagent.operationTitles.sendInput",
+    "agent/send_message": "subagent.operationTitles.sendMessage",
     "agent/spawn": "subagent.operationTitles.spawn",
     "agent/wait": "subagent.operationTitles.wait",
   };

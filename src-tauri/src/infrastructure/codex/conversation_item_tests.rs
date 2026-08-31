@@ -89,7 +89,10 @@ fn codex_151_items_should_keep_native_tool_semantics() {
         ("listAgents", "agent/list"),
     ] {
         let mapped = map_item(json!({
-            "agentsStates": {},
+            "agentsStates": {
+                "thread-b": {"message": "done", "status": "completed"},
+                "thread-c": {"message": null, "status": "interrupted"}
+            },
             "id": format!("collab-{native_tool}"),
             "model": null,
             "prompt": null,
@@ -101,7 +104,12 @@ fn codex_151_items_should_keep_native_tool_semantics() {
             "type": "collabAgentToolCall",
         }))
         .expect("Codex 0.151 collaboration tool should map");
-        assert_eq!(to_value(mapped).unwrap()["name"], mapped_tool);
+        let mapped = to_value(mapped).unwrap();
+        assert_eq!(mapped["name"], mapped_tool);
+        assert_eq!(mapped["output"]["agents"][0]["taskId"], "thread-b");
+        assert_eq!(mapped["output"]["agents"][0]["status"], "completed");
+        assert_eq!(mapped["output"]["agents"][1]["taskId"], "thread-c");
+        assert_eq!(mapped["output"]["agents"][1]["status"], "interrupted");
     }
 
     let completed = map_item(json!({
