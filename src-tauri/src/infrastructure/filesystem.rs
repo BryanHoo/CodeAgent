@@ -23,13 +23,17 @@ pub async fn list_project_directories(
     let mut entries = Vec::new();
     while let Some(entry) = reader.next_entry().await? {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if (!include_hidden && name.starts_with('.')) || !entry.metadata().await?.is_dir() {
+        let Ok(file_type) = entry.file_type().await else {
+            // Windows 磁盘根目录可能包含无法读取属性的系统项，单项失败不能中断整个目录列表。
+            continue;
+        };
+        if (!include_hidden && name.starts_with('.')) || !file_type.is_dir() {
             continue;
         }
-        let entry_path = tokio::fs::canonicalize(entry.path()).await?;
         entries.push(ProjectDirectoryEntry {
             name,
-            path: entry_path.to_string_lossy().into_owned(),
+            // 父目录已经规范化，直接拼接 DirEntry 路径可避免 Windows junction 再次解析失败。
+            path: entry.path().to_string_lossy().into_owned(),
         });
     }
     entries.sort_unstable_by(|left, right| {
@@ -74,7 +78,9 @@ pub async fn list_host_files(
     let mut entries = Vec::new();
     while let Some(entry) = reader.next_entry().await? {
         let name = entry.file_name().to_string_lossy().into_owned();
-        let file_type = entry.file_type().await?;
+        let Ok(file_type) = entry.file_type().await else {
+            continue;
+        };
         if file_type.is_symlink() || (!include_hidden && name.starts_with('.')) {
             continue;
         }
@@ -84,10 +90,7 @@ pub async fn list_host_files(
         }
         entries.push(HostFileEntry {
             name,
-            path: tokio::fs::canonicalize(entry.path())
-                .await?
-                .to_string_lossy()
-                .into_owned(),
+            path: entry.path().to_string_lossy().into_owned(),
             kind: if is_directory { "directory" } else { "file" },
         });
     }

@@ -1,5 +1,6 @@
 import type { ProjectDirectoryListing } from "@/protocol/index.js";
 import { ArrowRight, ArrowUp, Eye, EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
 import { Input } from "../../../shared/components/core/input.js";
@@ -54,13 +55,22 @@ export function FilesystemPickerToolbar({
   onToggleHidden,
   path,
 }: FilesystemPickerToolbarProps) {
+  const [knownRoots, setKnownRoots] = useState<ProjectDirectoryListing["roots"]>(
+    () => listing?.roots ?? [],
+  );
+  useEffect(() => {
+    if (listing !== undefined) setKnownRoots(listing.roots);
+  }, [listing]);
+  const roots = listing?.roots ?? knownRoots;
   const activeRootPath =
-    listing === undefined ? undefined : findActiveFilesystemRoot(listing.roots, listing.path)?.path;
+    roots.length === 0
+      ? undefined
+      : findActiveFilesystemRoot(roots, listing?.path ?? path)?.path;
   const hiddenAction = includeHidden ? labels.hideHidden : labels.showHidden;
 
   return (
     <div className="flex min-h-10 items-center gap-2 border-y border-separator bg-panel px-3 sm:px-4">
-      {listing === undefined || listing.roots.length < 2 ? null : (
+      {roots.length < 2 ? null : (
         <Select
           disabled={disabled}
           onValueChange={onNavigateRoot}
@@ -74,7 +84,7 @@ export function FilesystemPickerToolbar({
             <SelectValue placeholder={labels.filesystemRoot} />
           </SelectTrigger>
           <SelectContent position="popper">
-            {listing.roots.map((root) => (
+            {roots.map((root) => (
               <SelectItem key={root.path} value={root.path}>
                 {root.name}
               </SelectItem>
