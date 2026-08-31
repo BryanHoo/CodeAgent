@@ -6,13 +6,14 @@ use std::{
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuItem, MenuItemKind};
 use tauri::{
-    AppHandle, Manager as _, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    Window, WindowEvent,
+    AppHandle, Emitter as _, Manager as _, RunEvent, Url, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window, WindowEvent,
 };
 
 use super::desktop_pet_commands::acknowledge_completed_desktop_pet_route;
 
 const MAIN_WINDOW_LABEL: &str = "main";
+const MAIN_WINDOW_NAVIGATE_EVENT: &str = "main-window://navigate";
 const MAIN_WINDOW_DESTROY_MIN_SECS: u64 = 30;
 const MAIN_WINDOW_DESTROY_MAX_SECS: u64 = 60;
 #[cfg(target_os = "macos")]
@@ -191,9 +192,9 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
 
     if should_navigate
         && let Some(route) = requested_route.as_deref()
-        && let Err(error) = navigate_main_window(&window, route)
+        && let Err(error) = window.emit(MAIN_WINDOW_NAVIGATE_EVENT, route)
     {
-        eprintln!("failed to navigate main window: {error}");
+        eprintln!("failed to emit main window navigation: {error}");
     }
 
     // 恢复时同时处理最小化状态，确保托盘操作始终把工作台带到前台。
@@ -209,14 +210,6 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
             acknowledge_completed_desktop_pet_route(&app, &route).await;
         });
     }
-}
-
-fn navigate_main_window(window: &WebviewWindow, route: &str) -> tauri::Result<()> {
-    let target = window
-        .url()?
-        .join(&format!("/{route}"))
-        .map_err(tauri::Error::InvalidUrl)?;
-    window.navigate(target)
 }
 
 fn create_main_window(app: &AppHandle, route: Option<String>) -> tauri::Result<WebviewWindow> {

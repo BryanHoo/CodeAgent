@@ -153,4 +153,40 @@ describe("conversation layout recovery", () => {
     validPositionController.handleLayoutRevision(validTarget);
     expect(validTarget.scrollTo).not.toHaveBeenCalled();
   });
+
+  it("任务切换尚未稳定时忽略延迟滚动并继续跟随内容", () => {
+    const controller = createConversationAutoScrollController(vi.fn());
+    const target = createScrollTarget();
+
+    controller.handleConversationChange(target);
+    controller.handleConversationRenderComplete(target);
+    vi.mocked(target.scrollTo).mockClear();
+
+    // 历史 Turn 延迟展开时，旧高度产生的 scroll 不能被误判为用户主动离底。
+    target.scrollTop = 1_200;
+    controller.handleScroll(target);
+    expect(target.scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 2_000 });
+
+    vi.mocked(target.scrollTo).mockClear();
+    target.scrollHeight = 2_400;
+    controller.handleContentResize(target);
+    expect(target.scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 2_400 });
+  });
+
+  it("任务切换到达底部后允许用户停止自动跟随", () => {
+    const controller = createConversationAutoScrollController(vi.fn());
+    const target = createScrollTarget();
+
+    controller.handleConversationChange(target);
+    controller.handleConversationRenderComplete(target);
+    target.scrollTop = 1_600;
+    controller.handleScroll(target);
+
+    vi.mocked(target.scrollTo).mockClear();
+    target.scrollTop = 1_000;
+    controller.handleScroll(target);
+    target.scrollHeight = 2_400;
+    controller.handleContentResize(target);
+    expect(target.scrollTo).not.toHaveBeenCalled();
+  });
 });

@@ -13,6 +13,8 @@
   ·
   <a href="#快速开始">快速开始</a>
   ·
+  <a href="#安装放行与卸载">安装与卸载</a>
+  ·
   <a href="./README.en.md">English</a>
   ·
   <a href="./LICENSE">许可证</a>
@@ -34,7 +36,7 @@ CodeAgent 将 AI 编程任务、对话、审批、项目文件和 Git 操作集�
 ## 快速开始
 
 1. 从 [Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载适合当前平台的发布包。
-2. Windows 直接运行免安装 EXE；其他平台安装后启动 CodeAgent。
+2. 按照下方对应平台的步骤安装并启动 CodeAgent。
 3. 首次启动时按照界面提示完成配置，然后添加项目并创建任务。
 
 当前提供无签名预览包，系统可能显示来源或安全提示。支持平台如下：
@@ -44,6 +46,108 @@ CodeAgent 将 AI 编程任务、对话、审批、项目文件和 Git 操作集�
 | Windows 10/11 | x86_64 | EXE（免安装） |
 | Ubuntu 24.04+ | x86_64 | DEB、AppImage |
 | macOS 14+ | Apple Silicon | app、DMG |
+
+## 安装、放行与卸载
+
+所有发布包当前均未签名。只应从本仓库的 [Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载，并在确认下载来源后执行放行命令。以下命令只放行 CodeAgent，不会关闭系统级安全检查。
+
+### Windows 10/11
+
+Windows 版本为免安装 EXE。下载后将文件重命名为 `CodeAgent.exe`，在文件所在目录打开 PowerShell：
+
+```powershell
+Unblock-File -Path ".\CodeAgent.exe"
+Start-Process -FilePath ".\CodeAgent.exe"
+```
+
+`Unblock-File` 只移除该文件的下载标记。如果 SmartScreen 仍然拦截，请在系统提示中检查应用名称与下载来源，然后选择“更多信息 > 仍要运行”；不要全局关闭 SmartScreen。
+
+卸载时关闭应用并删除 EXE：
+
+```powershell
+Stop-Process -Name "CodeAgent" -Force -ErrorAction SilentlyContinue
+Remove-Item -Force ".\CodeAgent.exe"
+```
+
+如需同时删除设置、附件和缓存，可继续执行以下命令。此操作不可恢复：
+
+```powershell
+Remove-Item -Recurse -Force "$env:APPDATA\com.codeagent.desktop" -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\com.codeagent.desktop" -ErrorAction SilentlyContinue
+```
+
+### Ubuntu 24.04+
+
+推荐使用 DEB。下载后将文件重命名为 `CodeAgent.deb`：
+
+```bash
+chmod 0644 "./CodeAgent.deb"
+sudo apt install "./CodeAgent.deb"
+codeagent
+```
+
+卸载 DEB：
+
+```bash
+sudo apt purge codeagent
+```
+
+使用 AppImage 时，将文件重命名为 `CodeAgent.AppImage`，安装 FUSE 2 并赋予执行权限：
+
+```bash
+sudo apt update
+sudo apt install libfuse2t64
+chmod +x "./CodeAgent.AppImage"
+"./CodeAgent.AppImage"
+```
+
+如果无法安装 FUSE，可以使用解压运行模式：
+
+```bash
+"./CodeAgent.AppImage" --appimage-extract-and-run
+```
+
+AppImage 无需安装。卸载时关闭应用并删除文件：
+
+```bash
+pkill -x codeagent
+rm -f "./CodeAgent.AppImage"
+```
+
+如需同时删除默认位置中的设置、附件和缓存，可继续执行以下命令。此操作不可恢复；自定义过 `XDG_DATA_HOME` 或 `XDG_CACHE_HOME` 时，请删除对应目录中的 `com.codeagent.desktop`：
+
+```bash
+rm -rf "$HOME/.local/share/com.codeagent.desktop"
+rm -rf "$HOME/.cache/com.codeagent.desktop"
+```
+
+### macOS 14+
+
+macOS 版本仅支持 Apple Silicon。下载后将文件重命名为 `CodeAgent.dmg`：
+
+```bash
+hdiutil attach "./CodeAgent.dmg"
+sudo ditto "/Volumes/CodeAgent/CodeAgent.app" "/Applications/CodeAgent.app"
+hdiutil detach "/Volumes/CodeAgent"
+sudo xattr -dr com.apple.quarantine "/Applications/CodeAgent.app"
+open "/Applications/CodeAgent.app"
+```
+
+`xattr` 只移除 CodeAgent 的隔离标记，不会关闭 Gatekeeper。若 DMG 挂载后的卷名不是 `CodeAgent`，请将命令中的 `/Volumes/CodeAgent` 替换为 Finder 中显示的实际卷名。
+
+卸载应用：
+
+```bash
+pkill -x CodeAgent
+sudo rm -rf "/Applications/CodeAgent.app"
+```
+
+如需同时删除设置、附件和缓存，可继续执行以下命令。此操作不可恢复：
+
+```bash
+rm -rf "$HOME/Library/Application Support/com.codeagent.desktop"
+rm -rf "$HOME/Library/Caches/com.codeagent.desktop"
+```
 
 ## 使用方式
 

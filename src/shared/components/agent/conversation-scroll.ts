@@ -141,9 +141,8 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
       scrollToBottom(scrollTarget, "auto");
     },
     handleConversationRenderComplete(scrollTarget: ConversationScrollTarget) {
-      // 使用最终布局高度完成最后一次置底，随后恢复正常的用户滚动判断。
+      // 使用当前布局高度继续置底；真实 scroll 到达底部后再结束切换保护。
       scrollToBottom(scrollTarget, "auto");
-      conversationRendering = false;
     },
     handleContentResize(scrollTarget: ConversationScrollTarget) {
       lastObservedClientHeight = scrollTarget.clientHeight;
@@ -173,8 +172,16 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
       updateFollowState(true);
     },
     handleScroll(scrollTarget: ConversationScrollTarget) {
+      const distanceFromBottom =
+        scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight;
       if (conversationRendering) {
-        scrollToBottom(scrollTarget, "auto");
+        if (distanceFromBottom < BOTTOM_PROXIMITY_THRESHOLD_PX) {
+          conversationRendering = false;
+          updateFollowState(true);
+        } else {
+          // content-visibility 可能在后续帧修正高度，切换完成前持续夹紧到底部。
+          scrollToBottom(scrollTarget, "auto");
+        }
         return;
       }
 
@@ -193,8 +200,6 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
         return;
       }
 
-      const distanceFromBottom =
-        scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight;
       updateFollowState(distanceFromBottom < BOTTOM_PROXIMITY_THRESHOLD_PX);
     },
     pauseFollowing() {
