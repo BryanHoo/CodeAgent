@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { extractVersionNotes } from "./changelog.mjs";
+
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function readJson(relativePath) {
@@ -44,5 +46,8 @@ const releaseTag = process.env.RELEASE_TAG?.trim();
 if (releaseTag && releaseTag !== `v${packageVersion}`) {
   throw new Error(`release tag ${releaseTag} does not match v${packageVersion}`);
 }
+
+const changelog = readFileSync(resolve(workspaceRoot, "CHANGELOG.md"), "utf8");
+extractVersionNotes(changelog, packageVersion);
 
 process.stdout.write(`version ${packageVersion} is consistent\n`);

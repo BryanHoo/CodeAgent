@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State, ipc::Channel};
 
+use super::app_update::{CHANGELOG_URL, REPOSITORY_URL, check_for_update};
 use super::state::performance_metrics::RuntimePerformanceMetricsSnapshot;
 use super::{error::AppError, state::AppState};
 use crate::domain::runtime::{
@@ -59,13 +60,20 @@ pub async fn install_codex_runtime(
 
 #[tauri::command]
 pub async fn get_app_info(state: State<'_, AppState>) -> Result<Value, AppError> {
+    let app_version = env!("CARGO_PKG_VERSION");
+    // 远程检查与本地运行时读取彼此独立，并发执行可避免叠加关于页等待时间。
+    let (update, codex_version) =
+        tokio::join!(check_for_update(app_version), state.codex_version(),);
     Ok(json!({
-        "appVersion": env!("CARGO_PKG_VERSION"),
-        "codexVersion": state.codex_version().await?,
-        "latestVersion": null,
-        "releaseNotes": null,
-        "status": "current",
-        "updateAvailable": false,
+        "appVersion": app_version,
+        "changelogUrl": CHANGELOG_URL,
+        "codexVersion": codex_version?,
+        "latestVersion": update.latest_version,
+        "releaseNotes": update.release_notes,
+        "releaseNotesVersion": update.release_notes_version,
+        "repositoryUrl": REPOSITORY_URL,
+        "status": update.status,
+        "updateAvailable": update.update_available,
     }))
 }
 

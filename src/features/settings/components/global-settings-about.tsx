@@ -63,12 +63,12 @@ export function GlobalSettingsAbout({
           <SettingsField label={t("about.github")}>
             <Button asChild className="justify-self-start" size="sm" variant="link">
               <a
-                href="https://github.com/BryanHoo/Native"
+                href={appInfo.repositoryUrl}
                 rel="noopener noreferrer"
                 target="_blank"
               >
                 <GitFork aria-hidden="true" data-icon="inline-start" />
-                BryanHoo/Native
+                BryanHoo/CodeAgent
               </a>
             </Button>
           </SettingsField>
@@ -109,31 +109,28 @@ export function GlobalSettingsAbout({
                 )}
                 {isChecking ? t("about.checking") : t("about.check")}
               </Button>
-              {appInfo.status === "available" && appInfo.latestVersion !== null ? (
-                <Button
-                  onClick={() => {
-                    setReleaseNotesOpen(true);
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <BookOpen aria-hidden="true" data-icon="inline-start" />
-                  {t("about.releaseNotes")}
-                </Button>
-              ) : null}
+              <Button
+                onClick={() => {
+                  setReleaseNotesOpen(true);
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <BookOpen aria-hidden="true" data-icon="inline-start" />
+                {t("about.releaseNotes")}
+              </Button>
             </div>
           </SettingsField>
-          {appInfo.latestVersion === null ? null : (
-            <AppReleaseNotesDialog
-              notes={appInfo.releaseNotes}
-              onClose={() => {
-                setReleaseNotesOpen(false);
-              }}
-              open={releaseNotesOpen}
-              version={appInfo.latestVersion}
-            />
-          )}
+          <AppReleaseNotesDialog
+            changelogUrl={appInfo.changelogUrl}
+            notes={appInfo.releaseNotes}
+            onClose={() => {
+              setReleaseNotesOpen(false);
+            }}
+            open={releaseNotesOpen}
+            version={appInfo.releaseNotesVersion}
+          />
         </>
       )}
     </SettingsPanel>

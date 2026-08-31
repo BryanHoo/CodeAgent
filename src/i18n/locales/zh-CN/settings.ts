@@ -8,10 +8,10 @@ export const settings = {
     current: "已是最新版本",
     github: "项目 GitHub",
     loading: "正在检查更新",
+    moreReleaseNotes: "更多",
     retry: "重新检查",
     releaseNotes: "更新日志",
     releaseNotesTitle: "{{version}} 更新日志",
-    releaseNotesUnavailable: "暂时无法获取此版本的更新日志。",
     update: "软件更新",
   },
   actions: {

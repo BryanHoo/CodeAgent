@@ -469,9 +469,12 @@ describe("TauriSidebarClient", () => {
   it("reads application and verified Codex versions from Rust", async () => {
     const appInfo = {
       appVersion: "0.1.0",
+      changelogUrl: "https://github.com/BryanHoo/CodeAgent/blob/main/CHANGELOG.md",
       codexVersion: "0.151.0",
       latestVersion: null,
-      releaseNotes: null,
+      releaseNotes: "## [0.1.0] - 2026-08-31",
+      releaseNotesVersion: "0.1.0",
+      repositoryUrl: "https://github.com/BryanHoo/CodeAgent",
       status: "current" as const,
       updateAvailable: false,
     };

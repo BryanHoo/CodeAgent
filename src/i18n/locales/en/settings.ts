@@ -8,10 +8,10 @@ export const settings = {
     current: "CodeAgent is up to date",
     github: "Project GitHub",
     loading: "Checking for updates",
+    moreReleaseNotes: "More",
     retry: "Check again",
     releaseNotes: "Release notes",
     releaseNotesTitle: "{{version}} release notes",
-    releaseNotesUnavailable: "Release notes for this version are temporarily unavailable.",
     update: "Software update",
   },
   actions: {

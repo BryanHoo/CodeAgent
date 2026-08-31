@@ -15,9 +15,12 @@ export type AppUpdateStatus = Static<typeof AppUpdateStatusSchema>;
 export const AppInfoResponseSchema = Type.Object(
   {
     appVersion: SemanticVersionSchema,
+    changelogUrl: Type.String({ maxLength: 256, pattern: "^https://github\\.com/" }),
     codexVersion: SemanticVersionSchema,
     latestVersion: Type.Union([SemanticVersionSchema, Type.Null()]),
-    releaseNotes: Type.Union([Type.String({ maxLength: 32_768 }), Type.Null()]),
+    releaseNotes: Type.String({ maxLength: 32_768 }),
+    releaseNotesVersion: SemanticVersionSchema,
+    repositoryUrl: Type.String({ maxLength: 256, pattern: "^https://github\\.com/" }),
     status: AppUpdateStatusSchema,
     updateAvailable: Type.Boolean(),
   },

@@ -611,6 +611,7 @@ dependencies = [
  "ignore",
  "macos-panel-activation",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

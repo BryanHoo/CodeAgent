@@ -3,6 +3,7 @@ pub mod app_storage_commands;
 pub(crate) mod app_storage_runtime;
 #[cfg(test)]
 mod app_storage_runtime_tests;
+mod app_update;
 pub mod attachment_commands;
 pub mod background_commands;
 pub mod catalog_commands;
