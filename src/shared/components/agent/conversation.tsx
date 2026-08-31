@@ -62,7 +62,6 @@ export function Conversation({
   ...props
 }: ConversationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const layoutRecoveryFrameRef = useRef(0);
   const previousScrollToBottomSignalRef = useRef(scrollToBottomSignal);
   const [atBottom, setAtBottom] = useState(true);
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
@@ -109,17 +108,14 @@ export function Conversation({
       return;
     }
 
-    layoutRecoveryFrameRef.current = scheduleConversationLayoutRecovery({
+    return scheduleConversationLayoutRecovery({
       cancelFrame: cancelAnimationFrame,
-      frameId: layoutRecoveryFrameRef.current,
       recover: () => {
         autoScrollController.handleLayoutRevision(container);
       },
       requestFrame: requestAnimationFrame,
+      scrollTarget: container,
     });
-    return () => {
-      cancelAnimationFrame(layoutRecoveryFrameRef.current);
-    };
   }, [autoScrollController, layoutRevision]);
 
   useEffect(() => {

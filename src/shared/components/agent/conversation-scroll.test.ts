@@ -37,27 +37,36 @@ function createScrollTarget(overrides: Partial<ConversationScrollTarget> = {}) {
 }
 
 describe("conversation layout recovery", () => {
-  it("recovers immediately and once more after WebKit completes the next layout frame", () => {
+  it("结构收缩后跨帧轻微滚动并恢复原位置以触发重绘", () => {
     const recover = vi.fn();
     const cancelFrame = vi.fn();
-    let frame: (() => void) | undefined;
+    const frames: Array<() => void> = [];
+    const scrollTarget = createScrollTarget();
+    const scrollTo = vi.fn((options: ScrollToOptions) => {
+      scrollTarget.scrollTop = options.top ?? scrollTarget.scrollTop;
+    });
+    scrollTarget.scrollTo = scrollTo;
 
-    const frameId = scheduleConversationLayoutRecovery({
+    const dispose = scheduleConversationLayoutRecovery({
       cancelFrame,
-      frameId: 7,
       recover,
-      requestFrame: (callback) => {
-        frame = callback;
-        return 8;
+      requestFrame(callback) {
+        frames.push(callback);
+        return frames.length;
       },
+      scrollTarget,
     });
 
-    expect(cancelFrame).toHaveBeenCalledWith(7);
     expect(recover).toHaveBeenCalledTimes(1);
-    expect(frameId).toBe(8);
+    expect(scrollTo).not.toHaveBeenCalled();
 
-    frame?.();
+    frames.shift()?.();
     expect(recover).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 1_599 });
+
+    frames.shift()?.();
+    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 1_600 });
+    dispose();
   });
 
   it("重新聚焦后跨帧轻微滚动并恢复原位置以触发重绘", () => {

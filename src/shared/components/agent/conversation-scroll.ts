@@ -9,9 +9,9 @@ type AtBottomChangeHandler = (atBottom: boolean) => void;
 
 type ConversationLayoutRecoveryOptions = Readonly<{
   cancelFrame: (frameId: number) => void;
-  frameId: number;
   recover: () => void;
   requestFrame: (callback: () => void) => number;
+  scrollTarget: ConversationScrollTarget;
 }>;
 
 type RecoveryEventTarget = Readonly<{
@@ -30,24 +30,26 @@ type ConversationLayoutRecoveryObserverOptions = Readonly<{
 
 export function scheduleConversationLayoutRecovery({
   cancelFrame,
-  frameId,
-  recover,
-  requestFrame,
-}: ConversationLayoutRecoveryOptions): number {
-  cancelFrame(frameId);
-  // 当前提交先同步校正，下一帧再覆盖 WKWebView 延迟更新滚动范围的情况。
-  recover();
-  return requestFrame(recover);
-}
-
-export function observeConversationLayoutRecovery({
-  cancelFrame,
-  documentTarget,
   recover,
   requestFrame,
   scrollTarget,
-  windowTarget,
-}: ConversationLayoutRecoveryObserverOptions): () => void {
+}: ConversationLayoutRecoveryOptions): () => void {
+  const recovery = createConversationLayoutRecovery({
+    cancelFrame,
+    recover,
+    requestFrame,
+    scrollTarget,
+  });
+  recovery.run();
+  return recovery.dispose;
+}
+
+function createConversationLayoutRecovery({
+  cancelFrame,
+  recover,
+  requestFrame,
+  scrollTarget,
+}: ConversationLayoutRecoveryOptions) {
   let layoutFrameId = 0;
   let restoreFrameId = 0;
   let restoreScrollTop: number | undefined;
@@ -60,8 +62,7 @@ export function observeConversationLayoutRecovery({
     });
     restoreScrollTop = undefined;
   };
-  const recoverVisibleLayout = () => {
-    if (documentTarget.visibilityState !== "visible") return;
+  const run = () => {
     cancelFrame(layoutFrameId);
     cancelFrame(restoreFrameId);
     restoreScrollPosition();
@@ -79,13 +80,37 @@ export function observeConversationLayoutRecovery({
       restoreFrameId = requestFrame(restoreScrollPosition);
     });
   };
+  const dispose = () => {
+    cancelFrame(layoutFrameId);
+    cancelFrame(restoreFrameId);
+    restoreScrollPosition();
+  };
+  return { dispose, run };
+}
+
+export function observeConversationLayoutRecovery({
+  cancelFrame,
+  documentTarget,
+  recover,
+  requestFrame,
+  scrollTarget,
+  windowTarget,
+}: ConversationLayoutRecoveryObserverOptions): () => void {
+  const recovery = createConversationLayoutRecovery({
+    cancelFrame,
+    recover,
+    requestFrame,
+    scrollTarget,
+  });
+  const recoverVisibleLayout = () => {
+    if (documentTarget.visibilityState !== "visible") return;
+    recovery.run();
+  };
 
   documentTarget.addEventListener("visibilitychange", recoverVisibleLayout);
   windowTarget.addEventListener("focus", recoverVisibleLayout);
   return () => {
-    cancelFrame(layoutFrameId);
-    cancelFrame(restoreFrameId);
-    restoreScrollPosition();
+    recovery.dispose();
     documentTarget.removeEventListener("visibilitychange", recoverVisibleLayout);
     windowTarget.removeEventListener("focus", recoverVisibleLayout);
   };
