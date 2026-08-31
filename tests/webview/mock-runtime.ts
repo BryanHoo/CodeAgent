@@ -1,5 +1,6 @@
 import { browser } from "@wdio/globals";
 
+import { waitForWebviewBridge } from "./bridge-readiness.mjs";
 import {
   approvalRequest,
   connectedProvider,
@@ -45,6 +46,14 @@ export async function installWebviewMocks(): Promise<WebviewMocks> {
     status: "queued",
     text: "排队补充测试",
   };
+  // macOS WKWebView 可能先建立会话，再异步完成底层执行通道和应用测试桥接。
+  await waitForWebviewBridge(async () => {
+    const ready = await browser.execute(
+      () => window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__ !== undefined,
+    );
+    if (!ready) throw new Error("WebView test bridge is unavailable");
+  });
+
   await browser.execute(
     (fixtures) => {
       const bridge = window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__;
