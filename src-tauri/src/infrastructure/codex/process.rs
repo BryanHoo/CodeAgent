@@ -27,6 +27,8 @@ const SHELL_PATH_OUTPUT_LIMIT: usize = 64 * 1024;
 const SHELL_PATH_START: u8 = 0x1e;
 const SHELL_PATH_END: u8 = 0x1f;
 const SHELL_PATH_PROBE: &str = r#"printf '\036%s\037' "$PATH""#;
+#[cfg(any(windows, test))]
+const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Error)]
 pub enum ProcessError {
@@ -143,14 +145,14 @@ pub(super) fn executable_path(path: &Path) -> Option<PathBuf> {
 }
 
 pub(super) async fn probe_codex_version(program: &Path) -> Result<String, ProcessError> {
-    let mut child = Command::new(program)
+    let mut command = background_process_command(program.as_os_str());
+    command
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(ProcessError::VersionProbe)?;
+        .kill_on_drop(true);
+    let mut child = command.spawn().map_err(ProcessError::VersionProbe)?;
     let stdout = child.stdout.take().ok_or(ProcessError::MissingPipe)?;
     let stderr = child.stderr.take().ok_or(ProcessError::MissingPipe)?;
     let result = timeout(VERSION_PROBE_TIMEOUT, async {
@@ -258,7 +260,7 @@ fn parse_shell_path_output(output: &[u8]) -> Option<OsString> {
 }
 
 fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Command {
-    let mut command = Command::new(program);
+    let mut command = background_process_command(program);
     // 不设置 CODEX_HOME，让官方逻辑继承用户配置或回退到默认 ~/.codex。
     command
         .args(["app-server", "--listen", "stdio://"])
@@ -274,6 +276,35 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
     command
 }
 
+fn background_process_command(program: &OsStr) -> Command {
+    configure_background_process_command(Command::new(program))
+}
+
+#[cfg(windows)]
+fn configure_background_process_command(mut command: Command) -> Command {
+    use std::os::windows::process::CommandExt;
+
+    // GUI 应用启动控制台程序时必须显式禁用新控制台，否则长期 app-server 会一直显示终端窗口。
+    command
+        .as_std_mut()
+        .creation_flags(background_process_creation_flags(env::consts::OS));
+    command
+}
+
+#[cfg(not(windows))]
+fn configure_background_process_command(command: Command) -> Command {
+    command
+}
+
+#[cfg(any(windows, test))]
+fn background_process_creation_flags(os: &str) -> u32 {
+    if os == "windows" {
+        WINDOWS_CREATE_NO_WINDOW
+    } else {
+        0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::{OsStr, OsString};
@@ -282,8 +313,8 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        CodexProcess, SUPPORTED_CODEX_VERSION, build_app_server_command, parse_codex_version,
-        parse_shell_path_output,
+        CodexProcess, SUPPORTED_CODEX_VERSION, background_process_creation_flags,
+        build_app_server_command, parse_codex_version, parse_shell_path_output,
     };
     use crate::infrastructure::codex::{catalogs, conversation_commands, tasks};
 
@@ -303,6 +334,13 @@ mod tests {
             command.get_envs().find(|(key, _)| *key == "PATH"),
             Some((OsStr::new("PATH"), Some(runtime_path)))
         );
+    }
+
+    #[test]
+    fn windows_background_process_should_not_create_console_window() {
+        assert_eq!(background_process_creation_flags("windows"), 0x0800_0000);
+        assert_eq!(background_process_creation_flags("macos"), 0);
+        assert_eq!(background_process_creation_flags("linux"), 0);
     }
 
     #[test]
