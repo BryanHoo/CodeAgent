@@ -168,6 +168,22 @@ impl TaskActivityState {
         }
     }
 
+    pub(super) fn apply_event_for_viewed_task(
+        &mut self,
+        project_id: &str,
+        event: &AgentEvent,
+        task_is_viewed: bool,
+    ) -> bool {
+        let changed = self.apply_event(project_id, event);
+        if !task_is_viewed || event.event_type() != Some("turn.completed") {
+            return changed;
+        }
+        let acknowledged = event
+            .task_id()
+            .is_some_and(|task_id| self.acknowledge(project_id, task_id));
+        changed || acknowledged
+    }
+
     pub(super) fn remember_project_root(&mut self, project_id: &str, root_path: Option<&str>) {
         let Some(root_path) = normalized(root_path) else {
             return;

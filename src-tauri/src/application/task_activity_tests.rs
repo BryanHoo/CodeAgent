@@ -65,6 +65,35 @@ fn rust_owns_the_complete_task_activity_lifecycle() {
 }
 
 #[test]
+fn viewed_task_completion_should_not_leave_a_pet_activity() {
+    let mut state = TaskActivityState::default();
+    state.remember_task("project-1", "task-1", "当前任务", None);
+    state.apply_event(
+        "project-1",
+        &event(json!({
+            "payload": {"turn": {"status": "inProgress"}},
+            "taskId": "task-1",
+            "turnId": "turn-1",
+            "type": "turn.started"
+        })),
+    );
+
+    let changed = state.apply_event_for_viewed_task(
+        "project-1",
+        &event(json!({
+            "payload": {"turn": {"status": "completed"}},
+            "taskId": "task-1",
+            "turnId": "turn-1",
+            "type": "turn.completed"
+        })),
+        true,
+    );
+
+    assert!(changed);
+    assert!(state.snapshot().is_empty());
+}
+
+#[test]
 fn first_running_status_event_should_trigger_native_activity_refresh() {
     let mut state = TaskActivityState::default();
     state.remember_task("project-1", "task-1", "首次运行任务", None);

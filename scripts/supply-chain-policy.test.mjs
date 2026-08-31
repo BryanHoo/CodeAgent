@@ -17,6 +17,11 @@ void test("GitHub Actions should be pinned to full commit SHAs", async () => {
     const actionReferences = [...workflow.matchAll(/^\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gm)];
 
     for (const [, actionReference] of actionReferences) {
+      // 本地 Action 和复用工作流由仓库提交固定，不需要远程 SHA。
+      if (actionReference.startsWith("./")) {
+        continue;
+      }
+
       assert.match(
         actionReference,
         /^[^@]+@[0-9a-f]{40}$/,

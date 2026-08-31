@@ -147,6 +147,15 @@ pub(crate) fn show_main_window_at_route(app: &AppHandle, route: String) {
     queue_main_window_restore(app, Some(route));
 }
 
+pub(super) fn visible_main_window_route(app: &AppHandle) -> Option<String> {
+    let window = app.get_webview_window(MAIN_WINDOW_LABEL)?;
+    // 隐藏或最小化窗口不算用户正在查看，后台完成仍应保留待查看气泡。
+    if !window.is_visible().ok()? || window.is_minimized().ok()? {
+        return None;
+    }
+    window.url().ok().map(|url| app_route_from_url(&url))
+}
+
 fn queue_main_window_restore(app: &AppHandle, route: Option<String>) {
     let generation = app
         .state::<MainWindowLifecycle>()

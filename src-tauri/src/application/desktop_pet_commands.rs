@@ -342,7 +342,6 @@ pub(super) async fn acknowledge_completed_desktop_pet_task(
 }
 
 pub(super) async fn acknowledge_completed_desktop_pet_route(app: &AppHandle, route: &str) {
-    let route = route.split(['?', '#']).next().unwrap_or(route);
     let target = {
         app.state::<AppState>()
             .task_activity_snapshot()
@@ -352,8 +351,7 @@ pub(super) async fn acknowledge_completed_desktop_pet_route(app: &AppHandle, rou
                 matches!(
                     task.status,
                     TaskActivityStatus::Completed | TaskActivityStatus::Failed
-                ) && desktop_pet_task_route(&task.project_id, &task.task_id)
-                    .is_ok_and(|task_route| task_route == route)
+                ) && desktop_pet_route_targets_task(route, &task.project_id, &task.task_id)
             })
             .map(|task| (task.project_id, task.task_id))
     };
@@ -365,12 +363,21 @@ pub(super) async fn acknowledge_completed_desktop_pet_route(app: &AppHandle, rou
     }
 }
 
+pub(super) fn desktop_pet_route_targets_task(route: &str, project_id: &str, task_id: &str) -> bool {
+    let route = route.split(['?', '#']).next().unwrap_or(route);
+    desktop_pet_task_route(project_id, task_id).is_ok_and(|task_route| task_route == route)
+}
+
 fn desktop_pet_task_route(project_id: &str, task_id: &str) -> Result<String, AppError> {
     let mut url = Url::parse("tauri://localhost/").map_err(|_| AppError::DesktopPetWindowFailed)?;
     let mut segments = url
         .path_segments_mut()
         .map_err(|()| AppError::DesktopPetWindowFailed)?;
-    segments.push("p").push(project_id).push("t").push(task_id);
+    if project_id == "temporary" {
+        segments.push("temporary").push("t").push(task_id);
+    } else {
+        segments.push("p").push(project_id).push("t").push(task_id);
+    }
     drop(segments);
     Ok(url.path().trim_start_matches('/').to_owned())
 }
@@ -427,5 +434,24 @@ mod tests {
             desktop_pet_task_route("project/one", "task two").unwrap(),
             "p/project%2Fone/t/task%20two"
         );
+    }
+
+    #[test]
+    fn viewed_task_route_should_match_the_current_pet_task() {
+        assert!(desktop_pet_route_targets_task(
+            "p/project-1/t/task-1?panel=context#turn-1",
+            "project-1",
+            "task-1"
+        ));
+        assert!(!desktop_pet_route_targets_task(
+            "p/project-1/t/task-2",
+            "project-1",
+            "task-1"
+        ));
+        assert!(desktop_pet_route_targets_task(
+            "temporary/t/task-2",
+            "temporary",
+            "task-2"
+        ));
     }
 }

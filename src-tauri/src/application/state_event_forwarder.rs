@@ -9,7 +9,9 @@ use tokio::{
 };
 
 use super::super::{
-    desktop_pet_commands::render_desktop_pet_task_activities, error::AppError,
+    app_lifecycle::visible_main_window_route,
+    desktop_pet_commands::{desktop_pet_route_targets_task, render_desktop_pet_task_activities},
+    error::AppError,
     notification_commands::observe_task_notification,
     task_subscription_commands::spawn_task_subscription_release,
     tray_commands::render_tray_task_activities,
@@ -109,6 +111,11 @@ async fn publish_mapped_event(
     let Some(task_id) = event.task_id().map(str::to_owned) else {
         return true;
     };
+    let visible_route = if event.event_type() == Some("turn.completed") {
+        app.and_then(visible_main_window_route)
+    } else {
+        None
+    };
 
     // 序号只在实际发布时分配，合并后的 delta 不会制造 checkpoint 空洞。
     let mut session = runtime.lock().await;
@@ -122,7 +129,13 @@ async fn publish_mapped_event(
         };
         event_json["payload"]["request"]["projectId"] = json!(project_id);
     }
-    let activity_changed = session.task_activity.apply_event(&project_id, &event);
+    let task_is_viewed = visible_route
+        .as_deref()
+        .is_some_and(|route| desktop_pet_route_targets_task(route, &project_id, &task_id));
+    let activity_changed =
+        session
+            .task_activity
+            .apply_event_for_viewed_task(&project_id, &event, task_is_viewed);
     let release_generation = if event.event_type() == Some("turn.started") {
         session.task_subscription_leases.retain(&task_id);
         None
