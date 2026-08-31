@@ -31,6 +31,8 @@ export const common = {
     detectionFailedDescription: "Codex {{requiredVersion}} could not be verified. Check again or download a private copy for this app.",
     detectionFailedTitle: "Codex version check failed",
     download: "Download for this app",
+    downloadedBytes: "{{downloaded}} downloaded",
+    downloadProgress: "Download progress",
     downloading: "Downloading and verifying",
     globalDescription: "Install the required version globally, then return here and check again.",
     globalTitle: "Install globally",

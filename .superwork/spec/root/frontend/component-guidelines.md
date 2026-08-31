@@ -6,7 +6,7 @@
 - 通用控件优先复用 `src/shared/components/core/`，图标使用 `lucide-react`
 - 交互元素提供可访问名称、禁用状态和可见焦点反馈
 - 工作台仅面向桌面端，使用全局设计 tokens 约束三栏布局、颜色、间距和交互状态，不增加移动端适配分支
-- Codex Runtime Gate 必须先于 Provider 连接与工作台数据 Provider 挂载；只有精确兼容版本通过检测后才能进入工作台。缺失或不兼容时展示固定的全局安装命令与应用私有下载，私有下载完成后自动复检，并始终保留手动复检入口
+- Codex Runtime Gate 必须先于 Provider 连接与工作台数据 Provider 挂载；只有精确兼容版本通过检测后才能进入工作台。缺失或不兼容时展示固定的全局安装命令与应用私有下载；用户启动私有下载后必须展示实时下载进度，下载完成后自动复检，并始终保留手动复检入口
 - 工作台壁纸必须按视口尺寸与 `devicePixelRatio` 预缩放到物理像素画布，并在画布生成阶段完成模糊；窗口缩放应合并重绘，禁止对全屏原图使用实时 CSS `filter: blur()`
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义

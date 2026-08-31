@@ -24,6 +24,7 @@
 - WebView 不得控制下载地址、安装目录、校验值或进程参数
 - 未找到兼容版本时，必须由用户确认后安装到应用私有目录，禁止调用全局包管理器
 - `inspect_codex_runtime` 只返回后端发现的版本状态；`install_codex_runtime` 不接收 WebView 下载参数，必须使用应用内固定的官方包地址与完整性校验值，安装后由前端再次检测。全局安装命令仅供展示，不得由应用执行
+- `install_codex_runtime` 通过专用 Channel 发送 `{ sequence, downloadedBytes, totalBytes }`；序号必须单调递增，WebView 必须忽略陈旧事件。已知总量时至多按每个整数百分比上报一次，未知总量时按有界字节间隔上报，避免高频 IPC 和重复渲染
 - 版本匹配后必须完成 Provider 专属能力探测，安装和升级必须支持原子切换与回退
 - Codex 进程不得覆盖 `CODEX_HOME`，应继承用户配置并由官方逻辑回退到默认 `~/.codex`
 - stdio JSONL 路由必须区分响应、通知和带 `id` 的服务端请求，不能仅按 `id` 关联响应

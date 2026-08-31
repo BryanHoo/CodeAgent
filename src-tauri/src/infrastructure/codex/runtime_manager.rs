@@ -17,9 +17,13 @@ use tar::Archive;
 use thiserror::Error;
 use tokio::{fs, io::AsyncWriteExt, task};
 
-use super::process::{SUPPORTED_CODEX_VERSION, executable_path, probe_codex_version};
+use super::{
+    process::{SUPPORTED_CODEX_VERSION, executable_path, probe_codex_version},
+    runtime_download_progress::{DownloadProgressLimiter, DownloadProgressReporter},
+};
 use crate::domain::runtime::{
     CodexRuntimeAvailability, CodexRuntimeAvailabilityStatus as AvailabilityStatus,
+    CodexRuntimeInstallProgress,
 };
 
 const CODEX_BINARY_ENV: &str = "CODEAGENT_CODEX_BIN";
@@ -89,9 +93,13 @@ pub async fn find_compatible_codex_binary(
     }
 }
 
-pub async fn install_codex_runtime(
+pub async fn install_codex_runtime<OnProgress>(
     app_data: &Path,
-) -> Result<CodexRuntimeAvailability, RuntimeInstallError> {
+    on_progress: OnProgress,
+) -> Result<CodexRuntimeAvailability, RuntimeInstallError>
+where
+    OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
+{
     // 等待同一 Provider 的前序安装后再次检查，兼容版本已就绪时直接复用，避免重复传输大包。
     let current = inspect(app_data).await;
     if current.availability.status == AvailabilityStatus::Compatible {
@@ -113,6 +121,7 @@ pub async fn install_codex_runtime(
         &archive_path,
         &staging_dir,
         &final_dir,
+        &on_progress,
     )
     .await;
     let _ = fs::remove_file(&archive_path).await;
@@ -253,14 +262,18 @@ pub(super) fn distribution_for(os: &str, arch: &str) -> Option<&'static Distribu
     }
 }
 
-async fn install_distribution(
+async fn install_distribution<OnProgress>(
     app_data: &Path,
     distribution: &Distribution,
     archive_path: &Path,
     staging_dir: &Path,
     final_dir: &Path,
-) -> Result<(), RuntimeInstallError> {
-    download_verified(distribution, archive_path).await?;
+    on_progress: &OnProgress,
+) -> Result<(), RuntimeInstallError>
+where
+    OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
+{
+    download_verified(distribution, archive_path, on_progress).await?;
     let archive = archive_path.to_owned();
     let staging = staging_dir.to_owned();
     let target = distribution.target;
@@ -280,10 +293,14 @@ async fn install_distribution(
     Ok(())
 }
 
-async fn download_verified(
+async fn download_verified<OnProgress>(
     distribution: &Distribution,
     archive_path: &Path,
-) -> Result<(), RuntimeInstallError> {
+    on_progress: &OnProgress,
+) -> Result<(), RuntimeInstallError>
+where
+    OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
+{
     // URL 与 SHA-512 均由应用固定，WebView 无法注入下载源或替换校验值。
     let client = Client::builder()
         .connect_timeout(Duration::from_secs(15))
@@ -295,17 +312,19 @@ async fn download_verified(
         .send()
         .await?
         .error_for_status()?;
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_DOWNLOAD_BYTES)
-    {
+    let content_length = response.content_length();
+    if content_length.is_some_and(|length| length > MAX_DOWNLOAD_BYTES) {
         return Err(RuntimeInstallError::DownloadTooLarge);
     }
+    let total_bytes = content_length.filter(|length| *length > 0);
+    let mut progress_reporter = DownloadProgressReporter::new(on_progress, total_bytes);
+    progress_reporter.report(0);
 
     let mut file = fs::File::create(archive_path).await?;
     let mut stream = response.bytes_stream();
     let mut digest = Sha512::new();
     let mut downloaded = 0_u64;
+    let mut progress_limiter = DownloadProgressLimiter::new(total_bytes);
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         downloaded = downloaded.saturating_add(chunk.len() as u64);
@@ -314,6 +333,13 @@ async fn download_verified(
         }
         digest.update(&chunk);
         file.write_all(&chunk).await?;
+        // 百分比不变时不跨 IPC 上报，避免网络小分块造成 WebView 高频重复渲染。
+        if progress_limiter.advance(downloaded) {
+            progress_reporter.report(downloaded);
+        }
+    }
+    if progress_limiter.finish(downloaded) {
+        progress_reporter.report(downloaded);
     }
     file.flush().await?;
 

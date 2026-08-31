@@ -15,7 +15,10 @@ import {
   downloadAndInspectCodexRuntime,
   inspectCodexRuntime,
 } from "../../../platform/tauri/codex-runtime-manager.js";
-import type { CodexRuntimeAvailability } from "../../../protocol/index.js";
+import type {
+  CodexRuntimeAvailability,
+  CodexRuntimeInstallProgress,
+} from "../../../protocol/index.js";
 import { Button } from "../../../shared/components/core/button.js";
 
 const CODEX_RUNTIME_QUERY_KEY = ["codex-runtime-availability"] as const;
@@ -24,6 +27,7 @@ type CodexRuntimeGateProps = Readonly<{ children: ReactNode }>;
 
 export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
   const queryClient = useQueryClient();
+  const [downloadProgress, setDownloadProgress] = useState<CodexRuntimeInstallProgress | null>(null);
   const availabilityQuery = useQuery({
     queryFn: inspectCodexRuntime,
     queryKey: CODEX_RUNTIME_QUERY_KEY,
@@ -31,7 +35,10 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
     staleTime: 0,
   });
   const installMutation = useMutation({
-    mutationFn: downloadAndInspectCodexRuntime,
+    mutationFn: () => downloadAndInspectCodexRuntime(setDownloadProgress),
+    onError() {
+      setDownloadProgress(null);
+    },
     onSuccess(availability) {
       queryClient.setQueryData(CODEX_RUNTIME_QUERY_KEY, availability);
     },
@@ -47,11 +54,16 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
     <RuntimeSetup
       availability={availabilityQuery.data}
       detectionFailed={availabilityQuery.isError}
+      downloadProgress={downloadProgress}
       installFailed={installMutation.isError}
       isInstalling={installMutation.isPending}
       isRefreshing={availabilityQuery.isFetching}
-      onDownload={() => installMutation.mutate()}
+      onDownload={() => {
+        setDownloadProgress({ downloadedBytes: 0, sequence: 0, totalBytes: null });
+        installMutation.mutate();
+      }}
       onRefresh={() => {
+        setDownloadProgress(null);
         installMutation.reset();
         void availabilityQuery.refetch();
       }}
@@ -74,6 +86,7 @@ function RuntimeChecking() {
 type RuntimeSetupProps = Readonly<{
   availability: CodexRuntimeAvailability | undefined;
   detectionFailed: boolean;
+  downloadProgress: CodexRuntimeInstallProgress | null;
   installFailed: boolean;
   isInstalling: boolean;
   isRefreshing: boolean;
@@ -84,6 +97,7 @@ type RuntimeSetupProps = Readonly<{
 function RuntimeSetup({
   availability,
   detectionFailed,
+  downloadProgress,
   installFailed,
   isInstalling,
   isRefreshing,
@@ -185,6 +199,9 @@ function RuntimeSetup({
                 )}
                 {isInstalling ? t("runtimeSetup.downloading") : t("runtimeSetup.download")}
               </Button>
+              {isInstalling && downloadProgress !== null ? (
+                <RuntimeDownloadProgress progress={downloadProgress} />
+              ) : null}
             </RecoveryOption>
           </div>
 
@@ -212,6 +229,51 @@ function RuntimeSetup({
       </div>
     </main>
   );
+}
+
+function RuntimeDownloadProgress({
+  progress,
+}: Readonly<{ progress: CodexRuntimeInstallProgress }>) {
+  const { t } = useTranslation("common");
+  const percentage = calculateDownloadPercentage(progress);
+  const status =
+    percentage === null
+      ? t("runtimeSetup.downloadedBytes", { downloaded: formatBytes(progress.downloadedBytes) })
+      : `${percentage}%`;
+
+  return (
+    <div className="mt-4 max-w-md" aria-live="polite">
+      <div className="mb-1.5 flex items-center justify-between gap-4 text-xs text-muted-foreground">
+        <span>{t("runtimeSetup.downloadProgress")}</span>
+        <span className="shrink-0 font-mono tabular-nums">{status}</span>
+      </div>
+      <div
+        aria-label={t("runtimeSetup.downloadProgress")}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={percentage ?? undefined}
+        className="h-1.5 overflow-hidden rounded-pill bg-control"
+        role="progressbar"
+      >
+        <div
+          className={`h-full rounded-pill bg-brand transition-[width] duration-150 ${percentage === null ? "w-1/3" : ""}`}
+          style={percentage === null ? undefined : { width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function calculateDownloadPercentage(progress: CodexRuntimeInstallProgress): number | null {
+  if (progress.totalBytes === null || progress.totalBytes <= 0) return null;
+  return Math.min(100, Math.floor((progress.downloadedBytes / progress.totalBytes) * 100));
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1_024) return `${bytes} B`;
+  const mebibytes = bytes / (1_024 * 1_024);
+  if (mebibytes < 1) return `${Math.floor(bytes / 1_024)} KB`;
+  return `${mebibytes.toFixed(1)} MB`;
 }
 
 type RecoveryOptionProps = Readonly<{

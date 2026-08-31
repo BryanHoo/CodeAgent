@@ -31,6 +31,8 @@ export const common = {
     detectionFailedDescription: "无法确认本机是否存在 Codex {{requiredVersion}}，可重新检测或下载本项目专用版本。",
     detectionFailedTitle: "Codex 版本检测失败",
     download: "下载到本项目",
+    downloadedBytes: "已下载 {{downloaded}}",
+    downloadProgress: "下载进度",
     downloading: "正在下载并校验",
     globalDescription: "自行安装指定版本到全局后，返回此页面重新检测。",
     globalTitle: "安装到全局",

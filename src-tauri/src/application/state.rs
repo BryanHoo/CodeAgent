@@ -28,7 +28,8 @@ use super::task_activity::TaskActivityState;
 use super::task_subscription::TaskSubscriptionLeases;
 use crate::{
     domain::runtime::{
-        AppEvent, CodexRuntimeAvailability, ProviderKind, RuntimeSnapshot, RuntimeStatus,
+        AppEvent, CodexRuntimeAvailability, CodexRuntimeInstallProgress, ProviderKind,
+        RuntimeSnapshot, RuntimeStatus,
     },
     infrastructure::{
         codex::{
@@ -108,16 +109,22 @@ impl AppState {
         inspect_codex_runtime(app_data).await
     }
 
-    pub async fn install_codex(
+    pub async fn install_codex<OnProgress>(
         &self,
         app_data: &Path,
-    ) -> Result<CodexRuntimeAvailability, AppError> {
+        on_progress: OnProgress,
+    ) -> Result<CodexRuntimeAvailability, AppError>
+    where
+        OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
+    {
         // 串行化同一 Provider 的安装，避免双击触发重复下载和目录替换竞争。
         let _install_guard = self.runtime_install.lock().await;
-        install_codex_runtime(app_data).await.map_err(|error| {
-            eprintln!("codex private runtime installation failed: {error}");
-            AppError::CodexRuntimeInstallFailed
-        })
+        install_codex_runtime(app_data, on_progress)
+            .await
+            .map_err(|error| {
+                eprintln!("codex private runtime installation failed: {error}");
+                AppError::CodexRuntimeInstallFailed
+            })
     }
 
     pub async fn connect(&self, event_channel: Channel<AppEvent>) -> RuntimeSnapshot {

@@ -19,6 +19,7 @@ mod conversation_runtime_events;
 mod generated_image_store;
 mod process;
 mod protocol;
+mod runtime_download_progress;
 mod runtime_manager;
 mod settings;
 mod sidebar;

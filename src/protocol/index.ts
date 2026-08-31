@@ -4,6 +4,7 @@ export * from "./task-activity.js";
 export type {
   CodexRuntimeAvailability,
   CodexRuntimeAvailabilityStatus,
+  CodexRuntimeInstallProgress,
 } from "./codex-runtime.js";
 export {
   AppInfoResponseSchema,

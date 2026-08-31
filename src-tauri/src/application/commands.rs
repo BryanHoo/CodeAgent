@@ -3,7 +3,9 @@ use tauri::{AppHandle, Manager, State, ipc::Channel};
 
 use super::state::performance_metrics::RuntimePerformanceMetricsSnapshot;
 use super::{error::AppError, state::AppState};
-use crate::domain::runtime::{AppEvent, CodexRuntimeAvailability, RuntimeSnapshot};
+use crate::domain::runtime::{
+    AppEvent, CodexRuntimeAvailability, CodexRuntimeInstallProgress, RuntimeSnapshot,
+};
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn connect_runtime(
@@ -37,16 +39,22 @@ pub async fn inspect_codex_runtime(
     Ok(state.inspect_codex(&app_data).await)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn install_codex_runtime(
     app: AppHandle,
+    on_progress: Channel<CodexRuntimeInstallProgress>,
     state: State<'_, AppState>,
 ) -> Result<CodexRuntimeAvailability, AppError> {
     let app_data = app
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    state.install_codex(&app_data).await
+    state
+        .install_codex(&app_data, move |progress| {
+            // 页面关闭不应中断已开始的本地安装，因此只忽略失效 Channel 的发送错误。
+            let _ = on_progress.send(progress);
+        })
+        .await
 }
 
 #[tauri::command]
