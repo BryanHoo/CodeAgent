@@ -55,6 +55,23 @@ void test("Windows release should upload the unpackaged executable", async () =>
   assert.match(workflow, /\[name\]_\[version\]_\[arch\]_portable\[ext\]/);
 });
 
+void test("Windows should verify Codex through the app instead of the Tauri test harness", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/webview.yml", import.meta.url),
+    "utf8",
+  );
+
+  // Tauri 的 Windows 测试进程存在装载器问题，产品应用链路仍必须保留真实运行时覆盖。
+  assert.match(
+    workflow,
+    /name: Run real Codex lifecycle test\n\s+if: matrix\.platform != 'windows-latest'/,
+  );
+  assert.match(
+    workflow,
+    /name: Run real Codex WebView chain\n\s+if: matrix\.platform != 'ubuntu-24\.04'/,
+  );
+});
+
 void test("non-macOS commands should remain unchanged", () => {
   const argumentsList = ["build", "--no-sign"];
 
