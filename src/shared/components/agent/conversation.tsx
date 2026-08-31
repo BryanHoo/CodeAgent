@@ -19,8 +19,10 @@ import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
 import {
   createConversationAutoScrollController,
+  createConversationVisualAnchorController,
   observeConversationLayoutRecovery,
   scheduleConversationLayoutRecovery,
+  type ConversationVisualAnchor,
 } from "./conversation-scroll.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
@@ -42,6 +44,36 @@ type ConversationContextValue = Readonly<{
 
 const ConversationContext = createContext<ConversationContextValue | null>(null);
 const COLD_TURN_INTRINSIC_BLOCK_SIZE_PX = 300;
+
+function findConversationVisualAnchor(container: HTMLDivElement): ConversationVisualAnchor | undefined {
+  const containerRect = container.getBoundingClientRect();
+  const x = containerRect.left + container.clientWidth / 2;
+  const sampleOffsets = [1, 32, 96];
+  for (const offset of sampleOffsets) {
+    const y = Math.min(containerRect.bottom - 1, containerRect.top + offset);
+    for (const element of container.ownerDocument.elementsFromPoint(x, y)) {
+      const turn = element.closest<HTMLElement>("[data-conversation-turn]");
+      if (turn !== null && container.contains(turn)) return turn;
+    }
+  }
+
+  // 顶部恰好落在 Turn 间距时，用有序自然流二分查找首个可见 Turn。
+  const turns = container.querySelectorAll<HTMLElement>("[data-conversation-turn]");
+  let low = 0;
+  let high = turns.length - 1;
+  let visible: HTMLElement | undefined;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const turn = turns.item(middle);
+    if (turn.getBoundingClientRect().bottom > containerRect.top) {
+      visible = turn;
+      high = middle - 1;
+    } else {
+      low = middle + 1;
+    }
+  }
+  return visible;
+}
 
 function useConversationContext(): ConversationContextValue {
   const context = useContext(ConversationContext);
@@ -71,6 +103,12 @@ export function Conversation({
   const autoScrollController =
     autoScrollControllerRef.current ??
     (autoScrollControllerRef.current = createConversationAutoScrollController(setAtBottom));
+  const visualAnchorControllerRef = useRef<
+    ReturnType<typeof createConversationVisualAnchorController> | undefined
+  >(undefined);
+  const visualAnchorController =
+    visualAnchorControllerRef.current ??
+    (visualAnchorControllerRef.current = createConversationVisualAnchorController());
 
   const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
@@ -93,6 +131,7 @@ export function Conversation({
     }
 
     // 切换会话后保持置底到下一帧，后续异步内容变化由 ResizeObserver 继续跟随。
+    visualAnchorController.clear();
     autoScrollController.handleConversationChange(container);
     const animationFrameId = requestAnimationFrame(() => {
       autoScrollController.handleConversationRenderComplete(container);
@@ -100,7 +139,7 @@ export function Conversation({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [autoScrollController, conversationId]);
+  }, [autoScrollController, conversationId, visualAnchorController]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -165,6 +204,9 @@ export function Conversation({
       setScrollbarWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
     };
     const contentResizeObserver = new ResizeObserver(() => {
+      if (!autoScrollController.isFollowing()) {
+        visualAnchorController.recover(container);
+      }
       syncScrollbarWidth();
       autoScrollController.handleContentResize(container);
     });
@@ -178,7 +220,7 @@ export function Conversation({
     return () => {
       contentResizeObserver.disconnect();
     };
-  }, [autoScrollController]);
+  }, [autoScrollController, visualAnchorController]);
 
   return (
     <ConversationContext.Provider value={contextValue}>
@@ -187,6 +229,11 @@ export function Conversation({
         onScroll={(event) => {
           const container = event.currentTarget;
           autoScrollController.handleScroll(container);
+          if (autoScrollController.isFollowing()) {
+            visualAnchorController.clear();
+          } else {
+            visualAnchorController.capture(findConversationVisualAnchor(container));
+          }
           onScroll?.(event);
         }}
         ref={containerRef}

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createConversationAutoScrollController,
+  createConversationVisualAnchorController,
   observeConversationLayoutRecovery,
   scheduleConversationLayoutRecovery,
   type ConversationScrollTarget,
@@ -37,6 +38,43 @@ function createScrollTarget(overrides: Partial<ConversationScrollTarget> = {}) {
 }
 
 describe("conversation layout recovery", () => {
+  it("冷 Turn 恢复真实高度后保持当前可见 Turn 的屏幕位置", () => {
+    let anchorTop = 80;
+    const anchor = {
+      getBoundingClientRect: () => ({ top: anchorTop }),
+      isConnected: true,
+    };
+    const scrollTarget = createScrollTarget({ scrollTop: 600 });
+    scrollTarget.scrollTo = vi.fn((options: ScrollToOptions) => {
+      const nextScrollTop = options.top ?? scrollTarget.scrollTop;
+      anchorTop -= nextScrollTop - scrollTarget.scrollTop;
+      scrollTarget.scrollTop = nextScrollTop;
+    });
+    const controller = createConversationVisualAnchorController();
+    controller.capture(anchor);
+
+    // 上方冷 Turn 从 300px 占位恢复为 1,200px 真实高度。
+    anchorTop += 900;
+    controller.recover(scrollTarget);
+
+    expect(scrollTarget.scrollTo).toHaveBeenCalledWith({ behavior: "auto", top: 1_500 });
+    expect(anchorTop).toBe(80);
+  });
+
+  it("浏览器已完成原生滚动锚定时不重复修正位置", () => {
+    const anchor = {
+      getBoundingClientRect: () => ({ top: 80 }),
+      isConnected: true,
+    };
+    const scrollTarget = createScrollTarget({ scrollTop: 600 });
+    const controller = createConversationVisualAnchorController();
+    controller.capture(anchor);
+
+    controller.recover(scrollTarget);
+
+    expect(scrollTarget.scrollTo).not.toHaveBeenCalled();
+  });
+
   it("结构收缩后跨帧轻微滚动并恢复原位置以触发重绘", () => {
     const recover = vi.fn();
     const cancelFrame = vi.fn();

@@ -5,7 +5,41 @@ export type ConversationScrollTarget = Pick<
   "clientHeight" | "scrollHeight" | "scrollTo" | "scrollTop"
 >;
 
+export type ConversationVisualAnchor = Readonly<{
+  getBoundingClientRect: () => Pick<DOMRect, "top">;
+  isConnected: boolean;
+}>;
+
 type AtBottomChangeHandler = (atBottom: boolean) => void;
+
+export function createConversationVisualAnchorController() {
+  let snapshot: Readonly<{ anchor: ConversationVisualAnchor; top: number }> | undefined;
+
+  return {
+    capture(anchor: ConversationVisualAnchor | undefined) {
+      snapshot =
+        anchor === undefined || !anchor.isConnected
+          ? undefined
+          : { anchor, top: anchor.getBoundingClientRect().top };
+    },
+    clear() {
+      snapshot = undefined;
+    },
+    recover(scrollTarget: ConversationScrollTarget) {
+      if (snapshot === undefined || !snapshot.anchor.isConnected) {
+        snapshot = undefined;
+        return;
+      }
+      const currentTop = snapshot.anchor.getBoundingClientRect().top;
+      const offset = currentTop - snapshot.top;
+      if (Math.abs(offset) < 0.5) return;
+
+      // WebKit 展开视口上方的 content-visibility 内容时可能漏掉原生滚动锚定。
+      scrollTarget.scrollTo({ behavior: "auto", top: scrollTarget.scrollTop + offset });
+      snapshot = { anchor: snapshot.anchor, top: snapshot.anchor.getBoundingClientRect().top };
+    },
+  };
+}
 
 type ConversationLayoutRecoveryOptions = Readonly<{
   cancelFrame: (frameId: number) => void;
@@ -201,6 +235,9 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
       }
 
       updateFollowState(distanceFromBottom < BOTTOM_PROXIMITY_THRESHOLD_PX);
+    },
+    isFollowing() {
+      return shouldFollowNewContent;
     },
     pauseFollowing() {
       // 历史导航前停用贴底，避免内容尺寸变化把用户重新带回最新消息。
