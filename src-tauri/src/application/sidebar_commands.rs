@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State};
 use tokio::time::timeout;
 
-use super::{error::AppError, state::AppState};
+use super::{error::AppError, sidebar_task_settings::effective_task_settings, state::AppState};
 use crate::{
     domain::conversation::{
         AgentPromptInput, AgentTaskSettings, AgentTaskSnapshotResponse, AgentTurnActionResponse,
@@ -16,10 +16,7 @@ use crate::{
     },
     infrastructure::{
         codex,
-        task_settings::{
-            delete_project_task_settings, delete_task_settings, read_task_settings,
-            write_task_settings,
-        },
+        task_settings::{delete_project_task_settings, delete_task_settings, write_task_settings},
     },
 };
 
@@ -95,9 +92,12 @@ pub async fn list_tasks(
                 .await
                 .map_err(|_| AppError::CodexRequestFailed)?;
             state
-                .remember_tasks(
+                .remember_task_metadata(
                     &project_id,
-                    response.data.iter().map(|task| task.id.as_str()),
+                    response
+                        .data
+                        .iter()
+                        .map(|task| (task.id.as_str(), task.title.as_str())),
                 )
                 .await;
             Ok(response)
@@ -129,6 +129,15 @@ pub async fn read_task(
             response.snapshot.settings =
                 effective_task_settings(&app, &connection, &project_id, &task_id).await?;
             response.checkpoint.sequence = state.project_sequence(&project_id).await;
+            state
+                .remember_task_metadata(
+                    &project_id,
+                    [(
+                        response.snapshot.id.as_str(),
+                        response.snapshot.title.as_str(),
+                    )],
+                )
+                .await;
             Ok(response)
         })
         .await
@@ -144,7 +153,10 @@ pub async fn start_task(
         .await
         .map_err(|_| AppError::CodexRequestFailed)?;
     state
-        .remember_tasks(&project_id, [response.task.id.as_str()])
+        .remember_task_metadata(
+            &project_id,
+            [(response.task.id.as_str(), response.task.title.as_str())],
+        )
         .await;
     Ok(response)
 }
@@ -370,6 +382,12 @@ pub async fn fork_task(
     )
     .await
     .map_err(|_| AppError::FilesystemRequestFailed)?;
+    state
+        .remember_task_metadata(
+            &project_id,
+            [(response.task.id.as_str(), response.task.title.as_str())],
+        )
+        .await;
     Ok(response)
 }
 
@@ -381,9 +399,16 @@ pub async fn rename_task(
     state: State<'_, AppState>,
 ) -> Result<AgentTaskMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    codex::rename_task(&connection, project_id, task_id, title)
+    let response = codex::rename_task(&connection, project_id.clone(), task_id, title)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    state
+        .remember_task_metadata(
+            &project_id,
+            [(response.task.id.as_str(), response.task.title.as_str())],
+        )
+        .await;
+    Ok(response)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -394,9 +419,16 @@ pub async fn pin_task(
     state: State<'_, AppState>,
 ) -> Result<AgentTaskMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    codex::pin_task(&connection, project_id, task_id, pinned)
+    let response = codex::pin_task(&connection, project_id.clone(), task_id, pinned)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    state
+        .remember_task_metadata(
+            &project_id,
+            [(response.task.id.as_str(), response.task.title.as_str())],
+        )
+        .await;
+    Ok(response)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -418,9 +450,16 @@ pub async fn unarchive_task(
     state: State<'_, AppState>,
 ) -> Result<AgentTaskMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    codex::unarchive_task(&connection, project_id, task_id)
+    let response = codex::unarchive_task(&connection, project_id.clone(), task_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(|_| AppError::CodexRequestFailed)?;
+    state
+        .remember_task_metadata(
+            &project_id,
+            [(response.task.id.as_str(), response.task.title.as_str())],
+        )
+        .await;
+    Ok(response)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -456,33 +495,4 @@ fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
     app.path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)
-}
-
-async fn effective_task_settings(
-    app: &AppHandle,
-    connection: &codex::AppServerConnection,
-    project_id: &str,
-    task_id: &str,
-) -> Result<AgentTaskSettings, AppError> {
-    if let Some(settings) = read_task_settings(&app_data_dir(app)?, project_id, task_id)
-        .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?
-    {
-        return Ok(settings);
-    }
-    let response = codex::get_project_defaults(connection, project_id)
-        .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
-    let settings = serde_json::from_value(
-        response
-            .get("settings")
-            .cloned()
-            .ok_or(AppError::CodexRequestFailed)?,
-    )
-    .map_err(|_| AppError::CodexRequestFailed)?;
-    if AgentTaskSettings::is_valid(&settings) {
-        Ok(settings)
-    } else {
-        Err(AppError::CodexRequestFailed)
-    }
 }

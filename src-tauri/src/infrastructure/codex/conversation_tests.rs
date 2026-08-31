@@ -296,7 +296,7 @@ fn sidebar_notifications_should_map_task_lifecycle() {
         ),
         (
             "thread/name/updated",
-            json!({"threadId": "thread-a", "name": "新标题"}),
+            json!({"threadId": "thread-a", "threadName": "新标题"}),
             "task.metadata_changed",
         ),
         (
@@ -324,6 +324,9 @@ fn sidebar_notifications_should_map_task_lifecycle() {
         .expect("notification should map")
         .expect("notification should be supported");
         assert_eq!(event["type"], event_type);
+        if method == "thread/name/updated" {
+            assert_eq!(event["payload"]["title"], "新标题");
+        }
     }
 }
 

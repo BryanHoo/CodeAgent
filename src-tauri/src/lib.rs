@@ -31,7 +31,7 @@ use application::{
         set_desktop_pet_drag_position, show_desktop_pet, start_desktop_pet_native_drag,
         sync_desktop_pet,
     },
-    notification_commands::show_task_notification,
+    notification_commands::NotificationRuntime,
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
     pet_commands::{download_workbench_pet, list_workbench_pets},
     sidebar_commands::{
@@ -42,7 +42,7 @@ use application::{
     },
     sidebar_directory_commands::list_project_directories,
     state::AppState,
-    tray_commands::{TrayRuntime, setup_tray, sync_tray_tasks},
+    tray_commands::{TrayRuntime, get_running_tasks, setup_tray},
     workflow_commands::{
         add_queued_submission, clear_task_goal, delete_queued_submission,
         list_background_terminals, list_queued_submissions, reorder_queued_submissions,
@@ -74,6 +74,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .manage(DesktopPetRuntime::default())
+        .manage(NotificationRuntime::default())
         .manage(TrayRuntime::default())
         .manage(MainWindowLifecycle::default())
         .setup(|app| setup_tray(app.handle()).map_err(Into::into))
@@ -91,7 +92,7 @@ pub fn run() {
             cancel_native_request,
             get_app_info,
             get_runtime_performance_metrics,
-            sync_tray_tasks,
+            get_running_tasks,
             sync_desktop_pet,
             get_desktop_pet_state,
             get_desktop_pet_drag_strategy,
@@ -102,7 +103,6 @@ pub fn run() {
             move_desktop_pet,
             layout_desktop_pet,
             open_desktop_pet_task,
-            show_task_notification,
             get_workbench_background,
             list_workbench_pets,
             download_workbench_pet,

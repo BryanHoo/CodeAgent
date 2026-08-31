@@ -38,7 +38,6 @@ const emptyProjects: readonly Project[] = [];
 export function ProjectProvider({
   children,
   client = nativeClient,
-  taskNotifier,
 }: ProjectProviderProps) {
   const queryClient = useQueryClient();
   const [selectedRootIds, setSelectedRootIds] = useState<ReadonlyMap<string, string>>(
@@ -61,7 +60,6 @@ export function ProjectProvider({
   const projectRuntime = useMemo(() => {
     const taskMetadataSyncs = new Map<string, Promise<void>>();
     return createProjectRuntimeManager(client, {
-      ...(taskNotifier === undefined ? {} : { taskNotifier }),
       ...createProjectGitRuntimeHandlers({
         coordinator: gitStatusCoordinator,
         getProject: (projectId) =>
@@ -136,7 +134,7 @@ export function ProjectProvider({
         void sync.then(clearCompletedSync, clearCompletedSync);
       },
     });
-  }, [client, gitStatusCoordinator, queryClient, taskNotifier]);
+  }, [client, gitStatusCoordinator, queryClient]);
   const [isProjectAddPending, setIsProjectAddPending] = useState(false);
   const [projectTaskResults, setProjectTaskResults] = useState<
     ReadonlyMap<string, ProjectTaskQueryResult>

@@ -51,6 +51,7 @@ struct RuntimeSession {
     _event_task: Option<JoinHandle<()>>,
     project_sequences: HashMap<String, u64>,
     task_projects: HashMap<String, String>,
+    task_titles: HashMap<String, String>,
     pending_requests: HashMap<String, PendingServerRequest>,
     provider_login: Option<Value>,
     mcp_statuses: HashMap<String, Value>,
@@ -198,6 +199,29 @@ impl AppState {
             runtime
                 .task_projects
                 .insert(task_id.to_owned(), project_id.to_owned());
+        }
+    }
+
+    pub async fn remember_task_metadata<'a>(
+        &self,
+        project_id: &str,
+        tasks: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) {
+        let mut runtime = self.runtime.lock().await;
+        runtime
+            .project_sequences
+            .entry(project_id.to_owned())
+            .or_default();
+        for (task_id, title) in tasks {
+            runtime
+                .task_projects
+                .insert(task_id.to_owned(), project_id.to_owned());
+            let title = title.trim();
+            if !title.is_empty() {
+                runtime
+                    .task_titles
+                    .insert(task_id.to_owned(), title.to_owned());
+            }
         }
     }
 

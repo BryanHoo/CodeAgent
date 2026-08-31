@@ -1,8 +1,9 @@
-import type { AgentTask, AgentTaskSnapshotResponse, EventCheckpoint } from "@/protocol/index.js";
-import {
-  createDesktopTaskNotifier,
-  type TaskNotifier,
-} from "../../notifications/desktop-task-notifier.js";
+import type {
+  AgentTask,
+  AgentTaskSnapshotResponse,
+  EventCheckpoint,
+  RunningTaskSnapshot,
+} from "@/protocol/index.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 import {
@@ -49,7 +50,6 @@ export class ProjectRuntimeManager {
     ProjectRuntimeManagerOptions["onTaskMetadataChanged"]
   >;
   readonly #projects = new Map<string, ProjectEventRuntime>();
-  readonly #taskNotifier: TaskNotifier;
   #taskActivity: TaskActivityMap = new Map();
   readonly #taskActivityCheckpoints = new Map<string, EventCheckpoint>();
   readonly #taskTitles = new Map<string, string>();
@@ -70,7 +70,6 @@ export class ProjectRuntimeManager {
     this.#onSkillsChanged = options.onSkillsChanged ?? (() => undefined);
     this.#onTaskRemoved = options.onTaskRemoved ?? (() => undefined);
     this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
-    this.#taskNotifier = options.taskNotifier ?? createDesktopTaskNotifier();
     if (!Number.isSafeInteger(this.#idleTimeoutMs) || this.#idleTimeoutMs < 0) {
       throw new RangeError("Project Runtime idleTimeoutMs must be non-negative");
     }
@@ -170,6 +169,26 @@ export class ProjectRuntimeManager {
     this.#getProject(response.snapshot.projectId).reconcileTaskSnapshot(response);
   }
 
+  public async restoreRunningTasks(tasks: readonly RunningTaskSnapshot[]): Promise<void> {
+    let nextActivity = this.#taskActivity;
+    for (const task of tasks) {
+      this.#rememberTaskTitle({ id: task.taskId, projectId: task.projectId, title: task.taskName });
+      nextActivity = recordRunningTaskActivity(nextActivity, task.projectId, task.taskId);
+    }
+    this.#updateTaskActivity(nextActivity);
+
+    // 每个 Task 都需经 readTask 登记归属；同 Project 的 Snapshot 仍只会复用一条事件连接。
+    await Promise.all(
+      tasks.map(async ({ projectId, taskId }) => {
+        try {
+          this.observeSnapshot(await this.client.readTask(projectId, taskId));
+        } catch (error) {
+          recordInternalWarning("running_task_restore_failed", error, { projectId, taskId });
+        }
+      }),
+    );
+  }
+
   public async refreshTaskSnapshot(
     projectId: string,
     taskId: string,
@@ -257,18 +276,6 @@ export class ProjectRuntimeManager {
             this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_completed");
             // 标题由 Provider 在 Turn 结束时生成，后台 Task 也必须通知列表读取最新元数据。
             this.#onTaskMetadataChanged(eventProjectId, event.taskId, "turn_completed");
-          }
-          try {
-            this.#taskNotifier.notify(
-              eventProjectId,
-              event,
-              this.#taskTitles.get(createProjectTaskKey(eventProjectId, event.taskId)) ?? "Task",
-            );
-          } catch (error) {
-            recordInternalWarning("task_notification_failed", error, {
-              projectId: eventProjectId,
-              taskId: event.taskId,
-            });
           }
           if (event.type !== "task.removed") {
             // 所有 Task 实时事件都推进 Activity 水位，避免流式期间到达的旧 Snapshot 回滚侧栏状态。

@@ -1,8 +1,8 @@
-use serde::Deserialize;
+use serde::Serialize;
 use tauri::{
     AppHandle, Manager, State, Url,
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::TrayIconBuilder,
 };
 use tokio::sync::Mutex;
 
@@ -24,17 +24,9 @@ const RUNNING_TASK_MENU_PREFIX: &str = "running-task:";
 const SHOW_MAIN_MENU_ID: &str = "show-main";
 const TRAY_ICON_ID: &str = "codeagent-tray";
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TrayTaskUpdate {
-    is_running: bool,
-    project_id: String,
-    task_id: String,
-    task_name: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct TrayTask {
+pub struct TrayTask {
     pub(super) project_id: String,
     pub(super) task_id: String,
     pub(super) task_name: String,
@@ -54,35 +46,6 @@ impl TrayTaskState {
     #[cfg(test)]
     pub(super) fn tasks(&self) -> &[TrayTask] {
         &self.tasks
-    }
-
-    fn apply_updates(&mut self, updates: Vec<TrayTaskUpdate>) -> bool {
-        let mut changed = false;
-        for update in updates {
-            let task_index = self.tasks.iter().position(|task| {
-                task.project_id == update.project_id && task.task_id == update.task_id
-            });
-            if update.is_running {
-                let task = TrayTask {
-                    project_id: update.project_id,
-                    task_id: update.task_id,
-                    task_name: update.task_name,
-                };
-                if let Some(task_index) = task_index {
-                    if self.tasks[task_index] != task {
-                        self.tasks[task_index] = task;
-                        changed = true;
-                    }
-                } else if self.tasks.len() < MAX_TRAY_TASKS {
-                    self.tasks.push(task);
-                    changed = true;
-                }
-            } else if let Some(task_index) = task_index {
-                self.tasks.remove(task_index);
-                changed = true;
-            }
-        }
-        changed
     }
 }
 
@@ -112,7 +75,7 @@ pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id(TRAY_ICON_ID)
         .tooltip("CodeAgent")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        .show_menu_on_left_click(tray_show_menu_on_left_click())
         .on_menu_event(|app, event| match tray_menu_action(event.id().as_ref()) {
             TrayMenuAction::ShowMainWindow => show_main_window(app),
             TrayMenuAction::OpenTask {
@@ -130,18 +93,6 @@ pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
             TrayMenuAction::Ignore => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if matches!(
-                event,
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                }
-            ) {
-                show_main_window(tray.app_handle());
-            }
         });
     #[cfg(target_os = "macos")]
     {
@@ -156,35 +107,23 @@ pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-#[tauri::command(rename_all = "camelCase")]
-pub async fn sync_tray_tasks(
-    app: AppHandle,
-    runtime: State<'_, TrayRuntime>,
-    tasks: Vec<TrayTaskUpdate>,
-) -> Result<(), AppError> {
-    if !tray_task_updates_are_valid(&tasks) {
-        return Err(AppError::TrayOperationFailed);
-    }
-    let next_tasks = {
-        let mut state = runtime.state.lock().await;
-        if !state.apply_updates(tasks) {
-            return Ok(());
-        }
-        state.tasks.clone()
-    };
-    render_tray_state(&app, &next_tasks)
+#[tauri::command]
+pub async fn get_running_tasks(runtime: State<'_, TrayRuntime>) -> Result<Vec<TrayTask>, AppError> {
+    Ok(runtime.state.lock().await.tasks.clone())
 }
 
 pub(super) async fn observe_tray_agent_event(
     app: &AppHandle,
     project_id: &str,
     event: &AgentEvent,
+    task_name: Option<&str>,
 ) {
     if !matches!(
         event.event_type(),
         Some(
             "provider.error"
                 | "task.removed"
+                | "task.metadata_changed"
                 | "task.status_updated"
                 | "turn.completed"
                 | "turn.started"
@@ -192,15 +131,13 @@ pub(super) async fn observe_tray_agent_event(
     ) {
         return;
     }
-    let next_tasks = {
+    let (changed, next_tasks) = {
         let runtime = app.state::<TrayRuntime>();
         let mut state = runtime.state.lock().await;
-        if !apply_agent_event_to_tray_state(&mut state, project_id, event) {
-            return;
-        }
-        state.tasks.clone()
+        let changed = apply_agent_event_to_tray_state(&mut state, project_id, event, task_name);
+        (changed, state.tasks.clone())
     };
-    if let Err(error) = render_tray_state(app, &next_tasks) {
+    if changed && let Err(error) = render_tray_state(app, &next_tasks) {
         eprintln!("failed to update tray from runtime event: {error}");
     }
 }
@@ -209,6 +146,7 @@ pub(super) fn apply_agent_event_to_tray_state(
     state: &mut TrayTaskState,
     project_id: &str,
     event: &AgentEvent,
+    task_name: Option<&str>,
 ) -> bool {
     let Some(task_id) = event.task_id() else {
         return false;
@@ -239,19 +177,47 @@ pub(super) fn apply_agent_event_to_tray_state(
         }
         return false;
     }
+    if event.event_type() == Some("task.metadata_changed") {
+        let Some(task_index) = task_index else {
+            return false;
+        };
+        let Some(task_name) = normalized_task_name(task_name) else {
+            return false;
+        };
+        if state.tasks[task_index].task_name == task_name {
+            return false;
+        }
+        state.tasks[task_index].task_name = task_name.to_owned();
+        return true;
+    }
     let should_add = event.event_type() == Some("turn.started")
         || (event.event_type() == Some("task.status_updated")
             && payload
                 .and_then(|payload| payload.get("status"))
                 .and_then(serde_json::Value::as_str)
                 == Some("running"));
-    if !should_add || task_index.is_some() || state.tasks.len() >= MAX_TRAY_TASKS {
+    if !should_add {
+        return false;
+    }
+    if let Some(task_index) = task_index {
+        let Some(task_name) = normalized_task_name(task_name) else {
+            return false;
+        };
+        if state.tasks[task_index].task_name == task_name {
+            return false;
+        }
+        state.tasks[task_index].task_name = task_name.to_owned();
+        return true;
+    }
+    if state.tasks.len() >= MAX_TRAY_TASKS {
         return false;
     }
     state.tasks.push(TrayTask {
         project_id: project_id.to_owned(),
         task_id: task_id.to_owned(),
-        task_name: task_id.to_owned(),
+        task_name: normalized_task_name(task_name)
+            .unwrap_or(task_id)
+            .to_owned(),
     });
     true
 }
@@ -272,7 +238,16 @@ fn render_tray_state(app: &AppHandle, tasks: &[TrayTask]) -> Result<(), AppError
 }
 
 pub(super) fn tray_title(task_count: usize) -> Option<String> {
-    (task_count > 0).then(|| format!(" {task_count}"))
+    // macOS tray-icon 对 None 不会清空现有标题，零任务时必须显式写入空字符串。
+    Some(if task_count == 0 {
+        String::new()
+    } else {
+        format!(" {task_count}")
+    })
+}
+
+pub(super) const fn tray_show_menu_on_left_click() -> bool {
+    true
 }
 
 pub(super) fn tray_tooltip(task_count: usize) -> String {
@@ -377,16 +352,10 @@ pub(super) fn tray_task_route(project_id: &str, task_id: &str) -> Result<String,
     Ok(url.path().trim_start_matches('/').to_owned())
 }
 
-fn tray_task_updates_are_valid(tasks: &[TrayTaskUpdate]) -> bool {
-    tasks.len() <= MAX_TRAY_TASKS
-        && tasks.iter().all(|task| {
-            !task.project_id.is_empty()
-                && task.project_id.len() <= 128
-                && !task.task_id.is_empty()
-                && task.task_id.len() <= 128
-                && !task.task_name.is_empty()
-                && task.task_name.len() <= 512
-        })
+fn normalized_task_name(task_name: Option<&str>) -> Option<&str> {
+    task_name
+        .map(str::trim)
+        .filter(|task_name| !task_name.is_empty())
 }
 
 fn truncate_menu_task_name(task_name: &str) -> String {

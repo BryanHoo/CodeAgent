@@ -13,8 +13,10 @@
 
 ## 状态栏任务契约
 
-- 主 WebView 通过 `sync_tray_tasks` 增量同步最多 256 条任务运行态摘要，运行任务优先进入有界载荷；空快照不得清除 Rust 已持有的后台任务状态
-- Rust 必须直接归约 `turn.started`、`turn.completed`、失败与任务移除事件并更新状态栏数量和右键菜单，使主 WebView 隐藏或销毁后仍保持实时状态
+- Rust 独占最多 256 条任务运行态摘要，直接归约 `turn.started`、`turn.completed`、失败、元数据与任务移除事件并更新状态栏数量和动态菜单
+- 主 WebView 不得写入状态栏任务状态；重建时只能通过 `get_running_tasks` 读取 Rust 快照，恢复全部侧栏标记与 Project 事件归属
+- Rust 必须按持久化通知与语言偏好发送 Task 终态、失败及待处理请求系统通知，不得依赖主 WebView 是否存在、可见或处于前台
+- 状态栏图标左键必须显示任务菜单，不得直接恢复主窗口；应用恢复只能由菜单命令或任务项触发
 - 状态栏任务点击必须恢复主窗口并跳转对应任务；普通 Project 使用 `/p/:projectId/t/:taskId`，`temporary` 作用域使用 `/temporary/t/:taskId`
 
 ## 性能观测契约
@@ -32,4 +34,4 @@
 - 覆盖生成图片落盘、Base64 移除和时间线附件映射行为
 - 覆盖性能分位数、IPC 合并统计、源码虚拟化 DOM 上限和生产 Chunk 预算
 - 覆盖 MCP form/URL Resolution Schema 差异，以及 URL 外部打开成功后才提交 `accept` 的交互顺序
-- 覆盖状态栏计数、Provider 终态归约、菜单目标解析和普通/`temporary` 任务跳转
+- 覆盖状态栏计数清零、Provider 终态归约、左键菜单、前后台系统通知、运行态恢复、菜单目标解析和普通/`temporary` 任务跳转

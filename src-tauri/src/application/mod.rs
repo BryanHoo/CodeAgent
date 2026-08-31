@@ -18,6 +18,7 @@ pub mod pet_commands;
 mod request_cancellation;
 pub mod sidebar_commands;
 pub mod sidebar_directory_commands;
+mod sidebar_task_settings;
 pub mod state;
 pub mod tray_commands;
 #[cfg(test)]

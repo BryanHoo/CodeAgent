@@ -31,8 +31,8 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 排队提交 | `list/add/update/delete/reorder/startQueuedSubmission` | 原生 `thread/queue/*`，保留顺序和编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；单调序号、缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
-| 后台通知 | Task 终态、失败与待处理请求 | WebView 只归约事件；受限 Tauri command 通过官方 notification 插件调用系统通知中心 | 已实现 |
-| 状态栏任务 | Task 运行态与任务跳转 | 图标旁实时显示运行数量；Rust 直接归约 Provider 事件并动态更新右键任务菜单 | 已实现 |
+| 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
+| 状态栏任务 | Task 运行态与任务跳转 | Rust 独占并归约 Provider 事件；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取完整运行态快照 | 已实现 |
 | Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.151 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 0.151 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |

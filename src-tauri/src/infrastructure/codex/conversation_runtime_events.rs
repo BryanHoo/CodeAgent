@@ -13,12 +13,7 @@ pub(super) fn map_runtime_notification(
 ) -> Result<Option<Value>, ConnectionError> {
     let event = match method {
         "thread/status/changed" => task_status_event(params, sequence, timestamp)?,
-        "thread/name/updated" => envelope(
-            sequence,
-            timestamp,
-            required_string(params, "threadId")?,
-            json!({"payload": {}, "type": "task.metadata_changed"}),
-        ),
+        "thread/name/updated" => task_metadata_event(params, sequence, timestamp)?,
         "thread/archived" | "thread/deleted" => envelope(
             sequence,
             timestamp,
@@ -66,6 +61,28 @@ pub(super) fn map_runtime_notification(
         _ => return Ok(None),
     };
     Ok(Some(event))
+}
+
+fn task_metadata_event(
+    params: &Map<String, Value>,
+    sequence: u64,
+    timestamp: &str,
+) -> Result<Value, ConnectionError> {
+    let mut payload = Map::new();
+    if let Some(title) = params
+        .get("threadName")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+    {
+        payload.insert("title".to_owned(), Value::String(title.to_owned()));
+    }
+    Ok(envelope(
+        sequence,
+        timestamp,
+        required_string(params, "threadId")?,
+        json!({"payload": payload, "type": "task.metadata_changed"}),
+    ))
 }
 
 fn mcp_server_status_event(

@@ -3,13 +3,11 @@ import { type ReactNode, useEffect } from "react";
 import { Toaster } from "sonner";
 
 import { ProjectProvider } from "../features/projects/project-context.js";
-import { createDesktopTaskNotifier } from "../features/notifications/desktop-task-notifier.js";
+import { RunningTaskRestore } from "../features/conversation/runtime/running-task-restore.js";
 import { createActionMutationCache } from "../features/notifications/action-notifications.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { CodexRuntimeGate } from "../features/runtime/components/codex-runtime-gate.js";
-import { TrayTaskSync } from "../features/tray/components/tray-task-sync.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
-import { getNotificationPreference } from "../features/settings/notification-preference.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
 import { TooltipProvider } from "../shared/components/core/tooltip.js";
 import {
@@ -38,10 +36,6 @@ export function createAppQueryClient() {
 }
 
 const queryClient = createAppQueryClient();
-
-const taskNotifier = createDesktopTaskNotifier({
-  isEnabled: getNotificationPreference,
-});
 
 type AppProvidersProps = Readonly<{
   children: ReactNode;
@@ -72,8 +66,8 @@ function AppProviderContent({ children }: AppProvidersProps) {
     <>
       <CodexRuntimeGate>
         <ProviderConnectionGate>
-          <ProjectProvider taskNotifier={taskNotifier}>
-            <TrayTaskSync />
+          <ProjectProvider>
+            <RunningTaskRestore />
             <ComposerDraftProvider>{children}</ComposerDraftProvider>
           </ProjectProvider>
         </ProviderConnectionGate>

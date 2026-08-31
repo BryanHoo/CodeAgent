@@ -10,7 +10,7 @@ use tokio::{
 
 use super::super::{
     desktop_pet_commands::observe_desktop_pet_agent_event, error::AppError,
-    tray_commands::observe_tray_agent_event,
+    notification_commands::observe_task_notification, tray_commands::observe_tray_agent_event,
 };
 use super::{
     RuntimeSession,
@@ -119,6 +119,23 @@ async fn publish_mapped_event(
         };
         event_json["payload"]["request"]["projectId"] = json!(project_id);
     }
+    if event.event_type() == Some("task.metadata_changed")
+        && let Some(title) = event
+            .as_json()
+            .and_then(|event| event.pointer("/payload/title"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|title| !title.is_empty())
+    {
+        session
+            .task_titles
+            .insert(task_id.clone(), title.to_owned());
+    }
+    let task_name = session.task_titles.get(&task_id).cloned();
+    if event.event_type() == Some("task.removed") {
+        session.task_titles.remove(&task_id);
+        session.task_projects.remove(&task_id);
+    }
     let sequence = session
         .project_sequences
         .entry(project_id.clone())
@@ -154,13 +171,15 @@ async fn publish_mapped_event(
         .performance_metrics
         .record_delivery(&project_id, provider_event_count, 1, queue_depth);
     drop(session);
+    if let Some(app) = app {
+        // 原生后台状态必须先于 WebView 队列更新，窗口销毁或背压都不能阻塞托盘与通知。
+        observe_tray_agent_event(app, &project_id, &pet_event, task_name.as_deref()).await;
+        observe_task_notification(app, &pet_event, task_name.as_deref()).await;
+        observe_desktop_pet_agent_event(app, &project_id, &pet_event).await;
+    }
     if let Some(sender) = event_sender {
         // 等待前已释放全局状态锁，慢 WebView 不会阻塞其他命令读取 Runtime 状态。
         let _ = sender.send(AppEvent::AgentEvent { event }).await;
-    }
-    if let Some(app) = app {
-        observe_desktop_pet_agent_event(app, &project_id, &pet_event).await;
-        observe_tray_agent_event(app, &project_id, &pet_event).await;
     }
     true
 }

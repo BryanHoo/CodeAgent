@@ -1,8 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
-export const TrayTaskUpdateSchema = Type.Object(
+export const RunningTaskSnapshotSchema = Type.Object(
   {
-    isRunning: Type.Boolean(),
     projectId: Type.String({ maxLength: 128, minLength: 1 }),
     taskId: Type.String({ maxLength: 128, minLength: 1 }),
     taskName: Type.String({ maxLength: 512, minLength: 1 }),
@@ -10,4 +9,4 @@ export const TrayTaskUpdateSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type TrayTaskUpdate = Readonly<Static<typeof TrayTaskUpdateSchema>>;
+export type RunningTaskSnapshot = Readonly<Static<typeof RunningTaskSnapshotSchema>>;

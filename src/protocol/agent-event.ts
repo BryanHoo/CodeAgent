@@ -146,7 +146,10 @@ export const TaskStatusUpdatedEventSchema = createEventSchema({
 });
 
 export const TaskMetadataChangedEventSchema = createEventSchema({
-  payload: Type.Object({}, { additionalProperties: false }),
+  payload: Type.Object(
+    { title: Type.Optional(Type.String({ maxLength: 512, minLength: 1 })) },
+    { additionalProperties: false },
+  ),
   type: Type.Literal("task.metadata_changed"),
 });
 
