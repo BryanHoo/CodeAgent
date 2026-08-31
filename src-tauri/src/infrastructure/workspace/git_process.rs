@@ -363,6 +363,16 @@ async fn wait_for_child(
     }
 }
 
+#[cfg(unix)]
+fn unix_kill_process_group_args(process_id: u32) -> [String; 3] {
+    // GNU kill 需要显式结束选项解析，否则负 PGID 会被误判为第二个信号选项。
+    [
+        "-KILL".to_owned(),
+        "--".to_owned(),
+        format!("-{process_id}"),
+    ]
+}
+
 async fn terminate_child(
     child: &mut Child,
     process_id: Option<u32>,
@@ -371,7 +381,7 @@ async fn terminate_child(
     #[cfg(unix)]
     if let Some(process_id) = process_id {
         let status = Command::new("/bin/kill")
-            .args(["-KILL", &format!("-{process_id}")])
+            .args(unix_kill_process_group_args(process_id))
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -424,7 +434,7 @@ mod tests {
 
     use super::{
         BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, first_existing_path,
-        run_git_command,
+        run_git_command, unix_kill_process_group_args,
     };
 
     #[test]
@@ -448,6 +458,12 @@ mod tests {
             first_existing_path([missing, current_executable.clone()]),
             Some(current_executable)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_process_group_kill_should_terminate_option_parsing_before_negative_pgid() {
+        assert_eq!(unix_kill_process_group_args(42), ["-KILL", "--", "-42"]);
     }
 
     #[cfg(unix)]
