@@ -175,9 +175,7 @@ fn local_release_notes(version: &str) -> String {
         return format!("## [{version}]");
     };
     let section = &CHANGELOG[start..];
-    let end = section
-        .find("\n## [")
-        .map_or(section.len(), |next_heading| next_heading);
+    let end = section.find("\n## [").unwrap_or(section.len());
     truncate_notes(section[..end].trim())
 }
 
