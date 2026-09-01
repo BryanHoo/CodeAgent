@@ -3,6 +3,7 @@ import { browser, expect } from "@wdio/globals";
 import {
   approvalTaskResponse,
   gitTaskResponse,
+  longScrollTaskResponse,
   streamTaskResponse,
   taskResponse,
 } from "./fixtures.js";
@@ -103,6 +104,46 @@ describe("桌面原生 WebView 关键流程", () => {
     await $("aria/排队消息").click();
     await waitForText("排队补充测试");
     expect(await commandCallCount("add_queued_submission")).toBeGreaterThan(0);
+  });
+
+  it("切换到巨型冷 Turn 任务后保持最新信息置底", async () => {
+    await openTask(
+      "推送GitHub打包，发布 GitHub Draft Release，本机gh可用",
+      longScrollTaskResponse,
+    );
+    await waitForText("最新回复标记");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () => document.querySelectorAll('[data-render-mode="cold"]').length === 6,
+        ),
+      { timeoutMsg: "巨型任务未按预期渲染冷 Turn" },
+    );
+
+    // 在真实 WKWebView 中逐个恢复冷 Turn，覆盖 content-visibility 的多轮高度修正。
+    await browser.execute(async () => {
+      const coldTurns = document.querySelectorAll<HTMLElement>('[data-render-mode="cold"]');
+      for (const turn of coldTurns) {
+        turn.style.contentVisibility = "visible";
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    });
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const container = document.querySelector<HTMLElement>('[role="log"]');
+          if (container === null) return false;
+          return container.scrollHeight - container.scrollTop - container.clientHeight < 24;
+        }),
+      { timeoutMsg: "冷 Turn 恢复真实高度后未保持最新信息置底" },
+    );
+    const distanceFromBottom = await browser.execute(() => {
+      const container = document.querySelector<HTMLElement>('[role="log"]');
+      if (container === null) return Number.POSITIVE_INFINITY;
+      return container.scrollHeight - container.scrollTop - container.clientHeight;
+    });
+    expect(distanceFromBottom).toBeLessThan(24);
   });
 
   it("在项目和任务之间切换且保持正确选中项", async () => {

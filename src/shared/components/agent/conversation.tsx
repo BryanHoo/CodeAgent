@@ -44,6 +44,11 @@ type ConversationContextValue = Readonly<{
 
 const ConversationContext = createContext<ConversationContextValue | null>(null);
 const COLD_TURN_INTRINSIC_BLOCK_SIZE_PX = 300;
+const UPWARD_SCROLL_KEYS = new Set(["ArrowUp", "Home", "PageUp"]);
+
+function isUpwardScrollKey(key: string, shiftKey: boolean): boolean {
+  return UPWARD_SCROLL_KEYS.has(key) || (key === " " && shiftKey);
+}
 
 function findConversationVisualAnchor(container: HTMLDivElement): ConversationVisualAnchor | undefined {
   const containerRect = container.getBoundingClientRect();
@@ -94,6 +99,7 @@ export function Conversation({
   ...props
 }: ConversationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const clearUserScrollIntentFrameRef = useRef(0);
   const previousScrollToBottomSignalRef = useRef(scrollToBottomSignal);
   const [atBottom, setAtBottom] = useState(true);
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
@@ -118,6 +124,14 @@ export function Conversation({
   }, [autoScrollController]);
   const pauseFollowing = useCallback(() => {
     autoScrollController.pauseFollowing();
+  }, [autoScrollController]);
+  const markUserScrollIntent = useCallback(() => {
+    autoScrollController.markUserScrollIntent();
+    cancelAnimationFrame(clearUserScrollIntentFrameRef.current);
+    // 默认滚动会在当前帧内触发；无实际滚动时及时清除，避免污染后续布局事件。
+    clearUserScrollIntentFrameRef.current = requestAnimationFrame(() => {
+      autoScrollController.clearUserScrollIntent();
+    });
   }, [autoScrollController]);
   const contextValue = useMemo(
     () => ({ atBottom, containerRef, pauseFollowing, scrollbarWidth, scrollToBottom }),
@@ -172,6 +186,40 @@ export function Conversation({
       windowTarget: window,
     });
   }, [autoScrollController]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return;
+
+    const endPointerScroll = () => {
+      autoScrollController.endUserScroll();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target === container && isUpwardScrollKey(event.key, event.shiftKey)) {
+        markUserScrollIntent();
+      }
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button === 0) autoScrollController.beginUserScroll();
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) markUserScrollIntent();
+    };
+    container.addEventListener("keydown", handleKeyDown);
+    container.addEventListener("pointerdown", handlePointerDown);
+    container.addEventListener("wheel", handleWheel, { passive: true });
+    window.addEventListener("pointercancel", endPointerScroll);
+    window.addEventListener("pointerup", endPointerScroll);
+    return () => {
+      cancelAnimationFrame(clearUserScrollIntentFrameRef.current);
+      autoScrollController.endUserScroll();
+      container.removeEventListener("keydown", handleKeyDown);
+      container.removeEventListener("pointerdown", handlePointerDown);
+      container.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("pointercancel", endPointerScroll);
+      window.removeEventListener("pointerup", endPointerScroll);
+    };
+  }, [autoScrollController, markUserScrollIntent]);
 
   useLayoutEffect(() => {
     if (

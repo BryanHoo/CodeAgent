@@ -37,4 +37,50 @@ describe("Conversation visual anchor", () => {
 
     expect(Math.abs(anchor.getBoundingClientRect().top - anchorTop)).toBeLessThan(1);
   });
+
+  it("布局滚动不能让自动跟随离开底部", async () => {
+    const screen = await render(
+      <Conversation conversationId="task-layout-scroll" style={{ height: 320, overflowY: "auto" }}>
+        <ConversationList
+          getItemKey={(turnId) => turnId}
+          items={["turn-0"]}
+          renderItem={(turnId) => <div style={{ height: 1_600 }}>{turnId}</div>}
+        />
+      </Conversation>,
+    );
+    const conversation = screen.getByRole("log");
+    const container = conversation.element();
+
+    await nextFrame();
+    await nextFrame();
+    container.scrollTop = container.scrollHeight - container.clientHeight;
+    container.dispatchEvent(new Event("scroll", { bubbles: true }));
+    container.scrollTop = 100;
+    container.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await nextFrame();
+
+    expect(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+  });
+
+  it("滚轮向上后允许用户离开底部", async () => {
+    const screen = await render(
+      <Conversation conversationId="task-user-scroll" style={{ height: 320, overflowY: "auto" }}>
+        <ConversationList
+          getItemKey={(turnId) => turnId}
+          items={["turn-0"]}
+          renderItem={(turnId) => <div style={{ height: 1_600 }}>{turnId}</div>}
+        />
+      </Conversation>,
+    );
+    const conversation = screen.getByRole("log");
+    const container = conversation.element();
+
+    await nextFrame();
+    await nextFrame();
+    container.scrollTop = container.scrollHeight - container.clientHeight;
+    container.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await conversation.wheel({ direction: "up" });
+
+    expect(container.scrollTop).toBeLessThan(container.scrollHeight - container.clientHeight);
+  });
 });

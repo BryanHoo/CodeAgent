@@ -211,7 +211,7 @@ describe("conversation layout recovery", () => {
     expect(target.scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 2_400 });
   });
 
-  it("任务切换到达底部后允许用户停止自动跟随", () => {
+  it("任务切换假到底后仍跟随多轮冷 Turn 高度恢复", () => {
     const controller = createConversationAutoScrollController(vi.fn());
     const target = createScrollTarget();
 
@@ -220,11 +220,94 @@ describe("conversation layout recovery", () => {
     target.scrollTop = 1_600;
     controller.handleScroll(target);
 
+    // ResizeObserver 先记录新高度并请求置底，WebKit 随后仍可能上报旧位置的 scroll。
+    target.scrollHeight = 10_000;
+    controller.handleContentResize(target);
     vi.mocked(target.scrollTo).mockClear();
+    target.scrollTop = 1_600;
+    controller.handleScroll(target);
+    expect(target.scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 10_000 });
+
+    vi.mocked(target.scrollTo).mockClear();
+    target.scrollHeight = 20_000;
+    controller.handleContentResize(target);
+    expect(target.scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 20_000 });
+  });
+
+  it("只有明确的用户滚动意图可以停止自动跟随", () => {
+    const onAtBottomChange = vi.fn();
+    const controller = createConversationAutoScrollController(onAtBottomChange);
+    const target = createScrollTarget();
+
+    controller.handleConversationChange(target);
+    controller.handleConversationRenderComplete(target);
+    target.scrollTop = 1_600;
+    controller.handleScroll(target);
+
+    controller.markUserScrollIntent();
     target.scrollTop = 1_000;
     controller.handleScroll(target);
+
+    expect(controller.isFollowing()).toBe(false);
+    expect(onAtBottomChange).toHaveBeenLastCalledWith(false);
+    vi.mocked(target.scrollTo).mockClear();
     target.scrollHeight = 2_400;
     controller.handleContentResize(target);
     expect(target.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("用户重新滚到底部后恢复自动跟随", () => {
+    const controller = createConversationAutoScrollController(vi.fn());
+    const target = createScrollTarget();
+
+    controller.markUserScrollIntent();
+    target.scrollTop = 1_000;
+    controller.handleScroll(target);
+    expect(controller.isFollowing()).toBe(false);
+
+    target.scrollTop = 1_600;
+    controller.handleScroll(target);
+    expect(controller.isFollowing()).toBe(true);
+  });
+
+  it("指针拖动期间的滚动可以停止自动跟随", () => {
+    const controller = createConversationAutoScrollController(vi.fn());
+    const target = createScrollTarget();
+
+    controller.beginUserScroll();
+    target.scrollTop = 1_000;
+    controller.handleScroll(target);
+    controller.endUserScroll();
+
+    expect(controller.isFollowing()).toBe(false);
+  });
+
+  it("无实际滚动的用户意图不会污染后续布局滚动", () => {
+    const controller = createConversationAutoScrollController(vi.fn());
+    const target = createScrollTarget();
+
+    controller.markUserScrollIntent();
+    controller.clearUserScrollIntent();
+    target.scrollTop = 1_000;
+    controller.handleScroll(target);
+
+    expect(controller.isFollowing()).toBe(true);
+    expect(target.scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", top: 2_000 });
+  });
+
+  it("平滑置底期间保持跟随并允许动画自然完成", () => {
+    const controller = createConversationAutoScrollController(vi.fn());
+    const target = createScrollTarget({ scrollTop: 1_000 });
+
+    controller.scrollToBottom(target);
+    vi.mocked(target.scrollTo).mockClear();
+    target.scrollTop = 1_300;
+    controller.handleScroll(target);
+    expect(target.scrollTo).not.toHaveBeenCalled();
+    expect(controller.isFollowing()).toBe(true);
+
+    target.scrollTop = 1_600;
+    controller.handleScroll(target);
+    expect(controller.isFollowing()).toBe(true);
   });
 });

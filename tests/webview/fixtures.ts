@@ -42,6 +42,13 @@ export const tasks = [
     title: "切换另一项目",
     updatedAt: "2026-08-30T01:30:00.000Z",
   },
+  {
+    id: "long-scroll-task",
+    pinned: false,
+    projectId: "codeagent",
+    title: "推送GitHub打包，发布 GitHub Draft Release，本机gh可用",
+    updatedAt: "2026-08-30T01:20:00.000Z",
+  },
 ] as const;
 
 export const modelPage = {
@@ -223,5 +230,44 @@ export const gitTaskResponse = {
         status: "completed",
       },
     ],
+  },
+} as const;
+
+const longColdTurnText = Array.from(
+  { length: 120 },
+  (_, index) => `冷 Turn 延迟布局段落 ${String(index + 1)}`,
+).join("\n\n");
+
+export const longScrollTaskResponse = {
+  checkpoint: { sequence: 0, sessionId: "session-long-scroll-task" },
+  snapshot: {
+    ...baseSnapshot,
+    ...tasks[4],
+    turns: Array.from({ length: 9 }, (_, index) => ({
+      completedAt: "2026-08-30T02:00:00.000Z",
+      error: null,
+      id: `turn-scroll-${String(index)}`,
+      items: [
+        {
+          id: `user-scroll-${String(index)}`,
+          role: "user",
+          text: `滚动回归输入 ${String(index + 1)}`,
+          type: "message",
+        },
+        {
+          id: `assistant-scroll-${String(index)}`,
+          role: "assistant",
+          text:
+            index < 6
+              ? longColdTurnText
+              : index === 8
+                ? "最新回复标记"
+                : `热 Turn 回复 ${String(index + 1)}`,
+          type: "message",
+        },
+      ],
+      startedAt: "2026-08-30T01:55:00.000Z",
+      status: "completed",
+    })),
   },
 } as const;

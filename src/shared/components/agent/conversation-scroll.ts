@@ -151,9 +151,9 @@ export function observeConversationLayoutRecovery({
 }
 
 export function createConversationAutoScrollController(onAtBottomChange: AtBottomChangeHandler) {
-  let conversationRendering = false;
-  let lastObservedClientHeight: number | undefined;
-  let lastObservedScrollHeight: number | undefined;
+  let pointerScrollActive = false;
+  let smoothScrollActive = false;
+  let userScrollIntentPending = false;
   let shouldFollowNewContent = true;
 
   const updateFollowState = (atBottom: boolean) => {
@@ -162,25 +162,22 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
   };
 
   const scrollToBottom = (scrollTarget: ConversationScrollTarget, behavior: ScrollBehavior) => {
-    lastObservedClientHeight = scrollTarget.clientHeight;
-    lastObservedScrollHeight = scrollTarget.scrollHeight;
+    smoothScrollActive = behavior === "smooth";
     scrollTarget.scrollTo({ behavior, top: scrollTarget.scrollHeight });
     updateFollowState(true);
   };
 
   return {
     handleConversationChange(scrollTarget: ConversationScrollTarget) {
-      // Task 消息完成分帧渲染前保持强制跟随，避免临时 scroll 事件关闭自动置底。
-      conversationRendering = true;
+      pointerScrollActive = false;
+      userScrollIntentPending = false;
       scrollToBottom(scrollTarget, "auto");
     },
     handleConversationRenderComplete(scrollTarget: ConversationScrollTarget) {
-      // 使用当前布局高度继续置底；真实 scroll 到达底部后再结束切换保护。
+      // 当前高度可能仍是冷 Turn 估算值，后续尺寸变化继续由跟随状态校准。
       scrollToBottom(scrollTarget, "auto");
     },
     handleContentResize(scrollTarget: ConversationScrollTarget) {
-      lastObservedClientHeight = scrollTarget.clientHeight;
-      lastObservedScrollHeight = scrollTarget.scrollHeight;
       if (!shouldFollowNewContent) {
         return;
       }
@@ -189,8 +186,6 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
       scrollToBottom(scrollTarget, "auto");
     },
     handleLayoutRevision(scrollTarget: ConversationScrollTarget) {
-      lastObservedClientHeight = scrollTarget.clientHeight;
-      lastObservedScrollHeight = scrollTarget.scrollHeight;
       if (shouldFollowNewContent) {
         scrollToBottom(scrollTarget, "auto");
         return;
@@ -208,33 +203,42 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
     handleScroll(scrollTarget: ConversationScrollTarget) {
       const distanceFromBottom =
         scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight;
-      if (conversationRendering) {
-        if (distanceFromBottom < BOTTOM_PROXIMITY_THRESHOLD_PX) {
-          conversationRendering = false;
-          updateFollowState(true);
-        } else {
-          // content-visibility 可能在后续帧修正高度，切换完成前持续夹紧到底部。
-          scrollToBottom(scrollTarget, "auto");
-        }
+      const atBottom = distanceFromBottom < BOTTOM_PROXIMITY_THRESHOLD_PX;
+      const userInitiated = pointerScrollActive || userScrollIntentPending;
+      userScrollIntentPending = false;
+
+      if (userInitiated) {
+        smoothScrollActive = false;
+        updateFollowState(atBottom);
         return;
       }
 
-      const viewportHeightChanged =
-        lastObservedClientHeight !== undefined &&
-        scrollTarget.clientHeight !== lastObservedClientHeight;
-      const contentHeightIncreased =
-        lastObservedScrollHeight !== undefined &&
-        scrollTarget.scrollHeight > lastObservedScrollHeight;
-      lastObservedClientHeight = scrollTarget.clientHeight;
-      lastObservedScrollHeight = scrollTarget.scrollHeight;
+      if (!shouldFollowNewContent) {
+        if (atBottom) updateFollowState(true);
+        return;
+      }
 
-      if (shouldFollowNewContent && (contentHeightIncreased || viewportHeightChanged)) {
-        // 内容增长或中栏高度变化可能先触发 scroll；布局变化不应被当成用户离开底部。
+      if (smoothScrollActive) {
+        if (atBottom) smoothScrollActive = false;
+        return;
+      }
+
+      if (!atBottom) {
+        // 布局和程序滚动没有权限关闭跟随，WebKit 上报旧位置时立即重新夹紧到底部。
         scrollToBottom(scrollTarget, "auto");
-        return;
       }
-
-      updateFollowState(distanceFromBottom < BOTTOM_PROXIMITY_THRESHOLD_PX);
+    },
+    beginUserScroll() {
+      pointerScrollActive = true;
+    },
+    clearUserScrollIntent() {
+      userScrollIntentPending = false;
+    },
+    endUserScroll() {
+      pointerScrollActive = false;
+    },
+    markUserScrollIntent() {
+      userScrollIntentPending = true;
     },
     isFollowing() {
       return shouldFollowNewContent;
