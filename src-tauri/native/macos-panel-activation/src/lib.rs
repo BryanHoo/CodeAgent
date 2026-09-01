@@ -56,6 +56,7 @@ struct HoldToQuitHudLayout {
     corner_radius: f64,
     label_font_size: f64,
     horizontal_padding: f64,
+    label_vertical_offset: f64,
 }
 
 const fn hold_to_quit_hud_layout(os_major_version: isize) -> HoldToQuitHudLayout {
@@ -65,6 +66,7 @@ const fn hold_to_quit_hud_layout(os_major_version: isize) -> HoldToQuitHudLayout
         corner_radius: if os_major_version >= 26 { 20.0 } else { 9.0 },
         label_font_size: 24.0,
         horizontal_padding: 30.0,
+        label_vertical_offset: -4.0,
     }
 }
 
@@ -234,7 +236,9 @@ fn create_hold_to_quit_hud(mtm: MainThreadMarker) -> Retained<NSPanel> {
     message.setFrame(NSRect::new(
         NSPoint::new(
             (width - measured_message_frame.size.width) / 2.0,
-            (layout.height - measured_message_frame.size.height) / 2.0,
+            // NSTextField 的可见字形基线偏上，向下补偿后上下视觉留白一致。
+            (layout.height - measured_message_frame.size.height) / 2.0
+                + layout.label_vertical_offset,
         ),
         measured_message_frame.size,
     ));
@@ -299,5 +303,6 @@ mod tests {
         assert_eq!(legacy_layout.corner_radius, 9.0);
         assert_eq!(modern_layout.label_font_size, 24.0);
         assert_eq!(modern_layout.horizontal_padding, 30.0);
+        assert_eq!(modern_layout.label_vertical_offset, -4.0);
     }
 }
