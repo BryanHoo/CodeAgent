@@ -73,6 +73,7 @@ permissions = [
   "allow-stop-project-file-search",
   "allow-rename-project-file",
   "allow-delete-project-file",
+  "allow-open-project-file-window",
   "allow-read-project-source-file",
   "allow-get-project-git-status",
   "allow-get-project-git-history",
@@ -97,6 +98,17 @@ permissions = [
   "allow-archive-task",
   "allow-unarchive-task",
   "allow-delete-task",
+]
+
+[[set]]
+identifier = "project-file-window-commands"
+description = "Allows project file windows to initialize preferences and read one project file."
+permissions = [
+  "allow-initialize-app-storage",
+  "allow-record-frontend-diagnostic",
+  "allow-read-project-source-file",
+  "allow-cache-project-image",
+  "core:window:allow-close",
 ]
 
 [[set]]

@@ -8,12 +8,19 @@ import {
   type AgentTaskSettings,
   type AgentTurn,
   type EventCheckpoint,
+  type ProjectOpenAppId,
 } from "@/protocol/index.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { classifyProjectFileReference } from "../project-file-reference.js";
+import {
+  classifyProjectFileReference,
+  getProjectFileManagerOpenPath,
+} from "../project-file-reference.js";
 import { openProjectFileInNewWindow } from "../project-file-popup.js";
 
-import type { MessageFileReference } from "../../../shared/components/agent/message.js";
+import type {
+  MessageFileReference,
+  MessageFileReferenceOpenMode,
+} from "../../../shared/components/agent/message.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { notifyActionError } from "../../notifications/action-notifications.js";
 import {
@@ -35,6 +42,7 @@ import {
   type useWorkbenchShellRuntime,
 } from "./workbench-shell-runtime.js";
 import { inspectorOverlayQuery, sidebarOverlayQuery } from "./workbench-panel-layout.js";
+import { getProjectFileManagerApp } from "./project-open-menu.js";
 
 type WorkbenchShellControllerOptions = Readonly<{
   projectId: string;
@@ -75,6 +83,7 @@ export function useWorkbenchShellController(
     providerConnectionQuery,
     projectPathOpenLockRef,
     projectPathOpenMutationRef,
+    projectOpenCapabilitiesQuery,
     queryClient,
     renameMutation,
     runtime,
@@ -126,17 +135,30 @@ export function useWorkbenchShellController(
     ],
   );
   const openMessageFileReference = useCallback(
-    (reference: MessageFileReference, mode?: "popup") => {
-      const openSystemDefault = (path: string) => {
+    (reference: MessageFileReference, mode?: MessageFileReferenceOpenMode) => {
+      const openExternalPath = (appId: ProjectOpenAppId, path: string | undefined) => {
         const mutation = projectPathOpenMutationRef.current;
         mutation.reset();
         void projectPathOpenLockRef.current
-          .run(() => mutation.mutateAsync({ appId: "system-default", path }))
+          .run(() => mutation.mutateAsync({ appId, path }))
           .catch(() => undefined);
       };
+      if (mode === "containing-folder") {
+        const openCapabilities = projectOpenCapabilitiesQuery.data;
+        const fileManager = getProjectFileManagerApp(openCapabilities?.apps ?? []);
+        if (fileManager !== undefined && openCapabilities !== undefined) {
+          openExternalPath(
+            fileManager.id,
+            getProjectFileManagerOpenPath(reference.path, openCapabilities.platform),
+          );
+        }
+        return;
+      }
       if (mode === "popup") {
         openProjectFileInNewWindow({
-          onOpenSystemDefault: openSystemDefault,
+          onOpenSystemDefault: (path) => {
+            openExternalPath("system-default", path);
+          },
           projectId,
           reference,
           ...(selectedRootPath === undefined ? {} : { rootPath: selectedRootPath }),
@@ -145,7 +167,7 @@ export function useWorkbenchShellController(
       }
       const kind = classifyProjectFileReference(reference.path);
       if (kind === "system") {
-        openSystemDefault(reference.path);
+        openExternalPath("system-default", reference.path);
         return;
       }
 
@@ -158,6 +180,7 @@ export function useWorkbenchShellController(
       projectId,
       projectPathOpenLockRef,
       projectPathOpenMutationRef,
+      projectOpenCapabilitiesQuery.data,
       selectedRootPath,
       setInspectorOpen,
       setInspectorTab,

@@ -1,4 +1,6 @@
 import type { MessageFileReference } from "../../shared/components/agent/message.js";
+import { invoke } from "../../platform/tauri/native-invoke.js";
+import { recordFrontendDiagnostic } from "../../platform/tauri/diagnostics.js";
 import { classifyProjectFileReference } from "./project-file-reference.js";
 
 export type ProjectFilePopupSearch = Readonly<{
@@ -14,9 +16,6 @@ type OpenProjectFileInNewWindowOptions = Readonly<{
   reference: MessageFileReference;
   rootPath?: string;
 }>;
-
-const PROJECT_FILE_POPUP_TARGET = "codeagent-project-file-popup";
-const PROJECT_FILE_POPUP_FEATURES = "popup,width=1100,height=800,resizable=yes,scrollbars=yes";
 
 function parseLineNumber(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
@@ -71,6 +70,7 @@ export function buildProjectFilePopupUrl(
   if (rootPath !== undefined) {
     url.searchParams.set("rootPath", rootPath);
   }
+  url.searchParams.set("window", "project-file");
   return url.href;
 }
 
@@ -87,6 +87,16 @@ export function openProjectFileInNewWindow({
   }
 
   const url = buildProjectFilePopupUrl(window.location.href, projectId, reference, rootPath);
-  // 命名窗口配合明确尺寸，避免浏览器把仅含 popup 提示的请求降级为新标签页。
-  window.open(url, PROJECT_FILE_POPUP_TARGET, PROJECT_FILE_POPUP_FEATURES);
+  const parsedUrl = new URL(url);
+  const route = `${parsedUrl.pathname.replace(/^\/+/u, "")}${parsedUrl.search}`;
+  // Tauri WebView 不处理浏览器 popup，统一由受限原生命令创建独立窗口。
+  void invoke<void>("open_project_file_window", { route }).catch((error: unknown) => {
+    recordFrontendDiagnostic({
+      context: {},
+      errorMessage: error instanceof Error ? error.message : String(error),
+      event: "project_file_window_open_failed",
+      level: "error",
+      stack: error instanceof Error ? (error.stack ?? null) : null,
+    });
+  });
 }

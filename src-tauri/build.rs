@@ -96,6 +96,7 @@ fn main() {
         "stop_project_file_search",
         "rename_project_file",
         "delete_project_file",
+        "open_project_file_window",
         "read_project_source_file",
         "get_project_git_status",
         "get_project_git_history",

@@ -36,6 +36,7 @@ use application::{
     notification_commands::NotificationRuntime,
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
     pet_commands::{download_workbench_pet, list_workbench_pets},
+    project_file_window_commands::open_project_file_window,
     sidebar_commands::{
         add_project, archive_task, compact_task, delete_task, fork_task, get_task_settings,
         interrupt_turn, list_projects, list_tasks, pin_task, read_task, remove_project,
@@ -170,6 +171,7 @@ pub fn run() {
             stop_project_file_search,
             rename_project_file,
             delete_project_file,
+            open_project_file_window,
             read_project_source_file,
             get_project_git_status,
             get_project_git_history,

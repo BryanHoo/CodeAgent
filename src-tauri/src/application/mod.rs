@@ -19,6 +19,7 @@ pub mod notification_commands;
 pub mod open_commands;
 mod pet_assets;
 pub mod pet_commands;
+pub mod project_file_window_commands;
 mod request_cancellation;
 pub mod sidebar_commands;
 pub mod sidebar_directory_commands;

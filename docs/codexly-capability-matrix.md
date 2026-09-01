@@ -36,7 +36,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.151 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 0.151 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
-| 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、遵守 ignore 规则的缓存索引、会话取消和结果上限 | 已实现 |
+| 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、过滤 `.git` 与 `.DS_Store`、遵守 ignore 规则的缓存索引、会话取消和结果上限；源码与图片通过最小 capability 的轻量原生独立窗口预览 | 已实现 |
 | 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.151 `text`/`localImage` 输入；文件通过 `text_elements.placeholder` 保留名称与媒体类型，队列与历史恢复为附件 | 已实现 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |

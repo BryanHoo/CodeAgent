@@ -1,4 +1,4 @@
-import { ExternalLink, File } from "lucide-react";
+import { ExternalLink, File, FolderOpen } from "lucide-react";
 import {
   createContext,
   memo,
@@ -25,7 +25,7 @@ import {
 } from "../core/context-menu.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { CodeComments } from "./code-comments.js";
-import type { MessageFileReference } from "./message.js";
+import type { MessageFileReference, MessageFileReferenceOpenMode } from "./message.js";
 import {
   createIncrementalMarkdownBlockParser,
   IncrementalMessageResponseProcessor,
@@ -54,7 +54,7 @@ interface MarkdownNode {
 }
 
 const MessageFileReferenceContext = createContext<
-  ((reference: MessageFileReference, mode?: "popup") => void) | null
+  ((reference: MessageFileReference, mode?: MessageFileReferenceOpenMode) => void) | null
 >(null);
 
 function FileReferenceContextMenu({
@@ -63,7 +63,7 @@ function FileReferenceContextMenu({
   reference,
 }: Readonly<{
   children: ReactElement;
-  onOpen: (reference: MessageFileReference, mode?: "popup") => void;
+  onOpen: (reference: MessageFileReference, mode?: MessageFileReferenceOpenMode) => void;
   reference: MessageFileReference;
 }>) {
   const { t } = useTranslation("workbench");
@@ -71,6 +71,14 @@ function FileReferenceContextMenu({
     <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent aria-label={t("openMenu.targetLabel", { path: reference.path })}>
+        <ContextMenuItem
+          onSelect={() => {
+            onOpen(reference, "containing-folder");
+          }}
+        >
+          <FolderOpen aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.openContainingFolder")}</span>
+        </ContextMenuItem>
         <ContextMenuItem
           onSelect={() => {
             onOpen(reference, "popup");
@@ -330,7 +338,10 @@ function MarkdownLink({
 }
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
-  onOpenFileReference?: (reference: MessageFileReference, mode?: "popup") => void;
+  onOpenFileReference?: (
+    reference: MessageFileReference,
+    mode?: MessageFileReferenceOpenMode,
+  ) => void;
   promptFileReferences?: boolean;
 };
 

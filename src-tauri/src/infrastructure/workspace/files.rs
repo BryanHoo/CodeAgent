@@ -53,7 +53,8 @@ pub async fn list_project_files(
     let mut entries = Vec::new();
     while let Some(entry) = reader.next_entry().await? {
         let file_type = entry.file_type().await?;
-        if file_type.is_symlink() || entry.file_name() == ".git" {
+        let file_name = entry.file_name();
+        if file_type.is_symlink() || matches!(file_name.to_str(), Some(".git" | ".DS_Store")) {
             continue;
         }
         entries.push(FileTreeEntry {
@@ -168,10 +169,17 @@ mod tests {
         let root = std::env::temp_dir().join(format!("codeagent-workspace-{unique}"));
         fs::create_dir_all(root.join("src")).unwrap();
         fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("src/.DS_Store"), b"finder metadata").unwrap();
         let root = fs::canonicalize(root).unwrap();
 
         let tree = list_project_files(&root, Some("src")).await.unwrap();
-        assert_eq!(tree.entries[0].path, "src/main.rs");
+        assert_eq!(
+            tree.entries
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            ["src/main.rs"]
+        );
         assert!(read_source_file(&root, "../outside", None).await.is_err());
         let renamed = rename_project_file(&root, "src/main.rs", "lib.rs")
             .await

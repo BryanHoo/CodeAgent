@@ -23,14 +23,45 @@ if (!(rootElement instanceof HTMLElement)) {
 }
 const applicationRoot = rootElement;
 const windowSurface = new URLSearchParams(window.location.search).get("window");
-const appSurface = windowSurface === "desktop-pet" ? windowSurface : "main";
+const appSurface =
+  windowSurface === "desktop-pet" || windowSurface === "project-file" ? windowSurface : "main";
 document.documentElement.dataset.appSurface = appSurface;
 installPerformanceMonitoring();
 installGlobalDiagnostics();
 const reactDiagnosticHandlers = createReactDiagnosticHandlers();
 
+async function initializeAppStorageSafely(): Promise<void> {
+  try {
+    // 存储故障不应阻断任何窗口启动，本次运行继续使用默认偏好。
+    await initializeAppStorage();
+  } catch (error) {
+    recordFrontendDiagnostic({
+      context: {},
+      errorMessage: error instanceof Error ? error.message : "App storage initialization failed",
+      event: "app_storage_initialization_failed",
+      level: "warn",
+      stack: error instanceof Error ? (error.stack ?? null) : null,
+    });
+  }
+}
+
 async function startApplication(): Promise<void> {
   await prepareWebviewTestBridge();
+  if (appSurface === "project-file") {
+    const [{ ProjectFileWindowApplication }, { initializeThemePreference }] = await Promise.all([
+      import("./app/project-file-window-application.js"),
+      import("./features/settings/theme-preference.js"),
+    ]);
+    await initializeAppStorageSafely();
+    initializeThemePreference();
+    await synchronizeLanguagePreference();
+    createRoot(applicationRoot, reactDiagnosticHandlers).render(
+      <StrictMode>
+        <ProjectFileWindowApplication />
+      </StrictMode>,
+    );
+    return;
+  }
   if (appSurface !== "main") {
     const { DesktopPetWindow } = await import(
       "./features/pets/components/desktop-pet-window.js"
@@ -50,19 +81,7 @@ async function startApplication(): Promise<void> {
     import("./app/providers.js"),
     import("./features/settings/theme-preference.js"),
   ]);
-  try {
-    // 首次启动会先把旧 WebView 数据迁入应用目录，失败时保留旧数据供下次重试。
-    await initializeAppStorage();
-  } catch (error) {
-    // 存储故障不应阻断工作台启动，本次运行使用默认值。
-    recordFrontendDiagnostic({
-      context: {},
-      errorMessage: error instanceof Error ? error.message : "App storage initialization failed",
-      event: "app_storage_initialization_failed",
-      level: "warn",
-      stack: error instanceof Error ? (error.stack ?? null) : null,
-    });
-  }
+  await initializeAppStorageSafely();
   initializeThemePreference();
   await synchronizeLanguagePreference();
 

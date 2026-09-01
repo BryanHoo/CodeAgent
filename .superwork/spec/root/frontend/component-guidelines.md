@@ -14,6 +14,7 @@
 - 对话 Turn 列表必须使用 TanStack Virtual 2026 Chat 模式：以稳定 Turn ID 作为 `getItemKey`，使用 `anchorTo: "end"`、`followOnAppend`、动态 `measureElement` 和有界 overscan；滚动容器、虚拟 sizer 与行位置必须由同一个 Virtualizer 实例管理，启用 `directDomUpdates` 降低滚动期 React 提交；WebKit 使用 `directDomUpdatesMode: "position"`，禁止行级 transform 合成层和应用侧重复 `scrollTop` 补偿；历史 prepend 依赖 end anchor 保持可见 Turn，流式增长仅在用户已经置底时跟随；分页头、Turn 与待处理尾部必须进入同一虚拟序列，导航先定位 Turn 再定位内部消息锚点；`content-visibility` 不得用于对话列表正确性或替代 DOM 窗口化
 - 时间线右侧轻量导航必须使用自然文档流完整挂载，不得使用虚拟 sizer、尺寸测量或绝对位移；固定行高虚拟化仅用于可达万级数据的源码行和项目文件树
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
+- 工具型独立窗口必须由受限 Tauri 命令创建，使用专用轻量启动面和最小 capability；不得使用 WebView `window.open()`，也不得挂载完整工作台 Provider 树
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航
 - Provider 官方认证仅允许打开 `https` URL，并必须通过 `src/platform/tauri/` 调用系统 URL opener；不得使用 WebView `window.open()`
 - MCP URL elicitation 必须使用 `new URL()` 严格解析并仅允许 `http/https`，在用户操作前展示完整 URL、突出 `hostname` 并明确征得同意；同意后必须先通过 `src/platform/tauri/` 在系统浏览器打开，成功后才能提交 `accept`，不得使用 WebView 链接导航

@@ -3,7 +3,7 @@ import type { ProjectSourceFile } from "@/protocol/index.js";
 import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode, type UIEvent } from "react";
 
-import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
+import type { NativeSourceFileClient } from "../../projects/project-query-contracts.js";
 import {
   getMarkdownPreviewPreferenceStorage,
   readMarkdownPreviewPreference,
@@ -31,7 +31,7 @@ import { useTranslation } from "../../../i18n/i18n.js";
 export { getCodeLanguage } from "../../../shared/components/agent/code-languages.js";
 
 type ProjectSourcePanelProps = Readonly<{
-  client: NativeWorkbenchClient;
+  client: NativeSourceFileClient;
   onClose?: () => void;
   previewKind: "image" | "source";
   projectId: string;
