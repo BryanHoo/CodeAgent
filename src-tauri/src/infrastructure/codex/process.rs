@@ -290,10 +290,14 @@ fn background_process_command(program: &OsStr) -> Command {
 fn configure_background_process_command(mut command: Command) -> Command {
     use std::os::windows::process::CommandExt;
 
-    // GUI 应用启动控制台程序时必须显式禁用新控制台，否则长期 app-server 会一直显示终端窗口。
+    // Windows 11 24H2+ 的应用入口会创建无窗口控制台，Codex 及其后代共同继承它。
+    // 旧系统无法分配这种控制台时，至少禁止直接子进程创建窗口。
     command
         .as_std_mut()
-        .creation_flags(background_process_creation_flags(env::consts::OS));
+        .creation_flags(background_process_creation_flags(
+            env::consts::OS,
+            windows_process_platform::has_hidden_console(),
+        ));
     command
 }
 
@@ -303,8 +307,8 @@ fn configure_background_process_command(command: Command) -> Command {
 }
 
 #[cfg(any(windows, test))]
-fn background_process_creation_flags(os: &str) -> u32 {
-    if os == "windows" {
+fn background_process_creation_flags(os: &str, has_hidden_console: bool) -> u32 {
+    if os == "windows" && !has_hidden_console {
         WINDOWS_CREATE_NO_WINDOW
     } else {
         0
@@ -343,10 +347,14 @@ mod tests {
     }
 
     #[test]
-    fn windows_background_process_should_not_create_console_window() {
-        assert_eq!(background_process_creation_flags("windows"), 0x0800_0000);
-        assert_eq!(background_process_creation_flags("macos"), 0);
-        assert_eq!(background_process_creation_flags("linux"), 0);
+    fn windows_background_process_should_inherit_the_apps_hidden_console() {
+        assert_eq!(background_process_creation_flags("windows", true), 0);
+        assert_eq!(
+            background_process_creation_flags("windows", false),
+            0x0800_0000
+        );
+        assert_eq!(background_process_creation_flags("macos", false), 0);
+        assert_eq!(background_process_creation_flags("linux", false), 0);
     }
 
     #[test]

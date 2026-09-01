@@ -637,6 +637,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
+ "windows-process-platform",
 ]
 
 [[package]]
@@ -5594,6 +5595,13 @@ checksum = "9150af68066c4c5c07ddc0ce30421554771e528bde427614c61038bc2c92c2b1"
 dependencies = [
  "windows-core 0.61.2",
  "windows-link 0.1.3",
+]
+
+[[package]]
+name = "windows-process-platform"
+version = "0.1.0"
+dependencies = [
+ "windows",
 ]
 
 [[package]]
