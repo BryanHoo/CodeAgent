@@ -309,6 +309,7 @@ export function WorkbenchShellLayout({
               onTaskCreated={handleTaskCreated}
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
+              projectName={projectName}
               projectPath={projectPath}
               projectPathOpenDisabled={projectFolderOpenDisabled}
               projectRoots={projectRoots}
@@ -336,6 +337,7 @@ export function WorkbenchShellLayout({
             onProjectRootChange={setSelectedRootId}
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
+            projectName={projectName}
             projectPath={projectPath}
             projectPathOpenDisabled={projectFolderOpenDisabled}
             projectRoots={projectRoots}

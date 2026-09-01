@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use serde::Deserialize;
 
 use crate::domain::runtime::{
@@ -15,7 +17,9 @@ struct DeltaNotification<'a> {
     thread_id: &'a str,
     turn_id: &'a str,
     item_id: &'a str,
-    delta: &'a str,
+    // JSON 转义内容无法直接借用；Cow 仅在换行等转义出现时分配解码缓冲区。
+    #[serde(borrow)]
+    delta: Cow<'a, str>,
     #[serde(default)]
     summary_index: Option<u64>,
 }
@@ -50,7 +54,7 @@ pub(super) fn map_delta_message(
     Ok(Some(AgentDeltaEvent {
         item_id: params.item_id.to_owned(),
         payload: AgentDeltaPayload {
-            delta: params.delta.to_owned(),
+            delta: params.delta.into_owned(),
             field,
             section_index: params.summary_index,
         },
@@ -108,5 +112,27 @@ mod tests {
                 "version": 2
             })
         );
+    }
+
+    #[test]
+    fn maps_agent_message_delta_with_escaped_newlines() {
+        let message = ServerMessage {
+            id: None,
+            method: "item/agentMessage/delta".to_owned(),
+            params: to_raw_value(&json!({
+                "threadId": "thread-a",
+                "turnId": "turn-a",
+                "itemId": "item-a",
+                "delta": "\n\n- 下一项"
+            }))
+            .unwrap(),
+        };
+
+        let event = map_delta_message(&message, 4, "2025-01-01T00:00:00Z", 1_735_689_600_456)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(event.payload.delta, "\n\n- 下一项");
+        assert_eq!(event.event_type, AgentDeltaType::Message);
     }
 }

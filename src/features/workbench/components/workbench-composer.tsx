@@ -3,6 +3,7 @@ import { useEffect, useImperativeHandle, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { getTaskStoreUserMessageIds } from "../composer-queue-state.js";
+import { useProjectDrafts, useProjectDraftStore } from "../project-draft-context.js";
 import {
   interruptPromptTurn,
   resolveComposerSubmitAction,
@@ -12,7 +13,9 @@ import { HostAttachmentPickerDialog } from "./host-attachment-picker-dialog.js";
 import { isPromptSkillContentEmpty } from "./prompt-skill-editor.js";
 import { useWorkbenchBranchSwitch } from "../hooks/use-workbench-branch-switch.js";
 import { useComposerQueue } from "../hooks/use-composer-queue.js";
+import { useComposerMenuDismiss } from "../hooks/use-composer-menu-dismiss.js";
 import { createComposerCommands } from "./workbench-composer-commands.js";
+import { createProjectDraftComposerActions } from "./project-draft-composer-actions.js";
 import type { WorkbenchComposerProps } from "./workbench-composer-contracts.js";
 import { useComposerSession } from "./workbench-composer-session.js";
 import { createComposerSubmission } from "./workbench-composer-submission.js";
@@ -61,6 +64,7 @@ export function WorkbenchComposer({
   onTaskStarted,
   onTurnStarted,
   projectId,
+  projectName,
   projectPath,
   projectPathOpenDisabled,
   projectRoots,
@@ -73,15 +77,24 @@ export function WorkbenchComposer({
   taskId,
 }: WorkbenchComposerProps) {
   const { t } = useTranslation(["workbench", "settings"]);
+  const projectDraftStore = useProjectDraftStore();
+  const projectDrafts = useProjectDrafts(projectId);
+  const [editingProjectDraft, setEditingProjectDraft] = useState<
+    Readonly<{ draftId: string; projectId: string }>
+  >();
+  const editingProjectDraftId =
+    editingProjectDraft?.projectId === projectId ? editingProjectDraft.draftId : undefined;
   const session = useComposerSession({
     capabilities,
     client,
+    editingProjectDraftId,
     gitStatus,
     models,
     onSubmissionStateChange,
     projectId,
     projectPath,
     projectToolsEnabled,
+    projectDraftStore,
     runtime,
     settings,
     skills,
@@ -148,7 +161,14 @@ export function WorkbenchComposer({
   const fastModeSelected =
     fastModeSelection?.scope === composerScope ? fastModeSelection.enabled : fastModeDefault;
   const fastModeEnabled = fastModeAvailable && fastModeSelected;
-  const { actionLock: composerActionLock, interruptAttempt, isCurrentScope } = composerController;
+  const {
+    actionLock: composerActionLock,
+    attachmentUploadPromises,
+    interruptAttempt,
+    isCurrentScope,
+    uploadAttempts,
+    uploadedAttachments,
+  } = composerController;
   const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
     const requestScope = routeScope;
     setSettingsOverride({ scope: requestScope, settings: nextSettings });
@@ -167,39 +187,14 @@ export function WorkbenchComposer({
     routeScope,
   });
 
-  useEffect(() => {
-    if (turnControlsDisabled) {
-      closeCommandMenu();
-      closeFileMenu();
-    }
-  }, [closeCommandMenu, closeFileMenu, turnControlsDisabled]);
-
-  useEffect(() => {
-    if (!commandMenuOpen && !fileMenuOpen) {
-      return undefined;
-    }
-    const handleDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeCommandMenu();
-        closeFileMenu();
-      }
-    };
-    const handleDocumentPointerDown = (event: PointerEvent) => {
-      const eventTarget = event.target;
-      if (eventTarget instanceof Node && !commandSurfaceRef.current?.contains(eventTarget)) {
-        // 输入框和命令弹层共享一个交互区域，只有点击区域外部才关闭弹层。
-        closeCommandMenu();
-        closeFileMenu();
-      }
-    };
-    document.addEventListener("keydown", handleDocumentKeyDown, true);
-    document.addEventListener("pointerdown", handleDocumentPointerDown, true);
-    return () => {
-      document.removeEventListener("keydown", handleDocumentKeyDown, true);
-      document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
-    };
-  }, [closeCommandMenu, closeFileMenu, commandMenuOpen, commandSurfaceRef, fileMenuOpen]);
+  useComposerMenuDismiss({
+    closeCommandMenu,
+    closeFileMenu,
+    commandMenuOpen,
+    commandSurfaceRef,
+    fileMenuOpen,
+    turnControlsDisabled,
+  });
 
   const composerQueue = useComposerQueue({
     activeTurnId,
@@ -256,7 +251,35 @@ export function WorkbenchComposer({
     t,
     turnControlsDisabled,
   });
-
+  const hasComposerInput = !isPromptSkillContentEmpty(promptContent) || attachmentCount > 0;
+  const projectDraftActions = createProjectDraftComposerActions({
+    actionLock: composerActionLock,
+    attachmentUploadPromises,
+    attachments,
+    clearComposerInput,
+    client,
+    editingDraftId: editingProjectDraftId,
+    fallbackErrors: {
+      attachmentUpload: t("composer.attachmentUploadFailed"),
+      saveDraft: t("composer.saveDraftFailed"),
+    },
+    hasComposerInput,
+    isCurrentScope,
+    isSubmitting,
+    onAttachmentsChange: handleAttachmentsChange,
+    onEditingComplete: () => setEditingProjectDraft(undefined),
+    onPromptChange: handlePromptChange,
+    projectDraftStore,
+    projectId,
+    promptContent,
+    routeScope,
+    setIsSubmitting,
+    setMutationError,
+    skillEditorRef,
+    submitPrompt,
+    uploadAttempts,
+    uploadedAttachments,
+  });
   useImperativeHandle(composerRef, () => ({
     buildPlan: () => {
       setComposerModeState(undefined); // 避免后续 Turn 再次请求生成计划。
@@ -267,7 +290,6 @@ export function WorkbenchComposer({
     },
     referenceProjectPath,
   }));
-
   const {
     executePromptCommand,
     executeReviewTarget,
@@ -316,12 +338,10 @@ export function WorkbenchComposer({
     });
   };
 
-  const hasComposerInput = !isPromptSkillContentEmpty(promptContent) || attachmentCount > 0;
   const submitAction =
     composerQueue.editingId === undefined
       ? resolveComposerSubmitAction(state, hasComposerInput, followUpBehavior, canSteer)
       : "queue";
-
   const composerView = (
     <WorkbenchComposerView
       activeCommandIndex={activeCommandIndex}
@@ -355,6 +375,7 @@ export function WorkbenchComposer({
       gitStatus={gitStatus}
       goal={runtime?.metadata?.goal}
       hasComposerInput={hasComposerInput}
+      editingProjectDraftId={editingProjectDraftId}
       isSubmitting={isSubmitting}
       menuItemCount={menuItemCount}
       moveQueuedPrompt={(queuedPromptId, offset) => {
@@ -369,7 +390,20 @@ export function WorkbenchComposer({
       onComposerModeRemove={() => {
         setComposerModeState(undefined);
       }}
-      onAttachmentsChange={handleAttachmentsChange}
+      onProjectDraftDelete={(draftId) => {
+        projectDraftStore.remove(projectId, draftId);
+        if (editingProjectDraftId === draftId) setEditingProjectDraft(undefined);
+      }}
+      onProjectDraftRestore={(draftId) => {
+        if (projectDraftStore.read(projectId, draftId) !== undefined) {
+          if (editingProjectDraftId === undefined) clearComposerInput();
+          setEditingProjectDraft({ draftId, projectId });
+        }
+      }}
+      onProjectDraftSave={() => {
+        void projectDraftActions.save();
+      }}
+      onAttachmentsChange={projectDraftActions.changeAttachments}
       onBranchCreate={branchMutation.createBranch}
       onBranchChange={(branch) => {
         void branchMutation.switchBranch(branch);
@@ -397,14 +431,14 @@ export function WorkbenchComposer({
         setActiveCommandIndex(0);
         setReviewMenuMode("branches");
       }}
-      onPromptChange={handlePromptChange}
+      onPromptChange={projectDraftActions.changePrompt}
       onPromptHistoryNavigate={navigatePromptHistory}
       onSelectActiveCommand={selectActiveCommandItem}
       onSelectAttachmentKind={setAttachmentPickerKind}
       onSelectFileReference={selectFileReference}
       onSelectSkill={selectSkill}
       onSettingsChange={updateSettings}
-      onSubmit={(message) => void submitPrompt(message)}
+      onSubmit={(message) => void projectDraftActions.submit(message)}
       onViewError={(error) => {
         setMutationError(error);
       }}
@@ -412,6 +446,8 @@ export function WorkbenchComposer({
       projectPathOpenDisabled={projectPathOpenDisabled}
       projectRoots={projectRoots}
       projectToolsEnabled={projectToolsEnabled}
+      projectDrafts={projectDrafts}
+      projectName={projectName}
       promptContent={promptContent}
       promptSubmissionText={promptSubmission.text}
       queuedPrompts={composerQueue.queuedPrompts}

@@ -19,6 +19,7 @@ import type {
 } from "../../../shared/components/agent/prompt-input.js";
 import type { QueuedComposerPrompt } from "../composer-queue-state.js";
 import type { ComposerState, ComposerSubmitAction } from "../composer-state.js";
+import type { ProjectDraftRecord } from "../project-draft-store.js";
 import type { PromptCommandItem } from "./prompt-command.js";
 import type { PromptSkillContent, PromptSkillEditorHandle } from "./prompt-skill-editor.js";
 import type { ComposerMode } from "./workbench-composer-contracts.js";
@@ -45,6 +46,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   creatingBranch: string | undefined;
   creatingWorktree: string | undefined;
   draftInputDisabled: boolean;
+  editingProjectDraftId: string | undefined;
   editQueuedPrompt: (queuedPrompt: QueuedComposerPrompt) => void;
   filteredCommands: readonly PromptCommandItem[];
   filteredSkills: readonly AgentSkill[];
@@ -77,6 +79,9 @@ export type WorkbenchComposerViewProps = Readonly<{
   onProjectRootChange: (rootId: string) => void;
   onOpenReviewBranches: () => void;
   onComposerModeRemove: () => void;
+  onProjectDraftDelete: (draftId: string) => void;
+  onProjectDraftRestore: (draftId: string) => void;
+  onProjectDraftSave: () => void;
   onPromptChange: (
     content: PromptSkillContent,
     serializedText: string,
@@ -94,6 +99,8 @@ export type WorkbenchComposerViewProps = Readonly<{
   projectPathOpenDisabled: boolean;
   projectRoots: readonly ProjectRoot[];
   projectToolsEnabled: boolean;
+  projectDrafts: readonly ProjectDraftRecord[];
+  projectName: string;
   promptContent: PromptSkillContent;
   promptSubmissionText: string;
   queuedPrompts: readonly QueuedComposerPrompt[];

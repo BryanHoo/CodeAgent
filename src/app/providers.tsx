@@ -8,6 +8,7 @@ import { createActionMutationCache } from "../features/notifications/action-noti
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { CodexRuntimeGate } from "../features/runtime/components/codex-runtime-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
+import { ProjectDraftProvider } from "../features/workbench/project-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
 import { TooltipProvider } from "../shared/components/core/tooltip.js";
 import {
@@ -68,7 +69,9 @@ function AppProviderContent({ children }: AppProvidersProps) {
         <ProviderConnectionGate>
           <ProjectProvider>
             <TaskActivityRestore />
-            <ComposerDraftProvider>{children}</ComposerDraftProvider>
+            <ProjectDraftProvider>
+              <ComposerDraftProvider>{children}</ComposerDraftProvider>
+            </ProjectDraftProvider>
           </ProjectProvider>
         </ProviderConnectionGate>
       </CodexRuntimeGate>

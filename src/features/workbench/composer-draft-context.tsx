@@ -13,7 +13,7 @@ const emptyComposerDraft: ComposerDraft = {
   content: [],
 };
 
-type ComposerDraftStore = Readonly<{
+export type ComposerDraftStore = Readonly<{
   clear: (scope: string) => void;
   dispose: () => void;
   read: (scope: string) => ComposerDraft;

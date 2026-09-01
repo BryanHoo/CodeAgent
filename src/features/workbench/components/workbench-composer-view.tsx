@@ -41,6 +41,7 @@ import { ProjectRootSelector } from "./project-root-selector.js";
 import { selectionOffset } from "./prompt-skill-editor-dom.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
+import { ComposerDraftSaveButton, ProjectDraftList } from "./project-draft-controls.js";
 import {
   ComposerAttachments,
   ComposerFastModeButton,
@@ -397,6 +398,11 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 selectedModel={props.selectedModel}
                 selectedReasoningEffort={props.selectedReasoningEffort}
               />
+              <ComposerDraftSaveButton
+                disabled={!props.hasComposerInput || props.isSubmitting}
+                editing={props.editingProjectDraftId !== undefined}
+                onSave={props.onProjectDraftSave}
+              />
               <PromptInputSubmit
                 aria-label={
                   props.submitAction === "queue"
@@ -459,13 +465,21 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
             />
           </>
         ) : null}
-        <Context
-          className="ml-auto"
-          maxTokens={props.contextUsage?.contextWindow}
-          usedTokens={props.contextUsage?.usedTokens}
-        >
-          <ContextTrigger />
-        </Context>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <ProjectDraftList
+            composerHasInput={props.hasComposerInput}
+            drafts={props.projectDrafts}
+            onDelete={props.onProjectDraftDelete}
+            onRestore={props.onProjectDraftRestore}
+            projectName={props.projectName}
+          />
+          <Context
+            maxTokens={props.contextUsage?.contextWindow}
+            usedTokens={props.contextUsage?.usedTokens}
+          >
+            <ContextTrigger />
+          </Context>
+        </div>
       </div>
     </section>
   );

@@ -138,6 +138,7 @@ export function createComposerSubmission({
 }: ComposerSubmissionOptions) {
   const {
     actionLock: composerActionLock,
+    attachmentUploadPromises,
     isCurrentScope,
     setIsSubmitting,
     setMutationError,
@@ -235,21 +236,34 @@ export function createComposerSubmission({
             if (uploaded !== undefined) {
               return uploaded;
             }
+            const pendingUpload = attachmentUploadPromises.current.get(browserAttachment.id);
+            if (pendingUpload !== undefined) return pendingUpload;
             const idempotencyKey = uploadAttempts.current.get(browserAttachment.id) ?? createUuid();
             uploadAttempts.current.set(browserAttachment.id, idempotencyKey);
-            const response = await client.uploadAttachment(
-              projectId,
-              {
-                content: browserAttachment.file,
-                kind: browserAttachment.kind,
-                name: browserAttachment.name,
-              },
-              { idempotencyKey },
-            );
-            if (isCurrentScope(requestScope)) {
-              uploadedAttachments.current.set(browserAttachment.id, response.attachment);
+            const uploadPromise = client
+              .uploadAttachment(
+                projectId,
+                {
+                  content: browserAttachment.file,
+                  kind: browserAttachment.kind,
+                  name: browserAttachment.name,
+                },
+                { idempotencyKey },
+              )
+              .then((response) => {
+                if (isCurrentScope(requestScope)) {
+                  uploadedAttachments.current.set(browserAttachment.id, response.attachment);
+                }
+                return response.attachment;
+              });
+            attachmentUploadPromises.current.set(browserAttachment.id, uploadPromise);
+            try {
+              return await uploadPromise;
+            } finally {
+              if (attachmentUploadPromises.current.get(browserAttachment.id) === uploadPromise) {
+                attachmentUploadPromises.current.delete(browserAttachment.id);
+              }
             }
-            return response.attachment;
           }),
         ),
       );

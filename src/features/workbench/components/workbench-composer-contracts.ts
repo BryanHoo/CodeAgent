@@ -17,6 +17,7 @@ import type {
 } from "@/protocol/index.js";
 import type { Ref } from "react";
 
+import { buildNativeAssetUrl } from "../../../platform/native-asset-url.js";
 import type {
   BrowserPromptInputAttachment,
   PromptInputAttachment,
@@ -96,6 +97,7 @@ export type WorkbenchComposerProps = Readonly<{
     checkpoint?: EventCheckpoint,
   ) => void;
   projectId: string;
+  projectName: string;
   projectPathOpenDisabled: boolean;
   projectPath: string;
   projectToolsEnabled?: boolean;
@@ -119,4 +121,28 @@ export async function resolvePromptAttachment(
   return attachment.kind === "image"
     ? { ...resolved, detail: attachment.detail ?? "auto" }
     : resolved;
+}
+
+export async function persistPromptAttachments(
+  attachments: readonly PromptInputAttachment[],
+  uploadBrowserAttachment: (attachment: BrowserPromptInputAttachment) => Promise<AgentAttachment>,
+): Promise<readonly PromptInputAttachment[]> {
+  const persisted = new Array<PromptInputAttachment>(attachments.length);
+  let nextIndex = 0;
+  const persistNext = async (): Promise<void> => {
+    while (nextIndex < attachments.length) {
+      // 固定两路并发，避免多个大附件同时复制到 WebView 与 Rust 堆。
+      const index = nextIndex;
+      nextIndex += 1;
+      const resolved = await resolvePromptAttachment(attachments[index]!, uploadBrowserAttachment);
+      persisted[index] = {
+        attachment: resolved,
+        ...resolved,
+        previewUrl: resolved.kind === "image" ? buildNativeAssetUrl(resolved.id) : "",
+        source: "host",
+      };
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(2, attachments.length) }, persistNext));
+  return persisted;
 }
