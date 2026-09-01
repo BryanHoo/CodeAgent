@@ -1,10 +1,19 @@
 use std::path::Path;
 
 #[cfg(unix)]
+use super::process::probe_codex_version;
+#[cfg(unix)]
+use super::runtime_discovery::initial_candidate_paths;
+use super::runtime_discovery::{
+    codex_executable_names, official_binary_directories, private_codex_binary_path,
+};
+use super::runtime_manager::distribution_for;
+#[cfg(unix)]
 use super::runtime_manager::inspect_codex_runtime;
-use super::runtime_manager::{codex_executable_names, distribution_for, private_codex_binary_path};
 #[cfg(unix)]
 use crate::domain::runtime::CodexRuntimeAvailabilityStatus;
+#[cfg(unix)]
+use std::ffi::OsStr;
 
 #[test]
 fn private_runtime_should_use_the_provider_version_directory() {
@@ -83,6 +92,41 @@ fn windows_runtime_should_include_the_npm_cmd_shim() {
     assert_eq!(codex_executable_names("linux"), &["codex"]);
 }
 
+#[test]
+fn official_install_locations_should_cover_all_platform_layouts() {
+    let unix = official_binary_directories(
+        "linux",
+        Some(Path::new("/home/user")),
+        Some(Path::new("/custom/codex-home")),
+        Some(Path::new("/custom/bin")),
+        None,
+    );
+    assert!(unix.contains(&Path::new("/custom/bin").to_path_buf()));
+    assert!(
+        unix.contains(
+            &Path::new("/custom/codex-home/packages/standalone/current/bin").to_path_buf()
+        )
+    );
+    assert!(
+        unix.contains(&Path::new("/custom/codex-home/packages/standalone/current").to_path_buf())
+    );
+    assert!(unix.contains(&Path::new("/home/user/.local/bin").to_path_buf()));
+
+    let windows = official_binary_directories(
+        "windows",
+        Some(Path::new("C:/Users/user")),
+        None,
+        None,
+        Some(Path::new("C:/Users/user/AppData/Local")),
+    );
+    assert!(windows.contains(
+        &Path::new("C:/Users/user/.codex/packages/standalone/current/bin").to_path_buf()
+    ));
+    assert!(windows.contains(
+        &Path::new("C:/Users/user/AppData/Local/Programs/OpenAI/Codex/bin").to_path_buf()
+    ));
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn inspection_should_find_the_compatible_private_runtime() {
@@ -106,4 +150,36 @@ async fn inspection_should_find_the_compatible_private_runtime() {
     );
     assert_eq!(availability.detected_version.as_deref(), Some("0.152.0"));
     std::fs::remove_dir_all(app_data).unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn discovery_and_probe_should_use_the_login_shell_path() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("codeagent-shell-path-{unique}"));
+    let bin_dir = root.join("bin");
+    let binary = bin_dir.join("codex");
+    let interpreter = bin_dir.join("codeagent-test-node");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    std::fs::write(&binary, "#!/usr/bin/env codeagent-test-node\n").unwrap();
+    std::fs::write(&interpreter, "#!/bin/sh\necho 'codex-cli 0.151.0'\n").unwrap();
+    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(&interpreter, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let candidates =
+        initial_candidate_paths(&root.join("app-data"), Some(OsStr::new(&bin_dir))).paths;
+
+    assert!(candidates.contains(&binary.canonicalize().unwrap()));
+    assert_eq!(
+        probe_codex_version(&binary, Some(OsStr::new(&bin_dir)))
+            .await
+            .unwrap(),
+        "0.151.0"
+    );
+    std::fs::remove_dir_all(root).unwrap();
 }

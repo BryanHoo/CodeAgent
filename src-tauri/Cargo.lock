@@ -659,6 +659,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "windows-process-platform",
+ "winreg",
  "zip",
 ]
 

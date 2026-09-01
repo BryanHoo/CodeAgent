@@ -6,5 +6,6 @@ publish = false
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61.3", features = [
+  "Win32_System_Environment",
   "Win32_System_LibraryLoader",
 ] }

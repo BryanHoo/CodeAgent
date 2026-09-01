@@ -1,10 +1,15 @@
 #[cfg(windows)]
 mod platform {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::{
+        ffi::{OsStr, OsString},
+        os::windows::ffi::{OsStrExt, OsStringExt},
+        sync::atomic::{AtomicBool, Ordering},
+    };
 
     use windows::{
+        Win32::System::Environment::ExpandEnvironmentStringsW,
         Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress},
-        core::{s, w},
+        core::{PCWSTR, s, w},
     };
 
     const ALLOC_CONSOLE_MODE_NO_WINDOW: i32 = 2;
@@ -30,6 +35,25 @@ mod platform {
 
     pub fn has_hidden_console() -> bool {
         HAS_HIDDEN_CONSOLE.load(Ordering::Acquire)
+    }
+
+    pub fn expand_environment_strings(value: &OsStr) -> Option<OsString> {
+        let source = value.encode_wide().chain([0]).collect::<Vec<_>>();
+        let required = unsafe { ExpandEnvironmentStringsW(PCWSTR(source.as_ptr()), None) };
+        if required == 0 {
+            return None;
+        }
+        let mut output = vec![0_u16; required as usize];
+        let written = unsafe {
+            ExpandEnvironmentStringsW(PCWSTR(source.as_ptr()), Some(output.as_mut_slice()))
+        };
+        if written == 0 || written > required {
+            return None;
+        }
+        // API 返回值包含末尾 NUL，OsString 只保留实际环境变量展开结果。
+        Some(OsString::from_wide(
+            &output[..written.saturating_sub(1) as usize],
+        ))
     }
 
     unsafe fn allocate_hidden_console() -> bool {
@@ -60,7 +84,7 @@ mod platform {
 }
 
 #[cfg(windows)]
-pub use platform::{has_hidden_console, initialize_hidden_console};
+pub use platform::{expand_environment_strings, has_hidden_console, initialize_hidden_console};
 
 #[cfg(not(windows))]
 pub fn initialize_hidden_console() {}

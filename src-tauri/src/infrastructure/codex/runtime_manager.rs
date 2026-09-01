@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     env,
+    ffi::OsString,
     io::{self, Write},
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -18,19 +19,21 @@ use thiserror::Error;
 use tokio::{fs, io::AsyncWriteExt, task};
 
 use super::{
-    process::{
-        SUPPORTED_CODEX_VERSION, executable_path, is_compatible_codex_version, probe_codex_version,
+    process::{SUPPORTED_CODEX_VERSION, is_compatible_codex_version, probe_codex_version},
+    runtime_discovery::{
+        expanded_candidate_paths, initial_candidate_paths, private_codex_binary_path,
     },
     runtime_distributions::{DARWIN_ARM64, LINUX_ARM64, LINUX_X64, WINDOWS_ARM64, WINDOWS_X64},
     runtime_download_progress::{DownloadProgressLimiter, DownloadProgressReporter},
+    runtime_path::resolve_runtime_path,
 };
 use crate::domain::runtime::{
     CodexRuntimeAvailability, CodexRuntimeAvailabilityStatus as AvailabilityStatus,
     CodexRuntimeInstallProgress,
 };
 
-const CODEX_BINARY_ENV: &str = "CODEAGENT_CODEX_BIN";
 const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.151.0";
+const MAX_CONCURRENT_PROBES: usize = 4;
 const MAX_DOWNLOAD_BYTES: u64 = 192 * 1024 * 1024;
 const MAX_UNPACKED_BYTES: u64 = 512 * 1024 * 1024;
 static INSTALL_ID: AtomicU64 = AtomicU64::new(1);
@@ -76,20 +79,29 @@ struct Inspection {
     binary_path: Option<PathBuf>,
 }
 
+#[derive(Default)]
+struct ProbeSummary {
+    compatible: Option<(PathBuf, String)>,
+    detected_version: Option<String>,
+    had_probe_failure: bool,
+    had_candidate: bool,
+}
+
 pub async fn inspect_codex_runtime(app_data: &Path) -> CodexRuntimeAvailability {
     inspect(app_data).await.availability
 }
 
 pub async fn find_compatible_codex_binary(
     app_data: &Path,
-) -> Result<(PathBuf, String), RuntimeDiscoveryError> {
-    let inspection = inspect(app_data).await;
+) -> Result<(PathBuf, String, Option<OsString>), RuntimeDiscoveryError> {
+    let runtime_path = resolve_runtime_path().await;
+    let inspection = inspect_with_runtime_path(app_data, runtime_path.as_deref()).await;
     if let Some(binary_path) = inspection.binary_path {
         let version = inspection
             .availability
             .detected_version
             .ok_or(RuntimeDiscoveryError::ProbeFailed)?;
-        return Ok((binary_path, version));
+        return Ok((binary_path, version, runtime_path));
     }
     match inspection.availability.status {
         AvailabilityStatus::Incompatible => Err(RuntimeDiscoveryError::Incompatible),
@@ -139,36 +151,83 @@ where
 }
 
 async fn inspect(app_data: &Path) -> Inspection {
-    let (candidates, mut had_probe_failure) = candidate_paths(app_data);
-    let had_candidate = !candidates.is_empty();
-    let mut detected_version = None;
+    let runtime_path = resolve_runtime_path().await;
+    inspect_with_runtime_path(app_data, runtime_path.as_deref()).await
+}
 
-    for candidate in candidates {
-        match probe_codex_version(&candidate).await {
-            Ok(version) if is_compatible_codex_version(&version) => {
-                return Inspection {
-                    availability: availability(AvailabilityStatus::Compatible, Some(version)),
-                    binary_path: Some(candidate),
-                };
-            }
-            Ok(version) => {
-                detected_version.get_or_insert(version);
-            }
-            Err(_) => had_probe_failure = true,
-        };
+async fn inspect_with_runtime_path(
+    app_data: &Path,
+    runtime_path: Option<&std::ffi::OsStr>,
+) -> Inspection {
+    let initial = initial_candidate_paths(app_data, runtime_path);
+    let mut seen = initial.paths.iter().cloned().collect::<HashSet<_>>();
+    let mut summary = probe_candidates(initial.paths, runtime_path).await;
+    summary.had_probe_failure |= initial.had_invalid_explicit_path;
+    if let Some(inspection) = compatible_inspection(summary.compatible.take()) {
+        return inspection;
     }
 
-    let status = if detected_version.is_some() {
+    // 首轮未命中后才查询包管理器与版本管理器，避免正常启动产生额外进程和目录遍历。
+    let mut expanded = expanded_candidate_paths(runtime_path).await;
+    expanded.retain(|candidate| seen.insert(candidate.clone()));
+    let expanded_summary = probe_candidates(expanded, runtime_path).await;
+    if let Some(inspection) = compatible_inspection(expanded_summary.compatible) {
+        return inspection;
+    }
+    summary.detected_version = summary
+        .detected_version
+        .or(expanded_summary.detected_version);
+    summary.had_probe_failure |= expanded_summary.had_probe_failure;
+    summary.had_candidate |= expanded_summary.had_candidate;
+
+    let status = if summary.detected_version.is_some() {
         AvailabilityStatus::Incompatible
-    } else if had_probe_failure || had_candidate {
+    } else if summary.had_probe_failure || summary.had_candidate {
         AvailabilityStatus::Failed
     } else {
         AvailabilityStatus::Missing
     };
     Inspection {
-        availability: availability(status, detected_version),
+        availability: availability(status, summary.detected_version),
         binary_path: None,
     }
+}
+
+async fn probe_candidates(
+    candidates: Vec<PathBuf>,
+    runtime_path: Option<&std::ffi::OsStr>,
+) -> ProbeSummary {
+    let had_candidate = !candidates.is_empty();
+    let mut probes = futures_util::stream::iter(candidates)
+        .map(|candidate| async move {
+            let result = probe_codex_version(&candidate, runtime_path).await;
+            (candidate, result)
+        })
+        .buffered(MAX_CONCURRENT_PROBES);
+    let mut summary = ProbeSummary {
+        had_candidate,
+        ..ProbeSummary::default()
+    };
+    while let Some((candidate, result)) = probes.next().await {
+        match result {
+            Ok(version) if is_compatible_codex_version(&version) => {
+                summary.compatible = Some((candidate, version));
+                return summary;
+            }
+            Ok(version) => {
+                summary.detected_version.get_or_insert(version);
+            }
+            Err(_) => summary.had_probe_failure = true,
+        }
+    }
+    summary
+}
+
+fn compatible_inspection(compatible: Option<(PathBuf, String)>) -> Option<Inspection> {
+    compatible.map(|(binary_path, version)| Inspection {
+        availability: availability(AvailabilityStatus::Compatible, Some(version)),
+        binary_path: Some(binary_path),
+    })
 }
 
 fn availability(
@@ -181,81 +240,6 @@ fn availability(
         required_version: SUPPORTED_CODEX_VERSION,
         status,
     }
-}
-
-fn candidate_paths(app_data: &Path) -> (Vec<PathBuf>, bool) {
-    let executable_names = codex_executable_names(env::consts::OS);
-    let mut raw_paths = Vec::new();
-    let mut invalid_explicit_path = false;
-
-    if let Some(explicit) = env::var_os(CODEX_BINARY_ENV) {
-        let path = PathBuf::from(explicit);
-        if path.is_absolute() {
-            raw_paths.push(path);
-        } else {
-            invalid_explicit_path = true;
-        }
-    }
-    raw_paths.push(private_codex_binary_path(app_data));
-    if let Some(path) = env::var_os("PATH") {
-        raw_paths.extend(env::split_paths(&path).flat_map(|directory| {
-            executable_names
-                .iter()
-                .map(move |executable| directory.join(executable))
-        }));
-    }
-    raw_paths.extend(common_binary_paths(executable_names));
-
-    let mut seen = HashSet::new();
-    let candidates = raw_paths
-        .into_iter()
-        .filter_map(|path| executable_path(&path))
-        .filter(|path| seen.insert(path.clone()))
-        .collect();
-    (candidates, invalid_explicit_path)
-}
-
-pub(super) fn codex_executable_names(os: &str) -> &'static [&'static str] {
-    if os == "windows" {
-        // npm 在 Windows 全局安装时生成 codex.cmd shim，必须与独立版 codex.exe 一并检测。
-        &["codex.exe", "codex.cmd"]
-    } else {
-        &["codex"]
-    }
-}
-
-fn common_binary_paths(executable_names: &[&str]) -> Vec<PathBuf> {
-    let mut directories = vec![
-        PathBuf::from("/opt/homebrew/bin"),
-        PathBuf::from("/usr/local/bin"),
-        PathBuf::from("/usr/bin"),
-    ];
-    if let Some(home) = env::var_os("HOME") {
-        directories.push(PathBuf::from(home).join(".local/bin"));
-    }
-    if let Some(app_data) = env::var_os("APPDATA") {
-        // 默认 npm global prefix 位于 %APPDATA%\npm，应用安装期间 PATH 不更新也能立即闭环。
-        directories.push(PathBuf::from(app_data).join("npm"));
-    }
-    if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-        directories.push(PathBuf::from(local_app_data).join("Programs/Codex"));
-    }
-    directories
-        .into_iter()
-        .flat_map(|directory| {
-            executable_names
-                .iter()
-                .map(move |executable| directory.join(executable))
-        })
-        .collect()
-}
-
-pub(super) fn private_codex_binary_path(app_data: &Path) -> PathBuf {
-    app_data
-        .join("providers/codex/bin")
-        .join(SUPPORTED_CODEX_VERSION)
-        .join("bin")
-        .join(format!("codex{}", env::consts::EXE_SUFFIX))
 }
 
 pub(super) fn distribution_for(os: &str, arch: &str) -> Option<&'static Distribution> {
@@ -291,7 +275,12 @@ where
     let staged_binary = staging_dir
         .join("bin")
         .join(format!("codex{}", env::consts::EXE_SUFFIX));
-    if probe_codex_version(&staged_binary).await.ok().as_deref() != Some(SUPPORTED_CODEX_VERSION) {
+    if probe_codex_version(&staged_binary, None)
+        .await
+        .ok()
+        .as_deref()
+        != Some(SUPPORTED_CODEX_VERSION)
+    {
         return Err(RuntimeInstallError::Validation);
     }
 

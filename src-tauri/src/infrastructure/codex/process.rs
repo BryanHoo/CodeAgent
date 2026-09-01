@@ -1,6 +1,5 @@
 use std::{
-    env,
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     path::{Path, PathBuf},
     process::Stdio,
     sync::Arc,
@@ -23,16 +22,6 @@ pub const SUPPORTED_CODEX_VERSION: &str = "0.151.0";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const VERSION_OUTPUT_LIMIT: usize = 4 * 1024;
-#[cfg(unix)]
-const SHELL_PATH_TIMEOUT: Duration = Duration::from_secs(3);
-#[cfg(unix)]
-const SHELL_PATH_OUTPUT_LIMIT: usize = 64 * 1024;
-#[cfg(any(unix, test))]
-const SHELL_PATH_START: u8 = 0x1e;
-#[cfg(any(unix, test))]
-const SHELL_PATH_END: u8 = 0x1f;
-#[cfg(unix)]
-const SHELL_PATH_PROBE: &str = r#"printf '\036%s\037' "$PATH""#;
 #[cfg(any(windows, test))]
 const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -70,8 +59,7 @@ pub struct CodexProcess {
 
 impl CodexProcess {
     pub async fn start(app_data: &Path) -> Result<Self, ProcessError> {
-        let (program, version) = find_compatible_codex_binary(app_data).await?;
-        let runtime_path = resolve_login_shell_path().await;
+        let (program, version, runtime_path) = find_compatible_codex_binary(app_data).await?;
         let mut child = build_app_server_command(program.as_os_str(), runtime_path.as_deref())
             .spawn()
             .map_err(ProcessError::Spawn)?;
@@ -150,8 +138,11 @@ pub(super) fn executable_path(path: &Path) -> Option<PathBuf> {
     Some(canonical)
 }
 
-pub(super) async fn probe_codex_version(program: &Path) -> Result<String, ProcessError> {
-    let mut command = background_process_command(program.as_os_str());
+pub(super) async fn probe_codex_version(
+    program: &Path,
+    runtime_path: Option<&OsStr>,
+) -> Result<String, ProcessError> {
+    let mut command = build_version_probe_command(program.as_os_str(), runtime_path);
     command
         .arg("--version")
         .stdin(Stdio::null())
@@ -235,54 +226,6 @@ fn parse_codex_cli_version(output: &str) -> Option<&str> {
     }
 }
 
-#[cfg(unix)]
-async fn resolve_login_shell_path() -> Option<OsString> {
-    let shell = env::var_os("SHELL")?;
-    let shell = executable_path(Path::new(&shell))?;
-    let mut child = Command::new(shell)
-        .args(["-ilc", SHELL_PATH_PROBE])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
-        .ok()?;
-    let stdout = child.stdout.take()?;
-    let result = timeout(SHELL_PATH_TIMEOUT, async {
-        tokio::try_join!(child.wait(), read_limited(stdout, SHELL_PATH_OUTPUT_LIMIT))
-    })
-    .await;
-    let (status, output) = match result {
-        Ok(Ok(result)) => result,
-        Ok(Err(_)) => return None,
-        Err(_) => {
-            let _ = child.kill().await;
-            return None;
-        }
-    };
-    status
-        .success()
-        .then(|| parse_shell_path_output(&output))
-        .flatten()
-}
-
-#[cfg(not(unix))]
-async fn resolve_login_shell_path() -> Option<OsString> {
-    None
-}
-
-#[cfg(any(unix, test))]
-fn parse_shell_path_output(output: &[u8]) -> Option<OsString> {
-    // shell 初始化可能输出版本管理器提示，仅提取控制字符标记之间的 PATH。
-    let start = output.iter().rposition(|byte| *byte == SHELL_PATH_START)? + 1;
-    let end = output[start..]
-        .iter()
-        .position(|byte| *byte == SHELL_PATH_END)?
-        + start;
-    let path = std::str::from_utf8(&output[start..end]).ok()?;
-    (!path.is_empty()).then(|| OsString::from(path))
-}
-
 fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Command {
     let mut command = background_process_command(program);
     // 不设置 CODEX_HOME，让官方逻辑继承用户配置或回退到默认 ~/.codex。
@@ -301,7 +244,16 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
     command
 }
 
-fn background_process_command(program: &OsStr) -> Command {
+fn build_version_probe_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Command {
+    let mut command = background_process_command(program);
+    if let Some(runtime_path) = runtime_path {
+        // npm 安装的 codex 可能通过 /usr/bin/env 启动 node，探测时必须复用 shell PATH。
+        command.env("PATH", runtime_path);
+    }
+    command
+}
+
+pub(super) fn background_process_command(program: &OsStr) -> Command {
     configure_background_process_command(Command::new(program))
 }
 
@@ -314,7 +266,7 @@ fn configure_background_process_command(mut command: Command) -> Command {
     command
         .as_std_mut()
         .creation_flags(background_process_creation_flags(
-            env::consts::OS,
+            std::env::consts::OS,
             windows_process_platform::has_hidden_console(),
         ));
     command
@@ -336,14 +288,14 @@ fn background_process_creation_flags(os: &str, has_hidden_console: bool) -> u32 
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::{OsStr, OsString};
+    use std::ffi::OsStr;
     use std::time::Duration;
 
     use serde_json::{Value, json};
 
     use super::{
         CodexProcess, SUPPORTED_CODEX_VERSION, background_process_creation_flags,
-        build_app_server_command, parse_codex_version, parse_shell_path_output,
+        build_app_server_command, parse_codex_version,
     };
     use crate::infrastructure::codex::{catalogs, conversation_commands, tasks};
 
@@ -381,15 +333,6 @@ mod tests {
         );
         assert_eq!(background_process_creation_flags("macos", false), 0);
         assert_eq!(background_process_creation_flags("linux", false), 0);
-    }
-
-    #[test]
-    fn shell_path_should_ignore_shell_startup_output() {
-        assert_eq!(
-            parse_shell_path_output(b"Using Node v24.19.0\n\x1e/shell/node/bin:/usr/bin\x1f"),
-            Some(OsString::from("/shell/node/bin:/usr/bin"))
-        );
-        assert_eq!(parse_shell_path_output(b"missing markers"), None);
     }
 
     #[test]

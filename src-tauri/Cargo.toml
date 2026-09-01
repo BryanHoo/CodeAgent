@@ -52,6 +52,7 @@ tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "c9ec21
 atomicwrites = "0.4.4"
 desktop-pet-platform = { path = "native/desktop-pet-platform", version = "=0.1.0" }
 windows-process-platform = { path = "native/windows-process-platform", version = "=0.1.0" }
+winreg = "0.55.0"
 
 [lints.rust]
 unsafe_code = "forbid"
