@@ -68,7 +68,6 @@ struct RuntimeSession {
     task_subscription_leases: TaskSubscriptionLeases,
     pending_requests: HashMap<String, PendingServerRequest>,
     provider_login: Option<Value>,
-    mcp_statuses: HashMap<String, Value>,
     model_turn_waiters: ModelTurnWaiters,
     queue_editing_by_task: HashMap<String, String>,
     turn_started_waiters: TurnStartedWaiters,
@@ -350,17 +349,6 @@ impl AppState {
 
     pub async fn set_provider_login(&self, pending: Option<Value>) {
         self.runtime.lock().await.provider_login = pending;
-    }
-
-    pub async fn mcp_statuses(&self, task_id: &str) -> Vec<Value> {
-        self.runtime
-            .lock()
-            .await
-            .mcp_statuses
-            .iter()
-            .filter(|(key, _)| key.starts_with(&format!("{task_id}\0")) || key.starts_with("*\0"))
-            .map(|(_, value)| value.clone())
-            .collect()
     }
 
     pub async fn publish_resolved_request(

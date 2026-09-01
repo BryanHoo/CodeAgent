@@ -159,30 +159,6 @@ async fn validate_task(
         .map_err(request_error)
 }
 
-async fn mcp_servers_with_status(
-    state: &State<'_, AppState>,
-    task_id: &str,
-    mut response: Value,
-) -> Value {
-    let statuses = state.mcp_statuses(task_id).await;
-    if let Some(servers) = response.get_mut("data").and_then(Value::as_array_mut) {
-        for server in servers {
-            let name = server.get("name").and_then(Value::as_str);
-            let Some(status) = statuses
-                .iter()
-                .rev()
-                .find(|status| status.get("name").and_then(Value::as_str) == name)
-            else {
-                continue;
-            };
-            server["status"] = status["status"].clone();
-            server["error"] = status.get("error").cloned().unwrap_or(Value::Null);
-            server["failureReason"] = status.get("failureReason").cloned().unwrap_or(Value::Null);
-        }
-    }
-    response
-}
-
 #[tauri::command(rename_all = "camelCase")]
 pub async fn list_mcp_servers(
     project_id: String,
@@ -191,10 +167,9 @@ pub async fn list_mcp_servers(
 ) -> Result<Value, AppError> {
     let connection = state.codex_connection().await?;
     validate_task(&connection, &project_id, &task_id).await?;
-    let response = codex::list_mcp_servers(&connection, &task_id)
+    codex::list_mcp_servers(&connection, &task_id)
         .await
-        .map_err(request_error)?;
-    Ok(mcp_servers_with_status(&state, &task_id, response).await)
+        .map_err(request_error)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -205,8 +180,7 @@ pub async fn retry_mcp_servers(
 ) -> Result<Value, AppError> {
     let connection = state.codex_connection().await?;
     validate_task(&connection, &project_id, &task_id).await?;
-    let response = codex::reload_mcp_servers(&connection, &task_id)
+    codex::reload_mcp_servers(&connection, &task_id)
         .await
-        .map_err(request_error)?;
-    Ok(mcp_servers_with_status(&state, &task_id, response).await)
+        .map_err(request_error)
 }

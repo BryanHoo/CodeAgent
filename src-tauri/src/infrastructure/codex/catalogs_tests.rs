@@ -116,18 +116,18 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
     assert_eq!(skills["data"].as_array().unwrap().len(), 1);
     assert_eq!(skills["data"][0]["displayName"], "Code Review");
     let servers = list_mcp_servers(&connection, "thread-a").await.unwrap();
-    assert_eq!(servers["data"][0]["status"], "ready");
-    assert_eq!(servers["data"][0]["tools"], json!(["search"]));
-    assert_eq!(servers["data"][1]["status"], "failed");
     assert_eq!(
-        servers["data"][1]["failureReason"],
-        "reauthenticationRequired"
+        servers["data"],
+        json!([
+            {"displayName": "Docs", "name": "docs", "status": "connected", "toolCount": 1},
+            {"displayName": "login", "name": "login", "status": "authenticationRequired", "toolCount": 0},
+            {"displayName": "failed", "name": "failed", "status": "failed", "toolCount": 0},
+            {"displayName": "disabled", "name": "disabled", "status": "disabled", "toolCount": 0},
+            {"displayName": "not-started", "name": "not-started", "status": "notStarted", "toolCount": 0},
+            {"displayName": "starting", "name": "starting", "status": "starting", "toolCount": 0},
+            {"displayName": "cancelled", "name": "cancelled", "status": "cancelled", "toolCount": 0},
+            {"displayName": "unavailable", "name": "unavailable", "status": "unknown", "toolCount": 0},
+        ])
     );
-    assert_eq!(servers["data"][2]["status"], "failed");
-    assert_eq!(servers["data"][3]["status"], "cancelled");
-    assert_eq!(servers["data"][4]["status"], "starting");
-    assert_eq!(servers["data"][5]["status"], "starting");
-    assert_eq!(servers["data"][6]["status"], "cancelled");
-    assert_eq!(servers["data"][7]["status"], "starting");
     server_task.await.unwrap();
 }

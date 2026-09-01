@@ -58,7 +58,7 @@ pub(super) fn spawn_event_forwarder(
             if handle_login_notification(&runtime, &message).await {
                 continue;
             }
-            if handle_mcp_status(&runtime, &message).await == McpStatusAction::CachedOnly {
+            if should_skip_mcp_status(&message) {
                 continue;
             }
             if message.method == "serverRequest/resolved" {
@@ -280,41 +280,16 @@ async fn handle_login_notification(
     true
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum McpStatusAction {
-    NotApplicable,
-    CachedOnly,
-    CachedAndForward,
-}
-
-async fn handle_mcp_status(
-    runtime: &Arc<Mutex<RuntimeSession>>,
-    message: &ServerMessage,
-) -> McpStatusAction {
+fn should_skip_mcp_status(message: &ServerMessage) -> bool {
     if message.id.is_some() || message.method != "mcpServer/startupStatus/updated" {
-        return McpStatusAction::NotApplicable;
+        return false;
     }
     let Ok(params) = serde_json::from_str::<Value>(message.params.get()) else {
-        return McpStatusAction::CachedOnly;
+        return true;
     };
-    let Some(name) = params.get("name").and_then(Value::as_str) else {
-        return McpStatusAction::CachedOnly;
-    };
-    let thread = params
-        .get("threadId")
-        .and_then(Value::as_str)
-        .unwrap_or("*");
-    let action = if thread == "*" {
-        McpStatusAction::CachedOnly
-    } else {
-        McpStatusAction::CachedAndForward
-    };
-    runtime
-        .lock()
-        .await
-        .mcp_statuses
-        .insert(format!("{thread}\0{name}"), params);
-    action
+    // App 级通知没有 Task 归属；Task 级通知只作为前端权威清单的失效信号。
+    params.get("name").and_then(Value::as_str).is_none()
+        || params.get("threadId").and_then(Value::as_str).is_none()
 }
 
 async fn handle_resolved_request(

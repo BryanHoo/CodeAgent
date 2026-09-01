@@ -185,38 +185,40 @@ fn map_skill(skill: &Value) -> Option<Value> {
 fn map_mcp_server(server: Value) -> Option<Value> {
     let name = server.get("name")?.as_str()?;
     let info = server.get("serverInfo").filter(|value| !value.is_null());
-    // 0.151 的 null 表示运行态暂不可用或配置刚变化，保留条目并等待后续状态通知。
-    let (status, failure_reason) = match server.get("runtimeStatus")? {
-        Value::Null => ("starting", Value::Null),
-        Value::String(value) if matches!(value.as_str(), "notStarted" | "starting") => {
-            ("starting", Value::Null)
+    // 保留 0.151 的线程连接态；仅按官方 TUI 规则补全无运行态但未登录的服务。
+    let status = match server.get("runtimeStatus")? {
+        Value::Null if server.get("authStatus").and_then(Value::as_str) == Some("notLoggedIn") => {
+            "authenticationRequired"
         }
-        Value::String(value) if value == "connected" => ("ready", Value::Null),
-        Value::String(value) if value == "authenticationRequired" => (
-            "failed",
-            Value::String("reauthenticationRequired".to_owned()),
-        ),
-        Value::String(value) if value == "failed" => ("failed", Value::Null),
-        Value::String(value) if matches!(value.as_str(), "cancelled" | "disabled") => {
-            ("cancelled", Value::Null)
+        Value::Null => "unknown",
+        Value::String(value)
+            if matches!(
+                value.as_str(),
+                "notStarted"
+                    | "starting"
+                    | "connected"
+                    | "authenticationRequired"
+                    | "failed"
+                    | "cancelled"
+                    | "disabled"
+            ) =>
+        {
+            value
         }
         _ => return None,
     };
-    let mut tools = server
+    let tool_count = server
         .get("tools")
         .and_then(Value::as_object)
-        .map(|value| value.keys().cloned().collect::<Vec<_>>())
-        .unwrap_or_default();
-    tools.sort_unstable();
+        .map_or(0, Map::len);
+    let display_name = info
+        .and_then(|value| value.get("title"))
+        .and_then(Value::as_str)
+        .unwrap_or(name);
     Some(json!({
-        "authStatus": server.get("authStatus").cloned().unwrap_or(Value::Null),
-        "description": info.and_then(|value| value.get("description")).cloned().unwrap_or(Value::Null),
-        "error": Value::Null,
-        "failureReason": failure_reason,
+        "displayName": display_name,
         "name": name,
         "status": status,
-        "title": info.and_then(|value| value.get("title")).cloned().unwrap_or(Value::Null),
-        "tools": tools,
-        "version": info.and_then(|value| value.get("version")).cloned().unwrap_or(Value::Null),
+        "toolCount": tool_count,
     }))
 }

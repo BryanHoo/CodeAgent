@@ -81,7 +81,7 @@ async fn closed_app_server_stream_should_mark_runtime_failed() {
 }
 
 #[tokio::test]
-async fn task_scoped_mcp_status_should_be_cached_and_forwarded() {
+async fn task_scoped_mcp_status_should_be_forwarded() {
     let published = Arc::new(StdMutex::new(Vec::new()));
     let published_for_channel = Arc::clone(&published);
     let channel = Channel::new(move |body| {
@@ -118,11 +118,6 @@ async fn task_scoped_mcp_status_should_be_cached_and_forwarded() {
     drop(sender);
     task.await.expect("event forwarder should stop cleanly");
 
-    let session = runtime.lock().await;
-    assert_eq!(
-        session.mcp_statuses["thread-a\0context7"]["status"],
-        "ready"
-    );
     let events = published.lock().unwrap();
     let agent_event = events
         .iter()

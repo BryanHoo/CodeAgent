@@ -42,9 +42,9 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
-| 右栏检查器 | 文件、Sources、Changes、历史 | 全部由上述 Tauri 文件/Git接口驱动 | 已实现 |
+| 右栏检查器 | 文件、Sources、Changes、历史、MCP | MCP 按当前 Task 读取线程级权威快照并展示紧凑连接态与工具数 | 已实现 |
 | 模型与 Skills | `listModels`, `listSkills` | 原生 `model/list`, `skills/list` | 已实现 |
-| MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/mcpServer/reload`；使用 0.151 `runtimeStatus` 区分连接、认证失败、失败、取消与禁用状态 | 已实现 |
+| MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/mcpServer/reload`；精确保留 0.151 线程连接态，启动通知只触发清单失效，IPC 仅传固定大小摘要 | 已实现 |
 | Provider 认证 | login/cancel/logout/custom provider | 原生账号协议与受限配置写入；密钥不持久化到 WebView | 已实现 |
 | 全局/项目设置 | get/update settings/defaults | Codex `config/read` + 应用原子配置 | 已实现 |
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
