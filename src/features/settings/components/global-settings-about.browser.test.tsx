@@ -28,6 +28,7 @@ describe("GlobalSettingsAbout", () => {
           error={null}
           isPending={false}
           onRetry={vi.fn()}
+          onExportDiagnostics={vi.fn(async () => ({ status: "cancelled" as const }))}
           onUpdate={vi.fn()}
         />
       </I18nextProvider>,
@@ -76,6 +77,7 @@ describe("GlobalSettingsAbout", () => {
           error={null}
           isPending={false}
           onRetry={vi.fn()}
+          onExportDiagnostics={vi.fn(async () => ({ status: "cancelled" as const }))}
           onUpdate={onUpdate}
         />
       </I18nextProvider>,
@@ -86,5 +88,47 @@ describe("GlobalSettingsAbout", () => {
 
     await expect.element(screen.getByRole("button", { name: "正在下载 50%" })).toBeVisible();
     expect(onUpdate).toHaveBeenCalledWith("0.2.0", expect.any(Function));
+  });
+
+  it("exports a diagnostic archive from the about panel", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const onExportDiagnostics = vi.fn(async () => ({
+      fileName: "codeagent-diagnostics.zip",
+      status: "saved" as const,
+    }));
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <GlobalSettingsAbout
+          activeSection="about"
+          appInfo={appInfo}
+          error={null}
+          isPending={false}
+          onExportDiagnostics={onExportDiagnostics}
+          onRetry={vi.fn()}
+          onUpdate={vi.fn()}
+        />
+      </I18nextProvider>,
+    );
+
+    await screen.getByRole("button", { name: "导出诊断日志" }).click();
+    expect(onExportDiagnostics).toHaveBeenCalledOnce();
+  });
+
+  it("keeps diagnostic export available when version information fails", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <GlobalSettingsAbout
+          activeSection="about"
+          error={new Error("version unavailable")}
+          isPending={false}
+          onExportDiagnostics={vi.fn(async () => ({ status: "cancelled" as const }))}
+          onRetry={vi.fn()}
+          onUpdate={vi.fn()}
+        />
+      </I18nextProvider>,
+    );
+
+    await expect.element(screen.getByRole("button", { name: "导出诊断日志" })).toBeVisible();
   });
 });

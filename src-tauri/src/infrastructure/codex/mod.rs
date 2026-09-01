@@ -23,6 +23,7 @@ mod runtime_download_progress;
 mod runtime_manager;
 mod settings;
 mod sidebar;
+mod stderr;
 mod tasks;
 
 #[cfg(test)]

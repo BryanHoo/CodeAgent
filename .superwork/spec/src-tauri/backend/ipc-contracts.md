@@ -30,6 +30,13 @@
 - stdio JSONL 路由必须区分响应、通知和带 `id` 的服务端请求，不能仅按 `id` 关联响应
 - 协议测试使用内存 stdio 覆盖初始化顺序、乱序响应和双向请求 ID 碰撞
 
+## 诊断日志
+
+- Rust、WebView 与 Codex stderr 统一写入带 `schemaVersion`、`timestamp`、`sessionId`、`source`、`level` 和稳定 `event` 的 JSONL；所有来源必须在 Rust 边界脱敏，凭据和提示内容不得落盘，路径必须替换，Project/Task/Thread 标识仅保留会话内稳定伪名
+- Codex stderr 必须使用 JSON 格式、受控 `RUST_LOG`、有界单行读取和有界队列；丢弃 `debug/trace`，非法、超长或队列溢出只记录计数，不得回显原始内容
+- 本地日志写入系统应用日志目录，单文件不超过 5 MiB，并最多保留 5 份历史日志；正常退出删除运行标记，残留标记在下次启动时记录异常退出事件
+- `record_frontend_diagnostic` 只接受有界结构化上下文；`export_diagnostics` 必须先由用户选择保存位置，再流式生成不超过 30 MiB 的 ZIP，归档白名单仅包含 `codeagent*.log`、版本清单、已脱敏运行指标和说明文件，响应不得返回完整保存路径
+
 ## Codex 工作台
 
 - 工作台运行时固定使用 `codex-cli 0.151.0` 的 `codex app-server`，协议判断以本地 `rust-v0.151.0` 源码为准

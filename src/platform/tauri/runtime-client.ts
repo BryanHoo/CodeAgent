@@ -5,6 +5,7 @@ import type {
   AppUpdateInstallProgress,
   HealthResponse,
   EventStreamMetricsResponse,
+  ExportDiagnosticsResponse,
   UploadAgentFeedbackRequest,
   UploadAgentFeedbackResponse,
   WorkbenchPetCatalogResponse,
@@ -24,6 +25,11 @@ export type AppUpdateInstallOptions = MutationOptions &
   Readonly<{ onProgress?: (progress: AppUpdateInstallProgress) => void }>;
 
 export class TauriRuntimeClient extends TauriCatalogClient {
+  public async exportDiagnostics(): Promise<ExportDiagnosticsResponse> {
+    // 运行时故障正是导出日志的主要场景，因此该命令不等待 Codex 初始化。
+    return this.invokeCommand("export_diagnostics");
+  }
+
   public async getPerformanceMetrics(): Promise<EventStreamMetricsResponse> {
     return this.call("get_runtime_performance_metrics");
   }

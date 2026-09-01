@@ -3,6 +3,7 @@ import type {
   AgentModel,
   AppInfoResponse,
   AppUpdateInstallProgress,
+  ExportDiagnosticsResponse,
   ProjectOpenApp,
 } from "@/protocol/index.js";
 import { Settings, X } from "lucide-react";
@@ -61,6 +62,7 @@ type GlobalSettingsDialogProps = Readonly<{
   onClose: () => void;
   onRetry: () => unknown;
   onRetryAppInfo?: () => unknown;
+  onExportDiagnostics?: () => Promise<ExportDiagnosticsResponse>;
   onSave: (settings: AgentGlobalSettings) => Promise<void>;
   onUpdate?: (
     version: string,
@@ -82,6 +84,7 @@ export function GlobalSettingsDialog({
   onClose,
   onRetry,
   onRetryAppInfo = () => undefined,
+  onExportDiagnostics = () => Promise.resolve({ status: "cancelled" }),
   onSave,
   onUpdate = () => Promise.resolve(),
   settings,
@@ -240,6 +243,7 @@ export function GlobalSettingsDialog({
                 error={appInfoError}
                 isPending={isAppInfoPending}
                 onRetry={onRetryAppInfo}
+                onExportDiagnostics={onExportDiagnostics}
                 onUpdate={onUpdate}
               />
 

@@ -53,13 +53,19 @@ pub(super) fn schedule_runtime_restart(app: AppHandle, generation: u64, delay: D
         let app_data = match app.path().app_data_dir() {
             Ok(app_data) => app_data,
             Err(error) => {
-                eprintln!("failed to resolve app data for Codex restart: {error}");
+                crate::infrastructure::diagnostics::record_error(
+                    "codex_restart_app_data_resolve_failed",
+                    error,
+                );
                 return;
             }
         };
         // Box 固定递归调度 future 的大小，后续失败继续由同一 supervisor 退避处理。
         if let Err(error) = Box::pin(state.start_codex(&app, &app_data)).await {
-            eprintln!("automatic Codex runtime restart failed: {error}");
+            crate::infrastructure::diagnostics::record_error(
+                "codex_automatic_restart_failed",
+                error,
+            );
         }
     });
 }

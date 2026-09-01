@@ -2,6 +2,7 @@ import { MutationCache } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { i18n } from "../../i18n/i18n.js";
+import { recordInternalWarning } from "./internal-diagnostics.js";
 
 export const ACTION_NOTIFICATION_META_KEY = "actionNotification";
 
@@ -51,6 +52,7 @@ export function notifyActionSuccess(
 export function createActionMutationCache(): MutationCache {
   return new MutationCache({
     onError(error, _variables, _context, mutation) {
+      recordInternalWarning("action_mutation_failed", error);
       const options = readNotificationOptions(mutation);
       if (options !== false && options?.error !== false) notifyActionError(error);
     },

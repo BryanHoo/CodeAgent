@@ -128,6 +128,7 @@ function IndexPage() {
             }}
             onRetry={() => Promise.all([globalSettingsQuery.refetch(), modelsQuery.refetch()])}
             onRetryAppInfo={() => appInfoQuery.refetch()}
+            onExportDiagnostics={() => client.exportDiagnostics()}
             onSave={(settings) =>
               globalSettingsMutation.mutateAsync(settings).then(() => undefined)
             }

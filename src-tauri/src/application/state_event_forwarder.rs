@@ -188,10 +188,16 @@ async fn publish_mapped_event(
         // 原生后台状态必须先于 WebView 队列更新，窗口销毁或背压都不能阻塞托盘与通知。
         if let Some(task_activities) = task_activities.as_deref() {
             if let Err(error) = render_tray_task_activities(app, task_activities) {
-                eprintln!("failed to update tray from runtime event: {error}");
+                crate::infrastructure::diagnostics::record_error(
+                    "runtime_event_tray_update_failed",
+                    error,
+                );
             }
             if let Err(error) = render_desktop_pet_task_activities(app, task_activities).await {
-                eprintln!("failed to update desktop pet from runtime event: {error}");
+                crate::infrastructure::diagnostics::record_error(
+                    "runtime_event_desktop_pet_update_failed",
+                    error,
+                );
             }
         }
         observe_task_notification(app, &pet_event, task_name.as_deref()).await;
@@ -300,7 +306,10 @@ async fn handle_resolved_request(
         Ok(Some(request_id)) => request_id,
         Ok(None) => return true,
         Err(error) => {
-            eprintln!("failed to map resolved codex request: {error}");
+            crate::infrastructure::diagnostics::record_error(
+                "codex_resolved_request_map_failed",
+                error,
+            );
             return true;
         }
     };
@@ -325,7 +334,7 @@ fn map_message(message: ServerMessage) -> Option<(AgentEvent, Option<PendingServ
             }
             Ok(None) => None,
             Err(error) => {
-                eprintln!("failed to map codex request: {error}");
+                crate::infrastructure::diagnostics::record_error("codex_request_map_failed", error);
                 None
             }
         }
@@ -334,7 +343,7 @@ fn map_message(message: ServerMessage) -> Option<(AgentEvent, Option<PendingServ
             Ok(Some(event)) => Some((event, None)),
             Ok(None) => None,
             Err(error) => {
-                eprintln!("failed to map codex event: {error}");
+                crate::infrastructure::diagnostics::record_error("codex_event_map_failed", error);
                 None
             }
         }
@@ -368,10 +377,16 @@ async fn finish_runtime(runtime: &Arc<Mutex<RuntimeSession>>, app: Option<&AppHa
     drop(session);
     if let (Some(app), Some(task_activities)) = (app, task_activities.as_deref()) {
         if let Err(error) = render_tray_task_activities(app, task_activities) {
-            eprintln!("failed to update tray after runtime failure: {error}");
+            crate::infrastructure::diagnostics::record_error(
+                "runtime_failure_tray_update_failed",
+                error,
+            );
         }
         if let Err(error) = render_desktop_pet_task_activities(app, task_activities).await {
-            eprintln!("failed to update desktop pet after runtime failure: {error}");
+            crate::infrastructure::diagnostics::record_error(
+                "runtime_failure_desktop_pet_update_failed",
+                error,
+            );
         }
     }
     if let (Some(app), Some((generation, delay))) = (app, restart) {

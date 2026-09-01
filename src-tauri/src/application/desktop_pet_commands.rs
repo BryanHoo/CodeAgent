@@ -359,7 +359,10 @@ pub(super) async fn acknowledge_completed_desktop_pet_route(app: &AppHandle, rou
         return;
     };
     if let Err(error) = acknowledge_completed_desktop_pet_task(app, &project_id, &task_id).await {
-        eprintln!("failed to acknowledge completed desktop pet task: {error}");
+        crate::infrastructure::diagnostics::record_error(
+            "desktop_pet_task_acknowledge_failed",
+            error,
+        );
     }
 }
 

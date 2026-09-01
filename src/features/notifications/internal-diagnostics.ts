@@ -18,9 +18,15 @@ export function recordInternalWarning(
   context: InternalDiagnosticContext = {},
 ): void {
   // 后台循环只写安全结构化诊断，禁止接入用户动作 toast。
-  console.warn("CodeAgent internal warning", {
-    diagnosticCode,
+  recordFrontendDiagnostic({
+    context: Object.fromEntries(
+      Object.entries(context).filter((entry): entry is [string, Exclude<InternalDiagnosticValue, undefined>] => entry[1] !== undefined),
+    ),
     errorMessage: internalErrorMessage(error),
-    ...context,
+    event: diagnosticCode,
+    level: "warn",
+    stack: error instanceof Error ? (error.stack ?? null) : null,
   });
+  if (import.meta.env.DEV) console.warn("CodeAgent internal warning", { diagnosticCode, ...context });
 }
+import { recordFrontendDiagnostic } from "../../platform/tauri/diagnostics.js";

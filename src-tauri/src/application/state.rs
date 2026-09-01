@@ -121,7 +121,10 @@ impl AppState {
         install_codex_runtime(app_data, on_progress)
             .await
             .map_err(|error| {
-                eprintln!("codex private runtime installation failed: {error}");
+                crate::infrastructure::diagnostics::record_error(
+                    "codex_runtime_install_failed",
+                    error,
+                );
                 AppError::CodexRuntimeInstallFailed
             })
     }
@@ -157,7 +160,10 @@ impl AppState {
                 let messages = match process.connection().take_server_messages().await {
                     Ok(messages) => messages,
                     Err(error) => {
-                        eprintln!("failed to attach Codex runtime event stream: {error}");
+                        crate::infrastructure::diagnostics::record_error(
+                            "codex_event_stream_attach_failed",
+                            error,
+                        );
                         self.fail_codex_start(app).await;
                         return Err(AppError::CodexRuntimeStartFailed);
                     }
@@ -173,7 +179,10 @@ impl AppState {
                 Ok(runtime.snapshot)
             }
             Err(error) => {
-                eprintln!("codex runtime startup failed: {error}");
+                crate::infrastructure::diagnostics::record_error(
+                    "codex_runtime_start_failed",
+                    error,
+                );
                 self.fail_codex_start(app).await;
                 Err(AppError::CodexRuntimeStartFailed)
             }

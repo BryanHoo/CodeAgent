@@ -58,7 +58,9 @@ pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 task_id,
             } => match tray_task_route(&project_id, &task_id) {
                 Ok(route) => show_main_window_at_route(app, route),
-                Err(error) => eprintln!("failed to open tray task: {error}"),
+                Err(error) => {
+                    crate::infrastructure::diagnostics::record_error("tray_task_open_failed", error)
+                }
             },
             TrayMenuAction::QuitApplication => app.exit(0),
             #[cfg(target_os = "macos")]

@@ -1,5 +1,6 @@
 pub mod app_storage;
 pub mod codex;
+pub mod diagnostics;
 pub mod filesystem;
 pub mod task_settings;
 pub mod workspace;

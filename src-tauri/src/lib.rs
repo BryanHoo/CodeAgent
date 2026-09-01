@@ -32,6 +32,7 @@ use application::{
         open_desktop_pet_task, set_desktop_pet_drag_position, show_desktop_pet,
         start_desktop_pet_native_drag,
     },
+    diagnostic_commands::{export_diagnostics, record_frontend_diagnostic},
     notification_commands::NotificationRuntime,
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
     pet_commands::{download_workbench_pet, list_workbench_pets},
@@ -61,6 +62,7 @@ use application::{
         switch_project_worktree,
     },
 };
+use infrastructure::diagnostics;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -73,6 +75,8 @@ pub fn run() {
         .plugin(tauri_plugin_wdio::init())
         .plugin(tauri_plugin_wdio_webdriver::init());
     let result = builder
+        .plugin(diagnostics::plugin())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -81,7 +85,10 @@ pub fn run() {
         .manage(DesktopPetRuntime::default())
         .manage(NotificationRuntime::default())
         .manage(MainWindowLifecycle::default())
-        .setup(|app| setup_tray(app.handle()).map_err(Into::into))
+        .setup(|app| {
+            diagnostics::initialize(app.handle())?;
+            setup_tray(app.handle()).map_err(Into::into)
+        })
         .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![
             initialize_app_storage,
@@ -97,6 +104,8 @@ pub fn run() {
             get_app_info,
             install_app_update,
             get_runtime_performance_metrics,
+            record_frontend_diagnostic,
+            export_diagnostics,
             get_task_activities,
             acknowledge_task_activity,
             release_task_subscription,
@@ -195,5 +204,10 @@ pub fn run() {
             return;
         }
     };
-    app.run(|_, event| handle_run_event(event));
+    app.run(|app, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            diagnostics::mark_clean_shutdown(app);
+        }
+        handle_run_event(event);
+    });
 }

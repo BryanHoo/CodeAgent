@@ -184,7 +184,10 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
         None => match create_main_window(app, saved_route) {
             Ok(window) => (window, false),
             Err(error) => {
-                eprintln!("failed to recreate main window: {error}");
+                crate::infrastructure::diagnostics::record_error(
+                    "main_window_recreate_failed",
+                    error,
+                );
                 return;
             }
         },
@@ -194,7 +197,10 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
         && let Some(route) = requested_route.as_deref()
         && let Err(error) = window.emit(MAIN_WINDOW_NAVIGATE_EVENT, route)
     {
-        eprintln!("failed to emit main window navigation: {error}");
+        crate::infrastructure::diagnostics::record_error(
+            "main_window_navigation_emit_failed",
+            error,
+        );
     }
 
     // 恢复时同时处理最小化状态，确保托盘操作始终把工作台带到前台。
@@ -243,7 +249,7 @@ fn destroy_main_window_if_current(app: &AppHandle, generation: u64) {
         state.route = Some(app_route_from_url(&route));
     }
     if let Err(error) = window.destroy() {
-        eprintln!("failed to destroy hidden main window: {error}");
+        crate::infrastructure::diagnostics::record_error("main_window_destroy_failed", error);
     }
 }
 

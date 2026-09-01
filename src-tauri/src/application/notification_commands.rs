@@ -73,7 +73,7 @@ pub(super) async fn observe_task_notification(
         return;
     };
     if let Err(error) = send_task_notification(app, notification) {
-        eprintln!("failed to show task notification: {error}");
+        crate::infrastructure::diagnostics::record_error("task_notification_show_failed", error);
     }
 }
 

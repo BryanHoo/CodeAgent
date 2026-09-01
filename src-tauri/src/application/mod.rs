@@ -12,6 +12,7 @@ pub mod desktop_pet_commands;
 #[cfg(target_os = "macos")]
 mod desktop_pet_panel;
 mod desktop_pet_window;
+pub mod diagnostic_commands;
 pub mod error;
 mod model_turn_waiters;
 pub mod notification_commands;

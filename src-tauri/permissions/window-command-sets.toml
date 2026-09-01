@@ -16,6 +16,8 @@ permissions = [
   "allow-get-app-info",
   "allow-install-app-update",
   "allow-get-runtime-performance-metrics",
+  "allow-record-frontend-diagnostic",
+  "allow-export-diagnostics",
   "allow-get-task-activities",
   "allow-acknowledge-task-activity",
   "allow-release-task-subscription",
@@ -111,4 +113,5 @@ permissions = [
   "allow-layout-desktop-pet",
   "allow-open-desktop-pet-task",
   "allow-list-workbench-pets",
+  "allow-record-frontend-diagnostic",
 ]

@@ -17,6 +17,7 @@ use tokio::{
 
 use super::connection::{AppServerConnection, ConnectionError};
 use super::runtime_manager::{RuntimeDiscoveryError, find_compatible_codex_binary};
+use super::stderr::spawn_codex_stderr_tasks;
 
 pub const SUPPORTED_CODEX_VERSION: &str = "0.151.0";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -63,6 +64,7 @@ pub struct CodexProcess {
     connection: Arc<AppServerConnection>,
     codex_home: PathBuf,
     stderr_task: JoinHandle<()>,
+    stderr_writer_task: JoinHandle<()>,
     version: String,
 }
 
@@ -76,12 +78,10 @@ impl CodexProcess {
             .map_err(ProcessError::Spawn)?;
         let stdin = child.stdin.take().ok_or(ProcessError::MissingPipe)?;
         let stdout = child.stdout.take().ok_or(ProcessError::MissingPipe)?;
-        let mut stderr = child.stderr.take().ok_or(ProcessError::MissingPipe)?;
+        let stderr = child.stderr.take().ok_or(ProcessError::MissingPipe)?;
 
-        // stderr 必须独立持续排水，避免日志写满管道后阻塞协议进程。
-        let stderr_task = tokio::spawn(async move {
-            let _ = io::copy(&mut stderr, &mut io::sink()).await;
-        });
+        // stderr 读取与磁盘写入通过有界队列隔离，避免日志反压阻塞协议进程。
+        let (stderr_task, stderr_writer_task) = spawn_codex_stderr_tasks(stderr);
         let connection = Arc::new(AppServerConnection::with_image_store(
             stdout, stdin, app_data,
         ));
@@ -105,6 +105,7 @@ impl CodexProcess {
             connection,
             codex_home,
             stderr_task,
+            stderr_writer_task,
             version,
         })
     }
@@ -130,6 +131,7 @@ impl CodexProcess {
 impl Drop for CodexProcess {
     fn drop(&mut self) {
         self.stderr_task.abort();
+        self.stderr_writer_task.abort();
     }
 }
 
@@ -271,6 +273,7 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
     command
         .args(["app-server", "--listen", "stdio://"])
         .env("LOG_FORMAT", "json")
+        .env("RUST_LOG", "codex_app_server=info,codex_core=warn")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -340,6 +343,13 @@ mod tests {
             ["app-server", "--listen", "stdio://"]
         );
         assert!(command.get_envs().all(|(key, _)| key != "CODEX_HOME"));
+        assert_eq!(
+            command.get_envs().find(|(key, _)| *key == "RUST_LOG"),
+            Some((
+                OsStr::new("RUST_LOG"),
+                Some(OsStr::new("codex_app_server=info,codex_core=warn"))
+            ))
+        );
         assert_eq!(
             command.get_envs().find(|(key, _)| *key == "PATH"),
             Some((OsStr::new("PATH"), Some(runtime_path)))

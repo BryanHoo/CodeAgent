@@ -133,6 +133,7 @@ export function WorkbenchShellDialogs({
               ])
             }
             onRetryAppInfo={() => appInfoQuery.refetch()}
+            onExportDiagnostics={() => client.exportDiagnostics()}
             onSave={(settings) =>
               globalSettingsMutation.mutateAsync(settings).then(() => undefined)
             }

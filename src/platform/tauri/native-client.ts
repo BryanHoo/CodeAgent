@@ -82,7 +82,7 @@ export class TauriNativeClient {
     }
   }
 
-  private async invokeCommand<T>(
+  protected async invokeCommand<T>(
     command: string,
     args?: Record<string, unknown>,
   ): Promise<T> {

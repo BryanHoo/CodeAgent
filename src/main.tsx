@@ -3,6 +3,12 @@ import { createRoot } from "react-dom/client";
 
 import { I18nextProvider, i18n, synchronizeLanguagePreference } from "./i18n/i18n.js";
 import { initializeAppStorage } from "./platform/tauri/app-storage.js";
+import {
+  createReactDiagnosticHandlers,
+  installGlobalDiagnostics,
+  recordApplicationStartFailure,
+} from "./platform/tauri/application-diagnostics.js";
+import { recordFrontendDiagnostic } from "./platform/tauri/diagnostics.js";
 import { installPerformanceMonitoring } from "./shared/performance/performance-monitoring.js";
 import { PerformanceProfiler } from "./shared/performance/performance-profiler.js";
 import "./shared/styles/globals.css";
@@ -20,6 +26,8 @@ const windowSurface = new URLSearchParams(window.location.search).get("window");
 const appSurface = windowSurface === "desktop-pet" ? windowSurface : "main";
 document.documentElement.dataset.appSurface = appSurface;
 installPerformanceMonitoring();
+installGlobalDiagnostics();
+const reactDiagnosticHandlers = createReactDiagnosticHandlers();
 
 async function startApplication(): Promise<void> {
   await prepareWebviewTestBridge();
@@ -28,7 +36,7 @@ async function startApplication(): Promise<void> {
       "./features/pets/components/desktop-pet-window.js"
     );
     await synchronizeLanguagePreference();
-    createRoot(applicationRoot).render(
+    createRoot(applicationRoot, reactDiagnosticHandlers).render(
       <StrictMode>
         <I18nextProvider i18n={i18n}>
           <DesktopPetWindow />
@@ -45,14 +53,21 @@ async function startApplication(): Promise<void> {
   try {
     // 首次启动会先把旧 WebView 数据迁入应用目录，失败时保留旧数据供下次重试。
     await initializeAppStorage();
-  } catch {
+  } catch (error) {
     // 存储故障不应阻断工作台启动，本次运行使用默认值。
+    recordFrontendDiagnostic({
+      context: {},
+      errorMessage: error instanceof Error ? error.message : "App storage initialization failed",
+      event: "app_storage_initialization_failed",
+      level: "warn",
+      stack: error instanceof Error ? (error.stack ?? null) : null,
+    });
   }
   initializeThemePreference();
   await synchronizeLanguagePreference();
 
   // 应用装配集中在唯一入口，避免功能模块直接控制 React 根节点。
-  createRoot(applicationRoot).render(
+  createRoot(applicationRoot, reactDiagnosticHandlers).render(
     <StrictMode>
       <AppProviders>
         <PerformanceProfiler>
@@ -63,4 +78,4 @@ async function startApplication(): Promise<void> {
   );
 }
 
-void startApplication();
+void startApplication().catch(recordApplicationStartFailure);

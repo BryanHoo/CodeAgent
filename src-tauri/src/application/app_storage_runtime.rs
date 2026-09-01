@@ -98,7 +98,10 @@ async fn run_preference_writer(app_data: PathBuf, mut receiver: mpsc::Receiver<P
         while !buffer.is_empty() {
             let updates = buffer.take();
             if let Err(error) = app_storage::update_preferences(&app_data, updates.clone()).await {
-                eprintln!("failed to persist app preferences: {error}");
+                crate::infrastructure::diagnostics::record_error(
+                    "app_preferences_persist_failed",
+                    error,
+                );
                 buffer.restore_failed(updates);
                 collect_until_deadline(&mut buffer, &mut receiver, PREFERENCE_RETRY_DELAY).await;
                 continue;

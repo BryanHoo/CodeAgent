@@ -1,11 +1,19 @@
-import type { AppInfoResponse, AppUpdateInstallProgress } from "@/protocol/index.js";
-import { BookOpen, Download, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
+import type {
+  AppInfoResponse,
+  AppUpdateInstallProgress,
+  ExportDiagnosticsResponse,
+} from "@/protocol/index.js";
+import { BookOpen, Download, FileArchive, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import {
+  notifyActionError,
+  notifyActionSuccess,
+} from "../../notifications/action-notifications.js";
 import { AppReleaseNotesDialog } from "./app-release-notes-dialog.js";
 import { SettingsField, SettingsPanel, type SettingsSectionId } from "./global-settings-fields.js";
 
@@ -15,6 +23,7 @@ export function GlobalSettingsAbout({
   error,
   isPending,
   onRetry,
+  onExportDiagnostics,
   onUpdate,
 }: Readonly<{
   activeSection: SettingsSectionId;
@@ -22,6 +31,7 @@ export function GlobalSettingsAbout({
   error: Error | null;
   isPending: boolean;
   onRetry: () => unknown;
+  onExportDiagnostics: () => Promise<ExportDiagnosticsResponse>;
   onUpdate: (
     version: string,
     onProgress: (progress: AppUpdateInstallProgress) => void,
@@ -31,6 +41,8 @@ export function GlobalSettingsAbout({
   const checkLockRef = useRef(createAsyncActionLock());
   const [isChecking, setIsChecking] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const exportLockRef = useRef(createAsyncActionLock());
+  const [isExporting, setIsExporting] = useState(false);
   const updateLockRef = useRef(createAsyncActionLock());
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<AppUpdateInstallProgress | null>(null);
@@ -179,6 +191,39 @@ export function GlobalSettingsAbout({
           />
         </>
       )}
+      <SettingsField label={t("about.diagnostics")}>
+        <Button
+          className="justify-self-start"
+          disabled={isExporting}
+          onClick={() => {
+            void exportLockRef.current.run(async () => {
+              setIsExporting(true);
+              try {
+                const result = await onExportDiagnostics();
+                if (result.status === "saved") {
+                  notifyActionSuccess(
+                    t("about.diagnosticsExported", { fileName: result.fileName }),
+                  );
+                }
+              } catch (exportError) {
+                notifyActionError(exportError);
+              } finally {
+                setIsExporting(false);
+              }
+            });
+          }}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {isExporting ? (
+            <LoaderCircle aria-hidden="true" className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <FileArchive aria-hidden="true" data-icon="inline-start" />
+          )}
+          {isExporting ? t("about.exportingDiagnostics") : t("about.exportDiagnostics")}
+        </Button>
+      </SettingsField>
     </SettingsPanel>
   );
 }

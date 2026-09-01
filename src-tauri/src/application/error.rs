@@ -43,6 +43,8 @@ pub enum AppError {
     NotificationFailed,
     #[error("tray operation failed")]
     TrayOperationFailed,
+    #[error("failed to export diagnostics")]
+    DiagnosticsExportFailed,
 }
 
 impl Serialize for AppError {
