@@ -383,6 +383,7 @@ export const workbench = {
     archived: "已归档",
     close: "关闭项目侧栏",
     collapse: "收起",
+    copyTaskId: "复制任务 ID",
     aboutStatus: "关于，CodeAgent v{{version}}{{update}}",
     createInProject: "在 {{project}} 中新建任务",
     deletePermanently: "永久删除",

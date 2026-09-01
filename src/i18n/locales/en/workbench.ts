@@ -386,6 +386,7 @@ export const workbench = {
     archived: "Archived",
     close: "Close project sidebar",
     collapse: "Show less",
+    copyTaskId: "Copy task ID",
     aboutStatus: "About, CodeAgent v{{version}}{{update}}",
     createInProject: "Create a task in {{project}}",
     deletePermanently: "Delete permanently",

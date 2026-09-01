@@ -1,5 +1,5 @@
 import { TEMPORARY_TASK_SCOPE_ID, type AgentTask } from "@/protocol/index.js";
-import { Archive, Ellipsis, Pencil, Pin, Trash2 } from "lucide-react";
+import { Archive, Copy, Ellipsis, Pencil, Pin, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -188,6 +188,11 @@ type TaskActionMenuProps = Readonly<{
 
 const taskActionClassName = "h-8 w-full text-left text-foreground";
 
+function copyTaskId(taskId: string): void {
+  // 复制失败不阻塞菜单关闭，用户可重新打开菜单重试。
+  void navigator.clipboard.writeText(taskId).catch(() => undefined);
+}
+
 export function TaskActionMenu({
   isPending,
   onArchive,
@@ -211,6 +216,16 @@ export function TaskActionMenu({
       <DropdownMenuItem className={taskActionClassName} disabled={isPending} onSelect={onRename}>
         <Pencil className="size-3.5" aria-hidden="true" />
         {t("sidebar.rename")}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        className={taskActionClassName}
+        disabled={isPending}
+        onSelect={() => {
+          copyTaskId(task.id);
+        }}
+      >
+        <Copy className="size-3.5" aria-hidden="true" />
+        {t("sidebar.copyTaskId")}
       </DropdownMenuItem>
       <DropdownMenuItem
         className={`${taskActionClassName} text-danger`}
