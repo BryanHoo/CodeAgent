@@ -1,10 +1,7 @@
 import { ensureCodexRuntime, subscribeAgentEvents } from "./runtime.js";
-import { invoke } from "./native-invoke.js";
+import { invoke, type NativeInvoke } from "./native-invoke.js";
 
-export type InvokeImplementation = <T>(
-  command: string,
-  args?: Record<string, unknown>,
-) => Promise<T>;
+export type InvokeImplementation = NativeInvoke;
 
 export type TauriClientOptions = Readonly<{
   ensureRuntime?: () => Promise<unknown>;
@@ -51,6 +48,19 @@ export class TauriNativeClient {
   protected async call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
     await this.ensureRuntime();
     return this.invokeCommand(command, args);
+  }
+
+  protected async callRaw<T>(
+    command: string,
+    body: Uint8Array,
+    headers: Record<string, string>,
+  ): Promise<T> {
+    await this.ensureRuntime();
+    try {
+      return await this.invokeNative<T>(command, body, { headers });
+    } catch (error) {
+      throw normalizeNativeError(error);
+    }
   }
 
   protected async callCancellable<T>(

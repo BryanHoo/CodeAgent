@@ -1,20 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AGENT_FILE_EXTENSIONS,
-  isAgentTextFileName,
+  AGENT_FILE_ACCEPT,
   MAX_AGENT_FILE_BYTES,
+  MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_TEXT_BYTES,
 } from "./agent-attachments.js";
 
 describe("Codex 0.151 attachment contract", () => {
-  it("accepts bounded text inputs and excludes unsupported binary documents", () => {
-    expect(MAX_AGENT_FILE_BYTES).toBe(MAX_AGENT_TEXT_BYTES);
-    expect(AGENT_FILE_EXTENSIONS).toContain(".md");
-    expect(AGENT_FILE_EXTENSIONS).not.toContain(".pdf");
-    expect(AGENT_FILE_EXTENSIONS).not.toContain(".docx");
-    expect(AGENT_FILE_EXTENSIONS).not.toContain(".xlsx");
-    expect(isAgentTextFileName("notes.MD")).toBe(true);
-    expect(isAgentTextFileName("document.pdf")).toBe(false);
+  it("keeps generated text bounded without restricting path-backed files and images", () => {
+    expect(MAX_AGENT_TEXT_BYTES).toBe(1024 * 1024);
+    expect(MAX_AGENT_FILE_BYTES).toBe(50 * 1024 * 1024);
+    expect(MAX_AGENT_IMAGE_BYTES).toBe(512 * 1024 * 1024);
+    expect(AGENT_FILE_ACCEPT).toBe("");
   });
 });

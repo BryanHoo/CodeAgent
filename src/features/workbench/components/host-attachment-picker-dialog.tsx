@@ -1,9 +1,5 @@
 import { buildNativeAssetUrl } from "@/platform/native-asset-url.js";
-import {
-  isAgentTextFileName,
-  type HostFileKind,
-  type HostFileListing,
-} from "@/protocol/index.js";
+import { type HostFileKind, type HostFileListing } from "@/protocol/index.js";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -48,7 +44,11 @@ type HostFileNodesProps = Readonly<{
 }>;
 
 function isVisibleHostEntry(entry: HostFileListing["entries"][number], kind: HostFileKind) {
-  return entry.type === "directory" || kind === "image" || isAgentTextFileName(entry.name);
+  return entry.type === "directory" || kind === "file" || isImageFileName(entry.name);
+}
+
+function isImageFileName(name: string): boolean {
+  return /\.(?:gif|jpe?g|png|webp)$/iu.test(name);
 }
 
 function HostFileNodes({
@@ -59,7 +59,7 @@ function HostFileNodes({
   onRetry,
 }: HostFileNodesProps) {
   const { t } = useTranslation("workbench");
-  // 宿主选择器与拖放入口共享扩展名规则，避免展示必然被 151 拒绝的二进制文件。
+  // 通用文件作为路径引用交给 Codex 工具读取，图片入口只展示原生支持的格式。
   return entries.filter((entry) => isVisibleHostEntry(entry, kind)).map((entry) => {
     if (entry.type === "file") {
       return <FileTreeFile key={entry.path} name={entry.name} path={entry.path} />;
@@ -270,9 +270,13 @@ export function HostAttachmentPickerDialog({
       if (response.attachment.kind !== kind) {
         throw new TypeError("Imported attachment kind does not match the selection");
       }
+      const importedAttachment =
+        kind === "image"
+          ? { ...response.attachment, detail: "auto" as const }
+          : response.attachment;
       onAdd({
-        attachment: response.attachment,
-        ...response.attachment,
+        attachment: importedAttachment,
+        ...importedAttachment,
         previewUrl:
           kind === "image" ? buildNativeAssetUrl(response.attachment.id) : "",
         source: "host",
@@ -384,8 +388,8 @@ export function HostAttachmentPickerDialog({
           )}
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-separator bg-raised px-4 py-3 sm:flex-row sm:items-center sm:px-5">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-separator bg-raised px-5 py-3">
+          <div className="min-w-0 max-w-80">
             <p
               aria-live="polite"
               className="truncate font-mono text-caption text-foreground"
@@ -394,9 +398,9 @@ export function HostAttachmentPickerDialog({
               {selectedPath ?? t("hostAttachmentPicker.noSelection")}
             </p>
           </div>
-          <DialogFooter className="w-full flex-col-reverse sm:w-auto sm:flex-row">
+          <DialogFooter className="shrink-0 flex-row">
             <Button
-              className="h-10 w-full sm:h-8 sm:w-auto"
+              className="h-8 shrink-0"
               disabled={isImporting}
               onClick={onClose}
               type="button"
@@ -405,7 +409,7 @@ export function HostAttachmentPickerDialog({
               {t("actions.cancel")}
             </Button>
             <Button
-              className="h-10 w-full sm:h-8 sm:w-auto"
+              className="h-8 shrink-0"
               disabled={selectedPath === undefined || isImporting}
               onClick={() => void importSelectedFile()}
               type="button"

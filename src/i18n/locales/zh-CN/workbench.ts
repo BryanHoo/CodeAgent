@@ -65,6 +65,8 @@ export const workbench = {
     attachmentCount_other: "{{count}} 个附件",
     attachmentReadFailed: "附件读取失败",
     attachmentUploadFailed: "附件上传失败",
+    modelAudioInputUnsupported: "所选模型不支持音频输入",
+    modelImageInputUnsupported: "所选模型不支持图片输入",
     baseBranchReview: "基于基础分支进行审查",
     buildPlanPrompt: "请开始按照上述计划进行开发。",
     cancelGoalMode: "取消目标模式",

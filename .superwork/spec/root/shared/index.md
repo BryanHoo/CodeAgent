@@ -2,8 +2,10 @@
 
 ## 附件契约
 
-- `AgentMessageAttachment` 是提交、队列编辑和历史恢复共用的完整附件身份，必须保留 `id`、`kind`、`name`、`mediaType`、`size` 与 `path`
-- 普通文件通过 `codexly-file:` `text_elements.placeholder` 携带固定大小元数据；关联的 `text` 仅保存本地缓存路径，不得作为可见正文渲染
+- `AgentMessageAttachment` 是提交、队列编辑和历史恢复共用的完整附件身份，必须保留 `id`、`kind`、`name`、`mediaType`、`size`，图片固定保留 `detail: auto`
+- Codex 原生媒体必须分别映射为 `localImage` 与 `localAudio`；普通文件通过 `codexly-file:` `text_elements.placeholder` 携带固定大小元数据，关联的 `text` 仅保存本地缓存路径，不得作为可见正文渲染
+- 浏览器附件必须通过 raw IPC 上传，宿主文件必须单遍流式缓存；不得把二进制转换为 JSON `number[]` 或 Base64
+- 附件超过类型上限时必须跨 Workspace、Tauri IPC 和 WebView 保留 `ATTACHMENT_TOO_LARGE`，前端展示本地化限制说明，不得降级为通用文件系统错误
 - 生成图片正文只允许写入本地附件存储；跨 Rust、Tauri Channel 和 WebView 仅传固定大小附件元数据，不得传输 Base64 `result`
 
 ## 桌面宠物契约
@@ -42,7 +44,8 @@
 ## 验证要求
 
 - 覆盖远程 release 新旧版本映射、仅 `0.1.0` 允许空 release、关于页常驻日志入口、安装 IPC 单调进度，以及签名 artifact 与 `latest.json` 发布约束
-- 覆盖普通文件提交后在队列编辑与历史恢复中的附件 chip 保留行为
+- 覆盖普通文件和原生媒体提交后在队列编辑与历史恢复中的附件 chip 保留行为
+- 覆盖宿主附件超限错误码透传、本地化提示及超长路径下选择器操作按钮不溢出行为
 - 覆盖生成图片落盘、Base64 移除和时间线附件映射行为
 - 覆盖性能分位数、IPC 合并统计、源码虚拟化 DOM 上限和生产 Chunk 预算
 - 覆盖 MCP form/URL Resolution Schema 差异，以及 URL 外部打开成功后才提交 `accept` 的交互顺序

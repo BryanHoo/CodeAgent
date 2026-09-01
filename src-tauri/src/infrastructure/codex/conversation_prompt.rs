@@ -11,8 +11,13 @@ pub(super) fn map_prompt_input(input: &AgentPromptInput) -> Result<Vec<Value>, C
     }
     for attachment in &input.attachments {
         match attachment.get("kind").and_then(Value::as_str) {
+            Some("file") if is_audio_attachment(attachment) => native.push(json!({
+                "path": object_string(attachment, "id")?,
+                "type": "localAudio",
+            })),
             Some("file" | "text") => native.push(create_file_text_input(attachment)?),
             None | Some("image") => native.push(json!({
+                "detail": image_detail(attachment)?,
                 "path": object_string(attachment, "id")?,
                 "type": "localImage",
             })),
@@ -30,6 +35,28 @@ pub(super) fn map_prompt_input(input: &AgentPromptInput) -> Result<Vec<Value>, C
         return Err(ConnectionError::InvalidMessage);
     }
     Ok(native)
+}
+
+fn image_detail(attachment: &Value) -> Result<&str, ConnectionError> {
+    match attachment.get("detail").and_then(Value::as_str) {
+        None => Ok("auto"),
+        Some(detail @ ("auto" | "low" | "high" | "original")) => Ok(detail),
+        Some(_) => Err(ConnectionError::InvalidMessage),
+    }
+}
+
+fn is_audio_attachment(attachment: &Value) -> bool {
+    attachment
+        .get("id")
+        .and_then(Value::as_str)
+        .and_then(|path| std::path::Path::new(path).extension())
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "m4a" | "mp3" | "ogg" | "wav" | "webm"
+            )
+        })
 }
 
 fn object_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, ConnectionError> {
@@ -82,6 +109,54 @@ mod tests {
             native[1]["text_elements"][0]["placeholder"]
                 .as_str()
                 .is_some_and(|value| value.starts_with("codexly-file:"))
+        );
+    }
+
+    #[test]
+    fn prompt_audio_file_should_use_codex_local_audio_input() {
+        let path = std::env::temp_dir()
+            .join("recording.mp3")
+            .to_string_lossy()
+            .into_owned();
+        let input = AgentPromptInput {
+            attachments: vec![json!({
+                "id": &path,
+                "kind": "file",
+                "mediaType": "audio/mpeg",
+                "name": "recording.mp3",
+                "size": 17,
+            })],
+            skills: Vec::new(),
+            text: String::new(),
+        };
+
+        let native = map_prompt_input(&input).expect("audio prompt should map");
+        assert_eq!(native, vec![json!({"path": path, "type": "localAudio"})]);
+    }
+
+    #[test]
+    fn prompt_image_should_preserve_requested_detail() {
+        let path = std::env::temp_dir()
+            .join("diagram.png")
+            .to_string_lossy()
+            .into_owned();
+        let input = AgentPromptInput {
+            attachments: vec![json!({
+                "detail": "original",
+                "id": &path,
+                "kind": "image",
+                "mediaType": "image/png",
+                "name": "diagram.png",
+                "size": 17,
+            })],
+            skills: Vec::new(),
+            text: String::new(),
+        };
+
+        let native = map_prompt_input(&input).expect("image prompt should map");
+        assert_eq!(
+            native,
+            vec![json!({"detail": "original", "path": path, "type": "localImage"})]
         );
     }
 }

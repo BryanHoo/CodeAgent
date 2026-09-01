@@ -1,7 +1,8 @@
 use std::path::Path;
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, ipc::InvokeBody, ipc::Request};
 
 use super::{error::AppError, state::AppState};
 use crate::infrastructure::filesystem::list_host_files as read_host_files;
@@ -9,6 +10,43 @@ use crate::{
     domain::conversation::AgentPromptInput,
     infrastructure::{codex, workspace},
 };
+
+const MAX_TEXT_BYTES: u64 = 1024 * 1024;
+const MAX_AUDIO_BYTES: u64 = 50 * 1024 * 1024;
+const MAX_FILE_BYTES: u64 = 50 * 1024 * 1024;
+const MAX_IMAGE_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_IMAGES: u64 = 1_500;
+
+#[derive(Default)]
+struct AttachmentBudget {
+    file_bytes: u64,
+    image_bytes: u64,
+    image_count: u64,
+}
+
+impl AttachmentBudget {
+    fn add(&mut self, kind: &str, size: u64) -> Result<(), AppError> {
+        if kind == "image" {
+            self.image_bytes = self
+                .image_bytes
+                .checked_add(size)
+                .ok_or(AppError::FilesystemRequestFailed)?;
+            self.image_count += 1;
+            if self.image_bytes > MAX_IMAGE_BYTES || self.image_count > MAX_IMAGES {
+                return Err(AppError::FilesystemRequestFailed);
+            }
+        } else {
+            self.file_bytes = self
+                .file_bytes
+                .checked_add(size)
+                .ok_or(AppError::FilesystemRequestFailed)?;
+            if self.file_bytes > MAX_FILE_BYTES {
+                return Err(AppError::FilesystemRequestFailed);
+            }
+        }
+        Ok(())
+    }
+}
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn list_host_files(
@@ -28,18 +66,33 @@ pub async fn list_host_files(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn upload_attachment(
-    app: AppHandle,
-    project_id: String,
-    kind: String,
-    name: String,
-    bytes: Vec<u8>,
-) -> Result<Value, AppError> {
+pub async fn upload_attachment(app: AppHandle, request: Request<'_>) -> Result<Value, AppError> {
+    let bytes = match request.body() {
+        InvokeBody::Raw(bytes) => bytes.as_slice(),
+        InvokeBody::Json(_) => return Err(AppError::FilesystemRequestFailed),
+    };
+    let project_id = required_header(&request, "x-codeagent-project-id")?;
+    let kind = required_header(&request, "x-codeagent-kind")?;
+    let encoded_name = required_header(&request, "x-codeagent-name")?;
+    let name = STANDARD
+        .decode(encoded_name)
+        .ok()
+        .and_then(|value| String::from_utf8(value).ok())
+        .ok_or(AppError::FilesystemRequestFailed)?;
     let app_data = app
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    store_attachment_without_codex(&app_data, &project_id, &kind, &name, &bytes).await
+    store_attachment_without_codex(&app_data, project_id, kind, &name, bytes).await
+}
+
+fn required_header<'a>(request: &'a Request<'_>, name: &str) -> Result<&'a str, AppError> {
+    request
+        .headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .ok_or(AppError::FilesystemRequestFailed)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -65,7 +118,7 @@ async fn store_attachment_without_codex(
 ) -> Result<Value, AppError> {
     let response = workspace::store_attachment(app_data, project_id, kind, name, bytes)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -77,7 +130,7 @@ async fn import_attachment_without_codex(
 ) -> Result<Value, AppError> {
     let response = workspace::import_attachment(app_data, project_id, kind, path)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
 }
 
@@ -132,6 +185,7 @@ pub async fn resolve_prompt_attachments(
     project_id: &str,
     input: &mut AgentPromptInput,
 ) -> Result<(), AppError> {
+    let mut budget = AttachmentBudget::default();
     for attachment in &mut input.attachments {
         let object = attachment
             .as_object_mut()
@@ -145,34 +199,56 @@ pub async fn resolve_prompt_attachments(
             .map_err(|_| AppError::FilesystemRequestFailed)?;
         let path_string = path.to_string_lossy().into_owned();
         object.insert("id".to_owned(), Value::String(path_string.clone()));
-        if is_image_path(&path) {
-            if object.get("kind").and_then(Value::as_str) != Some("image") {
-                return Err(AppError::FilesystemRequestFailed);
-            }
-            object.insert("kind".to_owned(), Value::String("image".to_owned()));
-        } else {
-            let metadata = tokio::fs::metadata(&path)
-                .await
-                .map_err(|_| AppError::FilesystemRequestFailed)?;
-            let expected_size = object.get("size").and_then(Value::as_u64);
-            let kind = object.get("kind").and_then(Value::as_str);
-            let name = object.get("name").and_then(Value::as_str);
-            let media_type = object.get("mediaType").and_then(Value::as_str);
-            if metadata.len() > 1024 * 1024
-                || expected_size != Some(metadata.len())
-                || !matches!(kind, Some("file" | "text"))
-                || name.is_none_or(|value| {
-                    value.is_empty()
-                        || value.len() > 255
-                        || value.contains(['/', '\\', '\0', '\r', '\n'])
-                })
-                || media_type.is_none_or(|value| value.is_empty() || value.len() > 255)
+        let metadata = tokio::fs::metadata(&path)
+            .await
+            .map_err(|_| AppError::FilesystemRequestFailed)?;
+        let expected_size = object.get("size").and_then(Value::as_u64);
+        let kind = object.get("kind").and_then(Value::as_str);
+        let name = object.get("name").and_then(Value::as_str);
+        let media_type = object.get("mediaType").and_then(Value::as_str);
+        let detail = object.get("detail").and_then(Value::as_str);
+        let max_bytes = match kind {
+            Some("image")
+                if is_image_path(&path)
+                    && detail.is_none_or(|value| {
+                        matches!(value, "auto" | "low" | "high" | "original")
+                    }) =>
             {
-                return Err(AppError::FilesystemRequestFailed);
+                MAX_IMAGE_BYTES
             }
+            Some("text") if detail.is_none() => MAX_TEXT_BYTES,
+            Some("file") if detail.is_none() && is_audio_path(&path) => MAX_AUDIO_BYTES,
+            Some("file") if detail.is_none() => MAX_FILE_BYTES,
+            _ => return Err(AppError::FilesystemRequestFailed),
+        };
+        if metadata.len() > max_bytes
+            || expected_size != Some(metadata.len())
+            || name.is_none_or(|value| {
+                value.is_empty()
+                    || value.len() > 255
+                    || value.contains(['/', '\\', '\0', '\r', '\n'])
+            })
+            || media_type.is_none_or(|value| value.is_empty() || value.len() > 255)
+        {
+            return Err(AppError::FilesystemRequestFailed);
         }
+        budget.add(
+            kind.ok_or(AppError::FilesystemRequestFailed)?,
+            metadata.len(),
+        )?;
     }
     Ok(())
+}
+
+fn is_audio_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "m4a" | "mp3" | "ogg" | "wav" | "webm"
+            )
+        })
 }
 
 fn is_image_path(path: &Path) -> bool {
@@ -191,6 +267,23 @@ mod tests {
     use std::{fs, time::SystemTime};
 
     use super::*;
+
+    #[test]
+    fn attachment_budget_should_enforce_combined_limits() {
+        let mut files = AttachmentBudget::default();
+        files.add("file", MAX_FILE_BYTES - 1).unwrap();
+        assert!(files.add("text", 2).is_err());
+
+        let mut images = AttachmentBudget::default();
+        images.add("image", MAX_IMAGE_BYTES).unwrap();
+        assert!(images.add("image", 1).is_err());
+
+        let mut image_count = AttachmentBudget::default();
+        for _ in 0..MAX_IMAGES {
+            image_count.add("image", 1).unwrap();
+        }
+        assert!(image_count.add("image", 1).is_err());
+    }
 
     #[tokio::test]
     async fn temporary_scope_should_import_json_without_a_codex_project() {
@@ -214,6 +307,39 @@ mod tests {
 
         assert_eq!(response["attachment"]["kind"], "file");
         assert_eq!(response["attachment"]["name"], "capslock-plus.json");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn oversized_import_should_preserve_a_structured_error() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codeagent-command-oversized-{unique}"));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("archive.zip");
+        fs::File::create(&source)
+            .unwrap()
+            .set_len(MAX_FILE_BYTES + 1)
+            .unwrap();
+
+        let error = import_attachment_without_codex(
+            &root.join("app-data"),
+            "temporary",
+            "file",
+            source.to_str().unwrap(),
+        )
+        .await
+        .expect_err("oversized import should fail");
+
+        assert_eq!(
+            serde_json::to_value(error).unwrap(),
+            serde_json::json!({
+                "code": "ATTACHMENT_TOO_LARGE",
+                "message": "attachment exceeds the 52428800 byte limit",
+            })
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -10,4 +10,12 @@ describe("actionErrorMessage", () => {
 
     expect(actionErrorMessage(error)).toBe(i18n.t("errors.gitNotFound", { ns: "common" }));
   });
+
+  it("localizes attachment size errors", () => {
+    const error = new NativeCommandError("ATTACHMENT_TOO_LARGE", "backend fallback");
+
+    expect(actionErrorMessage(error)).toBe(
+      i18n.t("errors.attachmentTooLarge", { ns: "common" }),
+    );
+  });
 });

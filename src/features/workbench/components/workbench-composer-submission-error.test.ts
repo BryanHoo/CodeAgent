@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { NativeCommandError } from "../../../platform/tauri/native-client.js";
-import { toPromptSubmissionError } from "./workbench-composer-submission.js";
+import {
+  findUnsupportedInputModality,
+  toPromptSubmissionError,
+} from "./workbench-composer-submission.js";
 
 describe("toPromptSubmissionError", () => {
   it("maps a busy Codex thread to an actionable localized message", () => {
@@ -20,5 +23,28 @@ describe("toPromptSubmissionError", () => {
     const source = new Error("request timeout");
 
     expect(toPromptSubmissionError(source, (key) => key)).toBe(source);
+  });
+});
+
+describe("findUnsupportedInputModality", () => {
+  it("uses model/list input modalities for structured media", () => {
+    expect(
+      findUnsupportedInputModality(
+        [{ kind: "image", mediaType: "image/png", name: "diagram.png" }],
+        ["text"],
+      ),
+    ).toBe("image");
+    expect(
+      findUnsupportedInputModality(
+        [{ kind: "file", mediaType: "audio/mpeg", name: "recording.mp3" }],
+        ["text", "image"],
+      ),
+    ).toBe("audio");
+    expect(
+      findUnsupportedInputModality(
+        [{ kind: "file", mediaType: "application/pdf", name: "report.pdf" }],
+        ["text"],
+      ),
+    ).toBeUndefined();
   });
 });

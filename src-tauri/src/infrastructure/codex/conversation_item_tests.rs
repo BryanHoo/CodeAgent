@@ -179,6 +179,38 @@ fn user_file_should_restore_attachment_without_exposing_its_path_as_text() {
 }
 
 #[test]
+fn user_local_audio_should_restore_attachment_identity() {
+    let path = absolute_test_path("recording.mp3");
+    let mapped = map_item(json!({
+        "id": "user-audio",
+        "type": "userMessage",
+        "content": [{"path": &path, "type": "localAudio"}],
+    }))
+    .expect("local audio should map");
+    let value = to_value(mapped).unwrap();
+
+    assert_eq!(value["text"], "");
+    assert_eq!(value["attachments"][0]["id"], path);
+    assert_eq!(value["attachments"][0]["kind"], "file");
+    assert_eq!(value["attachments"][0]["mediaType"], "audio/mpeg");
+    assert_eq!(value["attachments"][0]["name"], "recording.mp3");
+}
+
+#[test]
+fn user_local_image_should_restore_requested_detail() {
+    let path = absolute_test_path("diagram.png");
+    let mapped = map_item(json!({
+        "id": "user-image",
+        "type": "userMessage",
+        "content": [{"detail": "high", "path": &path, "type": "localImage"}],
+    }))
+    .expect("local image should map");
+    let value = to_value(mapped).unwrap();
+
+    assert_eq!(value["attachments"][0]["detail"], "high");
+}
+
+#[test]
 fn completed_image_generation_should_map_to_attachment_metadata_without_base64() {
     let encoded = "iVBORw0KGgo=";
     let path = absolute_test_path("generated.png");

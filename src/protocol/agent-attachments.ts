@@ -58,173 +58,19 @@ export const AgentReviewTargetSchema = Type.Intersect([
 export type AgentReviewTarget = Readonly<Static<typeof AgentReviewTargetSchema>>;
 
 export const MAX_AGENT_TEXT_BYTES = 1024 * 1024;
-export const MAX_AGENT_FILE_BYTES = MAX_AGENT_TEXT_BYTES;
-export const MAX_AGENT_FILE_TOTAL_BYTES = 50 * 1024 * 1024;
-export const MAX_AGENT_IMAGE_BYTES = 10 * 1024 * 1024;
-export const MAX_AGENT_IMAGES = 20;
-export const MAX_AGENT_IMAGE_TOTAL_BYTES = 50 * 1024 * 1024;
+// 文件遵循官方输入上限；普通文件在 151 下仅作为路径引用，不伪装成 input_file。
+export const MAX_AGENT_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_AGENT_FILE_TOTAL_BYTES = MAX_AGENT_FILE_BYTES;
+export const MAX_AGENT_IMAGE_BYTES = 512 * 1024 * 1024;
+export const MAX_AGENT_IMAGES = 1_500;
+export const MAX_AGENT_IMAGE_TOTAL_BYTES = MAX_AGENT_IMAGE_BYTES;
 export const MAX_AGENT_ATTACHMENT_BYTES = Math.max(MAX_AGENT_FILE_BYTES, MAX_AGENT_IMAGE_BYTES);
 export const MAX_AGENT_HISTORY_IMAGES = 1_500;
-export const MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES = 512 * 1024 * 1024;
+export const MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES = MAX_AGENT_IMAGE_TOTAL_BYTES;
 
 export const AGENT_IMAGE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
-// Codex 0.151 的 turn input 仅原生支持文本和图片；二进制文档不进入附件上传链路。
-export const AGENT_FILE_EXTENSIONS = [
-  ".asm",
-  ".astro",
-  ".awk",
-  ".bash",
-  ".bat",
-  ".c",
-  ".cc",
-  ".conf",
-  ".cs",
-  ".cpp",
-  ".css",
-  ".csv",
-  ".cxx",
-  ".def",
-  ".dic",
-  ".diff",
-  ".dot",
-  ".eml",
-  ".ejs",
-  ".ex",
-  ".exs",
-  ".go",
-  ".gradle",
-  ".graphql",
-  ".groovy",
-  ".h",
-  ".hh",
-  ".htm",
-  ".html",
-  ".hbs",
-  ".hcl",
-  ".hs",
-  ".ics",
-  ".ifb",
-  ".iif",
-  ".in",
-  ".ini",
-  ".jade",
-  ".java",
-  ".jinja2",
-  ".jl",
-  ".js",
-  ".jsx",
-  ".json",
-  ".json5",
-  ".kt",
-  ".kts",
-  ".ksh",
-  ".list",
-  ".liquid",
-  ".lua",
-  ".log",
-  ".markdown",
-  ".md",
-  ".mht",
-  ".mhtml",
-  ".mime",
-  ".mjs",
-  ".nws",
-  ".ndjson",
-  ".pl",
-  ".patch",
-  ".php",
-  ".pot",
-  ".py",
-  ".properties",
-  ".proto",
-  ".ps1",
-  ".pug",
-  ".r",
-  ".rb",
-  ".rst",
-  ".rtf",
-  ".rs",
-  ".s",
-  ".sass",
-  ".scala",
-  ".scss",
-  ".sh",
-  ".sql",
-  ".srt",
-  ".text",
-  ".tex",
-  ".tf",
-  ".tmpl",
-  ".toml",
-  ".ts",
-  ".tsx",
-  ".tsv",
-  ".txt",
-  ".vcf",
-  ".vtt",
-  ".vbs",
-  ".wiz",
-  ".xml",
-  ".yaml",
-  ".yml",
-  ".zsh",
-] as const;
-export const AGENT_FILE_MEDIA_TYPES = [
-  "application/csv",
-  "application/graphql",
-  "application/javascript",
-  "application/json",
-  "application/rtf",
-  "application/toml",
-  "application/typescript",
-  "application/x-httpd-php",
-  "application/x-iif",
-  "application/x-ndjson",
-  "application/x-patch",
-  "application/x-protobuf",
-  "application/x-rust",
-  "application/x-shellscript",
-  "application/x-sql",
-  "application/x-toml",
-  "application/x-typescript",
-  "application/x-yaml",
-  "application/yaml",
-  "message/rfc822",
-  "text/calendar",
-  "text/csv",
-  "text/css",
-  "text/html",
-  "text/javascript",
-  "text/jsx",
-  "text/markdown",
-  "text/plain",
-  "text/rtf",
-  "text/tsx",
-  "text/tsv",
-  "text/vtt",
-  "text/x-c",
-  "text/x-c++",
-  "text/x-csharp",
-  "text/x-diff",
-  "text/x-go",
-  "text/x-java",
-  "text/x-makefile",
-  "text/x-python",
-  "text/x-rst",
-  "text/x-rust",
-  "text/x-shellscript",
-  "text/x-sql",
-  "text/x-typescript",
-  "text/x-yaml",
-  "text/xml",
-] as const;
-export const AGENT_FILE_ACCEPT = [...AGENT_FILE_EXTENSIONS, ...AGENT_FILE_MEDIA_TYPES].join(",");
-const AGENT_FILE_EXTENSION_SET = new Set<string>(AGENT_FILE_EXTENSIONS);
-
-export function isAgentTextFileName(name: string): boolean {
-  const extensionOffset = name.lastIndexOf(".");
-  return extensionOffset >= 0 && AGENT_FILE_EXTENSION_SET.has(name.slice(extensionOffset).toLowerCase());
-}
+// 空 accept 允许选择任意文件；后端只把 Codex 原生媒体映射为结构化输入。
+export const AGENT_FILE_ACCEPT = "";
 
 export const AgentImageMediaTypeSchema = Type.Union([
   Type.Literal("image/gif"),
@@ -246,6 +92,15 @@ export const AgentAttachmentKindSchema = Type.Union([
 ]);
 
 export type AgentAttachmentKind = Readonly<Static<typeof AgentAttachmentKindSchema>>;
+
+export const AgentImageDetailSchema = Type.Union([
+  Type.Literal("auto"),
+  Type.Literal("low"),
+  Type.Literal("high"),
+  Type.Literal("original"),
+]);
+
+export type AgentImageDetail = Readonly<Static<typeof AgentImageDetailSchema>>;
 
 export const AgentMessageSkillSchema = Type.Object(
   { name: Type.String({ minLength: 1 }) },
@@ -280,11 +135,12 @@ export function stripLeadingAgentSkillReferences(
 // Snapshot 只保存可授权读取的附件元数据，避免历史二进制随消息缓存复制。
 export const AgentMessageAttachmentSchema = Type.Object(
   {
+    detail: Type.Optional(AgentImageDetailSchema),
     id: Type.String({ minLength: 1 }),
     kind: AgentAttachmentKindSchema,
     mediaType: AgentAttachmentMediaTypeSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
-    size: Type.Integer({ maximum: MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES, minimum: 1 }),
+    size: Type.Integer({ maximum: MAX_AGENT_ATTACHMENT_BYTES, minimum: 1 }),
   },
   { additionalProperties: false },
 );

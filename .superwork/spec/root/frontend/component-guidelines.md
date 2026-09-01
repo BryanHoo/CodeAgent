@@ -6,7 +6,7 @@
 - 通用控件优先复用 `src/shared/components/core/`，图标使用 `lucide-react`
 - 交互元素提供可访问名称、禁用状态和可见焦点反馈
 - 工作台仅面向桌面端，使用全局设计 tokens 约束三栏布局、颜色、间距和交互状态，不增加移动端适配分支
-- Codex Runtime Gate 必须先于 Provider 连接与工作台数据 Provider 挂载；只有精确兼容版本通过检测后才能进入工作台。缺失或不兼容时展示固定的全局安装命令与应用私有下载；用户启动私有下载后必须展示实时下载进度，下载完成后自动复检，并始终保留手动复检入口
+- Codex Runtime Gate 必须先于 Provider 连接与工作台数据 Provider 挂载；只有不低于协议基线的稳定版本通过检测后才能进入工作台。缺失或不兼容时展示固定的全局安装命令与应用私有下载；用户启动私有下载后必须展示实时下载进度，下载完成后自动复检，并始终保留手动复检入口
 - 工作台壁纸必须按视口尺寸与 `devicePixelRatio` 预缩放到物理像素画布，并在画布生成阶段完成模糊；窗口缩放应合并重绘，禁止对全屏原图使用实时 CSS `filter: blur()`
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
@@ -25,6 +25,8 @@
 - Inspector 的项目 Tab 固定排在上下文 Tab 前；普通 Task 启动后保持项目 Tab，仅当计划或目标出现时自动切换到上下文 Tab
 - `@pierre/diffs` 首次显示前按当前文件语言预加载高亮器，避免首个 Diff 异步初始化后保持空白
 - Composer 提交消息时必须保留完整 `AgentMessageAttachment`，不得退化为仅含 `id` 的引用
+- Composer 必须按 `model/list.inputModalities` 禁止模型不支持的图片或音频提交；图片固定使用 `detail: auto`，浏览器附件走 raw IPC，宿主选择走路径导入，不提供逐图档位选择
+- 宿主附件选择器底栏必须限制路径显示宽度并单行省略，操作按钮使用不可收缩的独立布局列；中文长路径必须在 Chromium 与 WebKit 浏览器测试中验证无裁切和溢出
 - Composer 必须将 `CODEX_THREAD_BUSY` 映射为本地化的可操作提示；未知原生拒绝不得显示硬编码英文兜底文案
 - 仅在多个调用方确有一致需求时提取通用组件
 - 应用入口必须通过 React 根回调、`window.error` 与 `unhandledrejection` 上报结构化诊断；后台失败使用同一诊断入口且不得影响主流程。关于页必须提供诊断 ZIP 导出按钮，并明确展示导出中禁用状态和完成/失败通知

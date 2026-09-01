@@ -39,12 +39,13 @@
 
 ## Codex 工作台
 
-- 工作台运行时固定使用 `codex-cli 0.151.0` 的 `codex app-server`，协议判断以本地 `rust-v0.151.0` 源码为准
+- 工作台协议基线使用 `codex-cli 0.151.0` 的 `codex app-server`，外部稳定运行时接受 `0.151.0` 及以上版本并完成初始化握手；应用私有回退包固定版本和完整性摘要
 - React 到 Codex 的运行链路必须保持 `Tauri invoke/Channel -> Rust -> stdio JSONL`，不得重新引入 HTTP、WebSocket 或 mock 运行时
 - app-server 只维持一个长生命周期 Channel；事件序号、通知队列、历史页、命令输出和附件必须保持有界
 - 分页历史使用 `thread/turns/list(itemsView: "notLoaded")`，再并发调用 `thread/items/list` 补全同页 Turn；必须拒绝空游标、重复游标和错误 `turnId`
 - 文件、Git、附件和自定义资源均由 Rust 校验项目根或资源目录边界，WebView 不得获得通用 shell 与任意文件访问能力
-- 附件必须映射为 Codex 0.151 原生 `text` 或 `localImage` 输入；文本在 Rust 缓存边界校验 UTF-8 且不超过 1 MiB，前端不得展示 PDF、Office 等无原生输入支持的二进制格式
+- 附件必须映射为 Codex 0.151 原生 `text`、`localImage` 或 `localAudio` 输入；图片固定使用 `detail: auto`，普通二进制仅作为带身份元数据的本地路径引用，不得伪装成上游不存在的 `input_file`
+- 附件 raw IPC、缓存和提交边界必须校验名称、类型、实际大小与聚合预算；文本不超过 1 MiB，文件合计不超过 50 MiB，图片合计不超过 512 MiB 且最多 1500 张
 - `McpServerStatus.runtimeStatus` 必须精确映射 `notStarted`、`starting`、`connected`、`authenticationRequired`、`failed`、`cancelled` 与 `disabled`；`null` 映射为 `unknown`，未登录时按官方 TUI 规则映射为 `authenticationRequired`，不得用启动通知缓存覆盖线程权威快照
 - MCP 清单 IPC 只传 `displayName`、`name`、`status` 与 `toolCount`；`mcpServer/startupStatus/updated` 仅负责使当前 Task Query 失效，不得向 WebView 传输完整工具定义或维护第二份连接状态
 - `functionCallOutput` 必须作为已完成工具项进入时间线；`sendMessage`、`followupTask`、`interruptAgent` 与 `listAgents` 必须映射为稳定的 Agent 工具标识

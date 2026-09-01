@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -8,6 +8,7 @@ use super::{
     connection::ConnectionError,
     conversation::{NativeTurn, map_turn},
     conversation_file_input::read_file_text_input,
+    conversation_media_input::{map_local_audio_attachment, map_local_image_attachment},
     conversation_prompt::map_prompt_input,
 };
 use crate::domain::conversation::{AgentPromptInput, AgentTurn};
@@ -297,7 +298,8 @@ fn map_submission(native: NativeSubmission) -> Result<AgentQueuedSubmission, Con
                 "id": object_string_from_map(object, "path")?,
                 "name": object_string_from_map(object, "name")?,
             })),
-            "localImage" => attachments.push(map_local_image(object)?),
+            "localImage" => attachments.push(map_local_image_attachment(object)?),
+            "localAudio" => attachments.push(map_local_audio_attachment(object)?),
             _ => return Err(ConnectionError::InvalidMessage),
         }
     }
@@ -309,30 +311,6 @@ fn map_submission(native: NativeSubmission) -> Result<AgentQueuedSubmission, Con
         status: "queued",
         text,
     })
-}
-
-fn map_local_image(object: &Map<String, Value>) -> Result<Value, ConnectionError> {
-    let path = Path::new(object_string_from_map(object, "path")?);
-    let size = std::fs::metadata(path)
-        .ok()
-        .and_then(|metadata| usize::try_from(metadata.len()).ok())
-        .filter(|size| *size > 0)
-        .unwrap_or(1);
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .ok_or(ConnectionError::InvalidMessage)?;
-    let media_type = match path.extension().and_then(|value| value.to_str()) {
-        Some("gif") => "image/gif",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("webp") => "image/webp",
-        _ => "image/png",
-    };
-    Ok(json!({
-        "id": path.to_string_lossy(), "kind": "image", "mediaType": media_type,
-        "name": name, "size": size,
-    }))
 }
 
 fn object_string_from_map<'a>(
@@ -377,5 +355,32 @@ mod tests {
         assert_eq!(mapped.attachments[0]["id"], path);
         assert_eq!(mapped.attachments[0]["name"], "report.json");
         assert_eq!(mapped.attachments[0]["mediaType"], "application/json");
+    }
+
+    #[test]
+    fn queued_local_media_should_restore_native_attachments() {
+        let root = std::env::temp_dir();
+        let submission = NativeSubmission {
+            client_user_message_id: "client-media".to_owned(),
+            id: "queue-media".to_owned(),
+            input: vec![
+                json!({
+                    "detail": "auto",
+                    "path": root.join("photo.WEBP"),
+                    "type": "localImage",
+                }),
+                json!({
+                    "path": root.join("voice.WAV"),
+                    "type": "localAudio",
+                }),
+            ],
+        };
+
+        let mapped = map_submission(submission).expect("queued media should map");
+
+        assert_eq!(mapped.attachments[0]["detail"], "auto");
+        assert_eq!(mapped.attachments[0]["mediaType"], "image/webp");
+        assert_eq!(mapped.attachments[1]["kind"], "file");
+        assert_eq!(mapped.attachments[1]["mediaType"], "audio/wav");
     }
 }

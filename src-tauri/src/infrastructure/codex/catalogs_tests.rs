@@ -19,6 +19,7 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
                     "data": [{
                         "id": "gpt-test", "model": "gpt-test", "displayName": "GPT Test",
                         "description": "Test model", "hidden": false, "isDefault": true,
+                        "inputModalities": ["text", "image", "audio"],
                         "defaultReasoningEffort": "medium",
                         "supportedReasoningEfforts": [
                             {"reasoningEffort": "low", "description": "Fast"},
@@ -111,6 +112,10 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
     assert_eq!(
         models["data"][0]["supportedReasoningEfforts"][0]["id"],
         "low"
+    );
+    assert_eq!(
+        models["data"][0]["inputModalities"],
+        json!(["text", "image", "audio"])
     );
     let skills = list_skills(&connection, "/work", false).await.unwrap();
     assert_eq!(skills["data"].as_array().unwrap().len(), 1);

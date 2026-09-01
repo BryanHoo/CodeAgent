@@ -46,7 +46,7 @@ pub enum ProcessError {
     VersionProbeTimeout,
     #[error("Codex version output exceeded the limit")]
     VersionOutputTooLarge,
-    #[error("unsupported Codex version; expected 0.151.0")]
+    #[error("unsupported Codex version; expected 0.151.0 or newer")]
     UnsupportedVersion,
     #[error(transparent)]
     RuntimeDiscovery(#[from] RuntimeDiscoveryError),
@@ -70,8 +70,7 @@ pub struct CodexProcess {
 
 impl CodexProcess {
     pub async fn start(app_data: &Path) -> Result<Self, ProcessError> {
-        let program = find_compatible_codex_binary(app_data).await?;
-        let version = SUPPORTED_CODEX_VERSION.to_owned();
+        let (program, version) = find_compatible_codex_binary(app_data).await?;
         let runtime_path = resolve_login_shell_path().await;
         let mut child = build_app_server_command(program.as_os_str(), runtime_path.as_deref())
             .spawn()
@@ -201,7 +200,24 @@ async fn read_limited<R: AsyncRead + Unpin>(reader: R, limit: usize) -> Result<V
 #[cfg(test)]
 fn parse_codex_version(output: &str) -> Option<&str> {
     let version = parse_codex_cli_version(output)?;
-    (version == SUPPORTED_CODEX_VERSION).then_some(version)
+    is_compatible_codex_version(version).then_some(version)
+}
+
+pub(super) fn is_compatible_codex_version(version: &str) -> bool {
+    let mut parts = version.split('.');
+    let (Some(major), Some(minor), Some(patch), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    let (Ok(major), Ok(minor), Ok(_patch)) = (
+        major.parse::<u64>(),
+        minor.parse::<u64>(),
+        patch.parse::<u64>(),
+    ) else {
+        return false;
+    };
+    major > 0 || (major == 0 && minor >= 151)
 }
 
 fn parse_codex_cli_version(output: &str) -> Option<&str> {
@@ -377,12 +393,15 @@ mod tests {
     }
 
     #[test]
-    fn codex_version_should_require_the_exact_supported_cli_output() {
+    fn codex_version_should_enforce_a_minimum_protocol_version() {
         assert_eq!(
             parse_codex_version("codex-cli 0.151.0\n"),
             Some(SUPPORTED_CODEX_VERSION)
         );
+        assert_eq!(parse_codex_version("codex-cli 0.152.3\n"), Some("0.152.3"));
+        assert_eq!(parse_codex_version("codex-cli 1.0.0\n"), Some("1.0.0"));
         assert_eq!(parse_codex_version("codex-cli 0.150.1\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.152.0-beta.1\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.151.0 unexpected\n"), None);
     }
 

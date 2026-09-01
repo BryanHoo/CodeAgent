@@ -162,6 +162,10 @@ fn map_model(model: Value) -> Option<Value> {
         "description": model.get("description").and_then(Value::as_str).unwrap_or_default(),
         "displayName": display_name,
         "id": id,
+        "inputModalities": model
+            .get("inputModalities")
+            .cloned()
+            .unwrap_or_else(|| json!(["text", "image"])),
         "isDefault": model.get("isDefault").and_then(Value::as_bool).unwrap_or(false),
         "supportedReasoningEfforts": efforts,
     }))

@@ -3,6 +3,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import {
   AgentAttachmentKindSchema,
   AgentAttachmentMediaTypeSchema,
+  AgentImageDetailSchema,
   AgentCommandItemSchema,
   AgentItemStatusSchema,
   AgentMessageAttachmentSchema,
@@ -234,6 +235,7 @@ export type AgentTurn = Readonly<Static<typeof AgentTurnSchema>>;
 
 export const AgentAttachmentSchema = Type.Object(
   {
+    detail: Type.Optional(AgentImageDetailSchema),
     id: Type.String({ minLength: 1 }),
     kind: AgentAttachmentKindSchema,
     mediaType: AgentAttachmentMediaTypeSchema,

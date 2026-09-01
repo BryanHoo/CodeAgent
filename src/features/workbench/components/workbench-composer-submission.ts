@@ -79,6 +79,30 @@ export function toPromptSubmissionError(
   return error instanceof Error ? error : new Error(t("composer.operationFailed"));
 }
 
+type AttachmentModalityInput = Readonly<{
+  kind: string;
+  mediaType: string;
+  name: string;
+}>;
+
+export function findUnsupportedInputModality(
+  attachments: readonly AttachmentModalityInput[],
+  inputModalities: readonly string[],
+): "audio" | "image" | undefined {
+  for (const attachment of attachments) {
+    if (attachment.kind === "image" && !inputModalities.includes("image")) {
+      return "image";
+    }
+    const isAudio =
+      attachment.mediaType.startsWith("audio/") ||
+      /\.(?:m4a|mp3|ogg|wav|webm)$/iu.test(attachment.name);
+    if (isAudio && !inputModalities.includes("audio")) {
+      return "audio";
+    }
+  }
+  return undefined;
+}
+
 export function createComposerSubmission({
   activeUserMessageIds,
   activeSettings,
@@ -156,6 +180,22 @@ export function createComposerSubmission({
     const skills = promptSkills ?? livePromptSubmission?.skills ?? [];
     if (requestedComposerMode === "goal" && (message.files.length > 0 || skills.length > 0)) {
       setMutationError(new Error(t("composer.goalStructuredInputUnsupported")));
+      return false;
+    }
+    const unsupportedModality =
+      selectedModel === undefined
+        ? undefined
+        : findUnsupportedInputModality(message.files, selectedModel.inputModalities);
+    if (unsupportedModality !== undefined) {
+      setMutationError(
+        new Error(
+          t(
+            unsupportedModality === "image"
+              ? "composer.modelImageInputUnsupported"
+              : "composer.modelAudioInputUnsupported",
+          ),
+        ),
+      );
       return false;
     }
     const hasInput = text !== "" || message.files.length > 0 || skills.length > 0;

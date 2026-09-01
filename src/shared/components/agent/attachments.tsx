@@ -1,4 +1,5 @@
 import { FileText, X } from "lucide-react";
+import type { AgentImageDetail } from "@/protocol/index.js";
 import {
   createContext,
   useContext,
@@ -11,6 +12,7 @@ import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
 
 export type AttachmentData = Readonly<{
+  detail?: AgentImageDetail;
   id: string;
   kind: "file" | "image" | "text";
   mediaType: string;

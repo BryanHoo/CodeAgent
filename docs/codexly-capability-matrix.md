@@ -8,15 +8,15 @@ CodeAgent 的左栏、中心工作台、右栏检查器和设置入口已改为�
 React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ```
 
-运行时不再使用 Codexly HTTP、WebSocket 或 mock。协议基线固定为本地
-`/Users/bryanhu/Develop/person/codex` 的 `rust-v0.151.0`，运行时只接受
-`codex-cli 0.151.0`。
+运行时不再使用 Codexly HTTP、WebSocket 或 mock。协议基线固定为只读的本地
+`/Users/bryanhu/Develop/person/codex` `rust-v0.151.0`；外部稳定运行时接受
+`codex-cli 0.151.0` 及以上版本，应用私有回退包仍固定为 `0.151.0` 并校验 SHA-512。
 
 ## 逐项矩阵
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
-| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页精确检测 `0.151.0`；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检；Rust supervisor 独立维护状态并按 1–30 秒有界退避恢复，不依赖 WebView 通道 | 已实现 |
+| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页接受不低于 `0.151.0` 的稳定版本并在启动时完成 app-server 初始化；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检；Rust supervisor 独立维护状态并按 1–30 秒有界退避恢复 | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
 | 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 按系统安装状态探测编辑器、终端与文件管理器，再通过受限应用 ID 打开 | 已实现 |
@@ -37,7 +37,9 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 0.151 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、过滤 `.git` 与 `.DS_Store`、遵守 ignore 规则的缓存索引、会话取消和结果上限；源码与图片通过最小 capability 的轻量原生独立窗口预览 | 已实现 |
-| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.151 `text`/`localImage` 输入；文件通过 `text_elements.placeholder` 保留名称与媒体类型，队列与历史恢复为附件 | 已实现 |
+| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.151 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
+| 模型输入能力 | `model/list.inputModalities` | 提交前按所选模型动态校验图片与音频能力；保留未知新模态，不使用本地硬编码模型名单 | 已实现 |
+| 通用文件原生输入 | `input_file` | Codex 0.151 app-server `ContentItem` 没有该类型；项目不绕过 app-server，也不伪造协议，普通文件以本地路径交给 Codex 工具读取 | 上游未提供 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
@@ -78,7 +80,8 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - 前端只保留 1,024 条近期事件，流式文本按动画帧批量提交。
 - 历史页每次读取 10 个 Turn，每个 Turn 的 Item 每页 100 条，同页 Turn 并发补全。
 - 文件搜索索引排除 ignore 与隐藏项、按项目根短时复用，并通过会话令牌取消过期扫描。
-- 文件变更、附件、命令输出、搜索结果和运行时事件均设有大小或数量边界。
+- 附件按内容寻址去重；raw IPC 不产生 JSON 数组膨胀，宿主导入单遍完成哈希与落盘。
+- 文本限制 1 MiB，文件合计 50 MiB，图片合计 512 MiB 且最多 1500 张；前后端均校验，Rust 为最终边界。
 - 自定义背景读取通过 `tauri::ipc::Response` 返回 `ArrayBuffer`；设置缩略图和工作台壁纸直接使用动态授权的 asset URL，避免大图 JSON 序列化及 WebView 字节复制。
 - 源码不存在 `new WebSocket`、Codexly `/v1/*` 调用或 mock 运行时；Bing 壁纸也通过原生命令获取。
 

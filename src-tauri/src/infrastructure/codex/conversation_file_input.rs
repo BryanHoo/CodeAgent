@@ -7,7 +7,8 @@ use serde_json::{Map, Value, json};
 use super::connection::ConnectionError;
 
 const FILE_PLACEHOLDER_PREFIX: &str = "codexly-file:";
-const MAX_FILE_BYTES: usize = 1024 * 1024;
+const MAX_TEXT_BYTES: usize = 1024 * 1024;
+const MAX_FILE_BYTES: usize = 50 * 1024 * 1024;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,7 +99,12 @@ fn validate_metadata(metadata: &FileMetadata) -> Result<(), ConnectionError> {
         || metadata.name.len() > 255
         || metadata.name.contains(['/', '\\', '\0', '\r', '\n'])
         || metadata.size == 0
-        || metadata.size > MAX_FILE_BYTES
+        || metadata.size
+            > if metadata.kind == "text" {
+                MAX_TEXT_BYTES
+            } else {
+                MAX_FILE_BYTES
+            }
     {
         return Err(ConnectionError::InvalidMessage);
     }

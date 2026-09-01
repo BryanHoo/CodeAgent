@@ -1,4 +1,8 @@
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import {
+  invoke as tauriInvoke,
+  type InvokeArgs,
+  type InvokeOptions,
+} from "@tauri-apps/api/core";
 
 declare global {
   interface Window {
@@ -6,7 +10,7 @@ declare global {
     __CODEAGENT_WEBVIEW_TEST_BRIDGE__?: {
       calls: Record<string, unknown[]>;
       defaults: Record<string, unknown>;
-      handlers: Record<string, (args: Record<string, unknown>) => unknown>;
+      handlers: Record<string, (args: InvokeArgs, options?: InvokeOptions) => unknown>;
       once: Record<string, unknown[]>;
       passthrough: Set<string>;
     };
@@ -29,20 +33,27 @@ export async function prepareWebviewTestBridge(): Promise<void> {
   window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__ = bridge;
   window.__CODEAGENT_WEBVIEW_TEST_INVOKE__ = async <T>(
     command: string,
-    args: Record<string, unknown> = {},
+    args: InvokeArgs = {},
+    options?: InvokeOptions,
   ): Promise<T> => {
     (bridge.calls[command] ??= []).push(args);
     if (bridge.passthrough.has(command)) {
       // 真实链路仅透传显式命令，其他启动查询继续使用隔离 Mock。
-      return tauriInvoke<T>(command, args);
+      return tauriInvoke<T>(command, args, options);
     }
-    if (command === "connect_runtime" && "onEvent" in args) {
+    if (
+      command === "connect_runtime" &&
+      !Array.isArray(args) &&
+      !(args instanceof ArrayBuffer) &&
+      !ArrayBuffer.isView(args) &&
+      "onEvent" in args
+    ) {
       window.__CODEAGENT_RUNTIME_CHANNEL__ = args.onEvent as NonNullable<
         Window["__CODEAGENT_RUNTIME_CHANNEL__"]
       >;
     }
     const handler = bridge.handlers[command];
-    if (handler !== undefined) return handler(args) as T;
+    if (handler !== undefined) return handler(args, options) as T;
     const once = bridge.once[command];
     if (once !== undefined && once.length > 0) return once.shift() as T;
     if (command in bridge.defaults) return bridge.defaults[command] as T;

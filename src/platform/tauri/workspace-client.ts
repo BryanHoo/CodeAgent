@@ -76,12 +76,11 @@ export class TauriWorkspaceClient extends TauriNativeClient {
     input: AgentAttachmentUploadInput,
     _options: MutationOptions = {},
   ): Promise<AgentAttachmentUploadResponse> {
-    const bytes = Array.from(new Uint8Array(await input.content.arrayBuffer()));
-    return this.call("upload_attachment", {
-      bytes,
-      kind: input.kind,
-      name: input.name,
-      projectId,
+    const bytes = new Uint8Array(await input.content.arrayBuffer());
+    return this.callRaw("upload_attachment", bytes, {
+      "x-codeagent-kind": input.kind,
+      "x-codeagent-name": encodeUtf8Header(input.name),
+      "x-codeagent-project-id": projectId,
     });
   }
 
@@ -320,4 +319,11 @@ export class TauriWorkspaceClient extends TauriNativeClient {
       rootPath: rootPath ?? null,
     });
   }
+}
+
+function encodeUtf8Header(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }

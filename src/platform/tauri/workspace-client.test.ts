@@ -4,6 +4,43 @@ import { NativeCommandError, type InvokeImplementation } from "./native-client.j
 import { TauriWorkspaceClient } from "./workspace-client.js";
 
 describe("TauriWorkspaceClient", () => {
+  it("uploads browser attachments through the raw Tauri IPC body", async () => {
+    const invoke = vi.fn(async () => ({
+      attachment: {
+        id: "/cache/notes.txt",
+        kind: "file",
+        mediaType: "text/plain",
+        name: "笔记.txt",
+        size: 6,
+      },
+    }));
+    const client = new TauriWorkspaceClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: invoke as InvokeImplementation,
+    });
+    const file = new File(["内容"], "笔记.txt", { type: "text/plain" });
+
+    await client.uploadAttachment("project-a", {
+      content: file,
+      kind: "file",
+      name: file.name,
+    });
+
+    const [command, body, options] = (invoke.mock.calls as unknown[][])[0] ?? [];
+    expect(command).toBe("upload_attachment");
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect([...((body as Uint8Array | undefined) ?? [])]).toEqual([
+      0xe5, 0x86, 0x85, 0xe5, 0xae, 0xb9,
+    ]);
+    expect(options).toEqual({
+      headers: {
+        "x-codeagent-kind": "file",
+        "x-codeagent-name": "56yU6K6wLnR4dA==",
+        "x-codeagent-project-id": "project-a",
+      },
+    });
+  });
+
   it("routes guarded file operations through Tauri commands", async () => {
     const invoke = vi.fn(async () => ({}));
     const client = new TauriWorkspaceClient({

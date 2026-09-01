@@ -112,8 +112,11 @@ export async function resolvePromptAttachment(
   attachment: PromptInputAttachment,
   uploadBrowserAttachment: (attachment: BrowserPromptInputAttachment) => Promise<AgentAttachment>,
 ): Promise<AgentAttachment> {
-  if (attachment.source === "host") {
-    return attachment.attachment;
-  }
-  return uploadBrowserAttachment(attachment);
+  const resolved =
+    attachment.source === "host"
+      ? attachment.attachment
+      : await uploadBrowserAttachment(attachment);
+  return attachment.kind === "image"
+    ? { ...resolved, detail: attachment.detail ?? "auto" }
+    : resolved;
 }

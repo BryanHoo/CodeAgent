@@ -6,6 +6,8 @@ use thiserror::Error;
 pub enum WorkspaceError {
     #[error("invalid workspace path")]
     InvalidPath,
+    #[error("attachment exceeds the {maximum_bytes} byte limit")]
+    AttachmentTooLarge { maximum_bytes: usize },
     #[error("workspace snapshot changed; refresh and retry")]
     SnapshotMismatch,
     #[error("invalid Git branch name")]
@@ -24,6 +26,7 @@ impl WorkspaceError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::InvalidPath => "INVALID_PATH",
+            Self::AttachmentTooLarge { .. } => "ATTACHMENT_TOO_LARGE",
             Self::SnapshotMismatch => "SNAPSHOT_MISMATCH",
             Self::InvalidBranch => "INVALID_BRANCH",
             Self::NoUpstream => "NO_UPSTREAM",

@@ -1,12 +1,20 @@
-use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    fmt::Write as _,
+    path::{Path, PathBuf},
+};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use super::path_guard::WorkspaceError;
 
 const MAX_TEXT_BYTES: usize = 1024 * 1024;
-const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+const MAX_AUDIO_BYTES: usize = 50 * 1024 * 1024;
+const MAX_FILE_BYTES: usize = 50 * 1024 * 1024;
+const MAX_IMAGE_BYTES: usize = 512 * 1024 * 1024;
+static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Serialize)]
 pub struct AttachmentResponse {
@@ -35,32 +43,17 @@ pub async fn store_attachment(
     let kind = validate_content(kind, name, bytes)?;
     let directory = attachment_directory(app_data, project_id);
     tokio::fs::create_dir_all(&directory).await?;
-    let mut hasher = Sha256::new();
-    hasher.update(project_id.as_bytes());
-    hasher.update([0]);
-    hasher.update(name.as_bytes());
-    hasher.update([0]);
+    let mut hasher = content_hasher(project_id, name);
     hasher.update(bytes);
-    let hash: String = hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
-    let extension = Path::new(name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .filter(|value| value.len() <= 16)
-        .map(|value| format!(".{value}"))
-        .unwrap_or_default();
+    let hash = hex_digest(hasher.finalize());
+    let extension = safe_extension(name);
     let path = directory.join(format!("{hash}{extension}"));
-    if !tokio::fs::try_exists(&path).await? {
-        tokio::fs::write(&path, bytes).await?;
-    }
+    persist_bytes(&path, bytes).await?;
     Ok(AttachmentResponse {
         attachment: Attachment {
             id: path.to_string_lossy().into_owned(),
             kind,
-            media_type: media_type(name).to_owned(),
+            media_type: media_type(name, bytes).to_owned(),
             name: name.to_owned(),
             size: bytes.len(),
         },
@@ -79,15 +72,43 @@ pub async fn import_attachment(
         return Err(WorkspaceError::InvalidPath);
     }
     let size = usize::try_from(metadata.len()).map_err(|_| WorkspaceError::InvalidPath)?;
-    if size > max_content_bytes(kind)? {
-        return Err(WorkspaceError::InvalidPath);
+    let max_bytes = if kind == "file" && is_audio_name(name_from_path(&source)?) {
+        MAX_AUDIO_BYTES
+    } else {
+        max_content_bytes(kind)?
+    };
+    if size > max_bytes {
+        return Err(WorkspaceError::AttachmentTooLarge {
+            maximum_bytes: max_bytes,
+        });
     }
-    let name = source
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or(WorkspaceError::InvalidPath)?;
-    let bytes = tokio::fs::read(&source).await?;
-    store_attachment(app_data, project_id, kind, name, &bytes).await
+    let name = name_from_path(&source)?;
+    if kind == "text" {
+        let bytes = tokio::fs::read(&source).await?;
+        return store_attachment(app_data, project_id, kind, name, &bytes).await;
+    }
+    validate_project_id(project_id)?;
+    validate_name(name)?;
+    let header = read_header(&source).await?;
+    let verified_kind = match kind {
+        "file" => "file",
+        "image" if is_supported_image(name, &header) => "image",
+        _ => return Err(WorkspaceError::InvalidPath),
+    };
+    let directory = attachment_directory(app_data, project_id);
+    tokio::fs::create_dir_all(&directory).await?;
+
+    // 单遍完成流式哈希和临时文件写入，WebView 与 Rust 堆都不保留完整副本。
+    let destination = persist_streamed_file(&source, &directory, project_id, name, size).await?;
+    Ok(AttachmentResponse {
+        attachment: Attachment {
+            id: destination.to_string_lossy().into_owned(),
+            kind: verified_kind,
+            media_type: media_type(name, &header).to_owned(),
+            name: name.to_owned(),
+            size,
+        },
+    })
 }
 
 pub async fn validate_attachment(
@@ -148,21 +169,189 @@ fn validate_content(kind: &str, name: &str, bytes: &[u8]) -> Result<&'static str
         return Err(WorkspaceError::InvalidPath);
     }
     match kind {
-        // 151 app-server 没有通用文件输入，文本在缓存边界完成 UTF-8 与大小校验。
-        "file" | "text" if bytes.len() <= MAX_TEXT_BYTES && std::str::from_utf8(bytes).is_ok() => {
-            Ok(if kind == "text" { "text" } else { "file" })
+        "file" => validate_size(
+            bytes.len(),
+            if is_audio_name(name) {
+                MAX_AUDIO_BYTES
+            } else {
+                MAX_FILE_BYTES
+            },
+            "file",
+        ),
+        "text" if std::str::from_utf8(bytes).is_ok() => {
+            validate_size(bytes.len(), MAX_TEXT_BYTES, "text")
         }
-        "image" if bytes.len() <= MAX_IMAGE_BYTES && is_supported_image(name, bytes) => Ok("image"),
+        "image" if is_supported_image(name, bytes) => {
+            validate_size(bytes.len(), MAX_IMAGE_BYTES, "image")
+        }
         _ => Err(WorkspaceError::InvalidPath),
     }
 }
 
+fn validate_size(
+    size: usize,
+    maximum_bytes: usize,
+    kind: &'static str,
+) -> Result<&'static str, WorkspaceError> {
+    if size > maximum_bytes {
+        return Err(WorkspaceError::AttachmentTooLarge { maximum_bytes });
+    }
+    Ok(kind)
+}
+
+fn name_from_path(path: &Path) -> Result<&str, WorkspaceError> {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .ok_or(WorkspaceError::InvalidPath)
+}
+
+fn is_audio_name(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "m4a" | "mp3" | "ogg" | "wav" | "webm"
+            )
+        })
+}
+
 fn max_content_bytes(kind: &str) -> Result<usize, WorkspaceError> {
     match kind {
-        "file" | "text" => Ok(MAX_TEXT_BYTES),
+        "file" => Ok(MAX_FILE_BYTES),
+        "text" => Ok(MAX_TEXT_BYTES),
         "image" => Ok(MAX_IMAGE_BYTES),
         _ => Err(WorkspaceError::InvalidPath),
     }
+}
+
+async fn read_header(source: &Path) -> Result<Vec<u8>, WorkspaceError> {
+    let mut header = [0_u8; 16];
+    let mut file = tokio::fs::File::open(source).await?;
+    let read = file.read(&mut header).await?;
+    Ok(header[..read].to_vec())
+}
+
+fn safe_extension(name: &str) -> String {
+    Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .filter(|value| value.len() <= 16)
+        .map(|value| format!(".{value}"))
+        .unwrap_or_default()
+}
+
+fn content_hasher(project_id: &str, name: &str) -> Sha256 {
+    let mut hasher = Sha256::new();
+    hasher.update(project_id.as_bytes());
+    hasher.update([0]);
+    hasher.update(name.as_bytes());
+    hasher.update([0]);
+    hasher
+}
+
+fn temporary_path(directory: &Path) -> PathBuf {
+    let sequence = TEMP_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    directory.join(format!(".upload-{}-{sequence}.tmp", std::process::id()))
+}
+
+async fn persist_bytes(destination: &Path, bytes: &[u8]) -> Result<(), WorkspaceError> {
+    if tokio::fs::try_exists(destination).await? {
+        return Ok(());
+    }
+    let directory = destination.parent().ok_or(WorkspaceError::InvalidPath)?;
+    let temporary = temporary_path(directory);
+    let result = async {
+        let mut file = tokio::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .await?;
+        file.write_all(bytes).await?;
+        file.flush().await?;
+        file.sync_data().await?;
+        commit_temporary(&temporary, destination).await
+    }
+    .await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&temporary).await;
+    }
+    result
+}
+
+async fn persist_streamed_file(
+    source: &Path,
+    directory: &Path,
+    project_id: &str,
+    name: &str,
+    expected_size: usize,
+) -> Result<PathBuf, WorkspaceError> {
+    let temporary = temporary_path(directory);
+    let result = async {
+        let mut source_file = tokio::fs::File::open(source).await?;
+        let mut temporary_file = tokio::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .await?;
+        let mut hasher = content_hasher(project_id, name);
+        let mut total = 0_usize;
+        let mut buffer = vec![0_u8; 64 * 1024];
+        loop {
+            let read = source_file.read(&mut buffer).await?;
+            if read == 0 {
+                break;
+            }
+            total = total.checked_add(read).ok_or(WorkspaceError::InvalidPath)?;
+            if total > expected_size {
+                return Err(WorkspaceError::InvalidPath);
+            }
+            hasher.update(&buffer[..read]);
+            temporary_file.write_all(&buffer[..read]).await?;
+        }
+        if total != expected_size {
+            return Err(WorkspaceError::InvalidPath);
+        }
+        temporary_file.flush().await?;
+        temporary_file.sync_data().await?;
+        let destination = directory.join(format!(
+            "{}{}",
+            hex_digest(hasher.finalize()),
+            safe_extension(name)
+        ));
+        commit_temporary(&temporary, &destination).await?;
+        Ok(destination)
+    }
+    .await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&temporary).await;
+    }
+    result
+}
+
+async fn commit_temporary(temporary: &Path, destination: &Path) -> Result<(), WorkspaceError> {
+    if tokio::fs::try_exists(destination).await? {
+        tokio::fs::remove_file(temporary).await?;
+        return Ok(());
+    }
+    match tokio::fs::rename(temporary, destination).await {
+        Ok(()) => Ok(()),
+        Err(_) if tokio::fs::try_exists(destination).await? => {
+            tokio::fs::remove_file(temporary).await?;
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
+    let bytes = bytes.as_ref();
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
 }
 
 fn is_supported_image(name: &str, bytes: &[u8]) -> bool {
@@ -180,17 +369,50 @@ fn is_supported_image(name: &str, bytes: &[u8]) -> bool {
     }
 }
 
-fn media_type(name: &str) -> &'static str {
+fn media_type(name: &str, bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return "image/png";
+    }
+    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return "image/jpeg";
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return "image/gif";
+    }
+    if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+        return "image/webp";
+    }
+    if bytes.starts_with(b"%PDF-") {
+        return "application/pdf";
+    }
+    if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WAVE") {
+        return "audio/wav";
+    }
+    if bytes.starts_with(b"OggS") {
+        return "audio/ogg";
+    }
+    if bytes.starts_with(b"ID3") || bytes.starts_with(&[0xff, 0xfb]) {
+        return "audio/mpeg";
+    }
+
     match Path::new(name)
         .extension()
         .and_then(|value| value.to_str())
         .map(str::to_ascii_lowercase)
         .as_deref()
     {
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
+        Some("doc") => "application/msword",
+        Some("docx") => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        Some("ppt") => "application/vnd.ms-powerpoint",
+        Some("pptx") => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        Some("xls") => "application/vnd.ms-excel",
+        Some("xlsx") => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        Some("csv") => "text/csv",
+        Some("mp3") => "audio/mpeg",
+        Some("m4a") => "audio/mp4",
+        Some("ogg") => "audio/ogg",
+        Some("wav") => "audio/wav",
+        Some("webm") => "audio/webm",
         Some("md") => "text/markdown",
         Some("json") => "application/json",
         Some("rs") => "text/x-rust",
@@ -232,7 +454,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn attachment_cache_should_accept_generated_text_and_reject_binary_files() {
+    async fn attachment_cache_should_accept_generated_text_and_binary_path_files() {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -250,13 +472,23 @@ mod tests {
         .expect("generated UTF-8 text should be cached");
         assert_eq!(generated.attachment.kind, "text");
 
-        let binary =
-            store_attachment(&root, "project-a", "file", "document.pdf", b"%PDF-\xff\xfe").await;
-        assert!(
-            binary.is_err(),
-            "binary files are not supported by Codex 0.151 input"
-        );
+        let binary = store_attachment(&root, "project-a", "file", "document.pdf", b"%PDF-\xff\xfe")
+            .await
+            .expect("binary files should remain available through a local path");
+        assert_eq!(binary.attachment.kind, "file");
+        assert_eq!(binary.attachment.media_type, "application/pdf");
+
+        let source = root.join("document.pdf");
+        fs::write(&source, b"%PDF-\xff\xfe").unwrap();
+        let imported = import_attachment(&root, "project-a", "file", source.to_str().unwrap())
+            .await
+            .expect("host import should use the same content address");
+        assert_eq!(imported.attachment.id, binary.attachment.id);
 
         fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "attachment_limit_tests.rs"]
+mod attachment_limit_tests;

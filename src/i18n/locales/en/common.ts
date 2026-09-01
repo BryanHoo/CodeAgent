@@ -11,6 +11,7 @@ export const common = {
     notificationRegion: "Notifications",
   },
   errors: {
+    attachmentTooLarge: "The attachment is too large. Files support up to 50 MiB and images up to 512 MiB.",
     gitNotFound: "Git was not found. Install Git and restart CodeAgent.",
     notFoundDescription: "This address does not match a registered application route.",
     notFoundTitle: "Page not found",

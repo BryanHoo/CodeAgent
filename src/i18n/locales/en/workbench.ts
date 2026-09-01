@@ -65,6 +65,8 @@ export const workbench = {
     attachmentCount_other: "{{count}} attachments",
     attachmentReadFailed: "Unable to read attachment",
     attachmentUploadFailed: "Unable to upload attachment",
+    modelAudioInputUnsupported: "The selected model does not support audio input",
+    modelImageInputUnsupported: "The selected model does not support image input",
     baseBranchReview: "Review against a base branch",
     buildPlanPrompt: "Start implementing the plan above.",
     cancelGoalMode: "Cancel Goal mode",

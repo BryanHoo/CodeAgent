@@ -6,6 +6,7 @@ import {
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
+  MAX_AGENT_TEXT_BYTES,
 } from "@/protocol/index.js";
 import { ArrowDown, ArrowUp, Folder, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
 
@@ -282,6 +283,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           maxImageSize={MAX_AGENT_IMAGE_BYTES}
           maxImages={MAX_AGENT_IMAGES}
           maxImageTotalSize={MAX_AGENT_IMAGE_TOTAL_BYTES}
+          maxTextSize={MAX_AGENT_TEXT_BYTES}
           multiple
           onAttachmentsChange={props.onAttachmentsChange}
           onError={(error) => {

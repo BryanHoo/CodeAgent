@@ -30,6 +30,7 @@ type PromptInputProps = Omit<FormHTMLAttributes<HTMLFormElement>, "onError" | "o
   maxImageSize?: number;
   maxImages?: number;
   maxImageTotalSize?: number;
+  maxTextSize?: number;
   multiple?: boolean;
   largePasteCharacterThreshold?: number;
   onAttachmentsChange?: (files: readonly PromptInputAttachment[]) => void;
@@ -93,6 +94,7 @@ export function PromptInput({
   maxImageSize = Number.POSITIVE_INFINITY,
   maxImages = Number.POSITIVE_INFINITY,
   maxImageTotalSize = Number.POSITIVE_INFINITY,
+  maxTextSize = Number.POSITIVE_INFINITY,
   multiple = false,
   onAttachmentsChange,
   onError,
@@ -157,7 +159,14 @@ export function PromptInput({
             });
             continue;
           }
-          if (kind !== "image" && file.size > maxFileSize) {
+          if (kind === "text" && file.size > maxTextSize) {
+            onError?.({
+              code: "file_too_large",
+              message: t("agentComponents.fileTooLarge", { name: file.name }),
+            });
+            continue;
+          }
+          if (kind === "file" && file.size > maxFileSize) {
             onError?.({
               code: "file_too_large",
               message: t("agentComponents.fileTooLarge", { name: file.name }),
@@ -193,6 +202,7 @@ export function PromptInput({
             continue;
           }
           accepted.push({
+            ...(kind === "image" ? { detail: "auto" as const } : {}),
             file,
             id: createUuid(),
             kind,
@@ -224,6 +234,7 @@ export function PromptInput({
       maxImageSize,
       maxImages,
       maxImageTotalSize,
+      maxTextSize,
       multiple,
       onError,
       t,

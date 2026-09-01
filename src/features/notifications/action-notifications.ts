@@ -31,6 +31,9 @@ function readNotificationOptions(
 }
 
 export function actionErrorMessage(error: unknown): string {
+  if (error instanceof Error && "code" in error && error.code === "ATTACHMENT_TOO_LARGE") {
+    return i18n.t("errors.attachmentTooLarge", { ns: "common" });
+  }
   if (error instanceof Error && "code" in error && error.code === "GIT_NOT_FOUND") {
     return i18n.t("errors.gitNotFound", { ns: "common" });
   }

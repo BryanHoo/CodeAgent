@@ -95,7 +95,7 @@ async fn inspection_should_find_the_compatible_private_runtime() {
     let app_data = std::env::temp_dir().join(format!("codeagent-runtime-{unique}"));
     let binary = private_codex_binary_path(&app_data);
     std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, "#!/bin/sh\necho 'codex-cli 0.151.0'\n").unwrap();
+    std::fs::write(&binary, "#!/bin/sh\necho 'codex-cli 0.152.0'\n").unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let availability = inspect_codex_runtime(&app_data).await;
@@ -104,6 +104,6 @@ async fn inspection_should_find_the_compatible_private_runtime() {
         availability.status,
         CodexRuntimeAvailabilityStatus::Compatible
     );
-    assert_eq!(availability.detected_version.as_deref(), Some("0.151.0"));
+    assert_eq!(availability.detected_version.as_deref(), Some("0.152.0"));
     std::fs::remove_dir_all(app_data).unwrap();
 }

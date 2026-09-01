@@ -3,6 +3,7 @@ use serde_json::{Map, Value, json};
 use super::connection::ConnectionError;
 use super::conversation_collaboration::{collaboration_tool_name, map_collaboration_agents};
 use super::conversation_file_input::read_file_text_input;
+use super::conversation_media_input::{map_local_audio_attachment, map_local_image_attachment};
 use super::generated_image_store::IMAGE_ATTACHMENT_FIELD;
 use crate::domain::conversation::{AgentCommandOutputOmission, AgentFileChange, AgentItem};
 
@@ -309,22 +310,7 @@ fn map_user_message(
                     text.push(required_string(part, "text")?.to_owned());
                 }
             }
-            Some("localImage") => {
-                let path = std::path::Path::new(required_string(part, "path")?);
-                let name = path
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .ok_or(ConnectionError::InvalidMessage)?;
-                let size = std::fs::metadata(path)
-                    .ok()
-                    .and_then(|metadata| usize::try_from(metadata.len()).ok())
-                    .filter(|size| *size > 0)
-                    .unwrap_or(1);
-                attachments.push(json!({
-                    "id": path.to_string_lossy(), "kind": "image",
-                    "mediaType": image_media_type(path), "name": name, "size": size,
-                }));
-            }
+            Some("localImage") => attachments.push(map_local_image_attachment(part)?),
             Some("image") => {
                 let url = required_string(part, "url")?;
                 attachments.push(json!({
@@ -333,20 +319,12 @@ fn map_user_message(
                 }));
             }
             Some("skill") => skills.push(json!({"name": required_string(part, "name")?})),
-            Some("audio" | "localAudio") => text.push("[音频]".to_owned()),
+            Some("localAudio") => attachments.push(map_local_audio_attachment(part)?),
+            Some("audio") => text.push("[音频]".to_owned()),
             _ => {}
         }
     }
     Ok((text.join("\n"), attachments, skills))
-}
-
-fn image_media_type(path: &std::path::Path) -> &'static str {
-    match path.extension().and_then(|value| value.to_str()) {
-        Some("gif") => "image/gif",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("webp") => "image/webp",
-        _ => "image/png",
-    }
 }
 
 fn generated_image_attachment(item: &Map<String, Value>) -> Result<Option<Value>, ConnectionError> {

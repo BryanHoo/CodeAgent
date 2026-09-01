@@ -18,7 +18,10 @@ use thiserror::Error;
 use tokio::{fs, io::AsyncWriteExt, task};
 
 use super::{
-    process::{SUPPORTED_CODEX_VERSION, executable_path, probe_codex_version},
+    process::{
+        SUPPORTED_CODEX_VERSION, executable_path, is_compatible_codex_version, probe_codex_version,
+    },
+    runtime_distributions::{DARWIN_ARM64, LINUX_ARM64, LINUX_X64, WINDOWS_ARM64, WINDOWS_X64},
     runtime_download_progress::{DownloadProgressLimiter, DownloadProgressReporter},
 };
 use crate::domain::runtime::{
@@ -79,10 +82,14 @@ pub async fn inspect_codex_runtime(app_data: &Path) -> CodexRuntimeAvailability 
 
 pub async fn find_compatible_codex_binary(
     app_data: &Path,
-) -> Result<PathBuf, RuntimeDiscoveryError> {
+) -> Result<(PathBuf, String), RuntimeDiscoveryError> {
     let inspection = inspect(app_data).await;
     if let Some(binary_path) = inspection.binary_path {
-        return Ok(binary_path);
+        let version = inspection
+            .availability
+            .detected_version
+            .ok_or(RuntimeDiscoveryError::ProbeFailed)?;
+        return Ok((binary_path, version));
     }
     match inspection.availability.status {
         AvailabilityStatus::Incompatible => Err(RuntimeDiscoveryError::Incompatible),
@@ -138,7 +145,7 @@ async fn inspect(app_data: &Path) -> Inspection {
 
     for candidate in candidates {
         match probe_codex_version(&candidate).await {
-            Ok(version) if version == SUPPORTED_CODEX_VERSION => {
+            Ok(version) if is_compatible_codex_version(&version) => {
                 return Inspection {
                     availability: availability(AvailabilityStatus::Compatible, Some(version)),
                     binary_path: Some(candidate),
@@ -472,29 +479,3 @@ async fn write_active_runtime(app_data: &Path, binary_path: &Path) -> Result<(),
     }
     Ok(())
 }
-
-const DARWIN_ARM64: Distribution = Distribution {
-    target: "aarch64-apple-darwin",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-darwin-arm64.tgz",
-    integrity: "g7YzpaCZGCw19R/gly3vRPjnLqaW7JcBAu2WQQ6e8PIlvBPmS/gMplIUURMgNO6gi8LsPzdlQtLqkwoeOOlIdg==",
-};
-const LINUX_ARM64: Distribution = Distribution {
-    target: "aarch64-unknown-linux-musl",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-linux-arm64.tgz",
-    integrity: "CsLgFeX4TQ6I2Gdrxd2r5UbgIbDLCdtcLAlnMYjr06bCL057MTNGec7Ewb3+Z2DBiMuXCljdTBGqLOePkMV0sQ==",
-};
-const LINUX_X64: Distribution = Distribution {
-    target: "x86_64-unknown-linux-musl",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-linux-x64.tgz",
-    integrity: "xcVyY1FtwvVYhh2JBmz8fX8CQqFAxO/lxJ2IXsh8x5uwxZVHVl5fZHFHf8JdRaOGG0vpkYmu/DKKVoLd56/DDQ==",
-};
-const WINDOWS_ARM64: Distribution = Distribution {
-    target: "aarch64-pc-windows-msvc",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-win32-arm64.tgz",
-    integrity: "zDWzOoh9wHm+Om1Nhn7os47rAVeSGPh0SnM3YOttdq6iPJz2zn4vBnbGUZjeih1qW/3mvNF3Oyd4owlaHmphmg==",
-};
-const WINDOWS_X64: Distribution = Distribution {
-    target: "x86_64-pc-windows-msvc",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-win32-x64.tgz",
-    integrity: "sLT7xvID3jhU6tkzcwRPnMEclKRwUPbpo0mtfxIF9KpdZH3VJV7sM2/kXWXyvUM7Zt/YeyOaeATTEysbRz8Yog==",
-};

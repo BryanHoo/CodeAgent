@@ -87,10 +87,10 @@ codex app-server generate-json-schema --out ./schemas
 Provider Runtime Manager 负责运行时发现、版本解析、能力探测、按需安装、升级和回退：
 
 - 按用户指定路径、应用私有目录、`PATH` 和平台常见目录的顺序发现候选项。
-- 使用短超时和输出上限执行官方版本命令，首版按适配器要求的精确版本匹配。
+- 使用短超时和输出上限执行官方版本命令，拒绝低于适配器协议基线或无法严格解析的版本。
 - 版本匹配后执行 Provider 专属能力探测，Codex 必须完成 `app-server` 初始化握手。
 - 未找到兼容版本时，由用户确认后从官方分发源下载到应用私有目录。
-- 校验版本、平台、架构、SHA-256 和官方签名，验证通过后原子切换。
+- 校验版本、平台、架构、npm SHA-512 integrity 和官方签名，验证通过后原子切换。
 - 保留上一个可用版本；安装、校验或启动失败时不影响当前版本。
 
 应用不得静默安装，不得执行全局 `npm install -g`、Homebrew、WinGet 或系统包管理器命令，也
@@ -304,7 +304,7 @@ CodeAgent 当前不为 UI 数据引入 SQLite。Codex 线程历史仍由 `app-se
 ### 阶段一：Codex 最小闭环
 
 - 建立 Tauri 2、React 19 和 Vite 工程。
-- 从显式路径或 `PATH` 启动 Codex `0.151.0`，并完成 `app-server` 初始化握手。
+- 从显式路径或 `PATH` 启动不低于 `0.151.0` 的稳定 Codex，并完成 `app-server` 初始化握手。
 - 实现线程创建、用户输入、流式文本和取消执行。
 - 建立稳定 `Channel`、请求路由和基础日志。
 - 使用 AI Elements 完成会话、消息和输入区域。
@@ -319,7 +319,7 @@ CodeAgent 当前不为 UI 数据引入 SQLite。Codex 线程历史仍由 `app-se
 ### 阶段三：跨平台发布
 
 - 分别在 Windows、macOS 和 Ubuntu 原生 CI 中构建。
-- 实现 Provider 运行时发现、精确版本匹配和能力探测。
+- 实现 Provider 运行时发现、最低协议版本校验和能力探测。
 - 实现官方来源下载、完整性校验、应用私有安装、原子升级和回退。
 - 完成 macOS 签名与公证、Windows 签名及 Linux 依赖验证。
 - 对真实流式响应、审批、取消、崩溃恢复执行端到端测试。

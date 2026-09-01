@@ -11,6 +11,7 @@ export const common = {
     notificationRegion: "通知",
   },
   errors: {
+    attachmentTooLarge: "附件超过大小限制：普通文件最多 50 MiB，图片最多 512 MiB。",
     gitNotFound: "未检测到 Git，请安装 Git 并重启 CodeAgent。",
     notFoundDescription: "当前地址不属于已注册的应用路由。",
     notFoundTitle: "页面不存在",
