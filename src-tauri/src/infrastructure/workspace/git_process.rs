@@ -447,10 +447,9 @@ mod tests {
     use std::time::Duration;
     use std::{env, path::Path};
 
-    use super::{
-        BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, first_existing_path,
-        git_path_argument,
-    };
+    #[cfg(windows)]
+    use super::git_path_argument;
+    use super::{BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, first_existing_path};
     #[cfg(unix)]
     use super::{run_git_command, unix_kill_process_group_args};
 
