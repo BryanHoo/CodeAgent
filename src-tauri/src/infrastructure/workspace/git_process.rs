@@ -155,7 +155,7 @@ async fn run_git_command(
     #[cfg(unix)]
     command.process_group(0);
     if let Some(index_path) = index_path {
-        command.env("GIT_INDEX_FILE", index_path);
+        command.env("GIT_INDEX_FILE", git_path_argument(index_path));
     }
 
     let mut child = command.spawn().map_err(|error| {
@@ -266,6 +266,19 @@ fn discover_git_binary() -> Option<PathBuf> {
 
 fn first_existing_path(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
     candidates.into_iter().find(|path| path.is_file())
+}
+
+pub(super) fn git_path_argument(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    #[cfg(windows)]
+    if let Some(path) = raw.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{path}");
+    }
+    #[cfg(windows)]
+    if let Some(path) = raw.strip_prefix(r"\\?\") {
+        return path.to_owned();
+    }
+    raw.into_owned()
 }
 
 #[cfg(target_os = "windows")]
@@ -430,12 +443,16 @@ fn git_failure(args: &[&str], fallback: String, stderr: &[u8]) -> WorkspaceError
 
 #[cfg(test)]
 mod tests {
-    use std::{env, path::Path, time::Duration};
+    #[cfg(unix)]
+    use std::time::Duration;
+    use std::{env, path::Path};
 
     use super::{
         BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, first_existing_path,
-        run_git_command, unix_kill_process_group_args,
+        git_path_argument,
     };
+    #[cfg(unix)]
+    use super::{run_git_command, unix_kill_process_group_args};
 
     #[test]
     fn bounded_capture_should_preserve_head_and_tail() {
@@ -457,6 +474,19 @@ mod tests {
         assert_eq!(
             first_existing_path([missing, current_executable.clone()]),
             Some(current_executable)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_paths_should_remove_windows_verbatim_prefixes() {
+        assert_eq!(
+            git_path_argument(Path::new(r"\\?\C:\workspace\repo")),
+            r"C:\workspace\repo"
+        );
+        assert_eq!(
+            git_path_argument(Path::new(r"\\?\UNC\server\share\repo")),
+            r"\\server\share\repo"
         );
     }
 

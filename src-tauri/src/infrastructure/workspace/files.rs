@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -93,10 +93,9 @@ pub async fn rename_project_file(
     if source == root {
         return Err(WorkspaceError::InvalidPath);
     }
-    let parent_relative = valid_relative(relative)?.parent().map_or_else(
-        || name.to_owned(),
-        |parent| parent.join(name).to_string_lossy().into_owned(),
-    );
+    let parent_relative = valid_relative(relative)?
+        .parent()
+        .map_or_else(|| PathBuf::from(name), |parent| parent.join(name));
     let destination = resolve_destination(root, &parent_relative).await?;
     if tokio::fs::try_exists(&destination).await? {
         return Err(WorkspaceError::InvalidPath);

@@ -1,4 +1,23 @@
 fn main() {
+    let windows_target = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
+    if windows_target {
+        // Keep every final Rust target on the same Common Controls activation context.
+        let manifest_path = std::path::PathBuf::from(
+            std::env::var_os("OUT_DIR").expect("Cargo should provide OUT_DIR"),
+        )
+        .join("common-controls-v6.manifest");
+        std::fs::write(
+            &manifest_path,
+            include_bytes!("windows-common-controls-v6.manifest"),
+        )
+        .expect("failed to write Windows application manifest");
+        println!("cargo::rustc-link-arg=/MANIFEST:EMBED");
+        println!(
+            "cargo::rustc-link-arg=/MANIFESTINPUT:{}",
+            manifest_path.display()
+        );
+    }
+
     // 所有应用命令先进入 ACL 清单；窗口仍需在 capability 中显式授权。
     let app_manifest = tauri_build::AppManifest::new().commands(&[
         "initialize_app_storage",
@@ -103,6 +122,10 @@ fn main() {
         "delete_task",
     ]);
 
-    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))
-        .expect("failed to build Tauri application");
+    let mut attributes = tauri_build::Attributes::new().app_manifest(app_manifest);
+    if windows_target {
+        attributes = attributes
+            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+    }
+    tauri_build::try_build(attributes).expect("failed to build Tauri application");
 }
