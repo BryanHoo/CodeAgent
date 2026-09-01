@@ -6,6 +6,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    include: ["@tanstack/react-virtual"],
+  },
   resolve: {
     alias: [{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) }],
   },
@@ -13,7 +16,7 @@ export default defineConfig({
     browser: {
       enabled: true,
       headless: true,
-      instances: [{ browser: "chromium" }],
+      instances: [{ browser: "chromium" }, { browser: "webkit" }],
       provider: playwright(),
       viewport: { height: 900, width: 1_440 },
     },

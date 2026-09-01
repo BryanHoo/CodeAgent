@@ -11,7 +11,7 @@
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
 - 桌面文件系统选择器切换盘符或路径时必须保留最近一次成功发现的根列表，加载或失败状态不得卸载盘符选择器；Windows `\\?\` verbatim 路径必须先按普通盘符语义归一化再匹配当前根项
-- 对话 Turn 列表必须使用自然文档流，禁止使用虚拟 sizer、绝对定位、transform 位移或持续动态测高；运行中与最近 3 个 Turn 保持热渲染，更早的终态 Turn 使用 `content-visibility: auto` 和 `contain-intrinsic-block-size` 作为可降级的浏览器原生优化；该 CSS 优化不得参与正确性判断，不支持时必须退化为完整自然流；冷 Turn 在视口附近恢复真实布局时必须显式保持当前可见 Turn 的视觉锚点，不得依赖 WebKit 原生滚动锚定；历史导航直接定位已挂载锚点，流式置底由滚动容器级 `ResizeObserver` 管理；Task 切换必须持续跟随到真实观测到底部，只有滚轮向上、滚动条拖动、向上键盘滚动或历史导航等明确用户输入可以关闭跟随，布局和程序产生的 `scroll` 只能校准位置；终态结构收缩及应用重新聚焦或可见时，必须跨帧夹紧 WebKit 的失效滚动位置，并产生一次真实滚动失效以恢复休眠的滚动合成层
+- 对话 Turn 列表必须使用 TanStack Virtual 2026 Chat 模式：以稳定 Turn ID 作为 `getItemKey`，使用 `anchorTo: "end"`、`followOnAppend`、动态 `measureElement` 和有界 overscan；滚动容器、虚拟 sizer 与行位置必须由同一个 Virtualizer 实例管理，启用 `directDomUpdates` 降低滚动期 React 提交；WebKit 使用 `directDomUpdatesMode: "position"`，禁止行级 transform 合成层和应用侧重复 `scrollTop` 补偿；历史 prepend 依赖 end anchor 保持可见 Turn，流式增长仅在用户已经置底时跟随；分页头、Turn 与待处理尾部必须进入同一虚拟序列，导航先定位 Turn 再定位内部消息锚点；`content-visibility` 不得用于对话列表正确性或替代 DOM 窗口化
 - 时间线右侧轻量导航必须使用自然文档流完整挂载，不得使用虚拟 sizer、尺寸测量或绝对位移；固定行高虚拟化仅用于可达万级数据的源码行和项目文件树
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航

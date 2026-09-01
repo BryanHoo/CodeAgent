@@ -5,11 +5,7 @@ import { useStore } from "zustand";
 
 import { i18n } from "../../../i18n/i18n.js";
 
-import {
-  Conversation,
-  ConversationList,
-  ConversationScrollButton,
-} from "../../../shared/components/agent/conversation.js";
+import { ConversationList } from "../../../shared/components/agent/conversation.js";
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type {
   NormalizedAgentTurn,
@@ -22,7 +18,6 @@ import { PendingRequestCard, type PendingRequestResolution } from "./pending-req
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
 import { resolveCompletedTurnProcessItemIds } from "./task-timeline-process.js";
-import { getTaskTurnRenderMode } from "./task-timeline-render-mode.js";
 import { TaskTimelinePagination } from "./task-timeline-pagination.js";
 import {
   TaskTimelineNavigation,
@@ -425,76 +420,72 @@ export function TaskStoreTimeline({
     );
   }
   return (
-    <Conversation
+    <ConversationList
       aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
       conversationId={`${projectId}:${taskId}`}
-      layoutRevision={itemStructureRevision}
-      {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
-    >
-      {hasOlderHistory ? (
-        <TaskTimelinePagination
-          error={olderHistoryError}
-          isLoading={isLoadingOlderHistory}
-          onLoad={onLoadOlderHistory}
+      {...(hasVisiblePendingRequest || showPendingSubmission || hasNotices
+        ? {
+            footer: (
+              <>
+                {hasNotices ? <StoreTaskNoticeList store={store} /> : null}
+                {hasVisiblePendingRequest ? (
+                  <StorePendingRequestList
+                    connected={connected}
+                    onResolvePendingRequest={onResolvePendingRequest}
+                    store={store}
+                  />
+                ) : null}
+                {showPendingSubmission ? (
+                  <Message from="assistant">
+                    <TurnProcessingTime completedAt={null} startedAt={submissionStartedAt} />
+                    <RunningReplyStatus />
+                  </Message>
+                ) : null}
+              </>
+            ),
+          }
+        : {})}
+      getItemKey={getTurnIdKey}
+      {...(hasOlderHistory
+        ? {
+            header: (
+              <TaskTimelinePagination
+                error={olderHistoryError}
+                isLoading={isLoadingOlderHistory}
+                onLoad={onLoadOlderHistory}
+              />
+            ),
+          }
+        : {})}
+      items={turnIds}
+      renderNavigation={(navigateToItem, scrollbarWidth, scrollContainerRef) => (
+        <TaskTimelineNavigation
+          items={navigationItems}
+          scrollContainerRef={scrollContainerRef}
+          scrollbarWidth={scrollbarWidth}
+          onNavigate={(item) => {
+            navigateToItem(item.turnIndex, item.anchorId);
+          }}
         />
-      ) : null}
-      <ConversationList
-        {...(hasVisiblePendingRequest || showPendingSubmission || hasNotices
-          ? {
-              footer: (
-                <>
-                  {hasNotices ? <StoreTaskNoticeList store={store} /> : null}
-                  {hasVisiblePendingRequest ? (
-                    <StorePendingRequestList
-                      connected={connected}
-                      onResolvePendingRequest={onResolvePendingRequest}
-                      store={store}
-                    />
-                  ) : null}
-                  {showPendingSubmission ? (
-                    <Message from="assistant">
-                      <TurnProcessingTime completedAt={null} startedAt={submissionStartedAt} />
-                      <RunningReplyStatus />
-                    </Message>
-                  ) : null}
-                </>
-              ),
-            }
-          : {})}
-        getItemKey={getTurnIdKey}
-        getItemRenderMode={(turnId, turnIndex) =>
-          getTaskTurnRenderMode(store.getState().turnsById[turnId], turnIndex, turnIds.length)
-        }
-        items={turnIds}
-        renderNavigation={(navigateToAnchor, scrollbarWidth, scrollContainerRef) => (
-          <TaskTimelineNavigation
-            items={navigationItems}
-            scrollContainerRef={scrollContainerRef}
-            scrollbarWidth={scrollbarWidth}
-            onNavigate={(item) => {
-              navigateToAnchor(item.anchorId);
-            }}
-          />
-        )}
-        renderItem={(turnId, turnIndex) => (
-          <StoreTurnTimelineSection
-            {...(connected && turnId === turnIds.at(-1) && onBuildPlan !== undefined
-              ? { onBuildPlan }
-              : {})}
-            {...(connected && onForkTask !== undefined ? { onForkTask } : {})}
-            onOpenFileDiff={onOpenFileDiff}
-            onOpenSourceFile={onOpenSourceFile}
-            onReviewFileChanges={onReviewFileChanges}
-            projectId={projectId}
-            store={store}
-            taskId={taskId}
-            turnId={turnId}
-            turnIndex={turnIndex}
-            suppressEmptyRunningStatus={showPendingSubmission && turnId === submissionTurnId}
-          />
-        )}
-      />
-      <ConversationScrollButton />
-    </Conversation>
+      )}
+      renderItem={(turnId, turnIndex) => (
+        <StoreTurnTimelineSection
+          {...(connected && turnId === turnIds.at(-1) && onBuildPlan !== undefined
+            ? { onBuildPlan }
+            : {})}
+          {...(connected && onForkTask !== undefined ? { onForkTask } : {})}
+          onOpenFileDiff={onOpenFileDiff}
+          onOpenSourceFile={onOpenSourceFile}
+          onReviewFileChanges={onReviewFileChanges}
+          projectId={projectId}
+          store={store}
+          taskId={taskId}
+          turnId={turnId}
+          turnIndex={turnIndex}
+          suppressEmptyRunningStatus={showPendingSubmission && turnId === submissionTurnId}
+        />
+      )}
+      {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
+    />
   );
 }
