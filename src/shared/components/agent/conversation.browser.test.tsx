@@ -206,12 +206,19 @@ describe("Conversation visual anchor", () => {
 
     prependHistory();
     await settleVirtualScroll();
-    const restoredAnchor = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-conversation-turn]"),
-    ).find((turn) => turn.textContent === anchorText);
-
-    expect(restoredAnchor).toBeDefined();
-    expect(Math.abs((restoredAnchor?.getBoundingClientRect().top ?? 0) - anchorTop)).toBeLessThan(1);
+    await expect
+      .poll(
+        () => {
+          const restoredAnchor = Array.from(
+            container.querySelectorAll<HTMLElement>("[data-conversation-turn]"),
+          ).find((turn) => turn.textContent === anchorText);
+          return restoredAnchor === undefined
+            ? Number.POSITIVE_INFINITY
+            : Math.abs(restoredAnchor.getBoundingClientRect().top - anchorTop);
+        },
+        { timeout: 5_000 },
+      )
+      .toBeLessThan(1);
   });
 
   it("向上滚动后允许用户离开底部", async () => {

@@ -30,6 +30,7 @@ export const config: Options.Testrunner = {
       "@wdio/tauri-service",
       {
         appBinaryPath,
+        captureBackendLogs: true,
         driverProvider: "embedded",
         env: { CODEAGENT_WEBVIEW_TEST: "1" },
       },

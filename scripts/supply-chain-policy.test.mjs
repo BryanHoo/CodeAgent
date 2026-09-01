@@ -48,6 +48,15 @@ void test("quality CI should audit production dependencies", async () => {
   assert.match(qualityWorkflow, /command:\s*check advisories bans licenses sources/);
 });
 
+void test("quality CI should install every configured browser engine", async () => {
+  const qualityWorkflow = await readProjectFile(".github/workflows/quality.yml");
+
+  assert.match(
+    qualityWorkflow,
+    /pnpm exec playwright install --with-deps chromium webkit/,
+  );
+});
+
 void test("stable releases should require signed updater artifacts", async () => {
   const releaseWorkflow = await readProjectFile(".github/workflows/release.yml");
 

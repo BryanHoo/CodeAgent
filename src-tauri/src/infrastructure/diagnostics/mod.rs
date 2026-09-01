@@ -102,6 +102,7 @@ impl DiagnosticSession {
     }
 }
 
+#[cfg_attr(feature = "webview-tests", allow(dead_code))]
 pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
     let file_target = Target::new(TargetKind::LogDir {
         file_name: Some("codeagent".to_owned()),

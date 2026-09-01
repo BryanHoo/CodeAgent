@@ -75,8 +75,10 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_wdio::init())
         .plugin(tauri_plugin_wdio_webdriver::init());
+    // WDIO 已注册全局 logger；测试构建不能再次安装正式诊断 logger。
+    #[cfg(not(feature = "webview-tests"))]
+    let builder = builder.plugin(diagnostics::plugin());
     let result = builder
-        .plugin(diagnostics::plugin())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())

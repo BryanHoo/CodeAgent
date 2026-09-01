@@ -66,8 +66,8 @@ jobs:
       - name: Check web
         run: pnpm check:web
 
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install browser engines
+        run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Check browser components
         run: pnpm test:browser
