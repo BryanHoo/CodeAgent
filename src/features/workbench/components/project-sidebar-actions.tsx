@@ -188,12 +188,22 @@ export function SidebarSettingsButton({
       >
         <span
           aria-live="polite"
-          className={updateAvailable ? "text-warning" : "text-muted-foreground"}
+          className={
+            updateAvailable
+              ? "whitespace-nowrap text-warning"
+              : "whitespace-nowrap text-muted-foreground"
+          }
         >
           {updateAvailable ? (
             <CircleArrowUp aria-hidden="true" className="mr-1 inline size-3" />
           ) : null}
           v{appVersion}
+          {updateAvailable ? (
+            <>
+              {" "}
+              <span className="font-medium">{t("sidebar.updateAvailableHint")}</span>
+            </>
+          ) : null}
         </span>
       </Button>
     </div>

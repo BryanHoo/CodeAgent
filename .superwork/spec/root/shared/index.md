@@ -34,11 +34,14 @@
 - `get_app_info` 只从 `BryanHoo/CodeAgent` 的 GitHub Releases 检查新版本，并限制请求超时、重定向和响应体大小
 - 仅 `0.1.0` 初始版本可在仓库没有公开 release 时视为最新；后续版本缺失或无法解析 release 时返回 `check-failed`
 - 关于页始终提供内置当前版本日志；发现新版本时改为显示远程 release 正文，并提供项目仓库与远程 `CHANGELOG.md` 链接
+- `install_app_update` 必须通过 Tauri updater 从固定的 GitHub `latest.json` 下载并校验签名；WebView 只提交已展示的目标版本，不得控制下载地址、公钥或安装参数
+- 安装前必须重新检查并精确匹配目标版本；下载进度使用单调 `sequence` 和累计字节，通过专用 Channel 有界投影，安装完成后由原生层重启应用
+- 正式 release 必须生成 updater artifact、`.sig` 与 `latest.json`，使用仓库 Secret 中的长期签名私钥；Windows 必须发布可更新的 NSIS 安装包，不得以 portable EXE 作为更新目标
 - 每个发布版本必须在 `CHANGELOG.md` 中包含 `## [版本] - YYYY-MM-DD` 条目，GitHub release 正文必须由该条目生成
 
 ## 验证要求
 
-- 覆盖远程 release 新旧版本映射、仅 `0.1.0` 允许空 release、关于页常驻日志入口与 release 正文提取
+- 覆盖远程 release 新旧版本映射、仅 `0.1.0` 允许空 release、关于页常驻日志入口、安装 IPC 单调进度，以及签名 artifact 与 `latest.json` 发布约束
 - 覆盖普通文件提交后在队列编辑与历史恢复中的附件 chip 保留行为
 - 覆盖生成图片落盘、Base64 移除和时间线附件映射行为
 - 覆盖性能分位数、IPC 合并统计、源码虚拟化 DOM 上限和生产 Chunk 预算

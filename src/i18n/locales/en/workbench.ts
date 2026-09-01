@@ -418,6 +418,7 @@ export const workbench = {
     search: "Search tasks",
     searchAll: "Searching all tasks",
     settings: "Settings",
+    updateAvailableHint: "Update",
     updateAvailableLabel: ", update available",
     taskActions: "Actions for {{task}}",
     taskApproval: "Task awaiting approval",

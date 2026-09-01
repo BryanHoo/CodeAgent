@@ -14,6 +14,7 @@ permissions = [
   "allow-inspect-codex-runtime",
   "allow-install-codex-runtime",
   "allow-get-app-info",
+  "allow-install-app-update",
   "allow-get-runtime-performance-metrics",
   "allow-get-task-activities",
   "allow-acknowledge-task-activity",

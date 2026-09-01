@@ -414,6 +414,7 @@ export const workbench = {
     search: "搜索任务",
     searchAll: "正在搜索全部任务",
     settings: "设置",
+    updateAvailableHint: "升级",
     updateAvailableLabel: "，有可用更新",
     taskActions: "{{task}} 的任务操作",
     taskApproval: "任务等待审批",

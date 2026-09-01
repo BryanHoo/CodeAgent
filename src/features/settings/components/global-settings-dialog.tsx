@@ -2,6 +2,7 @@ import type {
   AgentGlobalSettings,
   AgentModel,
   AppInfoResponse,
+  AppUpdateInstallProgress,
   ProjectOpenApp,
 } from "@/protocol/index.js";
 import { Settings, X } from "lucide-react";
@@ -61,6 +62,10 @@ type GlobalSettingsDialogProps = Readonly<{
   onRetry: () => unknown;
   onRetryAppInfo?: () => unknown;
   onSave: (settings: AgentGlobalSettings) => Promise<void>;
+  onUpdate?: (
+    version: string,
+    onProgress: (progress: AppUpdateInstallProgress) => void,
+  ) => Promise<void>;
   settings?: AgentGlobalSettings;
 }>;
 
@@ -78,6 +83,7 @@ export function GlobalSettingsDialog({
   onRetry,
   onRetryAppInfo = () => undefined,
   onSave,
+  onUpdate = () => Promise.resolve(),
   settings,
 }: GlobalSettingsDialogProps) {
   const { t } = useTranslation("settings");
@@ -234,6 +240,7 @@ export function GlobalSettingsDialog({
                 error={appInfoError}
                 isPending={isAppInfoPending}
                 onRetry={onRetryAppInfo}
+                onUpdate={onUpdate}
               />
 
               {activeSection === "provider" ? (

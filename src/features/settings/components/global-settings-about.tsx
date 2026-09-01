@@ -1,5 +1,5 @@
-import type { AppInfoResponse } from "@/protocol/index.js";
-import { BookOpen, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
+import type { AppInfoResponse, AppUpdateInstallProgress } from "@/protocol/index.js";
+import { BookOpen, Download, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -15,17 +15,26 @@ export function GlobalSettingsAbout({
   error,
   isPending,
   onRetry,
+  onUpdate,
 }: Readonly<{
   activeSection: SettingsSectionId;
   appInfo?: AppInfoResponse;
   error: Error | null;
   isPending: boolean;
   onRetry: () => unknown;
+  onUpdate: (
+    version: string,
+    onProgress: (progress: AppUpdateInstallProgress) => void,
+  ) => Promise<void>;
 }>) {
   const { t } = useTranslation("settings");
   const checkLockRef = useRef(createAsyncActionLock());
   const [isChecking, setIsChecking] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const updateLockRef = useRef(createAsyncActionLock());
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<AppUpdateInstallProgress | null>(null);
+  const updatePercentage = calculateUpdatePercentage(updateProgress);
   const checkForUpdates = () =>
     checkLockRef.current.run(async () => {
       setIsChecking(true);
@@ -109,6 +118,43 @@ export function GlobalSettingsAbout({
                 )}
                 {isChecking ? t("about.checking") : t("about.check")}
               </Button>
+              {appInfo.status === "available" && appInfo.latestVersion !== null ? (
+                <Button
+                  disabled={isUpdating}
+                  onClick={() => {
+                    const version = appInfo.latestVersion;
+                    if (version === null) return;
+                    void updateLockRef.current.run(async () => {
+                      setIsUpdating(true);
+                      setUpdateProgress(null);
+                      try {
+                        await onUpdate(version, setUpdateProgress);
+                      } catch {
+                        // 根级 MutationCache 展示失败，保留版本信息供用户重试。
+                      } finally {
+                        setIsUpdating(false);
+                      }
+                    });
+                  }}
+                  size="sm"
+                  type="button"
+                >
+                  {isUpdating ? (
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className="animate-spin"
+                      data-icon="inline-start"
+                    />
+                  ) : (
+                    <Download aria-hidden="true" data-icon="inline-start" />
+                  )}
+                  {isUpdating
+                    ? updatePercentage === null
+                      ? t("about.updating")
+                      : t("about.downloading", { percentage: updatePercentage })
+                    : t("about.updateTo", { version: appInfo.latestVersion })}
+                </Button>
+              ) : null}
               <Button
                 onClick={() => {
                   setReleaseNotesOpen(true);
@@ -134,5 +180,19 @@ export function GlobalSettingsAbout({
         </>
       )}
     </SettingsPanel>
+  );
+}
+
+function calculateUpdatePercentage(progress: AppUpdateInstallProgress | null): number | null {
+  if (
+    progress?.totalBytes === null ||
+    progress?.totalBytes === undefined ||
+    progress.totalBytes <= 0
+  ) {
+    return null;
+  }
+  return Math.min(
+    100,
+    Math.round((progress.downloadedBytes / progress.totalBytes) * 100),
   );
 }

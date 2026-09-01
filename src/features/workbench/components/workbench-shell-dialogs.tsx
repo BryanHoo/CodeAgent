@@ -25,6 +25,7 @@ export function WorkbenchShellDialogs({
 }>) {
   const {
     appInfoQuery,
+    appUpdateMutation,
     client,
     closeTaskRenameDialog,
     globalSettingsMutation,
@@ -134,6 +135,9 @@ export function WorkbenchShellDialogs({
             onRetryAppInfo={() => appInfoQuery.refetch()}
             onSave={(settings) =>
               globalSettingsMutation.mutateAsync(settings).then(() => undefined)
+            }
+            onUpdate={(version, onProgress) =>
+              appUpdateMutation.mutateAsync({ onProgress, version })
             }
             {...(globalSettingsQuery.data === undefined
               ? {}

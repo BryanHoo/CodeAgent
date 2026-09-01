@@ -6,6 +6,7 @@ export const settings = {
     codeagentVersion: "CodeAgent 版本",
     codexVersion: "Codex 版本",
     current: "已是最新版本",
+    downloading: "正在下载 {{percentage}}%",
     github: "项目 GitHub",
     loading: "正在检查更新",
     moreReleaseNotes: "更多",
@@ -13,6 +14,8 @@ export const settings = {
     releaseNotes: "更新日志",
     releaseNotesTitle: "{{version}} 更新日志",
     update: "软件更新",
+    updateTo: "更新到 {{version}}",
+    updating: "正在准备更新",
   },
   actions: {
     cancel: "取消",

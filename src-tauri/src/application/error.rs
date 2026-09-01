@@ -13,6 +13,12 @@ pub enum AppError {
     CodexRuntimeStartFailed,
     #[error("failed to install Codex runtime")]
     CodexRuntimeInstallFailed,
+    #[error("failed to check for a CodeAgent update")]
+    AppUpdateCheckFailed,
+    #[error("the selected CodeAgent update is no longer available")]
+    AppUpdateUnavailable,
+    #[error("failed to install the CodeAgent update")]
+    AppUpdateInstallFailed,
     #[error("Codex runtime is unavailable")]
     CodexRuntimeUnavailable,
     #[error("Codex request failed")]

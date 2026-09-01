@@ -48,11 +48,18 @@ void test("quality CI should audit production dependencies", async () => {
   assert.match(qualityWorkflow, /command:\s*check advisories bans licenses sources/);
 });
 
-void test("unsigned preview releases should remain prereleases", async () => {
+void test("stable releases should require signed updater artifacts", async () => {
   const releaseWorkflow = await readProjectFile(".github/workflows/release.yml");
 
   assert.match(releaseWorkflow, /releaseDraft:\s*true/);
-  assert.match(releaseWorkflow, /prerelease:\s*true/);
+  assert.match(releaseWorkflow, /prerelease:\s*false/);
+  assert.match(
+    releaseWorkflow,
+    /TAURI_SIGNING_PRIVATE_KEY:\s*\$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY \}\}/,
+  );
+  assert.match(releaseWorkflow, /uploadUpdaterJson:\s*true/);
+  assert.match(releaseWorkflow, /uploadUpdaterSignatures:\s*true/);
+  assert.doesNotMatch(releaseWorkflow, /^\s*args:.*--no-sign.*$/m);
 });
 
 void test("cargo-deny should enforce dependency policy", async () => {

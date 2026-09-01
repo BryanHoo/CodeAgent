@@ -24,7 +24,7 @@ use application::{
     },
     commands::{
         cancel_native_request, connect_runtime, get_app_info, get_runtime_performance_metrics,
-        inspect_codex_runtime, install_codex_runtime, start_runtime,
+        inspect_codex_runtime, install_app_update, install_codex_runtime, start_runtime,
     },
     desktop_pet_commands::{
         DesktopPetRuntime, configure_desktop_pet, get_desktop_pet_drag_strategy,
@@ -75,6 +75,7 @@ pub fn run() {
     let result = builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(AppStorageRuntime::default())
         .manage(DesktopPetRuntime::default())
@@ -94,6 +95,7 @@ pub fn run() {
             install_codex_runtime,
             cancel_native_request,
             get_app_info,
+            install_app_update,
             get_runtime_performance_metrics,
             get_task_activities,
             acknowledge_task_activity,

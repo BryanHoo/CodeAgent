@@ -27,3 +27,9 @@ export const AppInfoResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 export type AppInfoResponse = Readonly<Static<typeof AppInfoResponseSchema>>;
+
+export type AppUpdateInstallProgress = Readonly<{
+  downloadedBytes: number;
+  sequence: number;
+  totalBytes: number | null;
+}>;

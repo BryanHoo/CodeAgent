@@ -10,6 +10,7 @@ export {
   AppInfoResponseSchema,
   AppUpdateStatusSchema,
   type AppInfoResponse,
+  type AppUpdateInstallProgress,
   type AppUpdateStatus,
 } from "./app-update.js";
 export {

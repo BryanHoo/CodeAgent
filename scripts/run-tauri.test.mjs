@@ -35,7 +35,16 @@ void test("macOS builds should reject an Intel target", () => {
   );
 });
 
-void test("Windows builds should default to an unpackaged executable", () => {
+void test("Windows builds should preserve an explicit updater bundle", () => {
+  assert.deepEqual(resolveTauriArguments(["build", "--bundles", "nsis", "--no-sign"], "win32"), [
+    "build",
+    "--bundles",
+    "nsis",
+    "--no-sign",
+  ]);
+});
+
+void test("Windows local builds should still default to an unpackaged executable", () => {
   assert.deepEqual(resolveTauriArguments(["build", "--no-sign"], "win32"), [
     "build",
     "--no-bundle",
@@ -43,16 +52,30 @@ void test("Windows builds should default to an unpackaged executable", () => {
   ]);
 });
 
-void test("Windows release should upload the unpackaged executable", async () => {
+void test("release builds should publish signed updater artifacts", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/release.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(workflow, /name: Windows x64 Portable/);
-  assert.match(workflow, /args: --no-bundle --no-sign --ci/);
-  assert.match(workflow, /uploadPlainBinary: true/);
-  assert.match(workflow, /\[name\]_\[version\]_\[arch\]_portable\[ext\]/);
+  assert.match(workflow, /name: Windows x64 NSIS/);
+  assert.match(workflow, /args: --bundles nsis --ci/);
+  assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY \}\}/);
+  assert.match(workflow, /uploadUpdaterJson: true/);
+  assert.match(workflow, /uploadUpdaterSignatures: true/);
+  assert.match(workflow, /prerelease: false/);
+});
+
+void test("Tauri should use signed GitHub release metadata", async () => {
+  const config = JSON.parse(
+    await readFile(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+  );
+
+  assert.equal(config.bundle.createUpdaterArtifacts, true);
+  assert.match(config.plugins.updater.pubkey, /^[A-Za-z0-9+/]+=*$/);
+  assert.deepEqual(config.plugins.updater.endpoints, [
+    "https://github.com/BryanHoo/CodeAgent/releases/latest/download/latest.json",
+  ]);
 });
 
 void test("Windows should verify Codex through the app instead of the Tauri test harness", async () => {

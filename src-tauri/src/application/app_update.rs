@@ -3,7 +3,11 @@ use std::{sync::OnceLock, time::Duration};
 use futures_util::StreamExt;
 use reqwest::{Client, Response, header, redirect::Policy};
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, ipc::Channel};
+use tauri_plugin_updater::UpdaterExt;
+
+use super::error::AppError;
 
 pub(super) const CHANGELOG_URL: &str =
     "https://github.com/BryanHoo/CodeAgent/blob/main/CHANGELOG.md";
@@ -16,6 +20,14 @@ const MAX_RESPONSE_BYTES: usize = 64 * 1024;
 const MAX_RELEASE_NOTES_BYTES: usize = 32 * 1024;
 const CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
 static HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AppUpdateInstallProgress {
+    downloaded_bytes: u64,
+    sequence: u64,
+    total_bytes: Option<u64>,
+}
 
 #[derive(Debug, PartialEq)]
 pub(super) struct AppUpdate {
@@ -38,6 +50,39 @@ pub(super) async fn check_for_update(current_version: &str) -> AppUpdate {
         Err(()) => return failed_update(current_version),
     };
     resolve_release_response(current_version, &response)
+}
+
+pub(super) async fn install_update(
+    app: &AppHandle,
+    expected_version: &str,
+    on_progress: Channel<AppUpdateInstallProgress>,
+) -> Result<(), AppError> {
+    let updater = app.updater().map_err(|_| AppError::AppUpdateCheckFailed)?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|_| AppError::AppUpdateCheckFailed)?
+        .filter(|update| update.version == expected_version)
+        .ok_or(AppError::AppUpdateUnavailable)?;
+    let mut downloaded_bytes = 0_u64;
+    let mut sequence = 0_u64;
+    update
+        .download_and_install(
+            move |chunk_bytes, total_bytes| {
+                downloaded_bytes = downloaded_bytes.saturating_add(chunk_bytes as u64);
+                sequence = sequence.saturating_add(1);
+                // 设置页关闭不应中断安装，因此只忽略失效 Channel 的发送错误。
+                let _ = on_progress.send(AppUpdateInstallProgress {
+                    downloaded_bytes,
+                    sequence,
+                    total_bytes,
+                });
+            },
+            || {},
+        )
+        .await
+        .map_err(|_| AppError::AppUpdateInstallFailed)?;
+    app.restart();
 }
 
 fn http_client() -> Result<&'static Client, ()> {

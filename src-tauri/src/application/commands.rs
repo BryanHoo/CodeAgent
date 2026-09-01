@@ -1,7 +1,9 @@
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State, ipc::Channel};
 
-use super::app_update::{CHANGELOG_URL, REPOSITORY_URL, check_for_update};
+use super::app_update::{
+    AppUpdateInstallProgress, CHANGELOG_URL, REPOSITORY_URL, check_for_update, install_update,
+};
 use super::state::performance_metrics::RuntimePerformanceMetricsSnapshot;
 use super::{error::AppError, state::AppState};
 use crate::domain::runtime::{
@@ -77,6 +79,15 @@ pub async fn get_app_info(state: State<'_, AppState>) -> Result<Value, AppError>
     }))
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub async fn install_app_update(
+    app: AppHandle,
+    version: String,
+    on_progress: Channel<AppUpdateInstallProgress>,
+) -> Result<(), AppError> {
+    install_update(&app, &version, on_progress).await
+}
+
 #[tauri::command]
 pub async fn get_runtime_performance_metrics(
     state: State<'_, AppState>,
@@ -95,7 +106,11 @@ mod tests {
     fn main_window_should_allow_runtime_recovery_commands() {
         let permissions = include_str!("../../permissions/window-command-sets.toml");
 
-        for permission in ["allow-inspect-codex-runtime", "allow-install-codex-runtime"] {
+        for permission in [
+            "allow-inspect-codex-runtime",
+            "allow-install-codex-runtime",
+            "allow-install-app-update",
+        ] {
             assert!(
                 permissions.contains(&format!("\"{permission}\"")),
                 "main-window-commands must include {permission}"

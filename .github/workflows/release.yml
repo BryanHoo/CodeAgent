@@ -35,21 +35,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows x64 Portable
+          - name: Windows x64 NSIS
             platform: windows-latest
-            args: --no-bundle --no-sign --ci
+            args: --bundles nsis --ci
             rustTargets: ""
-            uploadPlainBinary: true
-            releaseAssetNamePattern: "[name]_[version]_[arch]_portable[ext]"
+            uploadPlainBinary: false
+            releaseAssetNamePattern: ""
           - name: Ubuntu x64 DEB and AppImage
             platform: ubuntu-24.04
-            args: --bundles deb,appimage --no-sign --ci
+            args: --bundles deb,appimage --ci
             rustTargets: ""
             uploadPlainBinary: false
             releaseAssetNamePattern: ""
           - name: macOS Apple Silicon
             platform: macos-latest
-            args: --target aarch64-apple-darwin --bundles app,dmg --no-sign --ci
+            args: --target aarch64-apple-darwin --bundles app,dmg --ci
             rustTargets: aarch64-apple-darwin
             uploadPlainBinary: false
             releaseAssetNamePattern: ""
@@ -107,18 +107,20 @@ jobs:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
         run: node scripts/release-notes.mjs >> "$GITHUB_OUTPUT"
 
-      - name: Build and upload unsigned artifacts
+      - name: Build and upload signed artifacts
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: CodeAgent v__VERSION__
           releaseBody: ${{ steps.release-notes.outputs.body }}
           releaseDraft: true
-          prerelease: true
-          uploadUpdaterJson: false
-          uploadUpdaterSignatures: false
+          prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
           uploadPlainBinary: ${{ matrix.uploadPlainBinary }}
           uploadWorkflowArtifacts: true
           releaseAssetNamePattern: ${{ matrix.releaseAssetNamePattern }}

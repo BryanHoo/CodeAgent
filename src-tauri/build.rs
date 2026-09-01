@@ -11,6 +11,7 @@ fn main() {
         "inspect_codex_runtime",
         "install_codex_runtime",
         "get_app_info",
+        "install_app_update",
         "get_runtime_performance_metrics",
         "get_task_activities",
         "acknowledge_task_activity",

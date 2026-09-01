@@ -14,7 +14,6 @@ import { infiniteQueryOptions, mutationOptions, queryOptions } from "@tanstack/r
 import {
   nativeClient,
   type NativeCapabilitiesClient,
-  type NativeAppInfoClient,
   type NativeModelsClient,
   type NativeSettingsClient,
   type NativeSkillsClient,
@@ -124,14 +123,6 @@ export function modelsQueryOptions(client: NativeModelsClient = nativeClient) {
   return queryOptions({
     queryFn: ({ signal }) => client.listModels({ signal }),
     queryKey: ["models"] as const,
-    staleTime: 5 * 60_000,
-  });
-}
-
-export function appInfoQueryOptions(client: NativeAppInfoClient = nativeClient) {
-  return queryOptions({
-    queryFn: ({ signal }) => client.getAppInfo({ signal }),
-    queryKey: ["app-info"] as const,
     staleTime: 5 * 60_000,
   });
 }

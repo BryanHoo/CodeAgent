@@ -6,6 +6,7 @@ export const settings = {
     codeagentVersion: "CodeAgent version",
     codexVersion: "Codex version",
     current: "CodeAgent is up to date",
+    downloading: "Downloading {{percentage}}%",
     github: "Project GitHub",
     loading: "Checking for updates",
     moreReleaseNotes: "More",
@@ -13,6 +14,8 @@ export const settings = {
     releaseNotes: "Release notes",
     releaseNotesTitle: "{{version}} release notes",
     update: "Software update",
+    updateTo: "Update to {{version}}",
+    updating: "Preparing update",
   },
   actions: {
     cancel: "Cancel",

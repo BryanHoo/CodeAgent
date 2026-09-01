@@ -28,6 +28,7 @@ describe("GlobalSettingsAbout", () => {
           error={null}
           isPending={false}
           onRetry={vi.fn()}
+          onUpdate={vi.fn()}
         />
       </I18nextProvider>,
     );
@@ -42,5 +43,48 @@ describe("GlobalSettingsAbout", () => {
       "href",
       appInfo.changelogUrl,
     );
+  });
+
+  it("installs an available update and renders download progress", async () => {
+    await i18n.changeLanguage("zh-CN");
+    let reportProgress:
+      | ((progress: { downloadedBytes: number; sequence: number; totalBytes: number | null }) => void)
+      | undefined;
+    const onUpdate = vi.fn(
+      async (
+        _version: string,
+        onProgress: (progress: {
+          downloadedBytes: number;
+          sequence: number;
+          totalBytes: number | null;
+        }) => void,
+      ) => {
+        reportProgress = onProgress;
+        await new Promise(() => undefined);
+      },
+    );
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <GlobalSettingsAbout
+          activeSection="about"
+          appInfo={{
+            ...appInfo,
+            latestVersion: "0.2.0",
+            status: "available",
+            updateAvailable: true,
+          }}
+          error={null}
+          isPending={false}
+          onRetry={vi.fn()}
+          onUpdate={onUpdate}
+        />
+      </I18nextProvider>,
+    );
+
+    await screen.getByRole("button", { name: "更新到 0.2.0" }).click();
+    reportProgress?.({ downloadedBytes: 50, sequence: 1, totalBytes: 100 });
+
+    await expect.element(screen.getByRole("button", { name: "正在下载 50%" })).toBeVisible();
+    expect(onUpdate).toHaveBeenCalledWith("0.2.0", expect.any(Function));
   });
 });

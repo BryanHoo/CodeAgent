@@ -2,6 +2,7 @@ import type { MutationOptions, ReadOptions } from "@/platform/native-client-type
 import type {
   AgentCapabilities,
   AppInfoResponse,
+  AppUpdateInstallProgress,
   HealthResponse,
   EventStreamMetricsResponse,
   UploadAgentFeedbackRequest,
@@ -9,6 +10,7 @@ import type {
   WorkbenchPetCatalogResponse,
   WorkbenchPetDownloadResponse,
 } from "@/protocol/index.js";
+import { Channel } from "@tauri-apps/api/core";
 
 import { TauriCatalogClient } from "./catalog-client.js";
 import {
@@ -18,6 +20,8 @@ import {
 } from "./workbench-pet-catalog.js";
 
 export type NativeWorkbenchBackgroundResponse = Readonly<{ assetPath: string }>;
+export type AppUpdateInstallOptions = MutationOptions &
+  Readonly<{ onProgress?: (progress: AppUpdateInstallProgress) => void }>;
 
 export class TauriRuntimeClient extends TauriCatalogClient {
   public async getPerformanceMetrics(): Promise<EventStreamMetricsResponse> {
@@ -51,6 +55,20 @@ export class TauriRuntimeClient extends TauriCatalogClient {
 
   public async getAppInfo(_options: ReadOptions = {}): Promise<AppInfoResponse> {
     return this.call("get_app_info");
+  }
+
+  public async installAppUpdate(
+    version: string,
+    options: AppUpdateInstallOptions = {},
+  ): Promise<void> {
+    let latestSequence = 0;
+    const progressChannel = new Channel<AppUpdateInstallProgress>((progress) => {
+      // 原生下载事件可能排队到达，只向 React 投影最新的单调进度。
+      if (progress.sequence <= latestSequence) return;
+      latestSequence = progress.sequence;
+      options.onProgress?.(progress);
+    });
+    await this.call<void>("install_app_update", { onProgress: progressChannel, version });
   }
 
   public async getWorkbenchBackground(day: string): Promise<NativeWorkbenchBackgroundResponse> {
