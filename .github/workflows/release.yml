@@ -35,23 +35,33 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: Windows x64 Portable
+            platform: windows-latest
+            args: --no-bundle --no-sign --ci
+            rustTargets: ""
+            uploadPlainBinary: true
+            uploadUpdaterArtifacts: false
+            releaseAssetNamePattern: "[name]_[version]_[arch]_portable[ext]"
           - name: Windows x64 NSIS
             platform: windows-latest
             args: --bundles nsis --ci
             rustTargets: ""
             uploadPlainBinary: false
+            uploadUpdaterArtifacts: true
             releaseAssetNamePattern: ""
           - name: Ubuntu x64 DEB and AppImage
             platform: ubuntu-24.04
             args: --bundles deb,appimage --ci
             rustTargets: ""
             uploadPlainBinary: false
+            uploadUpdaterArtifacts: true
             releaseAssetNamePattern: ""
           - name: macOS Apple Silicon
             platform: macos-latest
             args: --target aarch64-apple-darwin --bundles app,dmg --ci
             rustTargets: aarch64-apple-darwin
             uploadPlainBinary: false
+            uploadUpdaterArtifacts: true
             releaseAssetNamePattern: ""
 
     runs-on: ${{ matrix.platform }}
@@ -107,7 +117,7 @@ jobs:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
         run: node scripts/release-notes.mjs >> "$GITHUB_OUTPUT"
 
-      - name: Build and upload signed artifacts
+      - name: Build and upload release artifacts
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -119,8 +129,8 @@ jobs:
           releaseBody: ${{ steps.release-notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
+          uploadUpdaterJson: ${{ matrix.uploadUpdaterArtifacts }}
+          uploadUpdaterSignatures: ${{ matrix.uploadUpdaterArtifacts }}
           uploadPlainBinary: ${{ matrix.uploadPlainBinary }}
           uploadWorkflowArtifacts: true
           releaseAssetNamePattern: ${{ matrix.releaseAssetNamePattern }}

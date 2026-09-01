@@ -52,17 +52,32 @@ void test("Windows local builds should still default to an unpackaged executable
   ]);
 });
 
-void test("release builds should publish signed updater artifacts", async () => {
+void test("Windows releases should publish portable and updater NSIS artifacts", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/release.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(workflow, /name: Windows x64 NSIS/);
-  assert.match(workflow, /args: --bundles nsis --ci/);
+  assert.match(
+    workflow,
+    /- name: Windows x64 Portable[\s\S]*?args: --no-bundle --no-sign --ci[\s\S]*?uploadPlainBinary: true[\s\S]*?uploadUpdaterArtifacts: false/,
+  );
+  assert.match(workflow, /releaseAssetNamePattern: "\[name\]_\[version\]_\[arch\]_portable\[ext\]"/);
+  assert.match(
+    workflow,
+    /- name: Windows x64 NSIS[\s\S]*?args: --bundles nsis --ci[\s\S]*?uploadPlainBinary: false[\s\S]*?uploadUpdaterArtifacts: true/,
+  );
+});
+
+void test("bundled releases should publish signed updater artifacts", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+
   assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY \}\}/);
-  assert.match(workflow, /uploadUpdaterJson: true/);
-  assert.match(workflow, /uploadUpdaterSignatures: true/);
+  assert.match(workflow, /uploadUpdaterJson: \$\{\{ matrix\.uploadUpdaterArtifacts \}\}/);
+  assert.match(workflow, /uploadUpdaterSignatures: \$\{\{ matrix\.uploadUpdaterArtifacts \}\}/);
   assert.match(workflow, /prerelease: false/);
 });
 

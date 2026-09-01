@@ -1,21 +1,22 @@
 # 跨平台发布
 
-当前发布仅生成无签名预览包，不配置 Apple Developer ID、Windows 代码签名证书、Linux GPG
-密钥或 Tauri updater 签名密钥。产物仅应从本仓库的 GitHub Releases 获取。
+当前发布不配置 Apple Developer ID、Windows Authenticode 代码签名证书或 Linux GPG 密钥。
+自动更新产物使用独立的 Tauri updater 私钥签名，产物仅应从本仓库的 GitHub Releases 获取。
 
 ## 支持矩阵
 
 | 平台 | 目标 | 包格式 | 最低基线 |
 | --- | --- | --- | --- |
-| Windows | x86_64 | EXE（免安装） | Windows 10/11，使用系统 WebView2 Runtime |
+| Windows | x86_64 | EXE（免安装）、NSIS | Windows 10/11，使用系统 WebView2 Runtime |
 | Ubuntu | x86_64 | DEB、AppImage | Ubuntu 24.04 LTS+ |
 | macOS | Apple Silicon | app、DMG | macOS 14+ |
 
-Windows 按 Tauri 官方 `tauri build --no-bundle` 方式生成未封装的 EXE，并通过官方
-`tauri-action` 的 `uploadPlainBinary` 上传为 `portable.exe` 发布资产。Tauri 不提供独立的
-portable bundle target；该产物免安装，但仍使用 Windows 10/11 自带并维护的 WebView2 Runtime，
-应用数据也仍写入系统应用数据目录。Linux 和 macOS 的平台覆盖配置分别位于
-`src-tauri/tauri.linux.conf.json` 和 `src-tauri/tauri.macos.conf.json`。
+Windows 同时发布两种产物：按 `tauri build --no-bundle --no-sign` 生成的 `portable.exe` 用于
+免安装运行，NSIS 安装器作为 Tauri updater 的 Windows 更新目标。两者都不包含 Authenticode
+代码签名；NSIS updater artifact 仍必须通过 Tauri updater 私钥签名。portable 产物不参与自动
+更新，仍使用 Windows 10/11 自带并维护的 WebView2 Runtime，应用数据也写入系统应用数据目录。
+Linux 和 macOS 的平台覆盖配置分别位于 `src-tauri/tauri.linux.conf.json` 和
+`src-tauri/tauri.macos.conf.json`。
 
 ## Ubuntu 安装
 
@@ -43,8 +44,9 @@ chmod +x CodeAgent.AppImage
 - `Platform Build`：Pull Request 上验证 Windows、Ubuntu、macOS 的原生编译。
 - `Draft Release`：`v*` 标签或手动触发后，从 `CHANGELOG.md` 提取对应版本日志，构建各平台安装包并创建 GitHub draft release。
 
-所有桌面构建显式使用 `--no-sign`。发布工作流不生成 updater JSON 或 updater 签名，避免让
-无签名预览产物进入自动更新链路。
+Windows portable 构建显式使用 `--no-sign` 且不进入自动更新链路；Windows NSIS、Ubuntu 与
+macOS 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。Tauri updater 签名只校验更新
+来源与完整性，不等同于操作系统代码签名。
 
 ## 发布步骤
 

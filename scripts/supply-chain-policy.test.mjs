@@ -57,9 +57,19 @@ void test("stable releases should require signed updater artifacts", async () =>
     releaseWorkflow,
     /TAURI_SIGNING_PRIVATE_KEY:\s*\$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY \}\}/,
   );
-  assert.match(releaseWorkflow, /uploadUpdaterJson:\s*true/);
-  assert.match(releaseWorkflow, /uploadUpdaterSignatures:\s*true/);
-  assert.doesNotMatch(releaseWorkflow, /^\s*args:.*--no-sign.*$/m);
+  assert.match(
+    releaseWorkflow,
+    /uploadUpdaterJson:\s*\$\{\{ matrix\.uploadUpdaterArtifacts \}\}/,
+  );
+  assert.match(
+    releaseWorkflow,
+    /uploadUpdaterSignatures:\s*\$\{\{ matrix\.uploadUpdaterArtifacts \}\}/,
+  );
+
+  const unsignedBuilds = [...releaseWorkflow.matchAll(/^\s*args:\s*(.*--no-sign.*)$/gm)].map(
+    ([, args]) => args,
+  );
+  assert.deepEqual(unsignedBuilds, ["--no-bundle --no-sign --ci"]);
 });
 
 void test("cargo-deny should enforce dependency policy", async () => {
