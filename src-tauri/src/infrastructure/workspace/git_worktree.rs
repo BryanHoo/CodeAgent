@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use super::{
-    git_process::run_git,
+    git_process::{git_path_argument, run_git},
     git_read::repository_path,
     git_write::{validate_branch, validate_snapshot},
     path_guard::WorkspaceError,
@@ -66,7 +66,7 @@ pub async fn create_worktree(
     validate_branch(root, repository, branch).await?;
     let repo = repository_path(root, repository).await?;
     let target = available_worktree_path(&repo, branch).await?;
-    let target_string = target.to_string_lossy().into_owned();
+    let target_string = git_path_argument(&target);
     let args = if status.branches.iter().any(|value| value == branch) {
         vec!["worktree", "add", "--", target_string.as_str(), branch]
     } else {

@@ -1,10 +1,24 @@
 use std::{fs, path::Path, process::Command, time::SystemTime};
 
+use super::git_process::git_path_argument;
 use super::{
     WorkspaceError, commit_changes, create_branch, create_worktree, get_commit_diff,
     get_commit_files, get_git_history, get_git_status, list_worktrees, prepare_commit_message,
     switch_branch,
 };
+
+#[cfg(not(windows))]
+const STATUS_SPECIAL_PATH: &str = "line\nbreak.txt";
+#[cfg(windows)]
+const STATUS_SPECIAL_PATH: &str = "unicode-功能.txt";
+#[cfg(not(windows))]
+const ARROW_SPECIAL_PATH: &str = "left -> right.txt";
+#[cfg(windows)]
+const ARROW_SPECIAL_PATH: &str = "left -＞ right.txt";
+#[cfg(not(windows))]
+const WORKTREE_SPECIAL_SUFFIX: &str = "-line\nbreak";
+#[cfg(windows)]
+const WORKTREE_SPECIAL_SUFFIX: &str = "-功能 路径";
 
 #[tokio::test]
 async fn git_reads_should_map_repository_state_and_history() {
@@ -192,8 +206,8 @@ async fn git_status_should_preserve_special_paths() {
     run(&root, &["commit", "-m", "initial commit"]);
     let paths = [
         "file with space.txt",
-        "line\nbreak.txt",
-        "left -> right.txt",
+        STATUS_SPECIAL_PATH,
+        ARROW_SPECIAL_PATH,
     ];
     for path in paths {
         fs::write(root.join(path), "content\n").unwrap();
@@ -219,8 +233,8 @@ async fn git_status_should_split_combined_diffs_for_special_paths() {
     let root = create_repository("codeagent-git-diffs");
     let files = [
         ("file with space.txt", "space-marker"),
-        ("line\nbreak.txt", "newline-marker"),
-        ("left -> right.txt", "arrow-marker"),
+        (STATUS_SPECIAL_PATH, "special-marker"),
+        (ARROW_SPECIAL_PATH, "arrow-marker"),
     ];
     for (path, marker) in files {
         fs::write(root.join(path), format!("old {marker}\n")).unwrap();
@@ -369,16 +383,17 @@ async fn create_worktree_should_preserve_unicode_and_probe_a_numeric_suffix() {
 }
 
 #[tokio::test]
-async fn list_worktrees_should_preserve_paths_containing_newlines() {
+async fn list_worktrees_should_preserve_platform_special_paths() {
     let root = create_repository("codeagent-git-worktree-list");
     fs::write(root.join("tracked.txt"), "initial\n").unwrap();
     run(&root, &["add", "."]);
     run(&root, &["commit", "-m", "initial commit"]);
     let root = fs::canonicalize(root).unwrap();
     let target = root.with_file_name(format!(
-        "{}-line\nbreak",
+        "{}{WORKTREE_SPECIAL_SUFFIX}",
         root.file_name().unwrap().to_string_lossy()
     ));
+    let target_argument = git_path_argument(&target);
     run(
         &root,
         &[
@@ -386,7 +401,7 @@ async fn list_worktrees_should_preserve_paths_containing_newlines() {
             "add",
             "-b",
             "newline-path",
-            target.to_str().unwrap(),
+            target_argument.as_str(),
         ],
     );
     let target = fs::canonicalize(target).unwrap();

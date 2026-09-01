@@ -56,9 +56,13 @@ mod tests {
 
     #[test]
     fn prompt_file_should_preserve_attachment_identity_in_text_elements() {
+        let path = std::env::temp_dir()
+            .join("report.json")
+            .to_string_lossy()
+            .into_owned();
         let input = AgentPromptInput {
             attachments: vec![json!({
-                "id": "/tmp/report.json",
+                "id": &path,
                 "kind": "file",
                 "mediaType": "application/json",
                 "name": "report.json",
@@ -69,10 +73,10 @@ mod tests {
         };
 
         let native = map_prompt_input(&input).expect("file prompt should map");
-        assert_eq!(native[1]["text"], "/tmp/report.json");
+        assert_eq!(native[1]["text"], path);
         assert_eq!(
             native[1]["text_elements"][0]["byteRange"],
-            json!({"start": 0, "end": 16})
+            json!({"start": 0, "end": path.len()})
         );
         assert!(
             native[1]["text_elements"][0]["placeholder"]

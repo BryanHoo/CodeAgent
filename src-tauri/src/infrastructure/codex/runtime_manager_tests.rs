@@ -1,8 +1,9 @@
 use std::path::Path;
 
-use super::runtime_manager::{
-    codex_executable_names, distribution_for, inspect_codex_runtime, private_codex_binary_path,
-};
+#[cfg(unix)]
+use super::runtime_manager::inspect_codex_runtime;
+use super::runtime_manager::{codex_executable_names, distribution_for, private_codex_binary_path};
+#[cfg(unix)]
 use crate::domain::runtime::CodexRuntimeAvailabilityStatus;
 
 #[test]

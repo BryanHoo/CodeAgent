@@ -2,6 +2,13 @@ use serde_json::{Value, json, to_value};
 
 use super::conversation::map_item;
 
+fn absolute_test_path(name: &str) -> String {
+    std::env::temp_dir()
+        .join(name)
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[test]
 fn official_thread_items_should_keep_visible_semantics() {
     let cases = [
@@ -150,13 +157,14 @@ fn command_output_should_keep_bounded_utf8_head_and_tail() {
 
 #[test]
 fn user_file_should_restore_attachment_without_exposing_its_path_as_text() {
+    let path = absolute_test_path("report.json");
     let mapped = map_item(json!({
         "id": "user-file",
         "type": "userMessage",
         "content": [{
-            "text": "/tmp/report.json",
+            "text": &path,
             "text_elements": [{
-                "byteRange": {"start": 0, "end": 16},
+                "byteRange": {"start": 0, "end": path.len()},
                 "placeholder": "codexly-file:eyJraW5kIjoiZmlsZSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJuYW1lIjoicmVwb3J0Lmpzb24iLCJzaXplIjoxN30",
             }],
             "type": "text",
@@ -166,16 +174,17 @@ fn user_file_should_restore_attachment_without_exposing_its_path_as_text() {
     let value = to_value(mapped).unwrap();
 
     assert_eq!(value["text"], "");
-    assert_eq!(value["attachments"][0]["id"], "/tmp/report.json");
+    assert_eq!(value["attachments"][0]["id"], path);
     assert_eq!(value["attachments"][0]["name"], "report.json");
 }
 
 #[test]
 fn completed_image_generation_should_map_to_attachment_metadata_without_base64() {
     let encoded = "iVBORw0KGgo=";
+    let path = absolute_test_path("generated.png");
     let mapped = map_item(json!({
         "codeagentAttachment": {
-            "id": "/tmp/generated.png",
+            "id": &path,
             "kind": "image",
             "mediaType": "image/png",
             "name": "generated-image.png",
@@ -193,6 +202,6 @@ fn completed_image_generation_should_map_to_attachment_metadata_without_base64()
 
     assert_eq!(value["type"], "message");
     assert_eq!(value["role"], "assistant");
-    assert_eq!(value["attachments"][0]["id"], "/tmp/generated.png");
+    assert_eq!(value["attachments"][0]["id"], path);
     assert!(!value.to_string().contains(encoded));
 }

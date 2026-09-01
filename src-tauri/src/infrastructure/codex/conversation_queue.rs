@@ -354,13 +354,17 @@ mod tests {
 
     #[test]
     fn queued_file_should_restore_attachment_without_exposing_its_path_as_text() {
+        let path = std::env::temp_dir()
+            .join("report.json")
+            .to_string_lossy()
+            .into_owned();
         let submission = NativeSubmission {
             client_user_message_id: "client-a".to_owned(),
             id: "queue-a".to_owned(),
             input: vec![json!({
-                "text": "/tmp/report.json",
+                "text": &path,
                 "text_elements": [{
-                    "byteRange": {"start": 0, "end": 16},
+                    "byteRange": {"start": 0, "end": path.len()},
                     "placeholder": FILE_PLACEHOLDER,
                 }],
                 "type": "text",
@@ -370,7 +374,7 @@ mod tests {
         let mapped = map_submission(submission).expect("queued file should map");
         assert_eq!(mapped.text, "");
         assert_eq!(mapped.attachments.len(), 1);
-        assert_eq!(mapped.attachments[0]["id"], "/tmp/report.json");
+        assert_eq!(mapped.attachments[0]["id"], path);
         assert_eq!(mapped.attachments[0]["name"], "report.json");
         assert_eq!(mapped.attachments[0]["mediaType"], "application/json");
     }

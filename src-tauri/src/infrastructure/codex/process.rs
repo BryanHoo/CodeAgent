@@ -22,10 +22,15 @@ pub const SUPPORTED_CODEX_VERSION: &str = "0.151.0";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const VERSION_OUTPUT_LIMIT: usize = 4 * 1024;
+#[cfg(unix)]
 const SHELL_PATH_TIMEOUT: Duration = Duration::from_secs(3);
+#[cfg(unix)]
 const SHELL_PATH_OUTPUT_LIMIT: usize = 64 * 1024;
+#[cfg(any(unix, test))]
 const SHELL_PATH_START: u8 = 0x1e;
+#[cfg(any(unix, test))]
 const SHELL_PATH_END: u8 = 0x1f;
+#[cfg(unix)]
 const SHELL_PATH_PROBE: &str = r#"printf '\036%s\037' "$PATH""#;
 #[cfg(any(windows, test))]
 const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -248,6 +253,7 @@ async fn resolve_login_shell_path() -> Option<OsString> {
     None
 }
 
+#[cfg(any(unix, test))]
 fn parse_shell_path_output(output: &[u8]) -> Option<OsString> {
     // shell 初始化可能输出版本管理器提示，仅提取控制字符标记之间的 PATH。
     let start = output.iter().rposition(|byte| *byte == SHELL_PATH_START)? + 1;
