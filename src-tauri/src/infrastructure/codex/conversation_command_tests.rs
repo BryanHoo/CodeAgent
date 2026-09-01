@@ -49,6 +49,9 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
                 );
                 assert_eq!(request["params"]["historyMode"], "paginated");
             }
+            if method == "thread/resume" {
+                assert_eq!(request["params"]["excludeTurns"], true);
+            }
             if method == "turn/start" {
                 assert_eq!(request["params"]["threadId"], "thread-a");
                 assert_eq!(request["params"]["input"][0]["text"], "修复测试");
@@ -186,6 +189,7 @@ async fn advanced_task_commands_should_use_native_codex_methods() {
             }
             if method == "thread/fork" {
                 assert_eq!(request["params"]["lastTurnId"], "turn-a");
+                assert_eq!(request["params"]["excludeTurns"], true);
             }
             server_writer
                 .write_all(

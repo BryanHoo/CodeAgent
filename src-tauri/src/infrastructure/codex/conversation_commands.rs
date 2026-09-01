@@ -73,7 +73,8 @@ struct NativeTask {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ThreadIdParams<'a> {
+struct ThreadResumeParams<'a> {
+    exclude_turns: bool,
     thread_id: &'a str,
 }
 
@@ -235,7 +236,11 @@ pub async fn resume_task(
     let resumed: NativeResumeResponse = connection
         .request(
             "thread/resume",
-            &ThreadIdParams { thread_id: task_id },
+            &ThreadResumeParams {
+                // 历史由分页接口加载，Resume 仅返回元数据，避免极限会话形成超大单帧。
+                exclude_turns: true,
+                thread_id: task_id,
+            },
             REQUEST_TIMEOUT,
         )
         .await?;
