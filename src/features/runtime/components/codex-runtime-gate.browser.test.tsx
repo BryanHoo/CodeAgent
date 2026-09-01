@@ -54,6 +54,8 @@ describe("CodexRuntimeGate", () => {
 
     await screen.getByRole("button", { name: "Download for this app" }).click();
     expect(reportProgress).toBeDefined();
+    expect(screen.getByRole("progressbar", { name: "Download progress" }).query()).toBeNull();
+
     reportProgress?.({ downloadedBytes: 42, sequence: 1, totalBytes: 100 });
 
     const progressbar = screen.getByRole("progressbar", { name: "Download progress" });

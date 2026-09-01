@@ -59,7 +59,8 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
       isInstalling={installMutation.isPending}
       isRefreshing={availabilityQuery.isFetching}
       onDownload={() => {
-        setDownloadProgress({ downloadedBytes: 0, sequence: 0, totalBytes: null });
+        // 等待原生 Channel 返回真实总量，避免预置的不定进度跳回 0%。
+        setDownloadProgress(null);
         installMutation.mutate();
       }}
       onRefresh={() => {

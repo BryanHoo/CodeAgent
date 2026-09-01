@@ -12,7 +12,8 @@ use super::{
 
 #[cfg(target_os = "macos")]
 const HOLD_TO_QUIT_MENU_ID: &str = "hold-to-quit-app";
-const MAX_MENU_TASK_NAME_CHARS: usize = 32;
+// 原生菜单宽度由最长标题决定，限制为 16 字符以保持紧凑。
+const MAX_MENU_TASK_NAME_CHARS: usize = 16;
 const MENU_TASK_NAME_ELLIPSIS_CHARS: usize = 3;
 const MAX_TRAY_TASKS: usize = 256;
 #[cfg(target_os = "macos")]
@@ -257,11 +258,11 @@ mod task_name_tests {
     use super::truncate_menu_task_name;
 
     #[test]
-    fn tray_menu_task_names_are_limited_to_32_characters() {
+    fn tray_menu_task_names_are_limited_to_16_characters() {
         assert_eq!(truncate_menu_task_name("Short task"), "Short task");
         assert_eq!(
             truncate_menu_task_name("1234567890123456789012345678901234567890"),
-            "12345678901234567890123456789..."
+            "1234567890123..."
         );
     }
 }
