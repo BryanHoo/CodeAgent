@@ -382,6 +382,39 @@ fn runtime_notifications_should_map_visible_timeline_state() {
 }
 
 #[test]
+fn context_compaction_lifecycle_should_map_visible_running_state() {
+    let timestamp = "2025-01-01T00:00:00Z";
+
+    for (index, (method, expected_status)) in
+        [("item/started", "running"), ("item/completed", "completed")]
+            .into_iter()
+            .enumerate()
+    {
+        let event = map_server_message(
+            ServerMessage {
+                id: None,
+                method: method.to_owned(),
+                params: to_raw_value(&json!({
+                    "threadId": "thread-a",
+                    "turnId": "turn-a",
+                    "item": {"id": "compact-a", "type": "contextCompaction"}
+                }))
+                .unwrap(),
+            },
+            index as u64 + 1,
+            timestamp,
+        )
+        .expect("notification should map")
+        .expect("notification should be supported");
+
+        assert_eq!(event["payload"]["item"]["type"], "activity");
+        assert_eq!(event["payload"]["item"]["label"], "上下文压缩");
+        assert_eq!(event["payload"]["item"]["status"], expected_status);
+        assert_eq!(event["payload"]["item"]["transient"], true);
+    }
+}
+
+#[test]
 fn hook_and_auto_review_notifications_should_map_timeline_items() {
     let timestamp = "2025-01-01T00:00:00Z";
     let cases = [

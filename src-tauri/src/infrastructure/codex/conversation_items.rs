@@ -204,6 +204,18 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
     }
 }
 
+pub(super) fn apply_transient_item_lifecycle(item: &mut AgentItem, started: bool) {
+    // 瞬时 Item 只在实时生命周期内可见，历史快照不保留运行状态。
+    if let AgentItem::Activity {
+        status,
+        transient: Some(true),
+        ..
+    } = item
+    {
+        *status = Some(if started { "running" } else { "completed" });
+    }
+}
+
 fn bound_command_output(value: &str) -> (String, AgentCommandOutputOmission) {
     let original_bytes = value.len();
     let original_lines = value.bytes().filter(|byte| *byte == b'\n').count();

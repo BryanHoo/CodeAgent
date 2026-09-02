@@ -10,6 +10,7 @@ use super::{
     conversation::{NativeTurn, RUNTIME_SESSION_ID, map_item, map_turn},
     conversation_advanced::{NativeGoal, map_native_goal},
     conversation_delta_events::map_delta_message,
+    conversation_items::apply_transient_item_lifecycle,
     conversation_runtime_events::map_runtime_notification,
     sidebar::unix_seconds_to_rfc3339,
 };
@@ -161,7 +162,9 @@ pub fn map_server_message(
                 .and_then(Value::as_str)
                 .ok_or(ConnectionError::InvalidMessage)?
                 .to_owned();
-            let item = map_item(native_item)?;
+            let started = message.method == "item/started";
+            let mut item = map_item(native_item)?;
+            apply_transient_item_lifecycle(&mut item, started);
             envelope(
                 sequence,
                 timestamp,
@@ -170,7 +173,7 @@ pub fn map_server_message(
                     "itemId": item_id,
                     "payload": {"item": item},
                     "turnId": required_string(params_object, "turnId")?,
-                    "type": if message.method == "item/started" {"item.started"} else {"item.completed"},
+                    "type": if started {"item.started"} else {"item.completed"},
                 }),
             )
         }
