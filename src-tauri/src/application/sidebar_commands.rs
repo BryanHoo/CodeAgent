@@ -139,7 +139,7 @@ pub async fn read_task(
             .await
             .map_err(|_| AppError::CodexRequestFailed)?;
             response.snapshot.settings =
-                effective_task_settings(&app, &connection, &project_id, &task_id).await?;
+                effective_task_settings(&app, &project_id, &task_id).await?;
             response.checkpoint.sequence = state.project_sequence(&project_id).await;
             state.remember_task_snapshot(&response.snapshot).await;
             Ok(response)
@@ -258,7 +258,7 @@ pub async fn get_task_settings(
         .await
         .map_err(|_| AppError::CodexRequestFailed)?;
     Ok(json!({
-        "settings": effective_task_settings(&app, &connection, &project_id, &task_id).await?,
+        "settings": effective_task_settings(&app, &project_id, &task_id).await?,
     }))
 }
 
@@ -379,7 +379,7 @@ pub async fn fork_task(
     state: State<'_, AppState>,
 ) -> Result<AgentTaskMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    let settings = effective_task_settings(&app, &connection, &project_id, &task_id).await?;
+    let settings = effective_task_settings(&app, &project_id, &task_id).await?;
     let response = codex::fork_task(&connection, &project_id, &task_id, last_turn_id.as_deref())
         .await
         .map_err(|_| AppError::CodexRequestFailed)?;

@@ -2,11 +2,11 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use tokio::time::timeout;
 
 use super::{error::AppError, state::AppState};
-use crate::infrastructure::{codex, workspace};
+use crate::infrastructure::{codex, local_settings, workspace};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -363,6 +363,7 @@ pub async fn switch_project_worktree(
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn generate_commit_message(
+    app: AppHandle,
     project_id: String,
     root_path: String,
     input: CommitMutationInput,
@@ -377,9 +378,14 @@ pub async fn generate_commit_message(
     )
     .await
     .map_err(AppError::from)?;
-    let settings = codex::read_commit_message_settings(&connection)
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    let global_settings = local_settings::read_global_settings(&app_data)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    let settings = codex::resolve_commit_message_settings(&global_settings);
     let thread_id = codex::start_commit_message_thread(&connection, &root, &settings.model)
         .await
         .map_err(|_| AppError::CodexRequestFailed)?;

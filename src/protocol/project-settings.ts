@@ -118,7 +118,10 @@ export const AgentGlobalSettingsSchema = Type.Object(
 export type AgentGlobalSettings = Readonly<Static<typeof AgentGlobalSettingsSchema>>;
 
 export const AgentGlobalSettingsResponseSchema = Type.Object(
-  { settings: AgentGlobalSettingsSchema },
+  {
+    changedFields: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    settings: AgentGlobalSettingsSchema,
+  },
   { additionalProperties: false },
 );
 
@@ -139,7 +142,10 @@ export const AgentProjectDefaultsSchema = Type.Object(
 export type AgentProjectDefaults = Readonly<Static<typeof AgentProjectDefaultsSchema>>;
 
 export const AgentProjectDefaultsResponseSchema = Type.Object(
-  { settings: AgentProjectDefaultsSchema },
+  {
+    changedFields: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    settings: AgentProjectDefaultsSchema,
+  },
   { additionalProperties: false },
 );
 

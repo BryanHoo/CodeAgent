@@ -3,7 +3,7 @@ use std::{path::Path, time::Duration};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{AppServerConnection, connection::ConnectionError, settings::read_config};
+use super::{AppServerConnection, connection::ConnectionError};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_PROMPT: &str = "根据给定的 Git 变更生成准确、简洁的 Conventional Commit message。首行不超过 72 个字符；必要时添加最多 3 条以 `- ` 开头的正文。只描述实际变更，不添加 Markdown 代码块或解释。";
@@ -63,24 +63,20 @@ struct GeneratedMessage {
     message: String,
 }
 
-pub async fn read_commit_message_settings(
-    connection: &AppServerConnection,
-) -> Result<CommitMessageSettings, ConnectionError> {
-    let config = read_config(connection).await?;
-    let private = config.pointer("/desktop/codeagent/global");
-    let model = private
-        .and_then(|value| value.get("commitMessageModel"))
+pub fn resolve_commit_message_settings(settings: &Value) -> CommitMessageSettings {
+    let model = settings
+        .get("commitMessageModel")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("gpt-5.6-luna")
         .to_owned();
-    let prompt = private
-        .and_then(|value| value.get("commitMessagePrompt"))
+    let prompt = settings
+        .get("commitMessagePrompt")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(DEFAULT_PROMPT)
         .to_owned();
-    Ok(CommitMessageSettings { model, prompt })
+    CommitMessageSettings { model, prompt }
 }
 
 pub async fn start_commit_message_thread(
@@ -160,7 +156,7 @@ mod tests {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
     use super::{
-        AppServerConnection, parse_commit_message_output, read_commit_message_settings,
+        AppServerConnection, parse_commit_message_output, resolve_commit_message_settings,
         start_commit_message_thread, start_commit_message_turn,
     };
 
@@ -182,13 +178,6 @@ mod tests {
         let server_task = tokio::spawn(async move {
             let mut lines = BufReader::new(server_reader).lines();
             for (method, result) in [
-                (
-                    "config/read",
-                    json!({"config": {"desktop": {"codeagent": {"global": {
-                        "commitMessageModel": "gpt-commit",
-                        "commitMessagePrompt": "生成中文提交信息"
-                    }}}}}),
-                ),
                 ("thread/start", json!({"thread": {"id": "thread-message"}})),
                 ("turn/start", json!({"turn": {"id": "turn-message"}})),
             ] {
@@ -226,7 +215,10 @@ mod tests {
             }
         });
 
-        let settings = read_commit_message_settings(&connection).await.unwrap();
+        let settings = resolve_commit_message_settings(&json!({
+            "commitMessageModel": "gpt-commit",
+            "commitMessagePrompt": "生成中文提交信息"
+        }));
         let thread_id =
             start_commit_message_thread(&connection, Path::new("/work/project"), &settings.model)
                 .await

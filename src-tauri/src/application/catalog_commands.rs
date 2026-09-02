@@ -1,8 +1,8 @@
-use serde_json::Value;
-use tauri::State;
+use serde_json::{Value, json};
+use tauri::{AppHandle, Manager, State};
 
 use super::{error::AppError, state::AppState};
-use crate::infrastructure::codex;
+use crate::infrastructure::{codex, local_settings};
 
 fn request_error(_: impl std::fmt::Debug) -> AppError {
     AppError::CodexRequestFailed
@@ -73,22 +73,22 @@ pub async fn configure_custom_provider(
 }
 
 #[tauri::command]
-pub async fn get_global_settings(state: State<'_, AppState>) -> Result<Value, AppError> {
-    let connection = state.codex_connection().await?;
-    codex::get_global_settings(&connection)
+pub async fn get_global_settings(app: AppHandle) -> Result<Value, AppError> {
+    let settings = local_settings::read_global_settings(&app_data_dir(&app)?)
         .await
-        .map_err(request_error)
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    Ok(json!({"settings": settings}))
 }
 
 #[tauri::command]
-pub async fn update_global_settings(
-    settings: Value,
-    state: State<'_, AppState>,
-) -> Result<Value, AppError> {
-    let connection = state.codex_connection().await?;
-    codex::update_global_settings(&connection, settings)
+pub async fn update_global_settings(app: AppHandle, settings: Value) -> Result<Value, AppError> {
+    let update = local_settings::update_global_settings(&app_data_dir(&app)?, settings)
         .await
-        .map_err(request_error)
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    Ok(json!({
+        "changedFields": update.changed_fields,
+        "settings": update.settings,
+    }))
 }
 
 async fn validate_project(
@@ -110,25 +110,39 @@ async fn validate_project(
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn get_project_defaults(
+    app: AppHandle,
     project_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (connection, _) = validate_project(&state, &project_id).await?;
-    codex::get_project_defaults(&connection, &project_id)
+    validate_project(&state, &project_id).await?;
+    let settings = local_settings::read_project_defaults(&app_data_dir(&app)?, &project_id)
         .await
-        .map_err(request_error)
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
+    Ok(json!({"settings": settings}))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn update_project_defaults(
+    app: AppHandle,
     project_id: String,
     settings: Value,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let (connection, _) = validate_project(&state, &project_id).await?;
-    codex::update_project_defaults(&connection, &project_id, settings)
-        .await
-        .map_err(request_error)
+    validate_project(&state, &project_id).await?;
+    let update =
+        local_settings::update_project_defaults(&app_data_dir(&app)?, &project_id, settings)
+            .await
+            .map_err(|_| AppError::FilesystemRequestFailed)?;
+    Ok(json!({
+        "changedFields": update.changed_fields,
+        "settings": update.settings,
+    }))
+}
+
+fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
+    app.path()
+        .app_data_dir()
+        .map_err(|_| AppError::FilesystemRequestFailed)
 }
 
 #[tauri::command(rename_all = "camelCase")]

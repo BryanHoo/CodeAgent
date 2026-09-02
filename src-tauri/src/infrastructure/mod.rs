@@ -2,6 +2,7 @@ pub mod app_storage;
 pub mod codex;
 pub mod diagnostics;
 pub mod filesystem;
+pub mod local_settings;
 pub mod task_settings;
 pub mod workspace;
 
@@ -12,3 +13,7 @@ mod task_settings_tests;
 #[cfg(test)]
 #[path = "app_storage_tests.rs"]
 mod app_storage_tests;
+
+#[cfg(test)]
+#[path = "local_settings_tests.rs"]
+mod local_settings_tests;

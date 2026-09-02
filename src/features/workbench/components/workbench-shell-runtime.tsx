@@ -22,6 +22,7 @@ import type { AgentFileChange } from "../../diff/file-change.js";
 import { providerConnectionQueryOptions } from "../../provider-connection/provider-connection-queries.js";
 import { notifyActionError } from "../../notifications/action-notifications.js";
 import { isGitUnavailableError } from "../../projects/project-git-error.js";
+import { shouldRefreshTaskDefaults } from "../../projects/global-settings-effects.js";
 import {
   useProjectActions,
   useProjectData,
@@ -251,7 +252,10 @@ export function useWorkbenchShellRuntime({
     ...globalSettingsMutationOptions(client),
     async onSuccess(response) {
       queryClient.setQueryData(["settings"], response);
-      // 局部显式设置仍由 Server 保持优先；刷新只让未配置的当前上下文重新解析全局回退。
+      if (!shouldRefreshTaskDefaults(response.changedFields)) {
+        return;
+      }
+      // 仅任务默认字段变化时，重新解析未配置的 Project 与当前 Task 回退值。
       await queryClient.invalidateQueries({
         exact: true,
         queryKey: ["projects", projectId, "defaults"],

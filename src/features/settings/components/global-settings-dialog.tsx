@@ -15,13 +15,9 @@ import { Tooltip } from "../../../shared/components/core/tooltip.js";
 import { TooltipContent } from "../../../shared/components/core/tooltip.js";
 import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
-import { setThemePreference, type ThemePreference } from "../theme-preference.js";
-import { applyWorkbenchBackgroundPreference } from "../workbench-background-preference.js";
-import {
-  getNotificationPreference,
-  setNotificationPreference,
-} from "../notification-preference.js";
+import { getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
+import { getNotificationPreference } from "../notification-preference.js";
+import type { ThemePreference } from "../theme-preference.js";
 import {
   AppearanceSettingsPanel,
   FastModeSettingsField,
@@ -41,12 +37,16 @@ import {
   resolveGlobalSettingsModel,
   type ApprovalMode,
 } from "./global-settings-model.js";
-import { saveGlobalSettingsDraft } from "./global-settings-save.js";
+import {
+  saveGlobalSettingsDraft,
+  type BrowserSettingsDraft,
+} from "./global-settings-save.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
 import { GlobalSettingsPets } from "../../pets/components/global-settings-pets.js";
 import { useWorkbenchBackgroundDraft } from "./use-workbench-background-draft.js";
 import { GlobalSettingsBackground } from "./global-settings-background.js";
+import { applyBrowserSettingsChanges } from "./browser-settings-apply.js";
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
 
 type GlobalSettingsDialogProps = Readonly<{
@@ -108,6 +108,13 @@ export function GlobalSettingsDialog({
   } = useWorkbenchBackgroundDraft();
   const [language, setLanguage] = useState(getCurrentLanguage);
   const [notificationsEnabled, setNotificationsEnabled] = useState(getNotificationPreference);
+  const initialBrowserSettingsRef = useRef<BrowserSettingsDraft>({
+    background,
+    customBackgroundMutation: { deletedImageIds: [], imagesToSave: [] },
+    language,
+    notificationsEnabled,
+    theme,
+  });
   const [isSaving, setIsSaving] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
   useEffect(() => {
@@ -150,6 +157,8 @@ export function GlobalSettingsDialog({
               setIsSaving(true);
               try {
                 await saveGlobalSettingsDraft(
+                  settings,
+                  initialBrowserSettingsRef.current,
                   draft,
                   {
                     background,
@@ -159,17 +168,7 @@ export function GlobalSettingsDialog({
                     theme,
                   },
                   {
-                    applyBrowserSettings: async (browserSettings) => {
-                      await applyWorkbenchBackgroundPreference(
-                        browserSettings.background,
-                        browserSettings.customBackgroundMutation,
-                      );
-                      if (typeof window !== "undefined") {
-                        setThemePreference(browserSettings.theme);
-                      }
-                      setNotificationPreference(browserSettings.notificationsEnabled);
-                      await changeAppLanguage(browserSettings.language);
-                    },
+                    applyBrowserSettings: applyBrowserSettingsChanges,
                     saveGlobalSettings: onSave,
                   },
                 );

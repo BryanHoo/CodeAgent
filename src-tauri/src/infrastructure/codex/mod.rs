@@ -1,6 +1,7 @@
 mod auth;
 mod catalogs;
 mod commit_message;
+mod config;
 mod connection;
 mod conversation;
 mod conversation_advanced;
@@ -25,7 +26,6 @@ mod runtime_distributions;
 mod runtime_download_progress;
 mod runtime_manager;
 mod runtime_path;
-mod settings;
 mod sidebar;
 mod stderr;
 mod tasks;
@@ -63,9 +63,6 @@ mod conversation_tests;
 #[cfg(test)]
 #[path = "runtime_manager_tests.rs"]
 mod runtime_manager_tests;
-#[cfg(test)]
-#[path = "settings_tests.rs"]
-mod settings_tests;
 
 pub use auth::{
     cancel_provider_login, configure_custom_provider, get_provider_connection,
@@ -73,7 +70,7 @@ pub use auth::{
 };
 pub use catalogs::{list_mcp_servers, list_skills, reload_mcp_servers};
 pub use commit_message::{
-    parse_commit_message_output, read_commit_message_settings, start_commit_message_thread,
+    parse_commit_message_output, resolve_commit_message_settings, start_commit_message_thread,
     start_commit_message_turn,
 };
 pub(crate) use connection::ConnectionError;
@@ -99,9 +96,6 @@ pub use conversation_requests::{
 };
 pub use process::CodexProcess;
 pub use runtime_manager::{inspect_codex_runtime, install_codex_runtime};
-pub use settings::{
-    get_global_settings, get_project_defaults, update_global_settings, update_project_defaults,
-};
 pub use sidebar::{
     add_project, list_projects, read_project, remove_project, rename_project, reorder_projects,
 };

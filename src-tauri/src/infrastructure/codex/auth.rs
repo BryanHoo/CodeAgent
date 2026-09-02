@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 
 use super::{
     catalogs::list_models,
+    config::{edit, read_config, write_config},
     connection::{AppServerConnection, ConnectionError},
-    settings::{edit, read_config, write_config},
 };
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
