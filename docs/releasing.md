@@ -42,7 +42,7 @@ chmod +x CodeAgent.AppImage
 
 - `Quality`：在 Ubuntu 上执行 Web 和 Rust 的 lint、测试与构建。
 - `Platform Build`：Pull Request 上验证 Windows、Ubuntu、macOS 的原生编译。
-- `Draft Release`：`v*` 标签或手动触发后，从 `CHANGELOG.md` 提取对应版本日志，构建各平台安装包并创建 GitHub draft release。
+- `Release`：`v*` 标签或手动触发后，从 `CHANGELOG.md` 提取对应版本日志，通过全部质量门禁，构建各平台安装包并直接创建正式 GitHub Release。
 
 Windows portable 构建显式使用 `--no-sign` 且不进入自动更新链路；Windows NSIS、Ubuntu 与
 macOS 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。Tauri updater 签名只校验更新
@@ -54,7 +54,7 @@ macOS 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。Tauri upd
 2. 同步更新 `package.json`、`src-tauri/Cargo.toml` 和 `src-tauri/tauri.conf.json` 的版本。
 3. 执行 `pnpm version:check` 和 `pnpm check`。
 4. 推送与版本完全一致的标签，例如 `git tag v0.1.0 && git push origin v0.1.0`。
-5. 确认 draft release 正文与该版本 changelog 一致，再下载并实机验证全部产物后手动发布。
+5. 确认 GitHub Actions 全部成功，并核对正式 Release 的正文、安装包、更新元数据与签名产物。
 
 无签名应用会触发 Windows SmartScreen 和 macOS Gatekeeper 警告，Linux 包也没有可验证的发行者
 签名。这是当前阶段的明确限制，不应引导用户关闭系统安全机制。正式公开发布前必须补齐各平台

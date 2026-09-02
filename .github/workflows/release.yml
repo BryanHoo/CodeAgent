@@ -1,4 +1,4 @@
-name: Draft Release
+name: Release
 
 on:
   workflow_dispatch:
@@ -127,7 +127,7 @@ jobs:
           tagName: v__VERSION__
           releaseName: CodeAgent v__VERSION__
           releaseBody: ${{ steps.release-notes.outputs.body }}
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           uploadUpdaterJson: ${{ matrix.uploadUpdaterArtifacts }}
           uploadUpdaterSignatures: ${{ matrix.uploadUpdaterArtifacts }}

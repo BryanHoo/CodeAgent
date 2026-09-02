@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-02
+
+### Changed
+
+- 将设置持久化迁移到本地原子存储，统一项目与全局设置的保存链路。
+- 将 GitHub Release 工作流改为在质量门禁通过后直接正式发布。
+
+### Fixed
+
+- 修复设置自动保存、审批审核器参数及工作台背景草稿的同步问题。
+- 修复对话虚拟列表滚动锚定冲突和瞬时活动项生命周期状态映射。
+
 ## [0.1.0] - 2026-08-31
 
 ### Added
@@ -18,5 +30,6 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/BryanHoo/CodeAgent/releases/tag/v0.1.0

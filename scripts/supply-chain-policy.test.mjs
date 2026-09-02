@@ -57,10 +57,10 @@ void test("quality CI should install every configured browser engine", async () 
   );
 });
 
-void test("stable releases should require signed updater artifacts", async () => {
+void test("stable releases should publish signed updater artifacts directly", async () => {
   const releaseWorkflow = await readProjectFile(".github/workflows/release.yml");
 
-  assert.match(releaseWorkflow, /releaseDraft:\s*true/);
+  assert.match(releaseWorkflow, /releaseDraft:\s*false/);
   assert.match(releaseWorkflow, /prerelease:\s*false/);
   assert.match(
     releaseWorkflow,
