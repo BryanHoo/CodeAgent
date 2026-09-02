@@ -24,10 +24,9 @@ import type {
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { notifyActionError } from "../../notifications/action-notifications.js";
 import {
-  PROJECT_TASK_SEARCH_SOURCE_KEY,
+  cacheCreatedProjectTask,
   replaceProjectTaskInQueryCaches,
   updateNewTaskTitleFromSnapshotInInfiniteData,
-  upsertProjectTaskInInfiniteData,
   type ProjectTaskInfiniteData,
   type TaskTitleSnapshot,
   taskSnapshotQueryOptions,
@@ -234,25 +233,13 @@ export function useWorkbenchShellController(
       }
     });
   const cacheProjectTask = useCallback(
-    (startedTask: AgentTask) => {
-      queryClient.setQueryData<ProjectTaskInfiniteData>(
-        ["projects", startedTask.projectId, "tasks"],
-        (currentData) => upsertProjectTaskInInfiniteData(currentData, startedTask),
-      );
-      queryClient.setQueryData<readonly AgentTask[]>(
-        ["projects", startedTask.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
-        (currentTasks) =>
-          currentTasks === undefined
-            ? undefined
-            : [startedTask, ...currentTasks.filter((task) => task.id !== startedTask.id)],
-      );
-    },
+    (startedTask: AgentTask) => cacheCreatedProjectTask(queryClient, startedTask),
     [queryClient],
   );
   const handleTaskCreated = useCallback(
     (startedTask: AgentTask) => {
       // 真实 taskId 返回后立即展示并选中，但保持 Project Composer 以支持失败重试。
-      cacheProjectTask(startedTask);
+      void cacheProjectTask(startedTask);
       setPendingTaskSelection({ projectId: startedTask.projectId, taskId: startedTask.id });
     },
     [cacheProjectTask, setPendingTaskSelection],
@@ -266,7 +253,7 @@ export function useWorkbenchShellController(
       messageAttachments: readonly AgentMessageAttachment[] = [],
       checkpoint?: EventCheckpoint,
     ) => {
-      cacheProjectTask(startedTask);
+      void cacheProjectTask(startedTask);
       if (
         startedTurn !== undefined &&
         startedInput !== undefined &&

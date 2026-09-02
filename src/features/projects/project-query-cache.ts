@@ -86,6 +86,28 @@ export function upsertProjectTaskInInfiniteData(
   };
 }
 
+export async function cacheCreatedProjectTask(queryClient: QueryClient, task: AgentTask) {
+  const projectTasksQueryKey = ["projects", task.projectId, "tasks"] as const;
+  const taskSearchQueryKey = [
+    ...projectTasksQueryKey,
+    PROJECT_TASK_SEARCH_SOURCE_KEY,
+  ] as const;
+
+  // 先终止创建前发出的旧列表请求，避免其响应覆盖刚写入的新 Task。
+  await Promise.all([
+    queryClient.cancelQueries({ exact: true, queryKey: projectTasksQueryKey }),
+    queryClient.cancelQueries({ exact: true, queryKey: taskSearchQueryKey }),
+  ]);
+  queryClient.setQueryData<ProjectTaskInfiniteData>(projectTasksQueryKey, (currentData) =>
+    upsertProjectTaskInInfiniteData(currentData, task),
+  );
+  queryClient.setQueryData<readonly AgentTask[]>(taskSearchQueryKey, (currentTasks) =>
+    currentTasks === undefined
+      ? undefined
+      : [task, ...currentTasks.filter((currentTask) => currentTask.id !== task.id)],
+  );
+}
+
 export function replaceProjectTaskInInfiniteData(
   currentData: ProjectTaskInfiniteData | undefined,
   task: AgentTask,
