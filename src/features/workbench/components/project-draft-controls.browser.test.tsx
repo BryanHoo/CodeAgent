@@ -53,11 +53,11 @@ describe("project draft controls", () => {
       </I18nextProvider>,
     );
 
-    await screen.getByRole("button", { name: "草稿 2" }).click();
-    await expect.element(screen.getByText("CodeAgent的草稿")).toBeVisible();
+    await screen.getByRole("button", { name: "待办 2" }).click();
+    await expect.element(screen.getByText("CodeAgent的待办")).toBeVisible();
     await expect.element(screen.getByText("修复登录状态恢复")).toBeVisible();
     await expect.element(screen.getByText("有未保存修改")).toBeVisible();
-    expect(screen.getByRole("button", { name: "草稿 2" }).element().querySelector("svg")).toBeNull();
+    expect(screen.getByRole("button", { name: "待办 2" }).element().querySelector("svg")).toBeNull();
     const restoreButton = screen.getByRole("button", {
       name: "修复登录状态恢复",
       exact: true,
@@ -74,13 +74,13 @@ describe("project draft controls", () => {
       "nowrap",
     );
 
-    await screen.getByRole("button", { name: "删除草稿：修复登录状态恢复" }).click();
+    await screen.getByRole("button", { name: "删除待办：修复登录状态恢复" }).click();
     expect(onDelete).toHaveBeenCalledWith("draft-a");
     expect(onRestore).not.toHaveBeenCalled();
 
     await restoreButton.click();
     expect(onRestore).toHaveBeenCalledWith("draft-a");
-    expect(screen.getByRole("button", { name: "草稿 2" }).element()).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "待办 2" }).element()).toHaveAttribute(
       "aria-expanded",
       "false",
     );
@@ -103,7 +103,7 @@ describe("project draft controls", () => {
       </I18nextProvider>,
     );
 
-    await screen.getByRole("button", { name: "草稿 2" }).click();
+    await screen.getByRole("button", { name: "待办 2" }).click();
     await screen.getByRole("button", { name: "修复登录状态恢复", exact: true }).click();
 
     await expect.element(screen.getByRole("dialog", { name: "覆盖当前输入？" })).toBeVisible();
@@ -111,9 +111,9 @@ describe("project draft controls", () => {
     await screen.getByRole("button", { name: "取消" }).click();
     expect(onRestore).not.toHaveBeenCalled();
 
-    await screen.getByRole("button", { name: "草稿 2" }).click();
+    await screen.getByRole("button", { name: "待办 2" }).click();
     await screen.getByRole("button", { name: "修复登录状态恢复", exact: true }).click();
-    await screen.getByRole("button", { name: "应用草稿" }).click();
+    await screen.getByRole("button", { name: "应用待办" }).click();
     expect(onRestore).toHaveBeenCalledWith("draft-a");
   });
 
@@ -128,9 +128,22 @@ describe("project draft controls", () => {
       </I18nextProvider>,
     );
 
-    await screen.getByRole("button", { name: "保存草稿修改" }).click();
+    await screen.getByRole("button", { name: "保存待办修改" }).click();
     expect(onSave).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "保存草稿修改" }).element().querySelector("svg"))
+    expect(screen.getByRole("button", { name: "保存待办修改" }).element().querySelector("svg"))
       .toHaveClass("lucide-file-pen-line");
+  });
+
+  it("labels a new saved item as a todo", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <ComposerDraftSaveButton disabled={false} editing={false} onSave={vi.fn()} />
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    await expect.element(screen.getByRole("button", { name: "保存为待办" })).toBeVisible();
   });
 });

@@ -4,5 +4,5 @@ import { workbenchLayoutRoute } from "./workbench-route.js";
 
 export const projectDraftRoute = createRoute({
   getParentRoute: () => workbenchLayoutRoute,
-  path: "p/$projectId/draft/$draftId",
+  path: "p/$projectId/todo/$draftId",
 });

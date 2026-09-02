@@ -59,7 +59,7 @@ export function TaskBoardContainer({ projectId }: Readonly<{ projectId: string }
       onOpenDraft={({ projectId: draftProjectId, record }) => {
         void navigate({
           params: { draftId: record.id, projectId: draftProjectId },
-          to: "/p/$projectId/draft/$draftId",
+          to: "/p/$projectId/todo/$draftId",
         });
       }}
       onOpenTask={(task) => {

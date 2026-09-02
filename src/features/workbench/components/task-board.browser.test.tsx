@@ -135,7 +135,7 @@ describe("TaskBoard", () => {
       </I18nextProvider>,
     );
 
-    await expect.element(screen.getByRole("heading", { name: "草稿 1" })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { name: "待办 1" })).toBeVisible();
     await expect.element(screen.getByRole("heading", { name: "运行中 1" })).toBeVisible();
     await expect.element(screen.getByRole("heading", { name: "待审批 2" })).toBeVisible();
     await expect.element(screen.getByRole("heading", { name: "已完成 10" })).toBeVisible();
@@ -146,7 +146,7 @@ describe("TaskBoard", () => {
     await screen.getByRole("combobox", { name: "项目过滤" }).click();
     await screen.getByRole("option", { name: "Dashi" }).click();
 
-    await expect.element(screen.getByRole("heading", { name: "草稿 0" })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { name: "待办 0" })).toBeVisible();
     await expect.element(screen.getByRole("heading", { name: "运行中 0" })).toBeVisible();
     await expect.element(screen.getByRole("heading", { name: "待审批 1" })).toBeVisible();
     await expect.element(screen.getByRole("heading", { name: "已完成 10" })).toBeVisible();
@@ -182,7 +182,7 @@ describe("TaskBoard", () => {
       </I18nextProvider>,
     );
 
-    await expect.element(screen.getByRole("heading", { name: "草稿 1" })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { name: "待办 1" })).toBeVisible();
     await expect.element(screen.getByRole("alert")).toHaveTextContent("已完成任务加载失败");
     await screen.getByRole("button", { name: "重新加载已完成任务" }).click();
     expect(onRetryCompleted).toHaveBeenCalledOnce();

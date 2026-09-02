@@ -5,9 +5,9 @@ import { projectDraftRoute } from "./project-draft-route.js";
 import { projectTaskBoardRoute, temporaryTaskBoardRoute } from "./task-board-route.js";
 
 describe("task board routes", () => {
-  it("为项目、临时作用域和已保存草稿提供稳定路径", () => {
+  it("为项目、临时作用域和待办提供稳定路径", () => {
     expect(projectTaskBoardRoute.fullPath).toBe("/p/$projectId/board");
     expect(temporaryTaskBoardRoute.fullPath).toBe("/temporary/board");
-    expect(projectDraftRoute.fullPath).toBe("/p/$projectId/draft/$draftId");
+    expect(projectDraftRoute.fullPath).toBe("/p/$projectId/todo/$draftId");
   });
 });

@@ -183,7 +183,7 @@ export function createProjectDraftComposerActions({
           if (isCurrentScope(routeScope)) clearComposerInput();
         } else {
           const saved = projectDraftStore.save(projectId, editingDraftId, draft);
-          if (saved === undefined) throw new Error("Project draft is unavailable");
+          if (saved === undefined) throw new Error("Project todo is unavailable");
           if (isCurrentScope(routeScope)) onEditingComplete();
         }
       } catch (error) {
