@@ -75,6 +75,15 @@ async function invokeNative<T>(command: string, args?: Record<string, unknown>):
   return result as T;
 }
 
+async function inspectRuntimeNative(): Promise<RuntimeAvailability> {
+  const result = await browser.tauri.execute(
+    `window.__TAURI__.core.invoke("inspect_codex_runtime", {
+      onProgress: new window.__TAURI__.core.Channel()
+    })`,
+  );
+  return result as RuntimeAvailability;
+}
+
 describeRealRuntime("三平台真实 Codex 原生链路", () => {
   let projectId: string | undefined;
   let workspaceRoot: string | undefined;
@@ -124,7 +133,7 @@ describeRealRuntime("三平台真实 Codex 原生链路", () => {
   it("贯通运行时、Codex 项目、文件和 Git 命令", async () => {
     if (workspaceRoot === undefined) throw new Error("Real runtime workspace is unavailable");
 
-    const availability = await invokeNative<RuntimeAvailability>("inspect_codex_runtime");
+    const availability = await inspectRuntimeNative();
     expect(availability).toMatchObject({
       detectedVersion: REQUIRED_CODEX_VERSION,
       requiredVersion: REQUIRED_CODEX_VERSION,

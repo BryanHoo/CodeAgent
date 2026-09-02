@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-03
+
+### Added
+
+- 添加 Codex 运行时自动升级流程，在兼容版本变化时直接下载并切换到新版本。
+- 添加运行时升级失败后的自动回退，并在界面展示升级与恢复进度。
+
 ## [0.1.2] - 2026-09-03
 
 ### Added
@@ -37,7 +44,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/BryanHoo/CodeAgent/releases/tag/v0.1.0
