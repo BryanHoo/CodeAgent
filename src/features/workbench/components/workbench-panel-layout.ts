@@ -18,6 +18,14 @@ export function getInspectorMaximumWidth(shellWidth: number, sidebarWidth: numbe
   return Math.max(inspectorWidthLimits.minimum, Math.floor((shellWidth - sidebarWidth) / 2));
 }
 
+export function resolveInspectorVisibility(board: boolean, inspectorOpen: boolean): boolean {
+  return !board && inspectorOpen;
+}
+
+export function resolveQuickOpenVisibility(board: boolean, temporary: boolean): boolean {
+  return !board && !temporary;
+}
+
 export function useWorkbenchPanelLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>

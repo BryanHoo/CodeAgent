@@ -68,6 +68,7 @@ fn main() {
         "remove_project",
         "reorder_projects",
         "list_project_directories",
+        "list_completed_tasks",
         "list_tasks",
         "read_task",
         "start_task",

@@ -2,10 +2,12 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
 use super::{
-    archive_task, delete_task, list_tasks, pin_task, rename_task, unarchive_task, unsubscribe_task,
+    archive_task, delete_task, list_completed_tasks, list_tasks, pin_task, rename_task,
+    unarchive_task, unsubscribe_task,
 };
 use crate::{
-    domain::sidebar::ListTasksInput, infrastructure::codex::connection::AppServerConnection,
+    domain::sidebar::{ListCompletedTasksInput, ListTasksInput},
+    infrastructure::codex::connection::AppServerConnection,
 };
 
 const PINNED_SECTION_ID: &str = "01984de2-8f74-7c91-a3b2-5c5e937cf318";
@@ -75,6 +77,78 @@ async fn list_tasks_should_filter_and_map_native_threads() {
     server_task.await.unwrap();
 }
 
+#[tokio::test]
+async fn list_completed_tasks_should_fill_cross_project_page_from_idle_threads() {
+    let (client, server) = duplex(16 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+
+    let server_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(server_reader).lines();
+        for (cursor, limit, data, next_cursor) in [
+            (
+                None,
+                10,
+                json!([
+                    task_thread_with("running-a", "project-a", "active", 1735689602),
+                    task_thread_with("done-a", "project-a", "idle", 1735689601)
+                ]),
+                Some("cursor-b"),
+            ),
+            (
+                Some("cursor-b"),
+                9,
+                json!([
+                    task_thread_with("failed-b", "project-b", "systemError", 1735689600),
+                    task_thread_with("done-b", "project-b", "notLoaded", 1735689599)
+                ]),
+                None,
+            ),
+        ] {
+            let request: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(request["method"], "thread/list");
+            assert!(request["params"].get("projectId").is_none());
+            assert_eq!(request["params"]["cursor"].as_str(), cursor);
+            assert_eq!(request["params"]["limit"], limit);
+            let response = json!({
+                "id": request["id"].clone(),
+                "result": {
+                    "backwardsCursor": null,
+                    "data": data,
+                    "nextCursor": next_cursor
+                }
+            });
+            server_writer
+                .write_all(format!("{}\n", serde_json::to_string(&response).unwrap()).as_bytes())
+                .await
+                .unwrap();
+        }
+    });
+
+    let page = list_completed_tasks(
+        &connection,
+        ListCompletedTasksInput {
+            cursor: None,
+            limit: None,
+            project_id: None,
+        },
+    )
+    .await
+    .expect("completed tasks should map");
+
+    assert_eq!(
+        page.data
+            .iter()
+            .map(|task| (task.id.as_str(), task.project_id.as_str()))
+            .collect::<Vec<_>>(),
+        [("done-a", "project-a"), ("done-b", "project-b")]
+    );
+    assert_eq!(page.next_cursor, None);
+    server_task.await.unwrap();
+}
+
 fn task_thread(title: &str, pinned: bool) -> Value {
     json!({
         "id": "thread-a",
@@ -84,6 +158,18 @@ fn task_thread(title: &str, pinned: bool) -> Value {
         "section": pinned.then(|| json!({"id": PINNED_SECTION_ID, "name": "Pinned", "appearance": null})),
         "status": {"type": "idle"},
         "updatedAt": 1735689600
+    })
+}
+
+fn task_thread_with(id: &str, project_id: &str, status: &str, updated_at: i64) -> Value {
+    json!({
+        "id": id,
+        "name": id,
+        "preview": id,
+        "projectId": project_id,
+        "section": null,
+        "status": {"type": status},
+        "updatedAt": updated_at
     })
 }
 

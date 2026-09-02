@@ -45,9 +45,29 @@ describe("ProjectRuntimeManager task activity restoration", () => {
     } as unknown as NativeRuntimeClient;
     const runtime = createProjectRuntimeManager(client);
     const tasks: readonly TaskActivitySnapshot[] = [
-      { projectId: "project-1", status: "running", taskId: "task-1", taskName: "任务一" },
-      { projectId: "project-1", status: "waiting", taskId: "task-2", taskName: "任务二" },
-      { projectId: "project-2", status: "completed", taskId: "task-3", taskName: "任务三" },
+      {
+        projectId: "project-1",
+        requiresApproval: false,
+        startedAt: "2026-09-02T08:00:00.000Z",
+        status: "running",
+        taskId: "task-1",
+        taskName: "任务一",
+      },
+      {
+        projectId: "project-1",
+        requiresApproval: true,
+        startedAt: "2026-09-02T08:05:00.000Z",
+        status: "waiting",
+        taskId: "task-2",
+        taskName: "任务二",
+      },
+      {
+        projectId: "project-2",
+        requiresApproval: false,
+        status: "completed",
+        taskId: "task-3",
+        taskName: "任务三",
+      },
     ];
 
     await runtime.restoreTaskActivities(tasks);

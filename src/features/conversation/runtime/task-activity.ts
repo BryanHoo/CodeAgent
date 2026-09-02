@@ -18,7 +18,17 @@ type TaskActivityRecord = Readonly<{
   isRunning: boolean;
   pendingApprovalRequestIds: ReadonlySet<string>;
   projectId: string;
+  startedAt: string | undefined;
   taskId: string;
+  taskName: string;
+}>;
+
+export type ActiveTaskActivity = Readonly<{
+  id: string;
+  projectId: string;
+  startedAt?: string;
+  status: "approval" | "running";
+  title: string;
 }>;
 
 export type TaskActivityMap = ReadonlyMap<string, TaskActivityRecord>;
@@ -76,6 +86,8 @@ function replaceTaskActivity(
   if (
     currentRecord?.attention === nextRecord.attention &&
     currentRecord.isRunning === nextRecord.isRunning &&
+    currentRecord.startedAt === nextRecord.startedAt &&
+    currentRecord.taskName === nextRecord.taskName &&
     setsAreEqual(currentRecord.pendingApprovalRequestIds, nextRecord.pendingApprovalRequestIds)
   ) {
     return activity;
@@ -96,7 +108,9 @@ export function recordRunningTaskActivity(
     isRunning: true,
     pendingApprovalRequestIds: currentRecord?.pendingApprovalRequestIds ?? new Set(),
     projectId,
+    startedAt: currentRecord?.startedAt ?? new Date().toISOString(),
     taskId,
+    taskName: currentRecord?.taskName ?? taskId,
   });
 }
 
@@ -105,19 +119,22 @@ export function recordNativeTaskActivity(
   snapshot: TaskActivitySnapshot,
 ): TaskActivityMap {
   const waiting = snapshot.status === "waiting";
+  const requiresApproval = waiting && snapshot.requiresApproval;
   return replaceTaskActivity(activity, snapshot.projectId, snapshot.taskId, {
     attention:
       snapshot.status === "completed"
         ? "completed"
         : snapshot.status === "failed"
           ? "failed"
-          : waiting
+          : requiresApproval
             ? "approval"
             : null,
     isRunning: snapshot.status === "running" || waiting,
-    pendingApprovalRequestIds: waiting ? new Set(["native"]) : new Set(),
+    pendingApprovalRequestIds: requiresApproval ? new Set(["native"]) : new Set(),
     projectId: snapshot.projectId,
+    startedAt: snapshot.startedAt,
     taskId: snapshot.taskId,
+    taskName: snapshot.taskName,
   });
 }
 
@@ -134,6 +151,27 @@ export function getTaskActivity(
         isAwaitingApproval: record.pendingApprovalRequestIds.size > 0,
         isRunning: record.isRunning,
       };
+}
+
+export function listActiveTaskActivities(activity: TaskActivityMap): ActiveTaskActivity[] {
+  const tasks: ActiveTaskActivity[] = [];
+  for (const record of activity.values()) {
+    const status =
+      record.pendingApprovalRequestIds.size > 0
+        ? "approval"
+        : record.isRunning
+          ? "running"
+          : null;
+    if (status === null) continue;
+    tasks.push({
+      id: record.taskId,
+      projectId: record.projectId,
+      status,
+      title: record.taskName,
+      ...(record.startedAt === undefined ? {} : { startedAt: record.startedAt }),
+    });
+  }
+  return tasks;
 }
 
 export function clearTaskAttention(
@@ -194,6 +232,9 @@ export function recordTaskActivitySnapshot(
 ): TaskActivityMap {
   const currentRecord = activity.get(createTaskActivityKey(snapshot.projectId, snapshot.id));
   const pendingApprovalRequestIds = collectPendingApprovalRequestIds(snapshot.pendingRequests);
+  const runningStartedAt = snapshot.turns
+    .findLast((turn) => turn.status === "running")
+    ?.startedAt;
   const attention: TaskAttention = isViewed
     ? null
     : pendingApprovalRequestIds.size > 0
@@ -208,7 +249,9 @@ export function recordTaskActivitySnapshot(
     isRunning: snapshot.status === "running",
     pendingApprovalRequestIds,
     projectId: snapshot.projectId,
+    startedAt: runningStartedAt ?? currentRecord?.startedAt,
     taskId: snapshot.id,
+    taskName: snapshot.title,
   });
 }
 
@@ -224,16 +267,20 @@ export function reduceTaskActivityEvent(
     isRunning: false,
     pendingApprovalRequestIds: new Set<string>(),
     projectId,
+    startedAt: undefined,
     taskId: event.taskId,
+    taskName: event.taskId,
   };
   let attention = currentRecord.attention;
   let isRunning = currentRecord.isRunning;
   let pendingApprovalRequestIds = currentRecord.pendingApprovalRequestIds;
+  let startedAt = currentRecord.startedAt;
 
   switch (event.type) {
     case "turn.started":
       attention = null;
       isRunning = true;
+      startedAt = event.payload.turn.startedAt ?? event.timestamp;
       break;
     case "task.status_updated":
       isRunning = event.payload.status === "running";
@@ -285,6 +332,8 @@ export function reduceTaskActivityEvent(
     isRunning,
     pendingApprovalRequestIds,
     projectId,
+    startedAt,
     taskId: event.taskId,
+    taskName: currentRecord.taskName,
   });
 }

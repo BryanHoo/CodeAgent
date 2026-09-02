@@ -106,6 +106,6 @@ pub use sidebar::{
     add_project, list_projects, read_project, remove_project, rename_project, reorder_projects,
 };
 pub use tasks::{
-    archive_task, delete_task, list_tasks, pin_task, read_task, rename_task, unarchive_task,
-    unsubscribe_task,
+    archive_task, delete_task, list_completed_tasks, list_tasks, pin_task, read_task, rename_task,
+    unarchive_task, unsubscribe_task,
 };

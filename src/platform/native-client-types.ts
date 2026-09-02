@@ -29,6 +29,11 @@ export type ListTasksOptions = Readonly<{
   pinned?: true;
   searchTerm?: string;
 }>;
+export type ListCompletedTasksOptions = Readonly<{
+  cursor?: string;
+  limit?: number;
+  projectId?: string;
+}>;
 export type ListFilesystemEntriesOptions = ReadOptions & Readonly<{ includeHidden?: boolean }>;
 export type AgentAttachmentUploadInput = Readonly<{
   content: Blob;

@@ -17,6 +17,7 @@
 ## 状态栏任务契约
 
 - Rust 独占最多 256 条任务活动摘要，统一归约运行、等待、完成、失败、元数据与任务移除事件，并更新状态栏数量、动态菜单和桌面宠物
+- `TaskActivitySnapshot` 必须由 Rust 同时投影 `status`、`requiresApproval` 与当前 Turn 的可选 `startedAt`；`waiting` 仅表示等待用户处理，只有 `command_approval`、`terminal_input_approval`、`file_change_approval`、`permissions_approval` 和 `mcp_elicitation` 可以进入待审批看板，WebView 不得把普通 `user_input` 推断为审批
 - 主 WebView 不得写入原生任务活动状态；重建时只能通过 `get_task_activities` 读取 Rust 完整快照，恢复全部侧栏标记与 Project 事件归属
 - Rust 必须按持久化通知与语言偏好发送 Task 终态、失败及待处理请求系统通知，不得依赖主 WebView 是否存在、可见或处于前台
 - 状态栏图标左键必须显示任务菜单，不得直接恢复主窗口；应用恢复只能由菜单命令或任务项触发
@@ -51,3 +52,4 @@
 - 覆盖 MCP form/URL Resolution Schema 差异，以及 URL 外部打开成功后才提交 `accept` 的交互顺序
 - 覆盖状态栏计数清零、Provider 终态归约、左键菜单、前后台系统通知、运行态恢复、菜单目标解析和普通/`temporary` 任务跳转
 - 覆盖 Rust 任务活动的运行、等待、完成、失败、运行时崩溃和 WebView 重建恢复
+- 覆盖五类审批请求、普通用户输入排除、运行开始时间恢复及看板运行时长投影

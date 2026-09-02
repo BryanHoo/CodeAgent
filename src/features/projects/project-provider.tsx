@@ -24,6 +24,7 @@ import {
   invalidateTaskQueue,
   PROJECT_PINNED_TASKS_KEY,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
+  TASK_BOARD_COMPLETED_TASKS_QUERY_KEY,
   projectRemoveMutationOptions,
   projectRenameMutationOptions,
   projectReorderMutationOptions,
@@ -88,6 +89,7 @@ export function ProjectProvider({
       },
       onTaskRemoved(projectId, taskId) {
         void removeArchivedProjectTaskAndRefill(queryClient, projectId, taskId);
+        void queryClient.invalidateQueries({ queryKey: TASK_BOARD_COMPLETED_TASKS_QUERY_KEY });
         queryClient.removeQueries({
           exact: true,
           queryKey: ["projects", projectId, "tasks", taskId],
@@ -109,6 +111,9 @@ export function ProjectProvider({
               queryClient.invalidateQueries({
                 exact: true,
                 queryKey: ["projects", projectId, "tasks", PROJECT_PINNED_TASKS_KEY],
+              }),
+              queryClient.invalidateQueries({
+                queryKey: TASK_BOARD_COMPLETED_TASKS_QUERY_KEY,
               }),
             ]);
           }

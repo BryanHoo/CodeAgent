@@ -46,6 +46,7 @@ use application::{
     sidebar_directory_commands::list_project_directories,
     state::AppState,
     task_activity_commands::{acknowledge_task_activity, get_task_activities},
+    task_board_commands::list_completed_tasks,
     task_subscription_commands::{release_task_subscription, retain_task_subscription},
     tray_commands::setup_tray,
     workflow_commands::{
@@ -145,6 +146,7 @@ pub fn run() {
             remove_project,
             reorder_projects,
             list_project_directories,
+            list_completed_tasks,
             list_tasks,
             read_task,
             start_task,

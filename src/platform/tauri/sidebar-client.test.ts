@@ -9,6 +9,7 @@ describe("TauriSidebarClient", () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === "list_projects") return { data: [], nextCursor: null };
       if (command === "list_tasks") return { data: [], nextCursor: null };
+      if (command === "list_completed_tasks") return { data: [], nextCursor: null };
       return {
         project: {
           createdAt: "2025-01-01T00:00:00Z",
@@ -31,9 +32,10 @@ describe("TauriSidebarClient", () => {
       pinned: true,
       searchTerm: "fix",
     });
+    await client.listCompletedTasks({ cursor: "cursor-b", limit: 10, projectId: "project-a" });
     await client.addProject(["/work/a", "/work/shared"]);
 
-    expect(ensureRuntime).toHaveBeenCalledTimes(3);
+    expect(ensureRuntime).toHaveBeenCalledTimes(4);
     expect(invoke).toHaveBeenNthCalledWith(1, "list_projects");
     expect(invoke).toHaveBeenNthCalledWith(2, "list_tasks", {
       input: {
@@ -45,7 +47,10 @@ describe("TauriSidebarClient", () => {
         searchTerm: "fix",
       },
     });
-    expect(invoke).toHaveBeenNthCalledWith(3, "add_project", {
+    expect(invoke).toHaveBeenNthCalledWith(3, "list_completed_tasks", {
+      input: { cursor: "cursor-b", limit: 10, projectId: "project-a" },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, "add_project", {
       rootPaths: ["/work/a", "/work/shared"],
     });
   });

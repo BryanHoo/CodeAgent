@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use super::task_activity::{TaskActivityState, TaskActivityStatus};
+use super::task_activity::{TaskActivityState, TaskActivityStatus, is_approval_request_type};
 use crate::domain::runtime::AgentEvent;
 
 fn event(value: serde_json::Value) -> AgentEvent {
@@ -65,6 +65,78 @@ fn rust_owns_the_complete_task_activity_lifecycle() {
 }
 
 #[test]
+fn native_activity_distinguishes_approval_requests_and_preserves_turn_start_time() {
+    let mut state = TaskActivityState::default();
+    state.remember_task("project-1", "task-1", "审批任务", None);
+    state.apply_event(
+        "project-1",
+        &event(json!({
+            "payload": {
+                "turn": {
+                    "startedAt": "2026-09-02T08:00:00Z",
+                    "status": "running"
+                }
+            },
+            "taskId": "task-1",
+            "timestamp": "2026-09-02T08:00:00Z",
+            "type": "turn.started"
+        })),
+    );
+    assert_eq!(
+        state.snapshot()[0].started_at.as_deref(),
+        Some("2026-09-02T08:00:00Z")
+    );
+
+    state.apply_event(
+        "project-1",
+        &event(json!({
+            "payload": {"request": {"requestId": "input-1", "type": "user_input"}},
+            "taskId": "task-1",
+            "type": "pending_request.created"
+        })),
+    );
+    assert_eq!(state.snapshot()[0].status, TaskActivityStatus::Waiting);
+    assert!(!state.snapshot()[0].requires_approval);
+
+    state.apply_event(
+        "project-1",
+        &event(json!({
+            "payload": {
+                "request": {"requestId": "approval-1", "type": "permissions_approval"}
+            },
+            "taskId": "task-1",
+            "type": "pending_request.created"
+        })),
+    );
+    assert!(state.snapshot()[0].requires_approval);
+
+    state.apply_event(
+        "project-1",
+        &event(json!({
+            "payload": {"request": {"requestId": "approval-1"}},
+            "taskId": "task-1",
+            "type": "pending_request.resolved"
+        })),
+    );
+    assert_eq!(state.snapshot()[0].status, TaskActivityStatus::Waiting);
+    assert!(!state.snapshot()[0].requires_approval);
+}
+
+#[test]
+fn every_supported_approval_request_enters_the_approval_state() {
+    for request_type in [
+        "command_approval",
+        "terminal_input_approval",
+        "file_change_approval",
+        "permissions_approval",
+        "mcp_elicitation",
+    ] {
+        assert!(is_approval_request_type(request_type));
+    }
+    assert!(!is_approval_request_type("user_input"));
+}
+
+#[test]
 fn viewed_task_completion_should_not_leave_a_pet_activity() {
     let mut state = TaskActivityState::default();
     state.remember_task("project-1", "task-1", "当前任务", None);
@@ -103,12 +175,17 @@ fn first_running_status_event_should_trigger_native_activity_refresh() {
         &event(json!({
             "payload": {"status": "running"},
             "taskId": "task-1",
+            "timestamp": "2026-09-02T08:30:00Z",
             "type": "task.status_updated"
         })),
     );
 
     assert!(changed, "首次运行状态必须触发托盘和桌宠刷新");
     assert_eq!(state.snapshot()[0].status, TaskActivityStatus::Running);
+    assert_eq!(
+        state.snapshot()[0].started_at.as_deref(),
+        Some("2026-09-02T08:30:00Z")
+    );
 }
 
 #[test]
@@ -135,13 +212,21 @@ fn prompt_title_should_only_replace_the_new_chat_placeholder() {
 #[test]
 fn runtime_failure_should_fail_every_active_task() {
     let mut state = TaskActivityState::default();
-    state.remember_task_snapshot("project-1", "task-1", "运行任务", "running", Vec::new());
+    state.remember_task_snapshot(
+        "project-1",
+        "task-1",
+        "运行任务",
+        "running",
+        Vec::new(),
+        Some("2026-09-02T08:00:00Z"),
+    );
     state.remember_task_snapshot(
         "project-1",
         "task-2",
         "等待任务",
         "running",
-        vec!["request-1".to_owned()],
+        vec![("request-1".to_owned(), true)],
+        Some("2026-09-02T08:01:00Z"),
     );
 
     assert!(state.fail_active());
@@ -162,7 +247,11 @@ fn task_snapshot_should_preserve_pending_ids_and_correct_stale_running_state() {
         "task-1",
         "多审批任务",
         "running",
-        vec!["request-1".to_owned(), "request-2".to_owned()],
+        vec![
+            ("request-1".to_owned(), true),
+            ("request-2".to_owned(), true),
+        ],
+        Some("2026-09-02T08:00:00Z"),
     );
     for request_id in ["request-1", "request-2"] {
         state.apply_event(
@@ -181,7 +270,14 @@ fn task_snapshot_should_preserve_pending_ids_and_correct_stale_running_state() {
         assert_eq!(state.snapshot()[0].status, expected);
     }
 
-    state.remember_task_snapshot("project-1", "task-1", "多审批任务", "idle", Vec::new());
+    state.remember_task_snapshot(
+        "project-1",
+        "task-1",
+        "多审批任务",
+        "idle",
+        Vec::new(),
+        None,
+    );
     assert_eq!(state.snapshot()[0].status, TaskActivityStatus::Completed);
 }
 

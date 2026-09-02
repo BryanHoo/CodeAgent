@@ -30,14 +30,18 @@ fn tray_projects_the_rust_owned_active_task_snapshot() {
     let activities = vec![
         TaskActivitySnapshot {
             project_id: "project-1".to_owned(),
+            requires_approval: false,
             root_path: None,
+            started_at: Some("2026-09-02T08:00:00Z".to_owned()),
             status: TaskActivityStatus::Running,
             task_id: "task-1".to_owned(),
             task_name: "底层任务标题".to_owned(),
         },
         TaskActivitySnapshot {
             project_id: "project-1".to_owned(),
+            requires_approval: false,
             root_path: None,
+            started_at: None,
             status: TaskActivityStatus::Completed,
             task_id: "task-2".to_owned(),
             task_name: "已完成任务".to_owned(),

@@ -4,7 +4,10 @@ import type { InfiniteData } from "@tanstack/react-query";
 
 import { TauriSidebarClient } from "../../platform/tauri/sidebar-client.js";
 
-export type NativeReadClient = Pick<NativeClient, "listProjects" | "listTasks" | "readTask">;
+export type NativeReadClient = Pick<
+  NativeClient,
+  "listCompletedTasks" | "listProjects" | "listTasks" | "readTask"
+>;
 export type NativeArchivedTaskClient = Pick<
   NativeClient,
   "deleteTask" | "listTasks" | "unarchiveTask"
@@ -128,10 +131,12 @@ export type NativeWorkbenchClient = NativeReadClient &
 export type NativeSnapshotClient = Pick<NativeClient, "readTask">;
 
 export const PROJECT_TASK_PAGE_SIZE = 5;
+export const COMPLETED_TASK_PAGE_SIZE = 10;
 export const ARCHIVED_TASK_PAGE_SIZE = 20;
 export const PROJECT_TASK_SEARCH_PAGE_SIZE = 100;
 export const PROJECT_PINNED_TASKS_KEY = "pinned";
 export const PROJECT_TASK_SEARCH_SOURCE_KEY = "search-source";
+export const TASK_BOARD_COMPLETED_TASKS_QUERY_KEY = ["task-board", "completed"] as const;
 export const TASK_SNAPSHOT_GC_TIME_MS = 30_000;
 
 export function taskQueueQueryKey(projectId: string, taskId: string) {

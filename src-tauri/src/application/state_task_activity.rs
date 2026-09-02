@@ -1,5 +1,7 @@
 use super::AppState;
-use crate::application::task_activity::{TaskActivitySnapshot, TaskActivityState};
+use crate::application::task_activity::{
+    TaskActivitySnapshot, TaskActivityState, is_approval_request_type,
+};
 use crate::domain::conversation::AgentTaskSnapshot;
 use crate::domain::sidebar::{Project, ProjectPage};
 
@@ -68,10 +70,21 @@ impl AppState {
             snapshot
                 .pending_requests
                 .iter()
-                .filter_map(|request| request.get("requestId"))
-                .filter_map(serde_json::Value::as_str)
-                .map(str::to_owned)
+                .filter_map(|request| {
+                    let request_id = request.get("requestId")?.as_str()?.to_owned();
+                    let requires_approval = request
+                        .get("type")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(is_approval_request_type);
+                    Some((request_id, requires_approval))
+                })
                 .collect(),
+            snapshot
+                .turns
+                .iter()
+                .rev()
+                .find(|turn| turn.status == "running")
+                .and_then(|turn| turn.started_at.as_deref()),
         );
     }
 

@@ -117,4 +117,19 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn task_board_command_should_be_registered_and_allowed() {
+        let build_manifest = include_str!("../../build.rs");
+        let permissions = include_str!("../../permissions/window-command-sets.toml");
+
+        assert!(
+            build_manifest.contains("\"list_completed_tasks\""),
+            "Tauri app manifest must register list_completed_tasks"
+        );
+        assert!(
+            permissions.contains("\"allow-list-completed-tasks\""),
+            "main-window-commands must allow list_completed_tasks"
+        );
+    }
 }

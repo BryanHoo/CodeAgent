@@ -19,11 +19,7 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import type { ProjectDraftRecord } from "../project-draft-store.js";
-import { serializePromptSkillContent } from "./prompt-skill-editor.js";
-
-function savedDraftSummary(draft: ProjectDraftRecord, attachmentFallback: string): string {
-  return serializePromptSkillContent(draft.draft.content).trim() || attachmentFallback;
-}
+import { getProjectDraftSummary } from "../project-draft-summary.js";
 
 export function ComposerDraftSaveButton({
   disabled,
@@ -103,7 +99,7 @@ export function ProjectDraftList({
               const attachmentFallback = t("composer.attachmentCount", {
                 count: draft.draft.attachments.length,
               });
-              const summary = savedDraftSummary(draft, attachmentFallback);
+              const summary = getProjectDraftSummary(draft, attachmentFallback);
               return (
                 <div className="group flex min-w-0 items-center gap-1" key={draft.id} role="listitem">
                   <Button

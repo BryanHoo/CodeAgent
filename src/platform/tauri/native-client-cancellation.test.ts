@@ -31,7 +31,9 @@ describe("Tauri native request cancellation", () => {
 
   it("adds native request ids to cancellable task and directory reads", async () => {
     const invoke = vi.fn(async (command: string, _args?: Record<string, unknown>) =>
-      command === "list_tasks" ? { data: [], nextCursor: null } : { data: [], path: null },
+      command === "list_tasks" || command === "list_completed_tasks"
+        ? { data: [], nextCursor: null }
+        : { data: [], path: null },
     );
     const client = new TauriSidebarClient({
       ensureRuntime: vi.fn(async () => undefined),
@@ -40,6 +42,7 @@ describe("Tauri native request cancellation", () => {
     const signal = new AbortController().signal;
 
     await client.listTasks("project-a", {}, { signal });
+    await client.listCompletedTasks({}, { signal });
     await client.listProjectDirectories("/work", { signal });
 
     for (const [, args] of invoke.mock.calls) {

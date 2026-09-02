@@ -2,9 +2,11 @@ import type { AgentTaskPage } from "@/protocol/index.js";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import {
-  PROJECT_TASK_PAGE_SIZE,
   ARCHIVED_TASK_PAGE_SIZE,
+  COMPLETED_TASK_PAGE_SIZE,
+  PROJECT_TASK_PAGE_SIZE,
   TASK_SNAPSHOT_GC_TIME_MS,
+  TASK_BOARD_COMPLETED_TASKS_QUERY_KEY,
   nativeClient,
   type NativeReadClient,
   type NativeArchivedTaskClient,
@@ -62,6 +64,35 @@ export function projectTasksInfiniteQueryOptions(
         { signal },
       ),
     queryKey: ["projects", projectId, "tasks"] as const,
+  });
+}
+
+export function completedTasksInfiniteQueryOptions(
+  projectId: string | null,
+  client: NativeReadClient = nativeClient,
+) {
+  return infiniteQueryOptions<
+    AgentTaskPage,
+    Error,
+    ProjectTaskInfiniteData,
+    readonly ["task-board", "completed", string | null],
+    string | undefined
+  >({
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.nextCursor === null || lastPage.nextCursor === lastPageParam
+        ? undefined
+        : lastPage.nextCursor,
+    initialPageParam: undefined,
+    queryFn: ({ pageParam, signal }) =>
+      client.listCompletedTasks(
+        {
+          ...(pageParam === undefined ? {} : { cursor: pageParam }),
+          limit: COMPLETED_TASK_PAGE_SIZE,
+          ...(projectId === null ? {} : { projectId }),
+        },
+        { signal },
+      ),
+    queryKey: [...TASK_BOARD_COMPLETED_TASKS_QUERY_KEY, projectId] as const,
   });
 }
 

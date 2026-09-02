@@ -1,6 +1,5 @@
-import { PanelLeft, PanelRight, Pencil } from "lucide-react";
+import { PanelLeft, Pencil } from "lucide-react";
 import { useRef, type CSSProperties } from "react";
-
 import { Button } from "../../../shared/components/core/button.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
 import {
@@ -10,26 +9,35 @@ import {
 } from "../../../shared/components/core/tooltip.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
+import { TaskBoardContainer } from "./task-board-container.js";
 import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
-import { inspectorWidthLimits, sidebarWidthLimits } from "./workbench-panel-layout.js";
+import {
+  inspectorWidthLimits,
+  resolveInspectorVisibility,
+  resolveQuickOpenVisibility,
+  sidebarWidthLimits,
+} from "./workbench-panel-layout.js";
 import { ProjectQuickOpenMenu } from "./project-open-menu.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
+import { WorkbenchInspectorToggle } from "./workbench-inspector-toggle.js";
 import { WorkbenchPetLayer } from "../../pets/components/workbench-pet-layer.js";
-
 type WorkbenchShellStyle = CSSProperties &
   Readonly<{ "--inspector-open-width": string; "--sidebar-open-width": string }>;
-
 export function WorkbenchShellLayout({
+  board,
   context,
+  draftId,
   projectId,
   taskId,
   temporary,
 }: Readonly<{
   context: ReturnType<typeof useWorkbenchShellController>;
+  board: boolean;
+  draftId?: string;
   projectId: string;
   taskId?: string;
   temporary: boolean;
@@ -112,10 +120,12 @@ export function WorkbenchShellLayout({
     workbenchShellRef,
     t,
   } = context;
+  const viewTitle = board ? t("taskBoard.title") : title;
+  const inspectorVisible = resolveInspectorVisibility(board, inspectorOpen);
   return (
     <div
       className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
-      data-inspector-open={inspectorOpen}
+      data-inspector-open={inspectorVisible}
       data-sidebar-open={sidebarOpen}
       ref={workbenchShellRef}
       style={
@@ -193,11 +203,11 @@ export function WorkbenchShellLayout({
               </TooltipContent>
             </Tooltip>
             <h1
-              aria-label={title}
+              aria-label={viewTitle}
               className="min-w-0 text-body-small font-semibold text-foreground"
             >
               {taskId === undefined ? (
-                <span className="block truncate">{title}</span>
+                <span className="block truncate">{viewTitle}</span>
               ) : (
                 <Button
                   variant="ghost"
@@ -219,43 +229,34 @@ export function WorkbenchShellLayout({
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <ProjectQuickOpenMenu
-              apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
-              className="hidden min-workbench:flex"
-              {...(globalSettings === undefined
-                ? {}
-                : { defaultOpenAppId: globalSettings.defaultOpenAppId })}
-              hidden={temporary}
-              isDetecting={projectOpenCapabilitiesQuery.isPending}
-              isPending={projectPathOpenMutation.isPending}
-              onSelect={(appId) => {
-                projectPathOpenMutation.reset();
-                void projectPathOpenLockRef.current
-                  .run(() => projectPathOpenMutation.mutateAsync({ appId, path: undefined }))
-                  .catch(() => undefined);
-              }}
-            />
-            <Tooltip key={inspectorOpen ? "inspector-open" : "inspector-closed"}>
-              <TooltipTrigger asChild>
-                <Button
-                  aria-label={
-                    inspectorOpen ? t("shell.collapseInspector") : t("shell.expandInspector")
-                  }
-                  id="workbench-inspector-toggle"
-                  onClick={() => {
-                    setInspectorOpen((open) => !open);
-                  }}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <PanelRight className="size-3.5" aria-hidden="true" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {inspectorOpen ? t("shell.collapseInspector") : t("shell.expandInspector")}
-              </TooltipContent>
-            </Tooltip>
+            {resolveQuickOpenVisibility(board, temporary) ? (
+              <ProjectQuickOpenMenu
+                apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+                className="hidden min-workbench:flex"
+                {...(globalSettings === undefined
+                  ? {}
+                  : { defaultOpenAppId: globalSettings.defaultOpenAppId })}
+                hidden={false}
+                isDetecting={projectOpenCapabilitiesQuery.isPending}
+                isPending={projectPathOpenMutation.isPending}
+                onSelect={(appId) => {
+                  projectPathOpenMutation.reset();
+                  void projectPathOpenLockRef.current
+                    .run(() => projectPathOpenMutation.mutateAsync({ appId, path: undefined }))
+                    .catch(() => undefined);
+                }}
+              />
+            ) : null}
+            {board ? null : (
+              <WorkbenchInspectorToggle
+                collapseLabel={t("shell.collapseInspector")}
+                expandLabel={t("shell.expandInspector")}
+                inspectorOpen={inspectorOpen}
+                onToggle={() => {
+                  setInspectorOpen((open) => !open);
+                }}
+              />
+            )}
           </div>
         </header>
         {error !== null ||
@@ -265,6 +266,8 @@ export function WorkbenchShellLayout({
         (!temporary && projectDefaultsQuery.error !== null) ||
         (taskId === undefined && globalSettingsQuery.error !== null) ? (
           <RuntimeUnavailable onRetry={() => void retry()} />
+        ) : board ? (
+          <TaskBoardContainer projectId={projectId} />
         ) : taskId === undefined ? (
           <>
             {temporary ? (
@@ -287,10 +290,12 @@ export function WorkbenchShellLayout({
               />
             )}
             <WorkbenchComposer
+              key={draftId === undefined ? "new-task" : `draft:${draftId}`}
               capabilities={capabilities}
               client={client}
               composerRef={composerRef}
               followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
+              {...(draftId === undefined ? {} : { initialProjectDraftId: draftId })}
               fastModeAvailable={fastModeAvailable}
               fastModeDefault={fastModeDefault}
               models={models}
@@ -355,7 +360,7 @@ export function WorkbenchShellLayout({
           />
         )}
       </main>
-      {inspectorOpen ? (
+      {inspectorVisible ? (
         <Button
           variant="ghost"
           aria-label={t("shell.closeInspector")}
@@ -364,8 +369,7 @@ export function WorkbenchShellLayout({
           type="button"
         />
       ) : null}
-
-      {inspectorOpen ? (
+      {inspectorVisible ? (
         <WorkbenchPanelResizer
           direction={-1}
           label={t("shell.resizeInspector")}
@@ -388,7 +392,7 @@ export function WorkbenchShellLayout({
           width={inspectorWidth}
         />
       ) : null}
-      {inspectorOpen ? (
+      {inspectorVisible ? (
         <WorkbenchInspector
           backgroundTerminals={backgroundTerminals.terminals}
           contextOnly={temporary}

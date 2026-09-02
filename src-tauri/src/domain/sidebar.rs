@@ -102,6 +102,14 @@ pub struct ListTasksInput {
     pub search_term: Option<String>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListCompletedTasksInput {
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub project_id: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct AgentTaskMutationResponse {
     pub task: AgentTask,

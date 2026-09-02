@@ -45,6 +45,7 @@ permissions = [
   "allow-remove-project",
   "allow-reorder-projects",
   "allow-list-project-directories",
+  "allow-list-completed-tasks",
   "allow-list-tasks",
   "allow-read-task",
   "allow-start-task",

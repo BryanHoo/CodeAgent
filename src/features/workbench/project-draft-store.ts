@@ -23,6 +23,7 @@ type ProjectDraftIndexEntry = Pick<ProjectDraftRecord, "createdAt" | "id" | "upd
 export type ProjectDraftStore = Readonly<{
   create: (projectId: string, draft: ComposerDraft) => ProjectDraftRecord;
   discardWorking: (projectId: string, draftId: string) => void;
+  getRevision: () => number;
   list: (projectId: string) => readonly ProjectDraftRecord[];
   read: (projectId: string, draftId: string) => ProjectDraftRecord | undefined;
   readWorking: (projectId: string, draftId: string) => ComposerDraft | undefined;
@@ -173,6 +174,7 @@ export function createProjectDraftStore(
   const now = options.now ?? Date.now;
   const draftsByProject = new Map<string, readonly ProjectDraftRecord[]>();
   const listeners = new Set<() => void>();
+  let revision = 0;
   const list = (projectId: string) => {
     const cached = draftsByProject.get(projectId);
     if (cached !== undefined) return cached;
@@ -187,7 +189,10 @@ export function createProjectDraftStore(
   ) => {
     const sorted = [...drafts].sort((left, right) => right.updatedAt - left.updatedAt);
     draftsByProject.set(projectId, sorted);
-    if (notify) listeners.forEach((listener) => listener());
+    if (notify) {
+      revision += 1;
+      listeners.forEach((listener) => listener());
+    }
     return sorted;
   };
   const replaceRecord = (
@@ -278,6 +283,7 @@ export function createProjectDraftStore(
   return {
     create,
     discardWorking,
+    getRevision: () => revision,
     list,
     read,
     readWorking,

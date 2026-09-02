@@ -5,6 +5,7 @@
 - Tauri 命令按职责拆分在 `src-tauri/src/application/*_commands.rs`
 - 命令通过 `AppState` 编排行为，不在入口中堆叠领域逻辑
 - Web 端对应调用集中在 `src/platform/tauri/`
+- 新增 Tauri 命令必须同时登记到 `build.rs` 的应用命令清单，并加入目标窗口的最小 capability；测试必须覆盖命令注册与窗口授权，避免已实现命令在运行时被 ACL 拒绝
 
 ## 数据契约
 

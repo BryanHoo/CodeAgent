@@ -1,4 +1,5 @@
 import {
+  type ListCompletedTasksOptions,
   type ListTasksOptions,
   type ListFilesystemEntriesOptions,
   type PendingRequestResolution,
@@ -87,6 +88,23 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     }, requestOptions.signal);
     for (const task of response.data) this.taskProjects.set(task.id, projectId);
     return response;
+  }
+
+  public async listCompletedTasks(
+    options: ListCompletedTasksOptions = {},
+    requestOptions: ReadOptions = {},
+  ): Promise<AgentTaskPage> {
+    return this.callCancellable<AgentTaskPage>(
+      "list_completed_tasks",
+      {
+        input: {
+          ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+          ...(options.limit === undefined ? {} : { limit: options.limit }),
+          ...(options.projectId === undefined ? {} : { projectId: options.projectId }),
+        },
+      },
+      requestOptions.signal,
+    );
   }
 
   public async addProject(

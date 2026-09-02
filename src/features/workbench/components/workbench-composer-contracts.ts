@@ -69,6 +69,7 @@ export type WorkbenchComposerProps = Readonly<{
   fastModeAvailable: boolean;
   fastModeDefault: boolean;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
+  initialProjectDraftId?: string;
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;

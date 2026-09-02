@@ -8,12 +8,15 @@ use super::{
     sidebar::unix_seconds_to_rfc3339,
 };
 use crate::domain::sidebar::{
-    AgentTask, AgentTaskMutationResponse, AgentTaskPage, AgentTaskStatusResponse, ListTasksInput,
+    AgentTask, AgentTaskMutationResponse, AgentTaskPage, AgentTaskStatusResponse,
+    ListCompletedTasksInput, ListTasksInput,
 };
 
 const PINNED_SECTION_ID: &str = "01984de2-8f74-7c91-a3b2-5c5e937cf318";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const TEMPORARY_PROJECT_ID: &str = "temporary";
+const COMPLETED_TASK_DEFAULT_LIMIT: u32 = 10;
+const COMPLETED_TASK_MAX_LIMIT: u32 = 100;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,11 +26,12 @@ struct ThreadListParams<'a> {
     cursor: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     limit: Option<u32>,
-    project_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project_id: Option<Option<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     search_term: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    section_id: Option<&'a str>,
+    section_id: Option<Option<&'a str>>,
     sort_direction: &'static str,
     sort_key: &'static str,
 }
@@ -115,9 +119,9 @@ pub async fn list_tasks(
                 archived: input.archived.unwrap_or(false),
                 cursor: input.cursor.as_deref(),
                 limit: input.limit,
-                project_id: project_filter,
+                project_id: Some(project_filter),
                 search_term: input.search_term.as_deref(),
-                section_id: input.pinned.unwrap_or(false).then_some(PINNED_SECTION_ID),
+                section_id: Some(input.pinned.unwrap_or(false).then_some(PINNED_SECTION_ID)),
                 sort_direction: "desc",
                 sort_key: "updated_at",
             },
@@ -136,6 +140,70 @@ pub async fn list_tasks(
         data,
         next_cursor: response.next_cursor,
     })
+}
+
+pub async fn list_completed_tasks(
+    connection: &AppServerConnection,
+    input: ListCompletedTasksInput,
+) -> Result<AgentTaskPage, ConnectionError> {
+    let limit = input
+        .limit
+        .unwrap_or(COMPLETED_TASK_DEFAULT_LIMIT)
+        .clamp(1, COMPLETED_TASK_MAX_LIMIT) as usize;
+    let selected_project_id = input.project_id.as_deref();
+    let mut cursor = input.cursor;
+    let mut requested_cursors = std::collections::HashSet::new();
+    let mut data = Vec::with_capacity(limit);
+
+    loop {
+        let response: NativeThreadPage = connection
+            .request(
+                "thread/list",
+                &ThreadListParams {
+                    archived: false,
+                    cursor: cursor.as_deref(),
+                    limit: Some((limit - data.len()) as u32),
+                    project_id: selected_project_id.map(Some),
+                    search_term: None,
+                    section_id: None,
+                    sort_direction: "desc",
+                    sort_key: "updated_at",
+                },
+                REQUEST_TIMEOUT,
+            )
+            .await?;
+
+        for thread in response.data {
+            let Some(project_id) = thread.project_id.clone() else {
+                continue;
+            };
+            if selected_project_id.is_some_and(|selected| selected != project_id) {
+                return Err(ConnectionError::InvalidMessage);
+            }
+            // Codex 的 idle/notLoaded 都表示当前没有执行中的 Turn；失败任务单独排除。
+            if !matches!(thread.status.kind.as_str(), "idle" | "notLoaded") {
+                continue;
+            }
+            data.push(map_task(thread, &project_id));
+            if data.len() == limit {
+                return Ok(AgentTaskPage {
+                    data,
+                    next_cursor: response.next_cursor,
+                });
+            }
+        }
+
+        let Some(next_cursor) = response.next_cursor else {
+            return Ok(AgentTaskPage {
+                data,
+                next_cursor: None,
+            });
+        };
+        if !requested_cursors.insert(next_cursor.clone()) {
+            return Err(ConnectionError::InvalidMessage);
+        }
+        cursor = Some(next_cursor);
+    }
 }
 
 pub async fn read_task(

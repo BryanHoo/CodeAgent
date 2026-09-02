@@ -18,6 +18,8 @@ function WorkbenchLayout() {
     select: (state) => {
       const params = state.matches.at(-1)?.params;
       return {
+        board: state.location.pathname.endsWith("/board"),
+        draftId: params !== undefined && "draftId" in params ? params.draftId : undefined,
         projectId: params !== undefined && "projectId" in params ? params.projectId : undefined,
         taskId: params !== undefined && "taskId" in params ? params.taskId : undefined,
       };
@@ -30,6 +32,8 @@ function WorkbenchLayout() {
   return (
     <WorkbenchBackground>
       <WorkbenchRoute
+        board={routeParams.board}
+        {...(routeParams.draftId === undefined ? {} : { draftId: routeParams.draftId })}
         projectId={projectId}
         temporary={temporary}
         {...(routeParams.taskId === undefined ? {} : { taskId: routeParams.taskId })}

@@ -20,8 +20,11 @@ pub enum TaskActivityStatus {
 #[serde(rename_all = "camelCase")]
 pub struct TaskActivitySnapshot {
     pub(super) project_id: String,
+    pub(super) requires_approval: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) root_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) started_at: Option<String>,
     pub(super) status: TaskActivityStatus,
     pub(super) task_id: String,
     pub(super) task_name: String,
@@ -36,8 +39,21 @@ struct TaskMetadata {
 
 #[derive(Clone, Debug)]
 struct TaskActivityRecord {
+    approval_request_ids: HashSet<String>,
     pending_request_ids: HashSet<String>,
     snapshot: TaskActivitySnapshot,
+}
+
+impl TaskActivityRecord {
+    fn clear_pending_requests(&mut self) {
+        self.approval_request_ids.clear();
+        self.pending_request_ids.clear();
+        self.snapshot.requires_approval = false;
+    }
+
+    fn refresh_approval_state(&mut self) {
+        self.snapshot.requires_approval = !self.approval_request_ids.is_empty();
+    }
 }
 
 #[derive(Debug, Default)]
@@ -70,7 +86,7 @@ impl TaskActivityState {
                 TaskActivityStatus::Running | TaskActivityStatus::Waiting
             ) {
                 record.snapshot.status = TaskActivityStatus::Failed;
-                record.pending_request_ids.clear();
+                record.clear_pending_requests();
                 changed = true;
             }
         }
@@ -91,39 +107,46 @@ impl TaskActivityState {
             }
             Some("task.removed") => self.remove_task(project_id, task_id),
             Some("turn.started") => {
+                let started_at = event_text(event, "/payload/turn/startedAt")
+                    .or_else(|| event_text(event, "/timestamp"))
+                    .map(str::to_owned);
                 let inserted = self.activity_index(project_id, task_id).is_none();
                 let record = self.ensure_activity(project_id, task_id);
                 let changed = inserted
                     || record.snapshot.status != TaskActivityStatus::Running
-                    || !record.pending_request_ids.is_empty();
+                    || !record.pending_request_ids.is_empty()
+                    || record.snapshot.started_at != started_at;
                 record.snapshot.status = TaskActivityStatus::Running;
-                record.pending_request_ids.clear();
+                record.snapshot.started_at = started_at;
+                record.clear_pending_requests();
                 changed
             }
             Some("pending_request.created") => {
-                let request_id = event
-                    .as_json()
-                    .and_then(|event| event.pointer("/payload/request/requestId"))
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned);
+                let request_id = event_text(event, "/payload/request/requestId").map(str::to_owned);
+                let requires_approval = event_text(event, "/payload/request/type")
+                    .is_some_and(is_approval_request_type);
                 let record = self.ensure_activity(project_id, task_id);
                 let mut changed = record.snapshot.status != TaskActivityStatus::Waiting;
                 record.snapshot.status = TaskActivityStatus::Waiting;
                 if let Some(request_id) = request_id {
-                    changed |= record.pending_request_ids.insert(request_id);
+                    changed |= record.pending_request_ids.insert(request_id.clone());
+                    if requires_approval {
+                        changed |= record.approval_request_ids.insert(request_id);
+                    }
                 }
+                record.refresh_approval_state();
                 changed
             }
             Some("pending_request.resolved" | "pending_request.expired") => {
-                let request_id = event
-                    .as_json()
-                    .and_then(|event| event.pointer("/payload/request/requestId"))
-                    .and_then(serde_json::Value::as_str);
+                let request_id = event_text(event, "/payload/request/requestId");
                 let Some(index) = self.activity_index(project_id, task_id) else {
                     return false;
                 };
                 let record = &mut self.activities[index];
-                let removed = request_id.is_some_and(|id| record.pending_request_ids.remove(id));
+                let mut removed =
+                    request_id.is_some_and(|id| record.pending_request_ids.remove(id));
+                removed |= request_id.is_some_and(|id| record.approval_request_ids.remove(id));
+                record.refresh_approval_state();
                 if record.pending_request_ids.is_empty()
                     && record.snapshot.status == TaskActivityStatus::Waiting
                 {
@@ -155,10 +178,22 @@ impl TaskActivityState {
                 .and_then(serde_json::Value::as_str)
             {
                 Some("running") => {
+                    let started_at = event_text(event, "/timestamp").map(str::to_owned);
                     let inserted = self.activity_index(project_id, task_id).is_none();
                     let record = self.ensure_activity(project_id, task_id);
-                    let changed = inserted || record.snapshot.status != TaskActivityStatus::Running;
+                    let was_active = matches!(
+                        record.snapshot.status,
+                        TaskActivityStatus::Running | TaskActivityStatus::Waiting
+                    );
+                    let mut changed =
+                        inserted || record.snapshot.status != TaskActivityStatus::Running;
                     record.snapshot.status = TaskActivityStatus::Running;
+                    if (inserted || !was_active || record.snapshot.started_at.is_none())
+                        && started_at.is_some()
+                    {
+                        changed |= record.snapshot.started_at != started_at;
+                        record.snapshot.started_at = started_at;
+                    }
                     changed
                 }
                 Some("failed") => self.set_terminal_status(project_id, task_id, true),
@@ -249,20 +284,35 @@ impl TaskActivityState {
         task_id: &str,
         task_name: &str,
         status: &str,
-        pending_request_ids: Vec<String>,
+        pending_requests: Vec<(String, bool)>,
+        started_at: Option<&str>,
     ) {
         self.remember_task(project_id, task_id, task_name, None);
-        if !pending_request_ids.is_empty() {
+        if !pending_requests.is_empty() {
             let record = self.ensure_activity(project_id, task_id);
             record.snapshot.status = TaskActivityStatus::Waiting;
-            record.pending_request_ids = pending_request_ids.into_iter().collect();
+            record.pending_request_ids = pending_requests
+                .iter()
+                .map(|(request_id, _)| request_id.clone())
+                .collect();
+            record.approval_request_ids = pending_requests
+                .into_iter()
+                .filter_map(|(request_id, approval)| approval.then_some(request_id))
+                .collect();
+            record.refresh_approval_state();
+            if let Some(started_at) = started_at {
+                record.snapshot.started_at = Some(started_at.to_owned());
+            }
             return;
         }
         match status {
             "running" => {
                 let record = self.ensure_activity(project_id, task_id);
                 record.snapshot.status = TaskActivityStatus::Running;
-                record.pending_request_ids.clear();
+                record.clear_pending_requests();
+                if let Some(started_at) = started_at {
+                    record.snapshot.started_at = Some(started_at.to_owned());
+                }
             }
             "failed" => {
                 self.set_terminal_status(project_id, task_id, true);
@@ -272,7 +322,7 @@ impl TaskActivityState {
                 if let Some(index) = self.activity_index(project_id, task_id) {
                     let record = &mut self.activities[index];
                     record.snapshot.status = TaskActivityStatus::Completed;
-                    record.pending_request_ids.clear();
+                    record.clear_pending_requests();
                 }
             }
         }
@@ -342,10 +392,13 @@ impl TaskActivityState {
         }
         let metadata = self.metadata.get(task_id);
         self.activities.push(TaskActivityRecord {
+            approval_request_ids: HashSet::new(),
             pending_request_ids: HashSet::new(),
             snapshot: TaskActivitySnapshot {
                 project_id: project_id.to_owned(),
+                requires_approval: false,
                 root_path: metadata.and_then(|metadata| metadata.root_path.clone()),
+                started_at: None,
                 status: TaskActivityStatus::Running,
                 task_id: task_id.to_owned(),
                 task_name: metadata
@@ -395,7 +448,7 @@ impl TaskActivityState {
         let record = self.ensure_activity(project_id, task_id);
         let changed = record.snapshot.status != status || !record.pending_request_ids.is_empty();
         record.snapshot.status = status;
-        record.pending_request_ids.clear();
+        record.clear_pending_requests();
         changed
     }
 
@@ -415,4 +468,22 @@ impl TaskActivityState {
 
 fn normalized(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+pub(super) fn is_approval_request_type(request_type: &str) -> bool {
+    matches!(
+        request_type,
+        "command_approval"
+            | "terminal_input_approval"
+            | "file_change_approval"
+            | "permissions_approval"
+            | "mcp_elicitation"
+    )
+}
+
+fn event_text<'a>(event: &'a AgentEvent, pointer: &str) -> Option<&'a str> {
+    event
+        .as_json()
+        .and_then(|event| event.pointer(pointer))
+        .and_then(serde_json::Value::as_str)
 }

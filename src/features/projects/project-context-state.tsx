@@ -10,6 +10,7 @@ import { createContext, useContext, useEffect, useMemo } from "react";
 import type { ProjectRuntimeManager } from "../conversation/runtime/project-runtime.js";
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
 import {
+  completedTasksInfiniteQueryOptions,
   flattenProjectTaskPages,
   projectPinnedTasksQueryOptions,
   projectTaskSearchSourceQueryOptions,
@@ -217,6 +218,21 @@ export function useProjectTaskSearch(normalizedQuery: string) {
           .filter((task) => task.title.toLocaleLowerCase().includes(normalizedQuery));
 
   return { error, isPending, tasks } as const;
+}
+
+export function useCompletedTasks(projectId: string | null) {
+  const { client } = useProjectData();
+  const query = useInfiniteQuery(completedTasksInfiniteQueryOptions(projectId, client));
+  const tasks = useMemo(() => flattenProjectTaskPages(query.data), [query.data]);
+  return {
+    error: query.error,
+    fetchNextPage: query.fetchNextPage,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isPending: query.isPending,
+    refetch: query.refetch,
+    tasks,
+  } as const;
 }
 
 export function usePinnedProjectTasks() {

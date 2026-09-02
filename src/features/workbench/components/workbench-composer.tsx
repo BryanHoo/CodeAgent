@@ -1,6 +1,5 @@
 import type { AgentTaskSettings } from "@/protocol/index.js";
 import { useEffect, useImperativeHandle, useState } from "react";
-
 import { useTranslation } from "../../../i18n/i18n.js";
 import { getTaskStoreUserMessageIds } from "../composer-queue-state.js";
 import { useProjectDrafts, useProjectDraftStore } from "../project-draft-context.js";
@@ -43,7 +42,6 @@ export {
   type ComposerSubmitAction,
   type IdempotencyAttempt,
 } from "../composer-state.js";
-
 export function WorkbenchComposer({
   composerRef,
   capabilities,
@@ -51,6 +49,7 @@ export function WorkbenchComposer({
   fastModeAvailable,
   fastModeDefault,
   followUpBehavior,
+  initialProjectDraftId,
   models,
   modelsError,
   modelsPending,
@@ -79,9 +78,12 @@ export function WorkbenchComposer({
   const { t } = useTranslation(["workbench", "settings"]);
   const projectDraftStore = useProjectDraftStore();
   const projectDrafts = useProjectDrafts(projectId);
-  const [editingProjectDraft, setEditingProjectDraft] = useState<
-    Readonly<{ draftId: string; projectId: string }>
-  >();
+  const initialEditingProjectDraft =
+    initialProjectDraftId !== undefined &&
+    projectDraftStore.read(projectId, initialProjectDraftId) !== undefined
+      ? { draftId: initialProjectDraftId, projectId }
+      : undefined;
+  const [editingProjectDraft, setEditingProjectDraft] = useState(initialEditingProjectDraft);
   const editingProjectDraftId =
     editingProjectDraft?.projectId === projectId ? editingProjectDraft.draftId : undefined;
   const session = useComposerSession({
@@ -186,7 +188,6 @@ export function WorkbenchComposer({
     rootPath: projectPath,
     routeScope,
   });
-
   useComposerMenuDismiss({
     closeCommandMenu,
     closeFileMenu,
@@ -195,7 +196,6 @@ export function WorkbenchComposer({
     fileMenuOpen,
     turnControlsDisabled,
   });
-
   const composerQueue = useComposerQueue({
     activeTurnId,
     client,
@@ -337,7 +337,6 @@ export function WorkbenchComposer({
       }
     });
   };
-
   const submitAction =
     composerQueue.editingId === undefined
       ? resolveComposerSubmitAction(state, hasComposerInput, followUpBehavior, canSteer)
