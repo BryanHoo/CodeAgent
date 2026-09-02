@@ -228,7 +228,7 @@ export function TaskActionMenu({
         {t("sidebar.copyTaskId")}
       </DropdownMenuItem>
       <DropdownMenuItem
-        className={`${taskActionClassName} text-danger`}
+        className={taskActionClassName}
         disabled={isPending}
         onSelect={onArchive}
       >

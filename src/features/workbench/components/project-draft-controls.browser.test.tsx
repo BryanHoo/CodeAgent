@@ -67,6 +67,12 @@ describe("project draft controls", () => {
       "backgroundColor",
       "rgba(0, 0, 0, 0)",
     );
+    const draftItem = restoreButton.element().closest<HTMLElement>("[role='listitem']");
+    expect(draftItem).not.toBeNull();
+    expect(draftItem!.getBoundingClientRect().height).toBeLessThanOrEqual(44);
+    expect(getComputedStyle(screen.getByText("修复登录状态恢复").element()).whiteSpace).toBe(
+      "nowrap",
+    );
 
     await screen.getByRole("button", { name: "删除草稿：修复登录状态恢复" }).click();
     expect(onDelete).toHaveBeenCalledWith("draft-a");

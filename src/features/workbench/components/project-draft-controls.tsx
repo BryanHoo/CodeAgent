@@ -94,37 +94,45 @@ export function ProjectDraftList({
           <div className="border-b border-separator px-3 py-2 text-label font-medium">
             {draftListLabel}
           </div>
-          <div className="max-h-80 overflow-y-auto p-1" role="list">
+          <div className="max-h-72 overflow-y-auto p-1" role="list">
             {drafts.map((draft) => {
               const attachmentFallback = t("composer.attachmentCount", {
                 count: draft.draft.attachments.length,
               });
               const summary = getProjectDraftSummary(draft, attachmentFallback);
               return (
-                <div className="group flex min-w-0 items-center gap-1" key={draft.id} role="listitem">
+                <div
+                  className="group flex h-11 min-w-0 items-center gap-1"
+                  key={draft.id}
+                  role="listitem"
+                >
                   <Button
                     aria-label={summary}
-                    className="h-auto min-w-0 flex-1 whitespace-normal px-2 py-2"
+                    className="h-full min-w-0 flex-1 px-2 py-1"
                     contentAlign="start"
                     onClick={() => restoreDraft(draft.id)}
                     type="button"
                     variant="ghost"
                   >
-                    <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 block break-words text-body-small text-foreground">
+                    <span className="min-w-0 flex-1 overflow-hidden">
+                      <span className="block truncate text-body-small text-foreground">
                         {summary}
                       </span>
-                      <span className="mt-0.5 flex items-center gap-2 text-caption text-muted-foreground">
-                        <span>{new Date(draft.updatedAt).toLocaleString(i18n.language)}</span>
+                      <span className="mt-px flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
+                        <span className="truncate">
+                          {new Date(draft.updatedAt).toLocaleString(i18n.language)}
+                        </span>
                         {draft.workingDraft === undefined ? null : (
-                          <span className="text-brand">{t("composer.draftHasChanges")}</span>
+                          <span className="shrink-0 text-brand">
+                            {t("composer.draftHasChanges")}
+                          </span>
                         )}
                       </span>
                     </span>
                   </Button>
                   <Button
                     aria-label={t("composer.deleteDraft", { summary })}
-                    className="mr-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                    className="mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
                     onClick={() => onDelete(draft.id)}
                     size="icon-sm"
                     type="button"
