@@ -12,7 +12,10 @@ export type CodexRuntimeAvailability = Readonly<{
 }>;
 
 export type CodexRuntimeInstallProgress = Readonly<{
+  currentVersion: string | null;
   downloadedBytes: number;
+  phase: "downloading" | "failed" | "installing" | "preparing" | "ready";
   sequence: number;
+  targetVersion: string;
   totalBytes: number | null;
 }>;

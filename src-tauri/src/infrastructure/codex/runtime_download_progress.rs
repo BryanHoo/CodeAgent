@@ -1,8 +1,10 @@
-use crate::domain::runtime::CodexRuntimeInstallProgress;
+use crate::domain::runtime::{CodexRuntimeInstallPhase, CodexRuntimeInstallProgress};
 
 const UNKNOWN_TOTAL_REPORT_INTERVAL_BYTES: u64 = 1024 * 1024;
 
 pub(super) struct DownloadProgressReporter<'a, OnProgress> {
+    current_version: Option<String>,
+    downloaded_bytes: u64,
     on_progress: &'a OnProgress,
     sequence: u64,
     total_bytes: Option<u64>,
@@ -12,19 +14,38 @@ impl<'a, OnProgress> DownloadProgressReporter<'a, OnProgress>
 where
     OnProgress: Fn(CodexRuntimeInstallProgress),
 {
-    pub(super) fn new(on_progress: &'a OnProgress, total_bytes: Option<u64>) -> Self {
+    pub(super) fn new(on_progress: &'a OnProgress, current_version: Option<String>) -> Self {
         Self {
+            current_version,
+            downloaded_bytes: 0,
             on_progress,
             sequence: 0,
-            total_bytes,
+            total_bytes: None,
         }
     }
 
-    pub(super) fn report(&mut self, downloaded_bytes: u64) {
+    pub(super) fn start_download(&mut self, total_bytes: Option<u64>) {
+        self.total_bytes = total_bytes;
+        self.report(CodexRuntimeInstallPhase::Downloading);
+    }
+
+    pub(super) fn report_download(&mut self, downloaded_bytes: u64) {
+        self.downloaded_bytes = downloaded_bytes;
+        self.report(CodexRuntimeInstallPhase::Downloading);
+    }
+
+    pub(super) fn report_phase(&mut self, phase: CodexRuntimeInstallPhase) {
+        self.report(phase);
+    }
+
+    fn report(&mut self, phase: CodexRuntimeInstallPhase) {
         self.sequence = self.sequence.saturating_add(1);
         (self.on_progress)(CodexRuntimeInstallProgress {
-            downloaded_bytes,
+            current_version: self.current_version.clone(),
+            downloaded_bytes: self.downloaded_bytes,
+            phase,
             sequence: self.sequence,
+            target_version: super::process::SUPPORTED_CODEX_VERSION,
             total_bytes: self.total_bytes,
         });
     }
@@ -76,20 +97,25 @@ impl DownloadProgressLimiter {
 mod tests {
     use std::sync::Mutex;
 
-    use super::{DownloadProgressLimiter, DownloadProgressReporter};
+    use super::{CodexRuntimeInstallPhase, DownloadProgressLimiter, DownloadProgressReporter};
 
     #[test]
     fn reporter_should_assign_monotonic_sequence_numbers() {
         let events = Mutex::new(Vec::new());
         let on_progress = |progress| events.lock().unwrap().push(progress);
-        let mut reporter = DownloadProgressReporter::new(&on_progress, Some(100));
+        let mut reporter = DownloadProgressReporter::new(&on_progress, Some("0.150.0".to_owned()));
 
-        reporter.report(0);
-        reporter.report(20);
+        reporter.report_phase(CodexRuntimeInstallPhase::Preparing);
+        reporter.start_download(Some(100));
+        reporter.report_download(20);
+        reporter.report_phase(CodexRuntimeInstallPhase::Installing);
 
         let events = events.lock().unwrap();
         assert_eq!(events[0].sequence, 1);
         assert_eq!(events[1].sequence, 2);
+        assert_eq!(events[2].sequence, 3);
+        assert_eq!(events[3].sequence, 4);
+        assert_eq!(events[3].phase, CodexRuntimeInstallPhase::Installing);
     }
 
     #[test]

@@ -10,7 +10,10 @@ use std::{
 use futures_util::{StreamExt, stream};
 use tokio::{io::AsyncReadExt, time::timeout};
 
-use super::process::{SUPPORTED_CODEX_VERSION, background_process_command, executable_path};
+use super::{
+    process::{SUPPORTED_CODEX_VERSION, background_process_command, executable_path},
+    runtime_active::read_active_codex_runtime,
+};
 
 const CODEX_BINARY_ENV: &str = "CODEAGENT_CODEX_BIN";
 const MANAGER_QUERY_TIMEOUT: Duration = Duration::from_secs(2);
@@ -52,6 +55,9 @@ pub(super) fn initial_candidate_paths(
         }
     }
     raw_paths.push(private_codex_binary_path(app_data));
+    if let Some(active_path) = active_codex_binary_path(app_data) {
+        raw_paths.push(active_path);
+    }
     for path in [env::var_os("PATH").as_deref(), runtime_path]
         .into_iter()
         .flatten()
@@ -100,6 +106,10 @@ pub(super) fn private_codex_binary_path(app_data: &Path) -> PathBuf {
         .join(SUPPORTED_CODEX_VERSION)
         .join("bin")
         .join(format!("codex{}", env::consts::EXE_SUFFIX))
+}
+
+pub(super) fn active_codex_binary_path(app_data: &Path) -> Option<PathBuf> {
+    read_active_codex_runtime(app_data).map(|runtime| runtime.path)
 }
 
 pub(super) fn official_binary_directories(

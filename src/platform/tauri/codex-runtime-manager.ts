@@ -6,21 +6,30 @@ import type {
 
 import { invoke } from "./native-invoke.js";
 
-export function inspectCodexRuntime(): Promise<CodexRuntimeAvailability> {
-  return invoke<CodexRuntimeAvailability>("inspect_codex_runtime");
+function createProgressChannel(
+  onProgress: (progress: CodexRuntimeInstallProgress) => void,
+): Channel<CodexRuntimeInstallProgress> {
+  let latestSequence = 0;
+  return new Channel<CodexRuntimeInstallProgress>((progress) => {
+    if (progress.sequence <= latestSequence) return;
+    latestSequence = progress.sequence;
+    onProgress(progress);
+  });
+}
+
+export function inspectCodexRuntime(
+  onProgress: (progress: CodexRuntimeInstallProgress) => void = () => undefined,
+): Promise<CodexRuntimeAvailability> {
+  return invoke<CodexRuntimeAvailability>("inspect_codex_runtime", {
+    onProgress: createProgressChannel(onProgress),
+  });
 }
 
 export async function downloadAndInspectCodexRuntime(
   onProgress: (progress: CodexRuntimeInstallProgress) => void = () => undefined,
 ): Promise<CodexRuntimeAvailability> {
-  let latestSequence = 0;
-  const progressChannel = new Channel<CodexRuntimeInstallProgress>((progress) => {
-    if (progress.sequence <= latestSequence) return;
-    latestSequence = progress.sequence;
-    onProgress(progress);
-  });
   await invoke<CodexRuntimeAvailability>("install_codex_runtime", {
-    onProgress: progressChannel,
+    onProgress: createProgressChannel(onProgress),
   });
   // 安装完成后重新走统一发现逻辑，保证进入工作台前使用的是已验证路径。
   return inspectCodexRuntime();

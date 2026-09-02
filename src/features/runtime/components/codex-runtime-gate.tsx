@@ -1,14 +1,23 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  type QueryFunctionContext,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  ArrowRight,
   Check,
   CircleAlert,
   Copy,
   Download,
   LoaderCircle,
+  PackageCheck,
   RefreshCw,
+  ShieldCheck,
   Terminal,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import {
@@ -22,14 +31,27 @@ import type {
 import { Button } from "../../../shared/components/core/button.js";
 
 const CODEX_RUNTIME_QUERY_KEY = ["codex-runtime-availability"] as const;
+type RuntimeProgressListener = (progress: CodexRuntimeInstallProgress) => void;
+
+function isRuntimeProgressListener(value: unknown): value is RuntimeProgressListener {
+  return typeof value === "function";
+}
+
+function inspectRuntimeQuery({ meta }: QueryFunctionContext) {
+  const onProgress = meta?.["onProgress"];
+  return inspectCodexRuntime(isRuntimeProgressListener(onProgress) ? onProgress : undefined);
+}
 
 type CodexRuntimeGateProps = Readonly<{ children: ReactNode }>;
 
 export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
+  const { t } = useTranslation("common");
   const queryClient = useQueryClient();
   const [downloadProgress, setDownloadProgress] = useState<CodexRuntimeInstallProgress | null>(null);
+  const [startupProgress, setStartupProgress] = useState<CodexRuntimeInstallProgress | null>(null);
   const availabilityQuery = useQuery({
-    queryFn: inspectCodexRuntime,
+    meta: { onProgress: setStartupProgress },
+    queryFn: inspectRuntimeQuery,
     queryKey: CODEX_RUNTIME_QUERY_KEY,
     retry: false,
     staleTime: 0,
@@ -43,8 +65,36 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
       queryClient.setQueryData(CODEX_RUNTIME_QUERY_KEY, availability);
     },
   });
+  const availability = availabilityQuery.data;
+  const refetchAvailability = availabilityQuery.refetch;
 
-  if (availabilityQuery.data?.status === "compatible") {
+  useEffect(() => {
+    if (
+      startupProgress?.phase !== "failed" ||
+      availability?.status !== "compatible"
+    ) {
+      return;
+    }
+    const currentVersion = startupProgress.currentVersion ?? availability.detectedVersion;
+    toast.warning(t("runtimeSetup.updateFailedTitle"), {
+      action: {
+        label: t("runtimeSetup.updateRetry"),
+        onClick() {
+          setStartupProgress(null);
+          void refetchAvailability();
+        },
+      },
+      description: t("runtimeSetup.updateFailedDescription", {
+        currentVersion: currentVersion ?? "-",
+      }),
+      id: "codex-runtime-update-failed",
+    });
+  }, [availability, refetchAvailability, startupProgress, t]);
+
+  if (startupProgress !== null && (availabilityQuery.isPending || availabilityQuery.isFetching)) {
+    return <RuntimeUpdating progress={startupProgress} />;
+  }
+  if (availability?.status === "compatible") {
     return children;
   }
   if (availabilityQuery.isPending) {
@@ -52,10 +102,10 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
   }
   return (
     <RuntimeSetup
-      availability={availabilityQuery.data}
+      availability={availability}
       detectionFailed={availabilityQuery.isError}
       downloadProgress={downloadProgress}
-      installFailed={installMutation.isError}
+      installFailed={installMutation.isError || startupProgress?.phase === "failed"}
       isInstalling={installMutation.isPending}
       isRefreshing={availabilityQuery.isFetching}
       onDownload={() => {
@@ -65,6 +115,7 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
       }}
       onRefresh={() => {
         setDownloadProgress(null);
+        setStartupProgress(null);
         installMutation.reset();
         void availabilityQuery.refetch();
       }}
@@ -82,6 +133,137 @@ function RuntimeChecking() {
       </div>
     </main>
   );
+}
+
+function RuntimeUpdating({ progress }: Readonly<{ progress: CodexRuntimeInstallProgress }>) {
+  const { t } = useTranslation("common");
+  const percentage = updatePercentage(progress);
+  const activeStep =
+    progress.phase === "preparing" || progress.phase === "downloading"
+      ? 0
+      : progress.phase === "installing"
+        ? 1
+        : progress.phase === "ready"
+          ? 2
+          : -1;
+  const steps = [
+    { icon: Download, label: t("runtimeSetup.downloadPhase") },
+    { icon: ShieldCheck, label: t("runtimeSetup.installPhase") },
+    { icon: PackageCheck, label: t("runtimeSetup.updateReadyPhase") },
+  ] as const;
+
+  return (
+    <main className="h-full overflow-y-auto bg-window text-foreground">
+      <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-10 py-9">
+        <img
+          alt="CodeAgent"
+          className="h-7 w-auto self-start"
+          height="28"
+          src="/brand/codeagent-logo.svg"
+          width="116"
+        />
+        <section
+          aria-live="polite"
+          className="my-auto w-full py-12"
+          role="status"
+        >
+          <p className="text-xs font-semibold text-brand uppercase">
+            {t("runtimeSetup.statusLabel")}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold">
+            {progress.phase === "failed"
+              ? t("runtimeSetup.updateFailedTitle")
+              : t("runtimeSetup.updateTitle")}
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            {progress.phase === "failed"
+              ? t("runtimeSetup.updateFailedDescription", {
+                  currentVersion: progress.currentVersion ?? "-",
+                })
+              : progress.phase === "ready"
+                ? t("runtimeSetup.completingUpdate")
+                : t("runtimeSetup.updateDescription")}
+          </p>
+
+          <div
+            aria-label={t("runtimeSetup.versionTransition", {
+              currentVersion: progress.currentVersion ?? "-",
+              targetVersion: progress.targetVersion,
+            })}
+            className="mt-7 flex items-center gap-3 font-mono text-sm tabular-nums"
+          >
+            <span>{progress.currentVersion ?? "-"}</span>
+            <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="font-semibold text-brand">{progress.targetVersion}</span>
+          </div>
+
+          <div className="mt-7 border-y border-separator py-6">
+            <div className="grid grid-cols-3 gap-5">
+              {steps.map(({ icon: Icon, label }, index) => {
+                const completed = activeStep > index || progress.phase === "ready";
+                const active = activeStep === index;
+                return (
+                  <div
+                    className={`flex min-w-0 items-center gap-2 text-xs ${
+                      active || completed ? "text-foreground" : "text-subtle-foreground"
+                    }`}
+                    key={label}
+                  >
+                    <span
+                      className={`grid size-7 shrink-0 place-items-center rounded-full border ${
+                        active || completed
+                          ? "border-brand bg-brand/10 text-brand"
+                          : "border-separator-strong text-subtle-foreground"
+                      }`}
+                    >
+                      {completed ? (
+                        <Check className="size-3.5" aria-hidden="true" />
+                      ) : (
+                        <Icon className="size-3.5" aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="truncate font-medium">{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between gap-4 text-xs text-muted-foreground">
+                <span>{t("runtimeSetup.updateProgress")}</span>
+                <span className="shrink-0 font-mono tabular-nums">
+                  {progress.phase === "failed"
+                    ? t("runtimeSetup.restoringVersion")
+                    : percentage === null
+                      ? t("runtimeSetup.preparingUpdate")
+                      : `${percentage}%`}
+                </span>
+              </div>
+              <div
+                aria-label={t("runtimeSetup.updateProgress")}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={percentage ?? undefined}
+                className="h-1.5 overflow-hidden rounded-pill bg-control"
+                role="progressbar"
+              >
+                <div
+                  className={`h-full rounded-pill bg-brand transition-[width] duration-150 ${percentage === null ? "w-1/3 animate-pulse" : ""}`}
+                  style={percentage === null ? undefined : { width: `${percentage}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function updatePercentage(progress: CodexRuntimeInstallProgress): number | null {
+  if (progress.phase === "installing" || progress.phase === "ready") return 100;
+  if (progress.phase !== "downloading") return null;
+  return calculateDownloadPercentage(progress);
 }
 
 type RuntimeSetupProps = Readonly<{
@@ -236,16 +418,24 @@ function RuntimeDownloadProgress({
   progress,
 }: Readonly<{ progress: CodexRuntimeInstallProgress }>) {
   const { t } = useTranslation("common");
-  const percentage = calculateDownloadPercentage(progress);
+  const percentage = updatePercentage(progress);
   const status =
     percentage === null
       ? t("runtimeSetup.downloadedBytes", { downloaded: formatBytes(progress.downloadedBytes) })
       : `${percentage}%`;
+  const label =
+    progress.phase === "installing"
+      ? t("runtimeSetup.installPhase")
+      : progress.phase === "ready"
+        ? t("runtimeSetup.updateReadyPhase")
+        : progress.phase === "preparing"
+          ? t("runtimeSetup.preparingUpdate")
+          : t("runtimeSetup.downloadProgress");
 
   return (
     <div className="mt-4 max-w-md" aria-live="polite">
       <div className="mb-1.5 flex items-center justify-between gap-4 text-xs text-muted-foreground">
-        <span>{t("runtimeSetup.downloadProgress")}</span>
+        <span>{label}</span>
         <span className="shrink-0 font-mono tabular-nums">{status}</span>
       </div>
       <div

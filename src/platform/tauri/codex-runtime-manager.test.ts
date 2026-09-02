@@ -68,4 +68,39 @@ describe("Codex runtime manager", () => {
       expect.objectContaining({ onProgress: expect.anything() }),
     );
   });
+
+  it("forwards automatic update progress while inspecting the runtime", async () => {
+    invoke.mockImplementationOnce(async () => {
+      channelHandler?.({
+        currentVersion: "0.150.0",
+        downloadedBytes: 42,
+        phase: "downloading",
+        sequence: 2,
+        targetVersion: "0.151.0",
+        totalBytes: 100,
+      });
+      channelHandler?.({
+        currentVersion: "0.150.0",
+        downloadedBytes: 10,
+        phase: "downloading",
+        sequence: 1,
+        targetVersion: "0.151.0",
+        totalBytes: 100,
+      });
+      return { status: "compatible" };
+    });
+    const { inspectCodexRuntime } = await import("./codex-runtime-manager.js");
+    const onProgress = vi.fn();
+
+    await inspectCodexRuntime(onProgress);
+
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: "downloading", sequence: 2 }),
+    );
+    expect(invoke).toHaveBeenCalledWith(
+      "inspect_codex_runtime",
+      expect.objectContaining({ onProgress: expect.anything() }),
+    );
+  });
 });

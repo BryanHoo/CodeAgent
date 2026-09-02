@@ -2,10 +2,12 @@ use std::path::Path;
 
 #[cfg(unix)]
 use super::process::probe_codex_version;
+use super::runtime_active::managed_private_runtime_needs_update;
 #[cfg(unix)]
 use super::runtime_discovery::initial_candidate_paths;
 use super::runtime_discovery::{
-    codex_executable_names, official_binary_directories, private_codex_binary_path,
+    active_codex_binary_path, codex_executable_names, official_binary_directories,
+    private_codex_binary_path,
 };
 use super::runtime_manager::distribution_for;
 #[cfg(unix)]
@@ -22,6 +24,95 @@ fn private_runtime_should_use_the_provider_version_directory() {
         Path::new("/application-data/providers/codex/bin/0.151.0/bin")
             .join(format!("codex{}", std::env::consts::EXE_SUFFIX))
     );
+}
+
+#[test]
+fn private_runtime_update_should_require_an_existing_managed_install() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let app_data = std::env::temp_dir().join(format!("codeagent-managed-runtime-{unique}"));
+
+    assert!(!managed_private_runtime_needs_update(&app_data));
+
+    let provider_root = app_data.join("providers/codex");
+    let old_binary = provider_root
+        .join("bin/0.150.0/bin")
+        .join(format!("codex{}", std::env::consts::EXE_SUFFIX));
+    std::fs::create_dir_all(old_binary.parent().unwrap()).unwrap();
+    std::fs::write(&old_binary, []).unwrap();
+    std::fs::write(
+        provider_root.join("active.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "path": old_binary,
+            "version": "0.150.0",
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert!(managed_private_runtime_needs_update(&app_data));
+    std::fs::remove_dir_all(app_data).unwrap();
+}
+
+#[test]
+fn current_managed_private_runtime_should_not_update_again() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let app_data = std::env::temp_dir().join(format!("codeagent-current-runtime-{unique}"));
+    let binary = private_codex_binary_path(&app_data);
+    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    std::fs::write(&binary, []).unwrap();
+    std::fs::write(
+        app_data.join("providers/codex/active.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "path": binary,
+            "version": "0.151.0",
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert!(!managed_private_runtime_needs_update(&app_data));
+    std::fs::remove_dir_all(app_data).unwrap();
+}
+
+#[test]
+fn active_runtime_path_should_stay_inside_the_private_provider_directory() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let app_data = std::env::temp_dir().join(format!("codeagent-active-runtime-{unique}"));
+    let binary = app_data.join("providers/codex/bin/0.150.0/bin/codex");
+    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    std::fs::write(&binary, []).unwrap();
+    std::fs::write(
+        app_data.join("providers/codex/active.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "path": binary,
+            "version": "0.150.0",
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(active_codex_binary_path(&app_data), Some(binary));
+
+    std::fs::write(
+        app_data.join("providers/codex/active.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "path": app_data.join("../outside/codex"),
+            "version": "0.150.0",
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(active_codex_binary_path(&app_data), None);
+    std::fs::remove_dir_all(app_data).unwrap();
 }
 
 #[test]

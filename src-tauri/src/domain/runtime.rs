@@ -38,9 +38,22 @@ pub struct CodexRuntimeAvailability {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub enum CodexRuntimeInstallPhase {
+    Preparing,
+    Downloading,
+    Installing,
+    Ready,
+    Failed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexRuntimeInstallProgress {
+    pub current_version: Option<String>,
     pub downloaded_bytes: u64,
+    pub phase: CodexRuntimeInstallPhase,
     pub sequence: u64,
+    pub target_version: &'static str,
     pub total_bytes: Option<u64>,
 }
 
@@ -208,7 +221,7 @@ mod tests {
 
     use super::{
         AppEvent, CodexRuntimeAvailability, CodexRuntimeAvailabilityStatus,
-        CodexRuntimeInstallProgress, ProviderKind, RuntimeStatus,
+        CodexRuntimeInstallPhase, CodexRuntimeInstallProgress, ProviderKind, RuntimeStatus,
     };
 
     #[test]
@@ -272,14 +285,24 @@ mod tests {
     #[test]
     fn codex_runtime_install_progress_should_match_frontend_contract() {
         let progress = CodexRuntimeInstallProgress {
+            current_version: Some("0.150.0".to_owned()),
             downloaded_bytes: 42,
+            phase: CodexRuntimeInstallPhase::Downloading,
             sequence: 3,
+            target_version: "0.151.0",
             total_bytes: Some(100),
         };
 
         assert_eq!(
             serde_json::to_value(progress).unwrap(),
-            json!({"downloadedBytes": 42, "sequence": 3, "totalBytes": 100})
+            json!({
+                "currentVersion": "0.150.0",
+                "downloadedBytes": 42,
+                "phase": "downloading",
+                "sequence": 3,
+                "targetVersion": "0.151.0",
+                "totalBytes": 100
+            })
         );
     }
 }

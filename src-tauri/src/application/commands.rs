@@ -30,16 +30,21 @@ pub async fn start_runtime(
     state.start_codex(&app, &app_data).await
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn inspect_codex_runtime(
     app: AppHandle,
+    on_progress: Channel<CodexRuntimeInstallProgress>,
     state: State<'_, AppState>,
 ) -> Result<CodexRuntimeAvailability, AppError> {
     let app_data = app
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    Ok(state.inspect_codex(&app_data).await)
+    Ok(state
+        .inspect_codex(&app_data, move |progress| {
+            let _ = on_progress.send(progress);
+        })
+        .await)
 }
 
 #[tauri::command(rename_all = "camelCase")]

@@ -20,6 +20,7 @@ use tokio::{fs, io::AsyncWriteExt, task};
 
 use super::{
     process::{SUPPORTED_CODEX_VERSION, is_compatible_codex_version, probe_codex_version},
+    runtime_active::read_active_codex_runtime,
     runtime_discovery::{
         expanded_candidate_paths, initial_candidate_paths, private_codex_binary_path,
     },
@@ -29,7 +30,7 @@ use super::{
 };
 use crate::domain::runtime::{
     CodexRuntimeAvailability, CodexRuntimeAvailabilityStatus as AvailabilityStatus,
-    CodexRuntimeInstallProgress,
+    CodexRuntimeInstallPhase, CodexRuntimeInstallProgress,
 };
 
 const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.151.0";
@@ -119,10 +120,34 @@ pub async fn install_codex_runtime<OnProgress>(
 where
     OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
 {
-    // 等待同一 Provider 的前序安装后再次检查，兼容版本已就绪时直接复用，避免重复传输大包。
-    let current = inspect(app_data).await;
-    if current.availability.status == AvailabilityStatus::Compatible {
-        return Ok(current.availability);
+    let current_version = read_active_codex_runtime(app_data).map(|active| active.version);
+    let mut progress = DownloadProgressReporter::new(&on_progress, current_version);
+    progress.report_phase(CodexRuntimeInstallPhase::Preparing);
+    let result = install_codex_runtime_inner(app_data, &mut progress).await;
+    if result.is_err() {
+        progress.report_phase(CodexRuntimeInstallPhase::Failed);
+    }
+    result
+}
+
+async fn install_codex_runtime_inner<OnProgress>(
+    app_data: &Path,
+    progress: &mut DownloadProgressReporter<'_, OnProgress>,
+) -> Result<CodexRuntimeAvailability, RuntimeInstallError>
+where
+    OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
+{
+    // 仅复用应用固定的私有版本；系统中的兼容版本不能替代用户已选择的私有安装。
+    let private_binary = private_codex_binary_path(app_data);
+    if probe_codex_version(&private_binary, None)
+        .await
+        .ok()
+        .as_deref()
+        == Some(SUPPORTED_CODEX_VERSION)
+    {
+        write_active_runtime(app_data, &private_binary).await?;
+        progress.report_phase(CodexRuntimeInstallPhase::Ready);
+        return Ok(inspect_codex_runtime(app_data).await);
     }
     let distribution = distribution_for(env::consts::OS, env::consts::ARCH)
         .ok_or(RuntimeInstallError::UnsupportedPlatform)?;
@@ -140,7 +165,7 @@ where
         &archive_path,
         &staging_dir,
         &final_dir,
-        &on_progress,
+        progress,
     )
     .await;
     let _ = fs::remove_file(&archive_path).await;
@@ -259,12 +284,13 @@ async fn install_distribution<OnProgress>(
     archive_path: &Path,
     staging_dir: &Path,
     final_dir: &Path,
-    on_progress: &OnProgress,
+    progress: &mut DownloadProgressReporter<'_, OnProgress>,
 ) -> Result<(), RuntimeInstallError>
 where
     OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
 {
-    download_verified(distribution, archive_path, on_progress).await?;
+    download_verified(distribution, archive_path, progress).await?;
+    progress.report_phase(CodexRuntimeInstallPhase::Installing);
     let archive = archive_path.to_owned();
     let staging = staging_dir.to_owned();
     let target = distribution.target;
@@ -286,13 +312,14 @@ where
 
     replace_runtime_directory(final_dir, staging_dir).await?;
     write_active_runtime(app_data, &private_codex_binary_path(app_data)).await?;
+    progress.report_phase(CodexRuntimeInstallPhase::Ready);
     Ok(())
 }
 
 async fn download_verified<OnProgress>(
     distribution: &Distribution,
     archive_path: &Path,
-    on_progress: &OnProgress,
+    progress: &mut DownloadProgressReporter<'_, OnProgress>,
 ) -> Result<(), RuntimeInstallError>
 where
     OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
@@ -313,8 +340,7 @@ where
         return Err(RuntimeInstallError::DownloadTooLarge);
     }
     let total_bytes = content_length.filter(|length| *length > 0);
-    let mut progress_reporter = DownloadProgressReporter::new(on_progress, total_bytes);
-    progress_reporter.report(0);
+    progress.start_download(total_bytes);
 
     let mut file = fs::File::create(archive_path).await?;
     let mut stream = response.bytes_stream();
@@ -331,11 +357,11 @@ where
         file.write_all(&chunk).await?;
         // 百分比不变时不跨 IPC 上报，避免网络小分块造成 WebView 高频重复渲染。
         if progress_limiter.advance(downloaded) {
-            progress_reporter.report(downloaded);
+            progress.report_download(downloaded);
         }
     }
     if progress_limiter.finish(downloaded) {
-        progress_reporter.report(downloaded);
+        progress.report_download(downloaded);
     }
     file.flush().await?;
 

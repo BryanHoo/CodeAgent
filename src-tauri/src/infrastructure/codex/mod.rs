@@ -21,6 +21,7 @@ mod conversation_runtime_events;
 mod generated_image_store;
 mod process;
 mod protocol;
+mod runtime_active;
 mod runtime_discovery;
 mod runtime_distributions;
 mod runtime_download_progress;
@@ -95,6 +96,7 @@ pub use conversation_requests::{
     PendingServerRequest, map_server_request_now, resolved_request_id, response_for_resolution,
 };
 pub use process::CodexProcess;
+pub use runtime_active::update_managed_codex_runtime;
 pub use runtime_manager::{inspect_codex_runtime, install_codex_runtime};
 pub use sidebar::{
     add_project, list_projects, read_project, remove_project, rename_project, reorder_projects,

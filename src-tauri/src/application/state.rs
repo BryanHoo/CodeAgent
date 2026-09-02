@@ -34,7 +34,7 @@ use crate::{
     infrastructure::{
         codex::{
             AppServerConnection, CodexProcess, PendingServerRequest, inspect_codex_runtime,
-            install_codex_runtime,
+            install_codex_runtime, update_managed_codex_runtime,
         },
         workspace::ProjectFileSearch,
     },
@@ -104,8 +104,30 @@ impl AppState {
         self.runtime.lock().await.performance_metrics.snapshot()
     }
 
-    pub async fn inspect_codex(&self, app_data: &Path) -> CodexRuntimeAvailability {
+    pub async fn inspect_codex<OnProgress>(
+        &self,
+        app_data: &Path,
+        on_progress: OnProgress,
+    ) -> CodexRuntimeAvailability
+    where
+        OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
+    {
+        self.update_managed_codex(app_data, &on_progress).await;
         inspect_codex_runtime(app_data).await
+    }
+
+    async fn update_managed_codex<OnProgress>(&self, app_data: &Path, on_progress: &OnProgress)
+    where
+        OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
+    {
+        let _install_guard = self.runtime_install.lock().await;
+        if let Err(error) = update_managed_codex_runtime(app_data, on_progress).await {
+            // 自动更新失败不能破坏旧版本启动；保留诊断并由下次启动继续重试。
+            crate::infrastructure::diagnostics::record_error(
+                "codex_runtime_automatic_update_failed",
+                error,
+            );
+        }
     }
 
     pub async fn install_codex<OnProgress>(
@@ -154,6 +176,8 @@ impl AppState {
             let event = runtime.transition(RuntimeStatus::Starting, Some(ProviderKind::Codex));
             let _ = runtime.publish(event);
         }
+
+        self.update_managed_codex(app_data, &|_| {}).await;
 
         match CodexProcess::start(app_data).await {
             Ok(process) => {
