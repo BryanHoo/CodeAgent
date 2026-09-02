@@ -200,7 +200,7 @@ async fn publish_mapped_event(
                 );
             }
         }
-        observe_task_notification(app, &pet_event, task_name.as_deref()).await;
+        observe_task_notification(app, &pet_event, &project_id, task_name.as_deref()).await;
         if let Some(generation) = release_generation {
             // 终态释放由 Rust 事件源触发，窗口销毁后仍会持续处理 busy 重试。
             spawn_task_subscription_release(

@@ -41,8 +41,6 @@ pub enum AppError {
     ProjectFileWindowFailed,
     #[error("workbench background is unavailable")]
     WorkbenchBackgroundUnavailable,
-    #[error("failed to show desktop notification")]
-    NotificationFailed,
     #[error("tray operation failed")]
     TrayOperationFailed,
     #[error("failed to export diagnostics")]

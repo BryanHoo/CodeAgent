@@ -2,10 +2,9 @@ use std::collections::{BTreeMap, VecDeque};
 
 use serde::Deserialize;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_notification::NotificationExt;
 use tokio::sync::Mutex;
 
-use super::error::AppError;
+use super::{app_lifecycle::show_main_window_at_route, tray_commands::tray_task_route};
 use crate::{domain::runtime::AgentEvent, infrastructure::app_storage};
 
 const LANGUAGE_STORAGE_KEY: &str = "codeagent.language-preference";
@@ -26,6 +25,7 @@ enum NotificationLanguage {
 #[derive(Debug, Eq, PartialEq)]
 struct TaskNotification {
     body: String,
+    route: String,
     title: String,
 }
 
@@ -49,6 +49,7 @@ struct StoredLanguagePreference {
 pub(super) async fn observe_task_notification(
     app: &AppHandle,
     event: &AgentEvent,
+    project_id: &str,
     task_name: Option<&str>,
 ) {
     if !is_notification_event(event) {
@@ -65,6 +66,7 @@ pub(super) async fn observe_task_notification(
         reduce_task_notification(
             &mut state,
             event,
+            project_id,
             task_name,
             notification_language(&preferences),
         )
@@ -72,19 +74,86 @@ pub(super) async fn observe_task_notification(
     let Some(notification) = notification else {
         return;
     };
-    if let Err(error) = send_task_notification(app, notification) {
+    send_task_notification(app, notification);
+}
+
+fn send_task_notification(app: &AppHandle, notification: TaskNotification) {
+    // 点击回调持有该条通知自己的路由，多条通知并存时也能打开准确 Task。
+    send_clickable_notification(app, notification);
+}
+
+#[cfg(target_os = "macos")]
+fn send_clickable_notification(app: &AppHandle, notification: TaskNotification) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let bundle_identifier = if tauri::is_dev() {
+            "com.apple.Terminal"
+        } else {
+            app.config().identifier.as_str()
+        };
+        // mac-notification-sys 全局只允许设置一次应用标识，重复设置可安全忽略。
+        let _ = mac_notification_sys::set_application(bundle_identifier);
+        let mut native = mac_notification_sys::Notification::new();
+        native
+            .title(&notification.title)
+            .message(&notification.body)
+            .wait_for_click(true);
+        match native.send() {
+            Ok(mac_notification_sys::NotificationResponse::Click) => {
+                show_main_window_at_route(&app, notification.route);
+            }
+            Ok(_) => {}
+            Err(error) => crate::infrastructure::diagnostics::record_error(
+                "task_notification_show_failed",
+                error,
+            ),
+        }
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn send_clickable_notification(app: &AppHandle, notification: TaskNotification) {
+    let app_id = if tauri::is_dev() {
+        tauri_winrt_notification::Toast::POWERSHELL_APP_ID
+    } else {
+        app.config().identifier.as_str()
+    };
+    let app = app.clone();
+    let route = notification.route;
+    let result = tauri_winrt_notification::Toast::new(app_id)
+        .title(&notification.title)
+        .text1(&notification.body)
+        .on_activated(move |_| {
+            show_main_window_at_route(&app, route.clone());
+            Ok(())
+        })
+        .show();
+    if let Err(error) = result {
         crate::infrastructure::diagnostics::record_error("task_notification_show_failed", error);
     }
 }
 
-fn send_task_notification(app: &AppHandle, notification: TaskNotification) -> Result<(), AppError> {
-    // 通知由宿主进程直接提交给系统通知中心，不让 WebView 构造 Web Notification。
-    app.notification()
-        .builder()
-        .title(notification.title)
-        .body(notification.body)
-        .show()
-        .map_err(|_| AppError::NotificationFailed)
+#[cfg(all(unix, not(target_os = "macos")))]
+fn send_clickable_notification(app: &AppHandle, notification: TaskNotification) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut native = notify_rust::Notification::new();
+        native
+            .summary(&notification.title)
+            .body(&notification.body)
+            .action("default", "Open");
+        match native.show() {
+            Ok(handle) => handle.wait_for_action(move |action| {
+                if action != "__closed" {
+                    show_main_window_at_route(&app, notification.route);
+                }
+            }),
+            Err(error) => crate::infrastructure::diagnostics::record_error(
+                "task_notification_show_failed",
+                error,
+            ),
+        }
+    });
 }
 
 async fn read_preferences(app: &AppHandle) -> BTreeMap<String, String> {
@@ -121,6 +190,7 @@ fn is_notification_event(event: &AgentEvent) -> bool {
 fn reduce_task_notification(
     state: &mut NotificationState,
     event: &AgentEvent,
+    project_id: &str,
     task_name: &str,
     language: NotificationLanguage,
 ) -> Option<TaskNotification> {
@@ -184,6 +254,7 @@ fn reduce_task_notification(
     };
     Some(TaskNotification {
         body,
+        route: tray_task_route(project_id, event.task_id()?).ok()?,
         title: format!("CodeAgent · {normalized_task_name}"),
     })
 }
@@ -240,11 +311,13 @@ mod tests {
             reduce_task_notification(
                 &mut state,
                 &event,
+                "project-1",
                 "修复底层通知",
                 NotificationLanguage::ZhCn,
             ),
             Some(super::TaskNotification {
                 body: "Task 已完成".to_owned(),
+                route: "p/project-1/t/task-1".to_owned(),
                 title: "CodeAgent · 修复底层通知".to_owned(),
             })
         );
@@ -259,6 +332,7 @@ mod tests {
             reduce_task_notification(
                 &mut state,
                 &request,
+                "project-1",
                 "修复底层通知",
                 NotificationLanguage::ZhCn,
             )
@@ -284,15 +358,33 @@ mod tests {
         }));
 
         assert!(
-            reduce_task_notification(&mut state, &failed, "任务", NotificationLanguage::ZhCn,)
-                .is_some()
+            reduce_task_notification(
+                &mut state,
+                &failed,
+                "project-1",
+                "任务",
+                NotificationLanguage::ZhCn,
+            )
+            .is_some()
         );
         assert_eq!(
-            reduce_task_notification(&mut state, &failed, "任务", NotificationLanguage::ZhCn,),
+            reduce_task_notification(
+                &mut state,
+                &failed,
+                "project-1",
+                "任务",
+                NotificationLanguage::ZhCn,
+            ),
             None
         );
         assert_eq!(
-            reduce_task_notification(&mut state, &completed, "任务", NotificationLanguage::ZhCn,),
+            reduce_task_notification(
+                &mut state,
+                &completed,
+                "project-1",
+                "任务",
+                NotificationLanguage::ZhCn,
+            ),
             None
         );
     }
