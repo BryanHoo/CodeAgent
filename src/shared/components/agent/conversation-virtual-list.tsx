@@ -55,6 +55,7 @@ export function ConversationVirtualList<TItem>({
   renderNavigation,
   renderItem,
   scrollToBottomSignal,
+  style,
   ...props
 }: ConversationVirtualListProps<TItem>) {
   const { t } = useTranslation("conversation");
@@ -199,6 +200,8 @@ export function ConversationVirtualList<TItem>({
       onScroll={onScroll}
       ref={scrollContainerRef}
       role="log"
+      // 禁用浏览器原生锚定，避免与 Virtualizer 的 end anchor 重复修正滚动位置。
+      style={{ ...style, overflowAnchor: "none" }}
       aria-live="off"
       {...props}
     >

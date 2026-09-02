@@ -16,6 +16,45 @@ async function settleVirtualScroll(): Promise<void> {
 }
 
 describe("Conversation visual anchor", () => {
+  it("从短任务切换到长任务时仅由 Virtualizer 管理滚动锚点", async () => {
+    let showLongTask = () => undefined;
+    function TaskSwitchHarness() {
+      const [longTaskVisible, setLongTaskVisible] = useState(false);
+      const items = longTaskVisible
+        ? Array.from({ length: 207 }, (_, index) => `long-turn-${String(index)}`)
+        : ["short-turn-0"];
+      useEffect(() => {
+        showLongTask = () => {
+          setLongTaskVisible(true);
+        };
+        return () => {
+          showLongTask = () => undefined;
+        };
+      }, []);
+      return (
+        <ConversationList
+          conversationId={longTaskVisible ? "task-long" : "task-short"}
+          getItemKey={(turnId) => turnId}
+          items={items}
+          renderItem={(turnId, index) => (
+            <div style={{ height: longTaskVisible ? 80 + (index % 7) * 180 : 80 }}>{turnId}</div>
+          )}
+          style={{ height: 320, overflowY: "auto" }}
+        />
+      );
+    }
+    const screen = await render(<TaskSwitchHarness />);
+    const container = screen.getByRole("log").element();
+    await settleVirtualScroll();
+
+    expect(getComputedStyle(container).overflowAnchor).toBe("none");
+    showLongTask();
+    await settleVirtualScroll();
+
+    expect(container.textContent).toContain("long-turn-206");
+    expect(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+  });
+
   it("仅挂载视口窗口并使用 WebKit 安全的位置直写模式", async () => {
     const items = Array.from({ length: 207 }, (_, index) => `turn-${String(index)}`);
     const screen = await render(
