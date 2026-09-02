@@ -245,26 +245,33 @@ describe("TaskBoard", () => {
     const grid = document.querySelector<HTMLElement>(".task-board-grid");
     const column = document.querySelector<HTMLElement>(".task-board-column");
     const header = document.querySelector<HTMLElement>(".task-board-column-header");
+    const list = document.querySelector<HTMLElement>(".task-board-column-list");
     const card = document.querySelector<HTMLElement>(".task-board-card");
 
     expect(board).not.toBeNull();
     expect(grid).not.toBeNull();
     expect(column).not.toBeNull();
     expect(header).not.toBeNull();
+    expect(list).not.toBeNull();
     expect(card).not.toBeNull();
 
     const boardStyle = getComputedStyle(board!);
     const gridStyle = getComputedStyle(grid!);
     const columnStyle = getComputedStyle(column!);
     const headerStyle = getComputedStyle(header!);
+    const listStyle = getComputedStyle(list!);
     const cardStyle = getComputedStyle(card!);
 
     expect(gridStyle.backgroundColor).toBe(boardStyle.backgroundColor);
     expect(parseFloat(gridStyle.paddingTop)).toBeGreaterThan(0);
     expect(parseFloat(gridStyle.paddingLeft)).toBeGreaterThan(0);
     expect(parseFloat(gridStyle.columnGap)).toBeGreaterThan(1);
-    expect(columnStyle.backgroundColor).not.toBe(cardStyle.backgroundColor);
-    expect(headerStyle.backgroundColor).not.toBe(columnStyle.backgroundColor);
+    expect(parseFloat(columnStyle.rowGap)).toBeGreaterThan(1);
+    expect(columnStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(parseFloat(columnStyle.borderTopWidth)).toBe(0);
+    expect(listStyle.backgroundColor).not.toBe(boardStyle.backgroundColor);
+    expect(parseFloat(listStyle.borderTopWidth)).toBe(0);
+    expect(headerStyle.backgroundColor).not.toBe(listStyle.backgroundColor);
     expect(cardStyle.boxShadow).not.toContain("inset");
   });
 });

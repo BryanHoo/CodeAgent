@@ -44,11 +44,11 @@
   display: grid;
   min-width: 0;
   min-height: 0;
+  gap: var(--ui-space-unit);
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid var(--ui-color-separator);
-  border-radius: var(--ui-radius-surface);
-  background: color-mix(in srgb, var(--ui-color-text) 4%, var(--ui-color-content));
+  border: 0;
+  background: transparent;
 }
 
 .task-board-column[data-tone="running"] {
@@ -68,7 +68,8 @@
   height: calc(var(--ui-space-unit) * 11);
   align-items: center;
   gap: calc(var(--ui-space-unit) * 2);
-  border-bottom: 1px solid color-mix(in srgb, var(--task-board-tone) 14%, transparent);
+  border: 0;
+  border-radius: var(--ui-radius-surface);
   padding: 0 calc(var(--ui-space-unit) * 3);
   color: color-mix(in srgb, var(--task-board-tone) 82%, var(--ui-color-text));
   background: color-mix(in srgb, var(--task-board-tone) 9%, var(--ui-color-raised));
@@ -86,7 +87,10 @@
 .task-board-column-list {
   min-height: 0;
   overflow-y: auto;
+  border: 0;
+  border-radius: var(--ui-radius-surface);
   padding: calc(var(--ui-space-unit) * 2);
+  background: color-mix(in srgb, var(--ui-color-text) 2%, var(--ui-color-content));
   scrollbar-gutter: stable;
 }
 
