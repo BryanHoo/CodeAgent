@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { appPreferenceStorage } from "../../../platform/tauri/app-storage.js";
 
 import {
@@ -48,7 +48,24 @@ export function useWorkbenchBackgroundDraft() {
     [customImages, deletedImageIds, storedImageIds],
   );
 
+  const acknowledgeBackgroundMutation = useCallback(
+    (mutation: typeof backgroundMutation) => {
+      const savedImageIds = new Set(mutation.imagesToSave.map((image) => image.id));
+      const removedImageIds = new Set(mutation.deletedImageIds);
+      setStoredImageIds((current) => {
+        const next = new Set([...current, ...savedImageIds]);
+        for (const imageId of removedImageIds) next.delete(imageId);
+        return next;
+      });
+      setDeletedImageIds(
+        (current) => new Set([...current].filter((imageId) => !removedImageIds.has(imageId))),
+      );
+    },
+    [],
+  );
+
   return {
+    acknowledgeBackgroundMutation,
     addCustomBackgroundFiles: (files: readonly File[]) => {
       const addedImages = files.map((file) => createCustomBackgroundImage(file));
       if (addedImages.length === 0) return;

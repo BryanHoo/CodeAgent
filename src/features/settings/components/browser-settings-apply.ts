@@ -1,9 +1,20 @@
 import { changeAppLanguage } from "../../../i18n/i18n.js";
+import type { SupportedLanguage } from "../../../i18n/language-preference.js";
 import { setNotificationPreference } from "../notification-preference.js";
-import { setThemePreference } from "../theme-preference.js";
-import { applyWorkbenchBackgroundPreference } from "../workbench-background-preference.js";
+import { setThemePreference, type ThemePreference } from "../theme-preference.js";
+import {
+  applyWorkbenchBackgroundPreference,
+  type CustomBackgroundMutation,
+  type WorkbenchBackgroundPreference,
+} from "../workbench-background-preference.js";
 
-import type { BrowserSettingsChanges } from "./global-settings-save.js";
+export type BrowserSettingsChanges = Readonly<{
+  background?: WorkbenchBackgroundPreference;
+  customBackgroundMutation?: CustomBackgroundMutation;
+  language?: SupportedLanguage;
+  notificationsEnabled?: boolean;
+  theme?: ThemePreference;
+}>;
 
 export async function applyBrowserSettingsChanges(
   changes: BrowserSettingsChanges,

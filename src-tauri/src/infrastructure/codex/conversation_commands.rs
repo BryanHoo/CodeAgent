@@ -350,7 +350,7 @@ fn validate_task_identity(
 fn map_approvals_reviewer(value: &str) -> Result<&'static str, ConnectionError> {
     match value {
         "user" => Ok("user"),
-        "auto_review" => Ok("autoReview"),
+        "auto_review" => Ok("auto_review"),
         _ => Err(ConnectionError::InvalidMessage),
     }
 }

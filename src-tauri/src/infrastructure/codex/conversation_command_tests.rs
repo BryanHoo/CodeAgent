@@ -57,6 +57,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
                 assert_eq!(request["params"]["input"][0]["text"], "修复测试");
                 assert_eq!(request["params"]["model"], "gpt-5.6-sol");
                 assert_eq!(request["params"]["effort"], "high");
+                assert_eq!(request["params"]["approvalsReviewer"], "auto_review");
                 assert_eq!(request["params"]["sandboxPolicy"]["type"], "workspaceWrite");
             }
             if method == "turn/steer" {
@@ -80,12 +81,16 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
         .expect("task should start");
     assert_eq!(task.task.id, "thread-a");
 
+    let options = AgentTurnOptions {
+        approvals_reviewer: "auto_review".to_owned(),
+        ..AgentTurnOptions::default()
+    };
     let turn = start_turn(
         &connection,
         "project-a".to_owned(),
         "thread-a".to_owned(),
         AgentPromptInput::text("修复测试"),
-        AgentTurnOptions::default(),
+        options,
         true,
     )
     .await

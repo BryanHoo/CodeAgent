@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/c
 import { Tooltip } from "../../../shared/components/core/tooltip.js";
 import { TooltipContent } from "../../../shared/components/core/tooltip.js";
 import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
-import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import { getNotificationPreference } from "../notification-preference.js";
 import type { ThemePreference } from "../theme-preference.js";
@@ -38,8 +37,8 @@ import {
   type ApprovalMode,
 } from "./global-settings-model.js";
 import {
-  saveGlobalSettingsDraft,
-  type BrowserSettingsDraft,
+  createGlobalSettingsSaveQueue,
+  SETTINGS_INPUT_DEBOUNCE_MS,
 } from "./global-settings-save.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
@@ -90,13 +89,13 @@ export function GlobalSettingsDialog({
   settings,
 }: GlobalSettingsDialogProps) {
   const { t } = useTranslation("settings");
-  const saveLockRef = useRef(createAsyncActionLock());
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection);
   const [draft, setDraft] = useState<AgentGlobalSettings>(
     () => settings ?? createFallbackSettings(models),
   );
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const {
+    acknowledgeBackgroundMutation,
     addCustomBackgroundFiles,
     background,
     backgroundMutation,
@@ -108,25 +107,80 @@ export function GlobalSettingsDialog({
   } = useWorkbenchBackgroundDraft();
   const [language, setLanguage] = useState(getCurrentLanguage);
   const [notificationsEnabled, setNotificationsEnabled] = useState(getNotificationPreference);
-  const initialBrowserSettingsRef = useRef<BrowserSettingsDraft>({
-    background,
-    customBackgroundMutation: { deletedImageIds: [], imagesToSave: [] },
-    language,
-    notificationsEnabled,
-    theme,
-  });
-  const [isSaving, setIsSaving] = useState(false);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const draftRef = useRef(draft);
+  const hasLocalChangesRef = useRef(false);
+  const saveQueueRef = useRef<ReturnType<typeof createGlobalSettingsSaveQueue> | null>(null);
+  if (saveQueueRef.current === null) {
+    saveQueueRef.current = createGlobalSettingsSaveQueue((next) => onSaveRef.current(next));
+    if (settings !== undefined) saveQueueRef.current.reset(settings);
+  }
+  const saveQueue = saveQueueRef.current;
+  const appliedBackgroundRef = useRef(background);
+  const [isApplyingBackground, setIsApplyingBackground] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
   useEffect(() => {
-    if (settings !== undefined) {
+    if (settings !== undefined && !hasLocalChangesRef.current) {
+      draftRef.current = settings;
       setDraft(settings);
+      saveQueue.reset(settings);
     }
-  }, [settings]);
+  }, [saveQueue, settings]);
+
+  useEffect(() => {
+    const assetsChanged =
+      backgroundMutation.deletedImageIds.length > 0 ||
+      backgroundMutation.imagesToSave.length > 0;
+    const preferenceChanged =
+      JSON.stringify(appliedBackgroundRef.current) !== JSON.stringify(background);
+    if ((!assetsChanged && !preferenceChanged) || customBackgroundMissing) return;
+
+    setIsApplyingBackground(true);
+    const frame = requestAnimationFrame(() => {
+      void applyBrowserSettingsChanges({
+        background,
+        customBackgroundMutation: backgroundMutation,
+      })
+        .then(() => {
+          appliedBackgroundRef.current = background;
+          acknowledgeBackgroundMutation(backgroundMutation);
+        })
+        .catch(() => {
+          // 本地偏好写入失败时保留当前界面状态，后续更改会再次尝试。
+        })
+        .finally(() => {
+          setIsApplyingBackground(false);
+        });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [
+    acknowledgeBackgroundMutation,
+    background,
+    backgroundMutation,
+    customBackgroundMissing,
+  ]);
+
+  const updateDraft = (
+    update: (current: AgentGlobalSettings) => AgentGlobalSettings,
+    debounce = false,
+  ) => {
+    const next = update(draftRef.current);
+    draftRef.current = next;
+    hasLocalChangesRef.current = true;
+    setDraft(next);
+    if (debounce) {
+      saveQueue.schedule(next, SETTINGS_INPUT_DEBOUNCE_MS);
+    } else {
+      saveQueue.save(next);
+    }
+  };
 
   const close = () => {
-    if (!isSaving) {
-      onClose();
-    }
+    void saveQueue.flush(draftRef.current);
+    onClose();
   };
 
   return (
@@ -139,48 +193,8 @@ export function GlobalSettingsDialog({
       <DialogContent
         aria-labelledby="global-settings-title"
         className="h-[min(88dvh,38rem)] max-w-[54rem] overflow-hidden p-0"
-        onEscapeKeyDown={(event) => {
-          if (isSaving) event.preventDefault();
-        }}
-        onInteractOutside={(event) => {
-          if (isSaving) event.preventDefault();
-        }}
       >
-        <form
-          className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (settings === undefined || isPending || isSaving) {
-              return;
-            }
-            void saveLockRef.current.run(async () => {
-              setIsSaving(true);
-              try {
-                await saveGlobalSettingsDraft(
-                  settings,
-                  initialBrowserSettingsRef.current,
-                  draft,
-                  {
-                    background,
-                    customBackgroundMutation: backgroundMutation,
-                    language,
-                    notificationsEnabled,
-                    theme,
-                  },
-                  {
-                    applyBrowserSettings: applyBrowserSettingsChanges,
-                    saveGlobalSettings: onSave,
-                  },
-                );
-                onClose();
-              } catch {
-                // 根级 MutationCache 已统一展示失败 toast，Dialog 只保留可重试草稿。
-              } finally {
-                setIsSaving(false);
-              }
-            });
-          }}
-        >
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
           <header className="flex h-12 items-center gap-2.5 px-4 shadow-toolbar">
             <Settings className="size-4 text-brand" aria-hidden="true" />
             <DialogTitle
@@ -193,7 +207,6 @@ export function GlobalSettingsDialog({
               <TooltipTrigger asChild>
                 <Button
                   aria-label={t("actions.closeDialog")}
-                  disabled={isSaving}
                   onClick={close}
                   size="icon-sm"
                   type="button"
@@ -277,18 +290,36 @@ export function GlobalSettingsDialog({
                 <>
                   <AppearanceSettingsPanel
                     activeSection={activeSection}
+                    apps={apps}
+                    defaultOpenAppId={draft.defaultOpenAppId}
                     language={language}
                     notificationsEnabled={notificationsEnabled}
-                    onLanguageChange={setLanguage}
-                    onNotificationsChange={setNotificationsEnabled}
-                    onThemeChange={setTheme}
+                    onDefaultOpenAppChange={(defaultOpenAppId) => {
+                      updateDraft((current) => ({ ...current, defaultOpenAppId }));
+                    }}
+                    onLanguageChange={(nextLanguage) => {
+                      setLanguage(nextLanguage);
+                      void applyBrowserSettingsChanges({ language: nextLanguage }).catch(
+                        () => undefined,
+                      );
+                    }}
+                    onNotificationsChange={(enabled) => {
+                      setNotificationsEnabled(enabled);
+                      void applyBrowserSettingsChanges({ notificationsEnabled: enabled }).catch(
+                        () => undefined,
+                      );
+                    }}
+                    onThemeChange={(nextTheme) => {
+                      setTheme(nextTheme);
+                      void applyBrowserSettingsChanges({ theme: nextTheme }).catch(() => undefined);
+                    }}
                     theme={theme}
                   />
 
                   <GlobalSettingsBackground
                     activeSection={activeSection}
                     customImages={customImages}
-                    disabled={isSaving}
+                    disabled={isApplyingBackground}
                     onCustomFilesAdd={addCustomBackgroundFiles}
                     onCustomImageRemove={removeCustomBackgroundImage}
                     onCustomImageSelect={selectCustomBackgroundImage}
@@ -299,7 +330,7 @@ export function GlobalSettingsDialog({
                   {activeSection === "pets" ? (
                     <GlobalSettingsPets
                       onChange={(pet) => {
-                        setDraft((current) => ({ ...current, pet }));
+                        updateDraft((current) => ({ ...current, pet }));
                       }}
                       settings={draft.pet}
                     />
@@ -313,10 +344,9 @@ export function GlobalSettingsDialog({
                     <SettingsField label={t("fields.approvalPolicy")}>
                       <SettingsSelect
                         aria-label={t("fields.approvalPolicy")}
-                        disabled={isSaving}
                         onChange={(event) => {
                           const mode = event.currentTarget.value as ApprovalMode;
-                          setDraft((current) => applyApprovalMode(current, mode));
+                          updateDraft((current) => applyApprovalMode(current, mode));
                         }}
                         value={deriveApprovalMode(draft)}
                       >
@@ -328,11 +358,10 @@ export function GlobalSettingsDialog({
                     <SettingsField label={t("fields.sandbox")}>
                       <SettingsSelect
                         aria-label={t("fields.sandbox")}
-                        disabled={isSaving}
                         onChange={(event) => {
                           const sandboxMode = event.currentTarget
                             .value as AgentGlobalSettings["sandboxMode"];
-                          setDraft((current) => ({ ...current, sandboxMode }));
+                          updateDraft((current) => ({ ...current, sandboxMode }));
                         }}
                         value={draft.sandboxMode}
                       >
@@ -344,11 +373,10 @@ export function GlobalSettingsDialog({
                     <SettingsField label={t("fields.followUpMessages")}>
                       <SettingsSelect
                         aria-label={t("fields.followUpMessages")}
-                        disabled={isSaving}
                         onChange={(event) => {
                           const followUpBehavior = event.currentTarget
                             .value as AgentGlobalSettings["followUpBehavior"];
-                          setDraft((current) => ({ ...current, followUpBehavior }));
+                          updateDraft((current) => ({ ...current, followUpBehavior }));
                         }}
                         value={draft.followUpBehavior}
                       >
@@ -358,20 +386,18 @@ export function GlobalSettingsDialog({
                     </SettingsField>
                     {fastModeAvailable ? (
                       <FastModeSettingsField
-                        disabled={isSaving}
                         enabled={draft.fastMode}
                         onChange={(fastMode) => {
-                          setDraft((current) => ({ ...current, fastMode }));
+                          updateDraft((current) => ({ ...current, fastMode }));
                         }}
                       />
                     ) : null}
                     <SettingsField label={t("fields.model")}>
                       <ModelSelect
                         ariaLabel={t("fields.model")}
-                        disabled={isSaving}
                         models={models}
                         onChange={(modelId) => {
-                          setDraft((current) => ({
+                          updateDraft((current) => ({
                             ...current,
                             ...resolveGlobalSettingsModel(models, modelId, current.reasoningEffort),
                           }));
@@ -382,10 +408,10 @@ export function GlobalSettingsDialog({
                     <SettingsField label={t("fields.reasoningEffort")}>
                       <ReasoningSelect
                         ariaLabel={t("fields.reasoningEffort")}
-                        disabled={isSaving || selectedModel === undefined}
+                        disabled={selectedModel === undefined}
                         model={selectedModel}
                         onChange={(reasoningEffort) => {
-                          setDraft((current) => ({ ...current, reasoningEffort }));
+                          updateDraft((current) => ({ ...current, reasoningEffort }));
                         }}
                         value={draft.reasoningEffort}
                       />
@@ -400,10 +426,9 @@ export function GlobalSettingsDialog({
                     <SettingsField label={t("fields.model")}>
                       <ModelSelect
                         ariaLabel={t("fields.commitModel")}
-                        disabled={isSaving}
                         models={models}
                         onChange={(modelId) => {
-                          setDraft((current) => ({ ...current, commitMessageModel: modelId }));
+                          updateDraft((current) => ({ ...current, commitMessageModel: modelId }));
                         }}
                         value={draft.commitMessageModel}
                       />
@@ -412,49 +437,22 @@ export function GlobalSettingsDialog({
                       <textarea
                         aria-label={t("fields.commitMessagePrompt")}
                         className="h-28 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small text-foreground outline-none focus:border-brand focus:shadow-focus disabled:opacity-50"
-                        disabled={isSaving}
                         maxLength={4_000}
+                        onBlur={() => {
+                          saveQueue.save(draftRef.current);
+                        }}
                         onChange={(event) => {
                           const commitMessagePrompt = event.currentTarget.value;
-                          setDraft((current) => ({ ...current, commitMessagePrompt }));
+                          updateDraft(
+                            (current) => ({ ...current, commitMessagePrompt }),
+                            true,
+                          );
                         }}
                         value={draft.commitMessagePrompt}
                       />
                     </SettingsField>
                   </SettingsPanel>
 
-                  <SettingsPanel
-                    activeSection={activeSection}
-                    id="integration"
-                    title={t("sections.integration")}
-                  >
-                    <SettingsField label={t("fields.defaultOpenWith")}>
-                      <SettingsSelect
-                        aria-label={t("fields.defaultOpenWith")}
-                        disabled={isSaving}
-                        onChange={(event) => {
-                          const appId = event.currentTarget.value;
-                          setDraft((current) => ({
-                            ...current,
-                            defaultOpenAppId:
-                              appId === ""
-                                ? null
-                                : (appId as AgentGlobalSettings["defaultOpenAppId"]),
-                          }));
-                        }}
-                        value={draft.defaultOpenAppId ?? ""}
-                      >
-                        <option value="">{t("integration.automatic")}</option>
-                        {apps
-                          .filter((app) => app.kind !== "system-default")
-                          .map((app) => (
-                            <option key={app.id} value={app.id}>
-                              {app.name}
-                            </option>
-                          ))}
-                      </SettingsSelect>
-                    </SettingsField>
-                  </SettingsPanel>
                 </>
               )}
             </div>
@@ -464,25 +462,13 @@ export function GlobalSettingsDialog({
             <Button
               variant="ghost"
               className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground disabled:opacity-50"
-              disabled={isSaving}
               onClick={close}
               type="button"
             >
-              {activeSection === "provider" ? t("actions.close") : t("actions.cancel")}
+              {t("actions.close")}
             </Button>
-            {activeSection === "provider" ? null : (
-              <Button
-                disabled={
-                  isPending || isSaving || settings === undefined || customBackgroundMissing
-                }
-                type="submit"
-                variant="default"
-              >
-                {isSaving ? t("actions.saving") : t("actions.save")}
-              </Button>
-            )}
           </footer>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

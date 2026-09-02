@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentGlobalSettings } from "@/protocol/index.js";
 
 import {
-  saveGlobalSettingsDraft,
-  type BrowserSettingsDraft,
+  createGlobalSettingsSaveQueue,
+  SETTINGS_INPUT_DEBOUNCE_MS,
 } from "./global-settings-save.js";
 
 const globalSettings: AgentGlobalSettings = {
@@ -21,54 +21,61 @@ const globalSettings: AgentGlobalSettings = {
   sandboxMode: "workspace-write",
 };
 
-const browserSettings: BrowserSettingsDraft = {
-  background: {
-    blurPercentage: 0,
-    mode: "none",
-    overlayOpacity: 60,
-    selectedCustomImageId: null,
-  },
-  customBackgroundMutation: { deletedImageIds: [], imagesToSave: [] },
-  language: "zh-CN",
-  notificationsEnabled: true,
-  theme: "system",
-};
+describe("createGlobalSettingsSaveQueue", () => {
+  it("should skip an unchanged snapshot", async () => {
+    const saveSettings = vi.fn();
+    const queue = createGlobalSettingsSaveQueue(saveSettings);
+    queue.reset(globalSettings);
 
-describe("saveGlobalSettingsDraft", () => {
-  it("should skip every downstream handler when settings are unchanged", async () => {
-    const saveGlobalSettings = vi.fn();
-    const applyBrowserSettings = vi.fn();
+    await queue.flush(globalSettings);
 
-    await saveGlobalSettingsDraft(
-      globalSettings,
-      browserSettings,
-      globalSettings,
-      browserSettings,
-      { applyBrowserSettings, saveGlobalSettings },
-    );
-
-    expect(saveGlobalSettings).not.toHaveBeenCalled();
-    expect(applyBrowserSettings).not.toHaveBeenCalled();
+    expect(saveSettings).not.toHaveBeenCalled();
   });
 
-  it("should forward only changed browser fields after the atomic global save", async () => {
-    const calls: string[] = [];
-    const saveGlobalSettings = vi.fn(async () => {
-      calls.push("global");
-    });
-    const applyBrowserSettings = vi.fn(async () => {
-      calls.push("browser");
-    });
+  it("should debounce text input and persist only its latest snapshot", async () => {
+    vi.useFakeTimers();
+    const saveSettings = vi.fn(async () => undefined);
+    const queue = createGlobalSettingsSaveQueue(saveSettings);
+    queue.reset(globalSettings);
 
-    await saveGlobalSettingsDraft(
-      globalSettings,
-      browserSettings,
-      { ...globalSettings, model: "gpt-next" },
-      { ...browserSettings, language: "en" },
-      { applyBrowserSettings, saveGlobalSettings },
+    queue.schedule(
+      { ...globalSettings, commitMessagePrompt: "first" },
+      SETTINGS_INPUT_DEBOUNCE_MS,
     );
+    queue.schedule(
+      { ...globalSettings, commitMessagePrompt: "latest" },
+      SETTINGS_INPUT_DEBOUNCE_MS,
+    );
+    await vi.advanceTimersByTimeAsync(SETTINGS_INPUT_DEBOUNCE_MS);
+    await queue.flush();
 
-    expect(calls).toEqual(["global", "browser"]);
-    expect(applyBrowserSettings).toHaveBeenCalledWith({ language: "en" });
+    expect(saveSettings).toHaveBeenCalledTimes(1);
+    expect(saveSettings).toHaveBeenCalledWith({
+      ...globalSettings,
+      commitMessagePrompt: "latest",
+    });
+    vi.useRealTimers();
+  });
+
+  it("should coalesce changes that arrive while a save is running", async () => {
+    let releaseFirstSave: () => void = () => undefined;
+    const firstSave = new Promise<void>((resolve) => {
+      releaseFirstSave = resolve;
+    });
+    const savedModels: string[] = [];
+    const saveSettings = vi.fn(async (settings: AgentGlobalSettings) => {
+      savedModels.push(settings.model);
+      if (savedModels.length === 1) await firstSave;
+    });
+    const queue = createGlobalSettingsSaveQueue(saveSettings);
+    queue.reset(globalSettings);
+
+    queue.save({ ...globalSettings, model: "first" });
+    queue.save({ ...globalSettings, model: "skipped" });
+    queue.save({ ...globalSettings, model: "latest" });
+    releaseFirstSave();
+    await queue.flush();
+
+    expect(savedModels).toEqual(["first", "latest"]);
   });
 });

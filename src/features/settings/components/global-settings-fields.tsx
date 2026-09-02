@@ -1,4 +1,4 @@
-import type { AgentModel } from "@/protocol/index.js";
+import type { AgentGlobalSettings, AgentModel, ProjectOpenApp } from "@/protocol/index.js";
 import {
   Bot,
   ChevronDown,
@@ -28,7 +28,6 @@ export type SettingsSectionId =
   | "appearance"
   | "background"
   | "commit"
-  | "integration"
   | "pets"
   | "provider";
 
@@ -42,7 +41,6 @@ export const settingsSections: readonly Readonly<{
   { icon: ServerCog, id: "provider" },
   { icon: Bot, id: "agent" },
   { icon: GitCommitHorizontal, id: "commit" },
-  { icon: MonitorCog, id: "integration" },
   { icon: Info, id: "about" },
 ];
 
@@ -98,10 +96,10 @@ export function SettingsField({
 }
 
 export function FastModeSettingsField({
-  disabled,
+  disabled = false,
   enabled,
   onChange,
-}: Readonly<{ disabled: boolean; enabled: boolean; onChange: (enabled: boolean) => void }>) {
+}: Readonly<{ disabled?: boolean; enabled: boolean; onChange: (enabled: boolean) => void }>) {
   const { t } = useTranslation("settings");
   const label = t("fields.fastMode");
   return (
@@ -148,16 +146,22 @@ export function ThemeButton({
 
 export function AppearanceSettingsPanel({
   activeSection,
+  apps,
+  defaultOpenAppId,
   language,
   notificationsEnabled,
+  onDefaultOpenAppChange,
   onLanguageChange,
   onNotificationsChange,
   onThemeChange,
   theme,
 }: Readonly<{
   activeSection: SettingsSectionId;
+  apps: readonly ProjectOpenApp[];
+  defaultOpenAppId: AgentGlobalSettings["defaultOpenAppId"];
   language: SupportedLanguage;
   notificationsEnabled: boolean;
+  onDefaultOpenAppChange: (appId: AgentGlobalSettings["defaultOpenAppId"]) => void;
   onLanguageChange: (language: SupportedLanguage) => void;
   onNotificationsChange: (enabled: boolean) => void;
   onThemeChange: (theme: ThemePreference) => void;
@@ -208,19 +212,40 @@ export function AppearanceSettingsPanel({
           <option value="disabled">{t("notifications.disabled")}</option>
         </SettingsSelect>
       </SettingsField>
+      <SettingsField label={t("fields.defaultOpenWith")}>
+        <SettingsSelect
+          aria-label={t("fields.defaultOpenWith")}
+          onChange={(event) => {
+            const appId = event.currentTarget.value;
+            onDefaultOpenAppChange(
+              appId === "" ? null : (appId as AgentGlobalSettings["defaultOpenAppId"]),
+            );
+          }}
+          value={defaultOpenAppId ?? ""}
+        >
+          <option value="">{t("appearance.defaultOpenAutomatic")}</option>
+          {apps
+            .filter((app) => app.kind !== "system-default")
+            .map((app) => (
+              <option key={app.id} value={app.id}>
+                {app.name}
+              </option>
+            ))}
+        </SettingsSelect>
+      </SettingsField>
     </SettingsPanel>
   );
 }
 
 export function ModelSelect({
   ariaLabel,
-  disabled,
+  disabled = false,
   models,
   onChange,
   value,
 }: Readonly<{
   ariaLabel: string;
-  disabled: boolean;
+  disabled?: boolean;
   models: readonly AgentModel[];
   onChange: (modelId: string) => void;
   value: string;

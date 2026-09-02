@@ -22,12 +22,9 @@ export const settings = {
     updating: "正在准备更新",
   },
   actions: {
-    cancel: "取消",
     close: "关闭",
     closeDialog: "关闭全局设置",
     closeReleaseNotes: "关闭更新日志",
-    save: "保存",
-    saving: "正在保存",
   },
   appearance: {
     automatic: "自动",
@@ -35,6 +32,7 @@ export const settings = {
     colorMode: "颜色模式",
     dark: "深色",
     darkMode: "深色模式",
+    defaultOpenAutomatic: "自动选择",
     language: "语言",
     light: "浅色",
     lightMode: "浅色模式",
@@ -96,9 +94,6 @@ export const settings = {
   followUp: {
     queue: "排队",
     steer: "引导",
-  },
-  integration: {
-    automatic: "自动选择",
   },
   languages: {
     en: "English",
@@ -166,7 +161,6 @@ export const settings = {
     appearance: "基础设置",
     background: "工作台背景",
     commit: "提交消息",
-    integration: "应用集成",
     pets: "桌面宠物",
     provider: "模型服务",
   },

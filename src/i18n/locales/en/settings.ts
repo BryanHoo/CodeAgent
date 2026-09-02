@@ -22,12 +22,9 @@ export const settings = {
     updating: "Preparing update",
   },
   actions: {
-    cancel: "Cancel",
     close: "Close",
     closeDialog: "Close global settings",
     closeReleaseNotes: "Close release notes",
-    save: "Save",
-    saving: "Saving",
   },
   appearance: {
     automatic: "Automatic",
@@ -35,6 +32,7 @@ export const settings = {
     colorMode: "Color mode",
     dark: "Dark",
     darkMode: "Dark mode",
+    defaultOpenAutomatic: "Select automatically",
     language: "Language",
     light: "Light",
     lightMode: "Light mode",
@@ -96,9 +94,6 @@ export const settings = {
   followUp: {
     queue: "Queue",
     steer: "Steer",
-  },
-  integration: {
-    automatic: "Select automatically",
   },
   languages: {
     en: "English",
@@ -166,7 +161,6 @@ export const settings = {
     appearance: "General",
     background: "Workbench background",
     commit: "Commit messages",
-    integration: "App integrations",
     pets: "Desktop pet",
     provider: "Model service",
   },
