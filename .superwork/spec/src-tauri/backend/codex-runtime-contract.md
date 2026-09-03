@@ -15,6 +15,12 @@
 - `thread/resume` 不传 `cwd`，由 Codex 从已保存线程恢复工作目录；恢复响应新增字段必须保持可解析
 - `project/list` 接受项目的 `recencyAt` 字段，但不得请求 `recencyAt` 排序，产品顺序继续由 `position` 决定
 
+## Provider 配置
+
+- Codex `config.toml` 只写入标准 Provider 字段：内置 OpenAI 覆盖使用 `openai_base_url`，自定义 Provider 使用 `model_provider` 与 `model_providers.<id>`
+- CodeAgent 自有的模型目录不得写入 `desktop.codeagent.provider`；应原子保存到应用数据目录，并按 `providerId` 与 `baseUrl` 精确匹配，防止跨端点复用模型
+- 重新连接未提交模型列表时复用当前端点的本地目录；旧 `desktop.codeagent.provider.customModels` 仅允许作为一次性迁移来源，成功保存后清理整个旧配置段
+
 ## 新增通知与请求
 
 - `modelProvider/authRecoveryStarted` 和 `modelProvider/authRecoveryCompleted` 必须校验 `threadId`、`turnId`、`provider`、`message` 后显式消费；当前不投影到 UI
@@ -26,5 +32,6 @@
 - 覆盖精确版本门禁、五个平台 URL 与 SHA-512、安装命令和前端恢复提示
 - 覆盖所有线程创建路径、恢复与 Fork 的计划工具配置，并断言恢复请求不携带 `cwd`
 - 覆盖 `recencyAt` 兼容、认证恢复通知结构和 `openaiForm` 降级
+- 覆盖 Provider 重连、端点隔离、旧模型目录迁移及 `desktop.codeagent.provider` 清理
 - 使用本机 `codex-cli 0.152.1` 运行真实 App Server 生命周期冒烟，并运行 `pnpm check`
 - 运行 `pnpm codex:protocol:check` 验证实验协议 schema 未发生漂移

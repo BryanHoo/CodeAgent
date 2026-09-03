@@ -1,7 +1,12 @@
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, path::Path, time::Duration};
 
 use serde::Serialize;
 use serde_json::{Value, json};
+use thiserror::Error;
+
+use crate::infrastructure::provider_models::{
+    ProviderModelsError, read_provider_models, write_provider_models,
+};
 
 use super::{
     catalogs::list_models,
@@ -10,7 +15,21 @@ use super::{
 };
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const CUSTOM_PROVIDER_ID: &str = "codeagent-custom";
+const DEFAULT_CUSTOM_PROVIDER_ID: &str = "OpenAI";
+
+#[derive(Debug, Error)]
+pub enum ProviderError {
+    #[error(transparent)]
+    Connection(#[from] ConnectionError),
+    #[error("failed to access local provider models")]
+    Storage,
+}
+
+impl From<ProviderModelsError> for ProviderError {
+    fn from(_: ProviderModelsError) -> Self {
+        Self::Storage
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,15 +54,20 @@ struct LoginParams<'a> {
 
 pub async fn list_provider_models(
     connection: &AppServerConnection,
-) -> Result<Value, ConnectionError> {
+    app_data: &Path,
+) -> Result<Value, ProviderError> {
     let config = read_config(connection).await?;
-    if selected_provider_id(&config) == CUSTOM_PROVIDER_ID
-        && let Some(data) = config.pointer("/desktop/codeagent/provider/customModels")
-        && data.is_array()
-    {
-        return Ok(json!({"data": data, "nextCursor": null}));
+    if provider_mode(&config) == "custom" {
+        let provider_id = selected_provider_id(&config);
+        if let Some(base_url) = configured_custom_base_url(&config)
+            && let Some(models) = read_provider_models(app_data, provider_id, base_url)
+                .await?
+                .or_else(|| legacy_provider_models(&config, base_url))
+        {
+            return Ok(models);
+        }
     }
-    list_models(connection).await
+    Ok(list_models(connection).await?)
 }
 
 pub async fn get_provider_connection(
@@ -93,7 +117,7 @@ pub async fn start_official_provider_login(
         connection,
         vec![
             edit("model_provider", json!("openai")),
-            edit("desktop.codeagent.provider.mode", json!("official")),
+            edit("desktop.codeagent.provider", Value::Null),
         ],
     )
     .await?;
@@ -151,8 +175,9 @@ pub async fn logout_provider(connection: &AppServerConnection) -> Result<Value, 
 
 pub async fn configure_custom_provider(
     connection: &AppServerConnection,
+    app_data: &Path,
     input: Value,
-) -> Result<Value, ConnectionError> {
+) -> Result<Value, ProviderError> {
     let base_url = input
         .get("baseUrl")
         .and_then(Value::as_str)
@@ -163,32 +188,54 @@ pub async fn configure_custom_provider(
                 && !value.chars().any(char::is_whitespace)
         })
         .ok_or(ConnectionError::InvalidMessage)?;
-    let models = map_custom_models(input.get("models"))?;
-    let provider = json!({
-        "name": "CodeAgent Custom",
-        "base_url": base_url,
-        "wire_api": "responses",
-        "requires_openai_auth": true,
-    });
-    let private = json!({
-        "mode": "custom",
-        "customBaseUrl": base_url,
-        // Codex 配置写入 TOML，持久化层不能包含分页响应中的 JSON null。
-        "customModels": models["data"].clone(),
-    });
-    write_config(
-        connection,
-        vec![
-            edit(&format!("model_providers.{CUSTOM_PROVIDER_ID}"), provider),
-            edit("model_provider", json!(CUSTOM_PROVIDER_ID)),
-            edit("desktop.codeagent.provider", private),
-        ],
-    )
-    .await?;
+    let config = read_config(connection).await?;
+    let existing_custom_provider_id = (provider_mode(&config) == "custom")
+        .then(|| configured_provider_id(&config))
+        .flatten();
+    let provider_id = existing_custom_provider_id.unwrap_or(DEFAULT_CUSTOM_PROVIDER_ID);
+    let submitted_models = match input.get("models") {
+        Some(models) => map_custom_models(Some(models))?,
+        None => empty_model_page(),
+    };
+    let models = if model_page_has_data(&submitted_models) {
+        submitted_models
+    } else {
+        read_provider_models(app_data, provider_id, base_url)
+            .await?
+            .or_else(|| legacy_provider_models(&config, base_url))
+            .unwrap_or_else(empty_model_page)
+    };
+    // 先保存可恢复目录，再清理旧 TOML，避免迁移过程中丢失用户模型。
+    if model_page_has_data(&models) {
+        write_provider_models(app_data, provider_id, base_url, &models).await?;
+    }
+    let mut edits = if provider_id == "openai" {
+        vec![edit("openai_base_url", json!(base_url))]
+    } else {
+        let provider_name = config
+            .get("model_providers")
+            .and_then(Value::as_object)
+            .and_then(|providers| providers.get(provider_id))
+            .and_then(|provider| provider.get("name"))
+            .and_then(non_empty_string)
+            .unwrap_or(provider_id);
+        let provider = json!({
+            "name": provider_name,
+            "base_url": base_url,
+            "wire_api": "responses",
+            "requires_openai_auth": true,
+        });
+        vec![edit(&format!("model_providers.{provider_id}"), provider)]
+    };
+    edits.push(edit("desktop.codeagent.provider", Value::Null));
+    if existing_custom_provider_id.is_none() {
+        edits.push(edit("model_provider", json!(DEFAULT_CUSTOM_PROVIDER_ID)));
+    }
+    write_config(connection, edits).await?;
 
     if let Some(api_key) = input.get("apiKey").and_then(Value::as_str) {
         if api_key.is_empty() || api_key.len() > 16_384 {
-            return Err(ConnectionError::InvalidMessage);
+            return Err(ConnectionError::InvalidMessage.into());
         }
         let _: Value = connection
             .request(
@@ -244,11 +291,36 @@ fn map_custom_models(value: Option<&Value>) -> Result<Value, ConnectionError> {
     Ok(json!({"data": data, "nextCursor": null}))
 }
 
+fn empty_model_page() -> Value {
+    json!({"data": [], "nextCursor": null})
+}
+
+fn model_page_has_data(models: &Value) -> bool {
+    models
+        .get("data")
+        .and_then(Value::as_array)
+        .is_some_and(|data| !data.is_empty())
+}
+
+fn legacy_provider_models(config: &Value, base_url: &str) -> Option<Value> {
+    let private = config.pointer("/desktop/codeagent/provider")?;
+    if private.get("customBaseUrl").and_then(Value::as_str) != Some(base_url) {
+        return None;
+    }
+    let data = private
+        .get("customModels")
+        .and_then(Value::as_array)
+        .filter(|data| !data.is_empty())?
+        .clone();
+    Some(json!({"data": data, "nextCursor": null}))
+}
+
 fn selected_provider_id(config: &Value) -> &str {
-    config
-        .get("model_provider")
-        .and_then(Value::as_str)
-        .unwrap_or("openai")
+    configured_provider_id(config).unwrap_or("openai")
+}
+
+fn configured_provider_id(config: &Value) -> Option<&str> {
+    config.get("model_provider").and_then(non_empty_string)
 }
 
 fn provider_mode(config: &Value) -> &'static str {
@@ -261,30 +333,23 @@ fn provider_mode(config: &Value) -> &'static str {
 }
 
 fn custom_base_url(config: &Value) -> Value {
-    let provider_id = selected_provider_id(config);
-    if provider_id == "openai" {
-        return configured_openai_base_url(config)
-            .map(str::to_owned)
-            .map(Value::String)
-            .unwrap_or(Value::Null);
-    }
-
-    let private_base_url = (provider_id == CUSTOM_PROVIDER_ID)
-        .then(|| config.pointer("/desktop/codeagent/provider/customBaseUrl"))
-        .flatten()
-        .and_then(non_empty_string);
-    private_base_url
-        .or_else(|| {
-            config
-                .get("model_providers")
-                .and_then(Value::as_object)
-                .and_then(|providers| providers.get(provider_id))
-                .and_then(|provider| provider.get("base_url"))
-                .and_then(non_empty_string)
-        })
+    configured_custom_base_url(config)
         .map(str::to_owned)
         .map(Value::String)
         .unwrap_or(Value::Null)
+}
+
+fn configured_custom_base_url(config: &Value) -> Option<&str> {
+    let provider_id = selected_provider_id(config);
+    if provider_id == "openai" {
+        return configured_openai_base_url(config);
+    }
+    config
+        .get("model_providers")
+        .and_then(Value::as_object)
+        .and_then(|providers| providers.get(provider_id))
+        .and_then(|provider| provider.get("base_url"))
+        .and_then(non_empty_string)
 }
 
 fn configured_openai_base_url(config: &Value) -> Option<&str> {

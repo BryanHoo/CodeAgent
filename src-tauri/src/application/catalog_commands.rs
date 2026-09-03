@@ -8,12 +8,19 @@ fn request_error(error: codex::ConnectionError) -> AppError {
     AppError::from(error)
 }
 
+fn provider_error(error: codex::ProviderError) -> AppError {
+    match error {
+        codex::ProviderError::Connection(error) => AppError::from(error),
+        codex::ProviderError::Storage => AppError::FilesystemRequestFailed,
+    }
+}
+
 #[tauri::command]
-pub async fn list_models(state: State<'_, AppState>) -> Result<Value, AppError> {
+pub async fn list_models(app: AppHandle, state: State<'_, AppState>) -> Result<Value, AppError> {
     let connection = state.codex_connection().await?;
-    codex::list_provider_models(&connection)
+    codex::list_provider_models(&connection, &app_data_dir(&app)?)
         .await
-        .map_err(request_error)
+        .map_err(provider_error)
 }
 
 #[tauri::command]
@@ -61,13 +68,14 @@ pub async fn logout_provider(state: State<'_, AppState>) -> Result<Value, AppErr
 
 #[tauri::command]
 pub async fn configure_custom_provider(
+    app: AppHandle,
     input: Value,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let connection = state.codex_connection().await?;
-    let response = codex::configure_custom_provider(&connection, input)
+    let response = codex::configure_custom_provider(&connection, &app_data_dir(&app)?, input)
         .await
-        .map_err(request_error)?;
+        .map_err(provider_error)?;
     state.set_provider_login(None).await;
     Ok(response)
 }

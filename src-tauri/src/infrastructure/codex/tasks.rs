@@ -26,6 +26,7 @@ struct ThreadListParams<'a> {
     cursor: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     limit: Option<u32>,
+    model_providers: &'a [String],
     #[serde(skip_serializing_if = "Option::is_none")]
     project_id: Option<Option<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -119,6 +120,8 @@ pub async fn list_tasks(
                 archived: input.archived.unwrap_or(false),
                 cursor: input.cursor.as_deref(),
                 limit: input.limit,
+                // 空数组按 Codex 协议表示不过滤 Provider，切换 API 后历史仍可见。
+                model_providers: &[],
                 project_id: Some(project_filter),
                 search_term: input.search_term.as_deref(),
                 section_id: Some(input.pinned.unwrap_or(false).then_some(PINNED_SECTION_ID)),
@@ -163,6 +166,7 @@ pub async fn list_completed_tasks(
                     archived: false,
                     cursor: cursor.as_deref(),
                     limit: Some((limit - data.len()) as u32),
+                    model_providers: &[],
                     project_id: selected_project_id.map(Some),
                     search_term: None,
                     section_id: None,

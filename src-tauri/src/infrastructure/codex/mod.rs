@@ -32,6 +32,9 @@ mod stderr;
 mod tasks;
 
 #[cfg(test)]
+#[path = "auth_provider_config_tests.rs"]
+mod auth_provider_config_tests;
+#[cfg(test)]
 #[path = "auth_tests.rs"]
 mod auth_tests;
 #[cfg(test)]
@@ -69,7 +72,7 @@ mod conversation_tests;
 mod runtime_manager_tests;
 
 pub use auth::{
-    cancel_provider_login, configure_custom_provider, get_provider_connection,
+    ProviderError, cancel_provider_login, configure_custom_provider, get_provider_connection,
     list_provider_models, logout_provider, start_official_provider_login,
 };
 pub use catalogs::{list_mcp_servers, list_skills, reload_mcp_servers};
