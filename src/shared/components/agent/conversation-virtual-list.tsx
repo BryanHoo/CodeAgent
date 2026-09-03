@@ -25,24 +25,13 @@ const TURN_OVERSCAN = 2;
 const SCROLL_END_THRESHOLD_PX = 80;
 const VERTICAL_PADDING_PX = 28;
 
-type ItemBoundary = Readonly<{
-  firstKey: Key;
-  lastKey: Key;
-  length: number;
-}>;
-
-type PrependScrollSnapshot = Readonly<{
-  nextLength: number;
-  scrollHeight: number;
-  scrollTop: number;
-}>;
-
 export type ConversationVirtualListProps<TItem> = Omit<
   HTMLAttributes<HTMLDivElement>,
   "children"
 > &
   Readonly<{
     conversationId: string;
+    estimateItemSize?: (item: TItem, index: number) => number;
     footer?: ReactNode;
     getItemKey: (item: TItem, index: number) => Key;
     header?: ReactNode;
@@ -59,6 +48,7 @@ export type ConversationVirtualListProps<TItem> = Omit<
 export function ConversationVirtualList<TItem>({
   className = "",
   conversationId,
+  estimateItemSize,
   footer,
   getItemKey,
   header,
@@ -72,10 +62,11 @@ export function ConversationVirtualList<TItem>({
 }: ConversationVirtualListProps<TItem>) {
   const { t } = useTranslation("conversation");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const contentResizeObserverRef = useRef<ResizeObserver | null>(null);
   const navigationFrameRef = useRef(0);
   const lastObservedScrollTopRef = useRef(0);
-  const committedItemBoundaryRef = useRef<ItemBoundary | null>(null);
-  const prependScrollSnapshotRef = useRef<PrependScrollSnapshot | null>(null);
+  const initialEndFollowRef = useRef(true);
+  const pinnedToEndRef = useRef(true);
   const previousScrollToBottomSignalRef = useRef(scrollToBottomSignal);
   const [, commitColdJump] = useReducer((revision: number) => revision + 1, 0);
   const [atBottom, setAtBottom] = useState(true);
@@ -86,26 +77,6 @@ export function ConversationVirtualList<TItem>({
   const headerOffset = header === undefined ? 0 : 1;
   const footerOffset = footer === undefined ? 0 : 1;
   const count = headerOffset + items.length + footerOffset;
-  const previousBoundary = committedItemBoundaryRef.current;
-  const addedItemCount = previousBoundary === null ? 0 : items.length - previousBoundary.length;
-  const scrollElementBeforeCommit = scrollContainerRef.current;
-  if (
-    previousBoundary !== null &&
-    addedItemCount > 0 &&
-    scrollElementBeforeCommit !== null &&
-    Object.is(
-      getItemKey(items[addedItemCount] as TItem, addedItemCount),
-      previousBoundary.firstKey,
-    ) &&
-    Object.is(getItemKey(items[items.length - 1] as TItem, items.length - 1), previousBoundary.lastKey)
-  ) {
-    // React render 仍对应旧 DOM，此时记录 prepend 前的稳定视口位置。
-    prependScrollSnapshotRef.current = {
-      nextLength: items.length,
-      scrollHeight: scrollElementBeforeCommit.scrollHeight,
-      scrollTop: scrollElementBeforeCommit.scrollTop,
-    };
-  }
   const getVirtualKey = useCallback(
     (virtualIndex: number): string => {
       if (header !== undefined && virtualIndex === 0) return `${conversationId}:header`;
@@ -124,11 +95,12 @@ export function ConversationVirtualList<TItem>({
   const estimateSize = useCallback(
     (virtualIndex: number): number => {
       if (header !== undefined && virtualIndex === 0) return HEADER_ESTIMATED_HEIGHT_PX;
-      return virtualIndex - headerOffset >= items.length
-        ? FOOTER_ESTIMATED_HEIGHT_PX
-        : DEFAULT_TURN_ESTIMATED_HEIGHT_PX;
+      const itemIndex = virtualIndex - headerOffset;
+      if (itemIndex >= items.length) return FOOTER_ESTIMATED_HEIGHT_PX;
+      return estimateItemSize?.(items[itemIndex] as TItem, itemIndex) ??
+        DEFAULT_TURN_ESTIMATED_HEIGHT_PX;
     },
-    [header, headerOffset, items.length],
+    [estimateItemSize, header, headerOffset, items],
   );
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     anchorTo: "end",
@@ -143,35 +115,24 @@ export function ConversationVirtualList<TItem>({
     overscan: TURN_OVERSCAN,
     paddingStart: VERTICAL_PADDING_PX,
     scrollEndThreshold: SCROLL_END_THRESHOLD_PX,
-    useFlushSync: false,
+    useAnimationFrameWithResizeObserver: true,
     onChange: (instance) => {
       const nextAtBottom = instance.isAtEnd();
       setAtBottom((current) => (current === nextAtBottom ? current : nextAtBottom));
     },
   });
-
-  useLayoutEffect(() => {
-    const scrollElement = scrollContainerRef.current;
-    const snapshot = prependScrollSnapshotRef.current;
-    if (scrollElement !== null && snapshot?.nextLength === items.length) {
-      const addedHeight = scrollElement.scrollHeight - snapshot.scrollHeight;
-      scrollElement.scrollTop = snapshot.scrollTop + addedHeight;
-      lastObservedScrollTopRef.current = scrollElement.scrollTop;
-      prependScrollSnapshotRef.current = null;
-    }
-    committedItemBoundaryRef.current =
-      items.length === 0
-        ? null
-        : {
-            firstKey: getItemKey(items[0] as TItem, 0),
-            lastKey: getItemKey(items[items.length - 1] as TItem, items.length - 1),
-            length: items.length,
-          };
-  }, [getItemKey, items]);
+  const measureVirtualRow = useCallback(
+    (element: HTMLDivElement | null) => {
+      virtualizer.measureElement(element);
+      if (element !== null) contentResizeObserverRef.current?.observe(element);
+    },
+    [virtualizer],
+  );
 
   useLayoutEffect(() => {
     // 会话首次呈现时从最新 Turn 开始，后续追加和流式增长交给 end anchor。
     if (initialScrolledConversationId === conversationId) return;
+    initialEndFollowRef.current = true;
     virtualizer.scrollToEnd({ behavior: "auto" });
     setInitialScrolledConversationId(conversationId);
     setAtBottom(true);
@@ -184,19 +145,46 @@ export function ConversationVirtualList<TItem>({
       return;
     }
     previousScrollToBottomSignalRef.current = scrollToBottomSignal;
+    initialEndFollowRef.current = true;
     virtualizer.scrollToEnd({ behavior: "auto" });
   }, [scrollToBottomSignal, virtualizer]);
   useEffect(() => {
     const scrollElement = scrollContainerRef.current;
     if (scrollElement === null) return;
-    const syncScrollbarWidth = () => {
+    let previousClientHeight = scrollElement.clientHeight;
+    let previousScrollHeight = scrollElement.scrollHeight;
+    let resizeTimer: number | null = null;
+    const scheduleEndCorrection = () => {
+      if (resizeTimer !== null) return;
+      resizeTimer = window.setTimeout(() => {
+        resizeTimer = null;
+        if (initialEndFollowRef.current || pinnedToEndRef.current) {
+          virtualizer.scrollToEnd({ behavior: "auto" });
+        }
+      });
+    };
+    const syncViewportMetrics = () => {
       const nextWidth = Math.max(0, scrollElement.offsetWidth - scrollElement.clientWidth);
       setScrollbarWidth((current) => (current === nextWidth ? current : nextWidth));
+      const clientHeightChanged = scrollElement.clientHeight !== previousClientHeight;
+      const scrollHeightChanged = scrollElement.scrollHeight !== previousScrollHeight;
+      if (!clientHeightChanged && !scrollHeightChanged) return;
+      const shouldFollowEnd = initialEndFollowRef.current || pinnedToEndRef.current;
+      previousClientHeight = scrollElement.clientHeight;
+      previousScrollHeight = scrollElement.scrollHeight;
+      if (shouldFollowEnd) {
+        // 异步富文本或视口改变高度后，继续展示任务的最新位置。
+        scheduleEndCorrection();
+      }
     };
-    const observer = new ResizeObserver(syncScrollbarWidth);
+    const observer = new ResizeObserver(syncViewportMetrics);
+    contentResizeObserverRef.current = observer;
     const commitWebKitColdJump = () => {
       const previousScrollTop = lastObservedScrollTopRef.current;
       lastObservedScrollTopRef.current = scrollElement.scrollTop;
+      pinnedToEndRef.current =
+        scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight <=
+        SCROLL_END_THRESHOLD_PX;
       if (Math.abs(scrollElement.scrollTop - previousScrollTop) <= scrollElement.clientHeight * 2) {
         return;
       }
@@ -214,18 +202,41 @@ export function ConversationVirtualList<TItem>({
         });
       }
     };
-    syncScrollbarWidth();
-    observer.observe(scrollElement);
-    scrollElement.addEventListener("scroll", commitWebKitColdJump, { passive: true });
-    return () => {
-      observer.disconnect();
-      scrollElement.removeEventListener("scroll", commitWebKitColdJump);
+    const releaseInitialEndFollow = () => {
+      // 仅明确的桌面滚动交互解除初始跟随，程序化测量滚动不得伪装成用户意图。
+      initialEndFollowRef.current = false;
+      if (resizeTimer !== null) {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = null;
+      }
     };
-  }, [commitColdJump]);
+    syncViewportMetrics();
+    observer.observe(scrollElement);
+    const contentElement = scrollElement.querySelector<HTMLElement>("[data-virtual-container]");
+    if (contentElement !== null) observer.observe(contentElement);
+    scrollElement
+      .querySelectorAll<HTMLElement>("[data-virtual-row]")
+      .forEach((element) => observer.observe(element));
+    scheduleEndCorrection();
+    scrollElement.addEventListener("keydown", releaseInitialEndFollow, true);
+    scrollElement.addEventListener("pointerdown", releaseInitialEndFollow, true);
+    scrollElement.addEventListener("scroll", commitWebKitColdJump, { passive: true });
+    scrollElement.addEventListener("wheel", releaseInitialEndFollow, { passive: true });
+    return () => {
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      observer.disconnect();
+      contentResizeObserverRef.current = null;
+      scrollElement.removeEventListener("keydown", releaseInitialEndFollow, true);
+      scrollElement.removeEventListener("pointerdown", releaseInitialEndFollow, true);
+      scrollElement.removeEventListener("scroll", commitWebKitColdJump);
+      scrollElement.removeEventListener("wheel", releaseInitialEndFollow);
+    };
+  }, [commitColdJump, virtualizer]);
 
   const navigateToItem = useCallback(
     (index: number, anchorId: string) => {
       if (index < 0 || index >= items.length) return;
+      initialEndFollowRef.current = false;
       cancelAnimationFrame(navigationFrameRef.current);
       virtualizer.scrollToIndex(index + headerOffset, { align: "start", behavior: "auto" });
       navigationFrameRef.current = requestAnimationFrame(() => {
@@ -264,6 +275,7 @@ export function ConversationVirtualList<TItem>({
         data-conversation-content=""
       >
         <div
+          data-virtual-container=""
           className="relative w-full"
           ref={virtualizer.containerRef}
           style={{ position: "relative", width: "100%" }}
@@ -280,7 +292,7 @@ export function ConversationVirtualList<TItem>({
                 data-index={virtualItem.index}
                 data-virtual-row={isHeader ? "header" : isFooter ? "footer" : "turn"}
                 key={virtualItem.key}
-                ref={virtualizer.measureElement}
+                ref={measureVirtualRow}
                 style={{ left: 0, position: "absolute", width: "100%" }}
               >
                 {isHeader

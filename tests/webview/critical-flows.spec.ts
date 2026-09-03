@@ -178,4 +178,27 @@ describe("桌面原生 WebView 关键流程", () => {
     await waitForCommand("commit_project_changes");
     expect(await commandCallCount("commit_project_changes")).toBeGreaterThan(0);
   });
+
+  it("后续重新打开巨型任务时仍保持最新位置置底", async () => {
+    await openTask(
+      "推送GitHub打包，发布 GitHub Draft Release，本机gh可用",
+      longScrollTaskResponse,
+    );
+    await waitForText("最新回复标记");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const container = document.querySelector<HTMLElement>('[role="log"]');
+          if (container === null) return false;
+          return container.scrollHeight - container.scrollTop - container.clientHeight < 24;
+        }),
+      { timeoutMsg: "后续重新打开巨型任务后未保持最新信息置底" },
+    );
+    const distanceFromBottom = await browser.execute(() => {
+      const container = document.querySelector<HTMLElement>('[role="log"]');
+      if (container === null) return Number.POSITIVE_INFINITY;
+      return container.scrollHeight - container.scrollTop - container.clientHeight;
+    });
+    expect(distanceFromBottom).toBeLessThan(24);
+  });
 });

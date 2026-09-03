@@ -16,8 +16,9 @@ async function settleVirtualScroll(): Promise<void> {
 }
 
 describe("Conversation visual anchor", () => {
-  it("从短任务切换到长任务时仅由 Virtualizer 管理滚动锚点", async () => {
+  it("从短任务切换到长任务且视口收缩后保持最新位置置底", async () => {
     let showLongTask = () => undefined;
+    let showShortTask = () => undefined;
     function TaskSwitchHarness() {
       const [longTaskVisible, setLongTaskVisible] = useState(false);
       const items = longTaskVisible
@@ -27,8 +28,12 @@ describe("Conversation visual anchor", () => {
         showLongTask = () => {
           setLongTaskVisible(true);
         };
+        showShortTask = () => {
+          setLongTaskVisible(false);
+        };
         return () => {
           showLongTask = () => undefined;
+          showShortTask = () => undefined;
         };
       }, []);
       return (
@@ -36,6 +41,7 @@ describe("Conversation visual anchor", () => {
           conversationId={longTaskVisible ? "task-long" : "task-short"}
           getItemKey={(turnId) => turnId}
           items={items}
+          key={longTaskVisible ? "task-long" : "task-short"}
           renderItem={(turnId, index) => (
             <div style={{ height: longTaskVisible ? 80 + (index % 7) * 180 : 80 }}>{turnId}</div>
           )}
@@ -44,12 +50,24 @@ describe("Conversation visual anchor", () => {
       );
     }
     const screen = await render(<TaskSwitchHarness />);
-    const container = screen.getByRole("log").element();
+    let container = screen.getByRole("log").element();
     await settleVirtualScroll();
 
     expect(getComputedStyle(container).overflowAnchor).toBe("none");
     showLongTask();
     await settleVirtualScroll();
+    container = screen.getByRole("log").element();
+    container.style.height = "240px";
+    await settleVirtualScroll();
+
+    expect(container.textContent).toContain("long-turn-206");
+    expect(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+
+    showShortTask();
+    await settleVirtualScroll();
+    showLongTask();
+    await settleVirtualScroll();
+    container = screen.getByRole("log").element();
 
     expect(container.textContent).toContain("long-turn-206");
     expect(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
@@ -97,6 +115,7 @@ describe("Conversation visual anchor", () => {
 
     // 先完成任务切换置底，再模拟用户在历史中段阅读。
     await settleVirtualScroll();
+    container.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }));
     container.scrollTop = Math.floor((container.scrollHeight - container.clientHeight) / 2);
     container.dispatchEvent(new Event("scroll", { bubbles: true }));
     await settleVirtualScroll();
@@ -152,6 +171,7 @@ describe("Conversation visual anchor", () => {
     await settleVirtualScroll();
     expect(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
 
+    container.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -240 }));
     container.scrollTop -= 240;
     container.dispatchEvent(new Event("scroll", { bubbles: true }));
     await settleVirtualScroll();
@@ -228,6 +248,7 @@ describe("Conversation visual anchor", () => {
     const screen = await render(<PrependHarness />);
     const container = screen.getByRole("log").element();
     await settleVirtualScroll();
+    container.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }));
     container.scrollTop = Math.floor((container.scrollHeight - container.clientHeight) / 2);
     container.dispatchEvent(new Event("scroll", { bubbles: true }));
     await settleVirtualScroll();
@@ -261,14 +282,19 @@ describe("Conversation visual anchor", () => {
     );
     const container = screen.getByRole("log").element();
 
-    await nextFrame();
-    await nextFrame();
+    await settleVirtualScroll();
     container.scrollTop = container.scrollHeight - container.clientHeight;
     container.dispatchEvent(new Event("scroll", { bubbles: true }));
+    container.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }));
     container.scrollTop -= 120;
     container.dispatchEvent(new Event("scroll", { bubbles: true }));
     await nextFrame();
+    const readingPosition = container.scrollTop;
+
+    container.style.height = "240px";
+    await settleVirtualScroll();
 
     expect(container.scrollTop).toBeLessThan(container.scrollHeight - container.clientHeight);
+    expect(Math.abs(container.scrollTop - readingPosition)).toBeLessThan(1);
   });
 });

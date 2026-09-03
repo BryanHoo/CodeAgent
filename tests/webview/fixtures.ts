@@ -237,35 +237,61 @@ const longColdTurnText = Array.from(
   { length: 120 },
   (_, index) => `冷 Turn 延迟布局段落 ${String(index + 1)}`,
 ).join("\n\n");
+const longTaskItemCounts = [114, 85, 4, 85, 78] as const;
+
+function createLongTaskItem(turnIndex: number, itemIndex: number, itemCount: number) {
+  const itemId = `item-scroll-${String(turnIndex)}-${String(itemIndex)}`;
+  if (itemIndex === 0) {
+    return {
+      id: itemId,
+      role: "user",
+      text: `滚动回归输入 ${String(turnIndex + 1)}`,
+      type: "message",
+    } as const;
+  }
+  if (itemIndex === itemCount - 1 || itemIndex % 6 === 0) {
+    return {
+      id: itemId,
+      role: "assistant",
+      text:
+        turnIndex === longTaskItemCounts.length - 1 && itemIndex === itemCount - 1
+          ? "最新回复标记"
+          : longColdTurnText,
+      type: "message",
+    } as const;
+  }
+  if (itemIndex % 3 === 0) {
+    return {
+      content: longColdTurnText,
+      id: itemId,
+      summary: `推理摘要 ${String(itemIndex)}`,
+      type: "reasoning",
+    } as const;
+  }
+  return {
+    command: `command-${String(itemIndex)}`,
+    cwd: "/workspace/CodeAgent",
+    exitCode: 0,
+    id: itemId,
+    output: longColdTurnText,
+    outputOmitted: { bytes: 0, lines: 0 },
+    status: "completed",
+    type: "command",
+  } as const;
+}
 
 export const longScrollTaskResponse = {
   checkpoint: { sequence: 0, sessionId: "session-long-scroll-task" },
   snapshot: {
     ...baseSnapshot,
     ...tasks[4],
-    turns: Array.from({ length: 9 }, (_, index) => ({
+    turns: longTaskItemCounts.map((itemCount, index) => ({
       completedAt: "2026-08-30T02:00:00.000Z",
       error: null,
       id: `turn-scroll-${String(index)}`,
-      items: [
-        {
-          id: `user-scroll-${String(index)}`,
-          role: "user",
-          text: `滚动回归输入 ${String(index + 1)}`,
-          type: "message",
-        },
-        {
-          id: `assistant-scroll-${String(index)}`,
-          role: "assistant",
-          text:
-            index < 6
-              ? longColdTurnText
-              : index === 8
-                ? "最新回复标记"
-                : `热 Turn 回复 ${String(index + 1)}`,
-          type: "message",
-        },
-      ],
+      items: Array.from({ length: itemCount }, (_, itemIndex) =>
+        createLongTaskItem(index, itemIndex, itemCount),
+      ),
       startedAt: "2026-08-30T01:55:00.000Z",
       status: "completed",
     })),

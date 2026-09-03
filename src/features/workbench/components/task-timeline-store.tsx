@@ -2,7 +2,6 @@ import type { PendingRequest } from "@/protocol/index.js";
 import { AlertTriangle, Info } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { useStore } from "zustand";
-
 import { i18n } from "../../../i18n/i18n.js";
 
 import { ConversationList } from "../../../shared/components/agent/conversation.js";
@@ -16,6 +15,7 @@ import type { AgentFileChange } from "../../diff/file-change.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
+import { useTurnSizeEstimate } from "./task-timeline-estimate.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
 import { resolveCompletedTurnProcessItemIds } from "./task-timeline-process.js";
 import { TaskTimelinePagination } from "./task-timeline-pagination.js";
@@ -390,6 +390,7 @@ export function TaskStoreTimeline({
     void itemStructureRevision;
     return getTaskTimelineNavigationItems(store.getState());
   }, [itemStructureRevision, store]);
+  const estimateTurnSize = useTurnSizeEstimate(store, itemStructureRevision);
   const submissionHandoffState = useStore(store, (state) => {
     if (submissionTurnId === undefined) {
       return "awaiting-turn";
@@ -430,6 +431,7 @@ export function TaskStoreTimeline({
     <ConversationList
       aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
       conversationId={`${projectId}:${taskId}`}
+      estimateItemSize={estimateTurnSize}
       {...(hasVisiblePendingRequest || showPendingSubmission || hasNotices
         ? {
             footer: (
