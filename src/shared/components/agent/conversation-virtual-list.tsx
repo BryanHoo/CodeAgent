@@ -25,6 +25,18 @@ const TURN_OVERSCAN = 2;
 const SCROLL_END_THRESHOLD_PX = 80;
 const VERTICAL_PADDING_PX = 28;
 
+type ItemBoundary = Readonly<{
+  firstKey: Key;
+  lastKey: Key;
+  length: number;
+}>;
+
+type PrependScrollSnapshot = Readonly<{
+  nextLength: number;
+  scrollHeight: number;
+  scrollTop: number;
+}>;
+
 export type ConversationVirtualListProps<TItem> = Omit<
   HTMLAttributes<HTMLDivElement>,
   "children"
@@ -64,7 +76,10 @@ export function ConversationVirtualList<TItem>({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const contentResizeObserverRef = useRef<ResizeObserver | null>(null);
   const navigationFrameRef = useRef(0);
+  const prependCorrectionFrameRef = useRef(0);
   const lastObservedScrollTopRef = useRef(0);
+  const committedItemBoundaryRef = useRef<ItemBoundary | null>(null);
+  const prependScrollSnapshotRef = useRef<PrependScrollSnapshot | null>(null);
   const initialEndFollowRef = useRef(true);
   const pinnedToEndRef = useRef(true);
   const previousScrollToBottomSignalRef = useRef(scrollToBottomSignal);
@@ -77,6 +92,23 @@ export function ConversationVirtualList<TItem>({
   const headerOffset = header === undefined ? 0 : 1;
   const footerOffset = footer === undefined ? 0 : 1;
   const count = headerOffset + items.length + footerOffset;
+  const previousBoundary = committedItemBoundaryRef.current;
+  const addedItemCount = previousBoundary === null ? 0 : items.length - previousBoundary.length;
+  const scrollElementBeforeCommit = scrollContainerRef.current;
+  if (
+    previousBoundary !== null &&
+    addedItemCount > 0 &&
+    scrollElementBeforeCommit !== null &&
+    Object.is(getItemKey(items[addedItemCount] as TItem, addedItemCount), previousBoundary.firstKey) &&
+    Object.is(getItemKey(items[items.length - 1] as TItem, items.length - 1), previousBoundary.lastKey)
+  ) {
+    // 在 React 提交新历史前保存真实视口，供 Virtualizer 未同步 DOM 时做一次确定性校正。
+    prependScrollSnapshotRef.current = {
+      nextLength: items.length,
+      scrollHeight: scrollElementBeforeCommit.scrollHeight,
+      scrollTop: scrollElementBeforeCommit.scrollTop,
+    };
+  }
   const getVirtualKey = useCallback(
     (virtualIndex: number): string => {
       if (header !== undefined && virtualIndex === 0) return `${conversationId}:header`;
@@ -116,6 +148,7 @@ export function ConversationVirtualList<TItem>({
     paddingStart: VERTICAL_PADDING_PX,
     scrollEndThreshold: SCROLL_END_THRESHOLD_PX,
     useAnimationFrameWithResizeObserver: true,
+    useFlushSync: false,
     onChange: (instance) => {
       const nextAtBottom = instance.isAtEnd();
       setAtBottom((current) => (current === nextAtBottom ? current : nextAtBottom));
@@ -128,6 +161,32 @@ export function ConversationVirtualList<TItem>({
     },
     [virtualizer],
   );
+
+  useLayoutEffect(() => {
+    const snapshot = prependScrollSnapshotRef.current;
+    if (snapshot?.nextLength === items.length) {
+      cancelAnimationFrame(prependCorrectionFrameRef.current);
+      prependCorrectionFrameRef.current = requestAnimationFrame(() => {
+        const scrollElement = scrollContainerRef.current;
+        if (scrollElement === null || prependScrollSnapshotRef.current !== snapshot) return;
+        const targetOffset = snapshot.scrollTop + scrollElement.scrollHeight - snapshot.scrollHeight;
+        if (Math.abs(scrollElement.scrollTop - targetOffset) >= 1) {
+          // 等待虚拟容器提交最终高度后，只经 Virtualizer 校正浏览器位置。
+          virtualizer.scrollToOffset(targetOffset, { behavior: "auto" });
+        }
+        lastObservedScrollTopRef.current = targetOffset;
+        prependScrollSnapshotRef.current = null;
+      });
+    }
+    committedItemBoundaryRef.current =
+      items.length === 0
+        ? null
+        : {
+            firstKey: getItemKey(items[0] as TItem, 0),
+            lastKey: getItemKey(items[items.length - 1] as TItem, items.length - 1),
+            length: items.length,
+          };
+  }, [getItemKey, items, virtualizer]);
 
   useLayoutEffect(() => {
     // 会话首次呈现时从最新 Turn 开始，后续追加和流式增长交给 end anchor。
@@ -160,6 +219,14 @@ export function ConversationVirtualList<TItem>({
         resizeTimer = null;
         if (initialEndFollowRef.current || pinnedToEndRef.current) {
           virtualizer.scrollToEnd({ behavior: "auto" });
+          const maxScrollOffset = Math.max(
+            0,
+            scrollElement.scrollHeight - scrollElement.clientHeight,
+          );
+          if (Math.abs(scrollElement.scrollTop - maxScrollOffset) >= 1) {
+            // 动态 Turn 的最终尺寸可能晚于估算值，按真实容器范围收敛到末尾。
+            virtualizer.scrollToOffset(maxScrollOffset, { behavior: "auto" });
+          }
         }
       });
     };
@@ -254,6 +321,7 @@ export function ConversationVirtualList<TItem>({
   useLayoutEffect(
     () => () => {
       cancelAnimationFrame(navigationFrameRef.current);
+      cancelAnimationFrame(prependCorrectionFrameRef.current);
     },
     [],
   );

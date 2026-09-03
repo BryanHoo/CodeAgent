@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { waitForWebviewBridge } from "../tests/webview/bridge-readiness.mjs";
@@ -27,4 +28,10 @@ void test("WebView bridge readiness reports the last startup failure on timeout"
     }),
     (error) => error === startupError,
   );
+});
+
+void test("Native WebView workflow installs the Ubuntu WebKit driver", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/webview.yml", import.meta.url), "utf8");
+
+  assert.match(workflow, /\bwebkit2gtk-driver\b/u);
 });

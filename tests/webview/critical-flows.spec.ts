@@ -65,7 +65,7 @@ describe("桌面原生 WebView 关键流程", () => {
     await $("aria/API Key（可选）").setValue("sk-webview-test");
     await $("aria/连接").click();
 
-    await expect($("aria/切换项目 CodeAgent")).toBeDisplayed();
+    await expect($('[aria-label="切换项目 CodeAgent"]')).toBeDisplayed();
   });
 
   it("接收流式消息并将运行中输入加入队列", async () => {
@@ -143,9 +143,9 @@ describe("桌面原生 WebView 关键流程", () => {
   });
 
   it("在项目和任务之间切换且保持正确选中项", async () => {
-    await $("aria/切换项目 Codexly").click();
+    await $('[aria-label="切换项目 Codexly"]').click();
     await openTask("切换另一项目", taskResponse("other-task"));
-    await expect($("aria/切换项目 Codexly")).toHaveAttribute("aria-expanded", "true");
+    await expect($('[aria-label="切换项目 Codexly"]')).toHaveAttribute("aria-expanded", "true");
   });
 
   it("将键盘焦点交给审批主操作并完成审批", async () => {
