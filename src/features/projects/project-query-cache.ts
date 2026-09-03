@@ -7,6 +7,7 @@ import {
   PROJECT_PINNED_TASKS_KEY,
   PROJECT_TASK_SEARCH_PAGE_SIZE,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
+  TASK_BOARD_COMPLETED_TASKS_QUERY_KEY,
   nativeClient,
   taskQueueQueryKey,
   type ProjectTaskInfiniteData,
@@ -106,6 +107,30 @@ export async function cacheCreatedProjectTask(queryClient: QueryClient, task: Ag
       ? undefined
       : [task, ...currentTasks.filter((currentTask) => currentTask.id !== task.id)],
   );
+}
+
+export async function cacheCompletedProjectTask(queryClient: QueryClient, task: AgentTask) {
+  const matchingQueryKeys = queryClient
+    .getQueriesData<ProjectTaskInfiniteData>({ queryKey: TASK_BOARD_COMPLETED_TASKS_QUERY_KEY })
+    .flatMap(([queryKey, currentData]) => {
+      const selectedProjectId = queryKey[2];
+      return currentData !== undefined &&
+        (selectedProjectId === null || selectedProjectId === task.projectId)
+        ? [queryKey]
+        : [];
+    });
+
+  // 终止可能返回旧 active 状态的列表请求，再把权威快照插入已挂载的完成列表。
+  await Promise.all(
+    matchingQueryKeys.map((queryKey) =>
+      queryClient.cancelQueries({ exact: true, queryKey }),
+    ),
+  );
+  for (const queryKey of matchingQueryKeys) {
+    queryClient.setQueryData<ProjectTaskInfiniteData>(queryKey, (currentData) =>
+      currentData === undefined ? undefined : upsertProjectTaskInInfiniteData(currentData, task),
+    );
+  }
 }
 
 export function replaceProjectTaskInInfiniteData(

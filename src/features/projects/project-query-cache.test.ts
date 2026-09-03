@@ -2,7 +2,10 @@ import type { AgentTask, AgentTaskPage } from "@/protocol/index.js";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 
-import { cacheCreatedProjectTask } from "./project-query-cache.js";
+import {
+  cacheCompletedProjectTask,
+  cacheCreatedProjectTask,
+} from "./project-query-cache.js";
 
 const existingTask: AgentTask = {
   id: "task-existing",
@@ -51,5 +54,34 @@ describe("cacheCreatedProjectTask", () => {
       pageParams: [undefined],
       pages: [{ data: [createdTask], nextCursor: null }],
     });
+  });
+});
+
+describe("cacheCompletedProjectTask", () => {
+  it("immediately inserts a completed task into matching board caches", async () => {
+    const queryClient = new QueryClient();
+    const allProjectsKey = ["task-board", "completed", null] as const;
+    const currentProjectKey = ["task-board", "completed", "project-a"] as const;
+    const otherProjectKey = ["task-board", "completed", "project-b"] as const;
+    const currentData = {
+      pageParams: [undefined],
+      pages: [{ data: [existingTask], nextCursor: null }],
+    };
+
+    queryClient.setQueryData(allProjectsKey, currentData);
+    queryClient.setQueryData(currentProjectKey, currentData);
+    queryClient.setQueryData(otherProjectKey, currentData);
+
+    await cacheCompletedProjectTask(queryClient, createdTask);
+
+    expect(queryClient.getQueryData(allProjectsKey)).toEqual({
+      pageParams: [undefined],
+      pages: [{ data: [createdTask, existingTask], nextCursor: null }],
+    });
+    expect(queryClient.getQueryData(currentProjectKey)).toEqual({
+      pageParams: [undefined],
+      pages: [{ data: [createdTask, existingTask], nextCursor: null }],
+    });
+    expect(queryClient.getQueryData(otherProjectKey)).toEqual(currentData);
   });
 });

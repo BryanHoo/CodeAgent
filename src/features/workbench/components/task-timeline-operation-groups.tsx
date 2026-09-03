@@ -171,7 +171,8 @@ export function TimelineOperationGroupDisclosure({
   // 聚合组件只订阅组内 revision，命令输出 Delta 不会让外层 Timeline 重渲染。
   useSyncExternalStore(subscribe, getRevisionSnapshot, getRevisionSnapshot);
   const summary = summarizeTimelineOperations(itemStores.map((itemStore) => itemStore.peek()));
-  const collapseTrigger = collapseTriggerStore?.peek();
+  // Assistant Delta 延迟物化，必须读取完整 Item 才能观察到已输出文本。
+  const collapseTrigger = collapseTriggerStore?.read();
   const hasFollowingAssistantText =
     collapseTrigger?.type === "message" &&
     collapseTrigger.role === "assistant" &&

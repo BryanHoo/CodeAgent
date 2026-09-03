@@ -20,6 +20,7 @@ import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js
 import { createProjectGitRuntimeHandlers } from "./project-git-runtime-handlers.js";
 import {
   capabilitiesQueryOptions,
+  cacheCompletedProjectTask,
   nativeClient,
   invalidateTaskQueue,
   PROJECT_PINNED_TASKS_KEY,
@@ -123,6 +124,9 @@ export function ProjectProvider({
           });
           const response = await client.readTask(projectId, taskId);
           projectRuntime.reconcileTaskSnapshot(response);
+          if (reason === "turn_completed" && response.snapshot.status === "idle") {
+            await cacheCompletedProjectTask(queryClient, response.snapshot);
+          }
           updateTaskTitleInProjectListCaches(queryClient, response.snapshot, {
             assistantReplyStarted: reason === "assistant_reply_started",
           });
