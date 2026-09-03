@@ -14,7 +14,14 @@ void test("extracts the dated changelog section for a release", () => {
   const notes = extractVersionNotes(changelog, "0.1.4");
 
   assert.match(notes, /^## \[0\.1\.4\] - 2026-09-03$/m);
+  assert.match(notes, /^### Added$/m);
+  assert.match(notes, /Codex `0\.152\.1`/u);
+  assert.match(notes, /新完成任务标识/u);
+  assert.match(notes, /^### Changed$/m);
+  assert.match(notes, /Linux Wayland/u);
   assert.match(notes, /^### Fixed$/m);
+  assert.match(notes, /文本附件/u);
+  assert.match(notes, /时间线/u);
   assert.doesNotMatch(notes, /^## \[Unreleased\]$/m);
 });
 
