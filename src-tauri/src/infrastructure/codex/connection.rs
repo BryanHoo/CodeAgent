@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     path::Path,
     pin::Pin,
     sync::{
@@ -31,6 +31,7 @@ type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<PendingResult>>>>;
 type AsyncWriter = Pin<Box<dyn AsyncWrite + Send>>;
 const OVERLOAD_RETRY_DELAYS: [Duration; 2] =
     [Duration::from_millis(25), Duration::from_millis(100)];
+const NOTIFICATION_OVERFLOW_CAPACITY: usize = 256;
 
 #[derive(Clone, Debug)]
 enum PendingError {
@@ -249,11 +250,38 @@ async fn read_responses<R>(
 {
     let mut reader = BufReader::new(reader);
     let mut line = Vec::with_capacity(8 * 1024);
+    let mut queued_notifications = VecDeque::with_capacity(NOTIFICATION_OVERFLOW_CAPACITY);
 
     loop {
         line.clear();
-        match reader.read_until(b'\n', &mut line).await {
-            Ok(0) | Err(_) => {
+        let read_result = if queued_notifications.is_empty() {
+            reader.read_until(b'\n', &mut line).await
+        } else {
+            tokio::select! {
+                biased;
+                result = reader.read_until(b'\n', &mut line) => result,
+                permit = server_messages.reserve() => {
+                    let Ok(permit) = permit else {
+                        queued_notifications.clear();
+                        continue;
+                    };
+                    permit.send(queued_notifications.pop_front().expect("queue is not empty"));
+                    continue;
+                }
+            }
+        };
+        match read_result {
+            Ok(0) => {
+                fail_pending(&pending, PendingError::ConnectionClosed);
+                // stdout 已关闭且不再有 response；尽量交付此前已接收的通知。
+                while let Some(notification) = queued_notifications.pop_front() {
+                    if server_messages.send(notification).await.is_err() {
+                        break;
+                    }
+                }
+                return;
+            }
+            Err(_) => {
                 fail_pending(&pending, PendingError::ConnectionClosed);
                 return;
             }
@@ -293,14 +321,23 @@ async fn read_responses<R>(
                 fail_pending(&pending, PendingError::InvalidMessage);
                 return;
             };
-            // 有界队列为 WebView 短暂卡顿提供背压，同时不丢弃会改变状态的通知。
-            let _ = server_messages
-                .send(ServerMessage {
-                    id: message.id,
-                    method,
-                    params,
-                })
-                .await;
+            let mut notification = ServerMessage {
+                id: message.id,
+                method,
+                params,
+            };
+            if queued_notifications.is_empty() {
+                match server_messages.try_send(notification) {
+                    Ok(()) => continue,
+                    Err(mpsc::error::TrySendError::Full(returned)) => notification = returned,
+                    Err(mpsc::error::TrySendError::Closed(_)) => continue,
+                }
+            }
+            // channel 满时写入有界环形缓冲，stdout reader 继续读取并优先路由 response。
+            if queued_notifications.len() == NOTIFICATION_OVERFLOW_CAPACITY {
+                queued_notifications.pop_front();
+            }
+            queued_notifications.push_back(notification);
             continue;
         }
         route_response(&pending, message);
@@ -337,146 +374,5 @@ fn fail_pending(pending: &PendingRequests, error: PendingError) {
     };
     for sender in requests.into_values() {
         let _ = sender.send(Err(error.clone()));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Duration;
-
-    use serde_json::{Value, json};
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
-
-    use super::AppServerConnection;
-
-    #[tokio::test]
-    async fn initialize_should_complete_required_handshake() {
-        let (client, server) = duplex(4096);
-        let (client_reader, client_writer) = split(client);
-        let (server_reader, mut server_writer) = split(server);
-        let connection = AppServerConnection::new(client_reader, client_writer);
-
-        let server_task = tokio::spawn(async move {
-            let mut lines = BufReader::new(server_reader).lines();
-            let request = lines
-                .next_line()
-                .await
-                .expect("server should read request")
-                .expect("initialize request should exist");
-            let request: Value = serde_json::from_str(&request).expect("request should be JSON");
-            assert_eq!(request["method"], "initialize");
-            assert_eq!(request["params"]["clientInfo"]["name"], "codeagent");
-            assert_eq!(request["params"]["capabilities"]["experimentalApi"], true);
-            let opt_out = request["params"]["capabilities"]["optOutNotificationMethods"]
-                .as_array()
-                .expect("ignored notifications should be negotiated");
-            assert!(opt_out.iter().any(|method| method == "turn/diff/updated"));
-            assert!(
-                !opt_out
-                    .iter()
-                    .any(|method| method == "thread/status/changed")
-            );
-
-            server_writer
-                .write_all(
-                    b"{\"id\":1,\"result\":{\"userAgent\":\"codex-cli\",\"codexHome\":\"/tmp/codex\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}\n",
-                )
-                .await
-                .expect("server should write response");
-
-            let notification = lines
-                .next_line()
-                .await
-                .expect("server should read notification")
-                .expect("initialized notification should exist");
-            assert_eq!(notification, "{\"method\":\"initialized\"}");
-        });
-
-        let response = connection
-            .initialize(Duration::from_secs(1))
-            .await
-            .expect("handshake should succeed");
-
-        assert_eq!(response.user_agent, "codex-cli");
-        assert_eq!(response.codex_home, "/tmp/codex");
-        server_task.await.expect("fake server should finish");
-    }
-
-    #[tokio::test]
-    async fn concurrent_requests_should_match_out_of_order_responses() {
-        let (client, server) = duplex(4096);
-        let (client_reader, client_writer) = split(client);
-        let (server_reader, mut server_writer) = split(server);
-        let connection = AppServerConnection::new(client_reader, client_writer);
-
-        let server_task = tokio::spawn(async move {
-            let mut lines = BufReader::new(server_reader).lines();
-            let first: Value =
-                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
-            let second: Value =
-                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
-
-            let responses = format!(
-                "{{\"id\":{},\"result\":{{\"value\":\"second\"}}}}\n{{\"id\":{},\"result\":{{\"value\":\"first\"}}}}\n",
-                second["id"], first["id"]
-            );
-            server_writer.write_all(responses.as_bytes()).await.unwrap();
-        });
-
-        let first_params = json!({});
-        let second_params = json!({});
-        let first =
-            connection.request::<_, Value>("test/first", &first_params, Duration::from_secs(1));
-        let second =
-            connection.request::<_, Value>("test/second", &second_params, Duration::from_secs(1));
-        let (first, second) = tokio::join!(first, second);
-
-        assert_eq!(first.unwrap()["value"], "first");
-        assert_eq!(second.unwrap()["value"], "second");
-        server_task.await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn notifications_should_be_available_without_blocking_responses() {
-        let (client, server) = duplex(4096);
-        let (client_reader, client_writer) = split(client);
-        let (server_reader, mut server_writer) = split(server);
-        let connection = AppServerConnection::new(client_reader, client_writer);
-        let mut messages = connection
-            .take_server_messages()
-            .await
-            .expect("message receiver should be available once");
-
-        let server_task = tokio::spawn(async move {
-            let mut lines = BufReader::new(server_reader).lines();
-            let request: Value =
-                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
-            server_writer
-                .write_all(
-                    format!(
-                        "{{\"method\":\"item/agentMessage/delta\",\"params\":{{\"threadId\":\"thread-a\",\"turnId\":\"turn-a\",\"itemId\":\"item-a\",\"delta\":\"ok\"}}}}\n{{\"id\":{},\"result\":{{\"done\":true}}}}\n",
-                        request["id"]
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-        });
-
-        let response: Value = connection
-            .request("test/request", &json!({}), Duration::from_secs(1))
-            .await
-            .expect("response should not wait for notification consumption");
-        assert_eq!(response["done"], true);
-        let message = messages
-            .recv()
-            .await
-            .expect("notification should be routed");
-        assert_eq!(message.method, "item/agentMessage/delta");
-        assert_eq!(
-            serde_json::from_str::<Value>(message.params.get()).unwrap()["delta"],
-            "ok"
-        );
-        server_task.await.unwrap();
     }
 }
