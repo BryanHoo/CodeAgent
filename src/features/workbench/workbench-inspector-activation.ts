@@ -34,6 +34,13 @@ export function getDefaultWorkbenchInspectorTab(
   return contextOnly ? "context" : "project";
 }
 
+export function getWorkbenchInspectorMountKey(
+  { projectId }: Readonly<{ projectId: string; taskId: string | undefined }>,
+): string {
+  // 右栏外壳承载项目级文件树，任务变化只更新任务上下文，不能重建整个右栏。
+  return projectId;
+}
+
 export function deriveWorkbenchInspectorContextActivation(
   previous: WorkbenchInspectorContextArtifactState,
   current: WorkbenchInspectorContextArtifactState,

@@ -194,7 +194,10 @@ export function WorkbenchInspector({
   );
   const projectRootName = projectPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? projectName;
   const contextContent = (
-    <div className="h-full space-y-5 overflow-y-auto p-2.5">
+    <div
+      className="h-full space-y-5 overflow-y-auto p-2.5"
+      key={`${projectId ?? projectName}:${taskId ?? "draft"}:context`}
+    >
       {task?.goal === null || task?.goal === undefined ? null : (
         <GoalSection goal={task.goal} onClear={onClearGoal} onStatusChange={onGoalStatusChange} />
       )}

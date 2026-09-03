@@ -25,6 +25,7 @@ import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 import { WorkbenchInspectorToggle } from "./workbench-inspector-toggle.js";
 import { WorkbenchPetLayer } from "../../pets/components/workbench-pet-layer.js";
+import { getWorkbenchInspectorMountKey } from "../workbench-inspector-activation.js";
 type WorkbenchShellStyle = CSSProperties &
   Readonly<{ "--inspector-open-width": string; "--sidebar-open-width": string }>;
 export function WorkbenchShellLayout({
@@ -408,7 +409,7 @@ export function WorkbenchShellLayout({
           mcpServersRetryAvailable={taskId !== undefined}
           mcpServersRefreshing={mcpServersQuery.isFetching && !mcpServersQuery.isPending}
           mcpServersRetrying={mcpServersReloadMutation.isPending}
-          key={`${projectId}:${taskId ?? "draft"}`}
+          key={getWorkbenchInspectorMountKey({ projectId, taskId })}
           onClose={closeInspector}
           onCloseFile={() => {
             setInspectorFileSelection(null);

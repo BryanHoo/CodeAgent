@@ -4,6 +4,7 @@ import {
   deriveWorkbenchInspectorContextActivation,
   getAvailableWorkbenchInspectorTabs,
   getDefaultWorkbenchInspectorTab,
+  getWorkbenchInspectorMountKey,
 } from "./workbench-inspector-activation.js";
 
 const gitStatus = {
@@ -13,6 +14,15 @@ const gitStatus = {
 };
 
 describe("workbench inspector activation", () => {
+  it("preserves the inspector mount identity between tasks in one project", () => {
+    expect(getWorkbenchInspectorMountKey({ projectId: "project-1", taskId: "task-1" })).toBe(
+      getWorkbenchInspectorMountKey({ projectId: "project-1", taskId: "task-2" }),
+    );
+    expect(getWorkbenchInspectorMountKey({ projectId: "project-1", taskId: "task-1" })).not.toBe(
+      getWorkbenchInspectorMountKey({ projectId: "project-2", taskId: "task-1" }),
+    );
+  });
+
   it("places the project tab before the task context tab", () => {
     expect(getAvailableWorkbenchInspectorTabs("task-1", gitStatus)).toEqual([
       "project",

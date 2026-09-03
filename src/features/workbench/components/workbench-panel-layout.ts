@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 export const sidebarOverlayQuery = "(max-width: 760px)";
 export const inspectorOverlayQuery = "(max-width: 1100px)";
 
-export const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
+export const sidebarWidthLimits = { default: 352, maximum: 400, minimum: 220 } as const;
 export const inspectorWidthLimits = {
   default: 320,
   minimum: 320,
