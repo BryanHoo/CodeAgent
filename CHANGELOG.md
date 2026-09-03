@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-03
+
+### Added
+
+- 添加 Codex 协议契约校验，固定 `0.152.1` 协议快照并覆盖实验 API 差异。
+- 添加文件变更操作分组与摘要，提升长任务时间线的浏览效率。
+
+### Changed
+
+- 重构 Provider 配置与模型目录持久化，统一自定义模型的读取和保存行为。
+- 更新任务最近活动排序与窗口恢复行为，并保留任务切换时的检查器状态。
+
+### Fixed
+
+- 修复 Codex 通知背压阻塞响应、超大消息帧和图片存储占用问题。
+- 修复自定义模型分页转换和 Codex RPC 错误详情丢失问题。
+- 修复对话虚拟列表动态内容置底、滚动校正与定位问题。
+- 修复运行时更新进度未知总量显示，以及 Windows Codex shim 调用失败问题。
+
 ## [0.1.4] - 2026-09-03
 
 ### Added
@@ -62,7 +81,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.1...v0.1.2
