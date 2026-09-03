@@ -7,6 +7,7 @@ use super::{
     AppServerConnection,
     connection::ConnectionError,
     conversation::{NativeTurn, map_turn},
+    conversation_commands::{ThreadConfig, thread_config},
     tasks::{NativeThread, map_task, read_task, validate_task_project},
 };
 use crate::domain::conversation::AgentGoal;
@@ -50,6 +51,7 @@ struct ThreadIdParams<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadForkParams<'a> {
+    config: ThreadConfig,
     exclude_turns: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_turn_id: Option<&'a str>,
@@ -333,6 +335,7 @@ pub async fn fork_task(
         .request(
             "thread/fork",
             &ThreadForkParams {
+                config: thread_config(),
                 // 历史由分页接口加载，Fork 仅返回元数据，避免极限会话形成超大单帧。
                 exclude_turns: true,
                 last_turn_id,

@@ -9,18 +9,18 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ```
 
 运行时不再使用 Codexly HTTP、WebSocket 或 mock。协议基线固定为只读的本地
-`/Users/bryanhu/Develop/person/codex` `rust-v0.151.0`；外部稳定运行时接受
-`codex-cli 0.151.0` 及以上版本，应用私有回退包仍固定为 `0.151.0` 并校验 SHA-512。
+`/Users/bryanhu/Develop/person/codex` `rust-v0.152.1`；外部稳定运行时仅接受
+`>=0.152.1,<0.153.0`，应用私有回退包固定为 `0.152.1` 并校验 SHA-512。
 
 ## 逐项矩阵
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
-| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页接受不低于 `0.151.0` 的稳定版本并在启动时完成 app-server 初始化；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检；Rust supervisor 独立维护状态并按 1–30 秒有界退避恢复 | 已实现 |
-| 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法 | 已实现 |
+| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页仅接受 `>=0.152.1,<0.153.0` 并在启动时完成 app-server 初始化；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检；Rust supervisor 独立维护状态并按 1–30 秒有界退避恢复 | 已实现 |
+| 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法；兼容 0.152 `recencyAt`，继续按用户维护的 `position` 排序且不请求 `recencyAt` 排序 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
 | 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 按系统安装状态探测编辑器、终端与文件管理器，再通过受限应用 ID 打开 | 已实现 |
-| 任务列表 | `listTasks`, `startTask`, `renameTask`, `pinTask` | 原生 `thread/list`, `thread/start`, `thread/name/set`, `thread/section/set` | 已实现 |
+| 任务列表 | `listTasks`, `startTask`, `renameTask`, `pinTask` | 原生 `thread/list`, `thread/start`, `thread/name/set`, `thread/section/set`；`thread/start`、`thread/resume`、`thread/fork` 均以线程配置覆盖启用 `tools.update_plan.enabled`，恢复时不覆盖已保存的 `cwd` | 已实现 |
 | 归档与删除 | `archiveTask`, `unarchiveTask`, `deleteTask`, `unsubscribeTask` | 原生 thread 生命周期；Rust lease 管理器在终态触发释放，活跃任务保持 busy 并有界退避重试，WebView 只声明消费者挂载/卸载 | 已实现 |
 | 会话快照 | `readTask` | `thread/read(includeTurns:false)` + `thread/turns/list` | 已实现 |
 | 长历史分页 | `readTask` cursor | `legacy` 使用 `full`；`paginated` 使用 `notLoaded` + 并发 `thread/items/list` | 已实现 |
@@ -33,20 +33,20 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；单调序号、缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
 | 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
 | 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |
-| Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.151 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
+| Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.152 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
-| 审批与输入 | `resolvePendingRequest` | 严格区分 0.151 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
+| 审批与输入 | `resolvePendingRequest` | 严格区分 0.152 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、过滤 `.git` 与 `.DS_Store`、遵守 ignore 规则的缓存索引、会话取消和结果上限；源码与图片通过最小 capability 的轻量原生独立窗口预览 | 已实现 |
-| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.151 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
+| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.152 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
 | 模型输入能力 | `model/list.inputModalities` | 提交前按所选模型动态校验图片与音频能力；保留未知新模态，不使用本地硬编码模型名单 | 已实现 |
-| 通用文件原生输入 | `input_file` | Codex 0.151 app-server `ContentItem` 没有该类型；项目不绕过 app-server，也不伪造协议，普通文件以本地路径交给 Codex 工具读取 | 上游未提供 |
+| 通用文件原生输入 | `input_file` | Codex 0.152 app-server `ContentItem` 没有该类型；项目不绕过 app-server，也不伪造协议，普通文件以本地路径交给 Codex 工具读取 | 上游未提供 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
 | Git 状态与历史 | `getProjectGitStatus`, `getProjectGitHistory` | 受限 Git 子进程、结构化解析 | 已实现 |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
 | 右栏检查器 | 文件、Sources、Changes、历史、MCP | MCP 按当前 Task 读取线程级权威快照并展示紧凑连接态与工具数 | 已实现 |
 | 模型与 Skills | `listModels`, `listSkills` | 原生 `model/list`, `skills/list` | 已实现 |
-| MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/mcpServer/reload`；精确保留 0.151 线程连接态，启动通知只触发清单失效，IPC 仅传固定大小摘要 | 已实现 |
+| MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/mcpServer/reload`；精确保留 0.152 线程连接态，启动通知只触发清单失效，IPC 仅传固定大小摘要；`openaiForm` 与 `openai/form` 均显式降级为 unsupported | 已实现 |
 | Provider 认证 | login/cancel/logout/custom provider | 原生账号协议与受限配置写入；密钥不持久化到 WebView | 已实现 |
 | 全局/项目设置 | get/update settings/defaults | `appData/agent-settings.json` 原子配置；返回实际变化字段，模型与权限默认值不写入 Codex 配置 | 已实现 |
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
@@ -58,12 +58,12 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 
 ## 协议事件覆盖
 
-| 类别 | Codex 0.151 通知 |
+| 类别 | Codex 0.152 通知 |
 | --- | --- |
 | 回合 | `turn/started`, `turn/completed`, `turn/plan/updated` |
 | 文本与推理 | `item/agentMessage/delta`, reasoning delta/summary 通知 |
 | 工具与文件 | command output、MCP progress、file patch、`functionCallOutput`、九类协作 Agent 工具、item started/completed |
-| 运行时 | warning/error、token usage、model reroute/safety/verification |
+| 运行时 | warning/error、token usage、model reroute/safety/verification；认证恢复通知校验结构后显式消费，暂不投影 UI |
 | 生命周期 | thread status/name/archive/delete、goal、queue |
 | 扩展流程 | hook、含 `writeStdin` 的 auto approval review、background terminal、认证、MCP status |
 
@@ -102,7 +102,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ## 参考资料
 
 - [Codex app-server README](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)
-- [Codex 0.151.0 官方更新日志](https://developers.openai.com/codex/changelog)
+- [Codex 0.152/0.152.1 官方更新日志](https://developers.openai.com/codex/changelog)
 - [Tauri Rust 到前端通信](https://v2.tauri.app/develop/calling-frontend/)
 - [Tauri 前端调用 Rust](https://v2.tauri.app/develop/calling-rust/)
 - [Tauri Notification 插件](https://v2.tauri.app/plugin/notification/)

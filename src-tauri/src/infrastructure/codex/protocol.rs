@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_codex_151_streams_should_be_disabled_at_initialization() {
+    fn unsupported_codex_152_streams_should_be_disabled_at_initialization() {
         for method in [
             "mcpServer/event/stream/notification",
             "thread/realtime/item/completed",

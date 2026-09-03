@@ -33,7 +33,7 @@ use crate::domain::runtime::{
     CodexRuntimeInstallPhase, CodexRuntimeInstallProgress,
 };
 
-const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.151.0";
+const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.152.1";
 const MAX_CONCURRENT_PROBES: usize = 4;
 const MAX_DOWNLOAD_BYTES: u64 = 192 * 1024 * 1024;
 const MAX_UNPACKED_BYTES: u64 = 512 * 1024 * 1024;

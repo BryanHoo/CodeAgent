@@ -28,7 +28,11 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
             ),
             (
                 "thread/resume",
-                json!({"thread": {"id": "thread-a", "projectId": "project-a"}}),
+                json!({
+                    "cwd": "/work/a",
+                    "instructionSources": ["/work/a/AGENTS.md"],
+                    "thread": {"id": "thread-a", "projectId": "project-a"}
+                }),
             ),
             (
                 "turn/start",
@@ -48,9 +52,18 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
                     json!(["/work/a", "/work/shared"])
                 );
                 assert_eq!(request["params"]["historyMode"], "paginated");
+                assert_eq!(
+                    request["params"]["config"]["tools.update_plan.enabled"],
+                    true
+                );
             }
             if method == "thread/resume" {
                 assert_eq!(request["params"]["excludeTurns"], true);
+                assert!(request["params"].get("cwd").is_none());
+                assert_eq!(
+                    request["params"]["config"]["tools.update_plan.enabled"],
+                    true
+                );
             }
             if method == "turn/start" {
                 assert_eq!(request["params"]["threadId"], "thread-a");
@@ -195,6 +208,10 @@ async fn advanced_task_commands_should_use_native_codex_methods() {
             if method == "thread/fork" {
                 assert_eq!(request["params"]["lastTurnId"], "turn-a");
                 assert_eq!(request["params"]["excludeTurns"], true);
+                assert_eq!(
+                    request["params"]["config"]["tools.update_plan.enabled"],
+                    true
+                );
             }
             server_writer
                 .write_all(

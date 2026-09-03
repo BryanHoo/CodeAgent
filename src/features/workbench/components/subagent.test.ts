@@ -17,7 +17,7 @@ function tool(name: string): Extract<AgentItem, { type: "tool" }> {
   };
 }
 
-describe("Codex 0.151 多 Agent 工具", () => {
+describe("Codex 0.152 多 Agent 工具", () => {
   beforeAll(async () => {
     await i18n.changeLanguage("zh-CN");
   });

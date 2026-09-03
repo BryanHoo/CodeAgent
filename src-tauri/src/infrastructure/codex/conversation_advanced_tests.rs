@@ -387,6 +387,10 @@ async fn temporary_task_should_start_without_project_context() {
             serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
         assert_eq!(request["method"], "thread/start");
         assert_eq!(request["params"]["historyMode"], "paginated");
+        assert_eq!(
+            request["params"]["config"]["tools.update_plan.enabled"],
+            true
+        );
         assert!(request["params"]["projectId"].is_null());
         assert!(request["params"]["cwd"].is_null());
         assert!(request["params"]["runtimeWorkspaceRoots"].is_null());

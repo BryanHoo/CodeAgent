@@ -17,7 +17,8 @@
 | 文档 | 内容 |
 |---|---|
 | [IPC 契约](./ipc-contracts.md) | 命令、Channel 与序列化约束 |
-| [Codexly 能力矩阵](../../../../docs/codexly-capability-matrix.md) | Codex 0.151 工作台能力、协议来源与验证证据 |
+| [Codex 运行时契约](./codex-runtime-contract.md) | 0.152 版本范围、线程配置与新增协议边界 |
+| [Codexly 能力矩阵](../../../../docs/codexly-capability-matrix.md) | Codex 0.152 工作台能力、协议来源与验证证据 |
 | [Provider 运行时](../../../../docs/provider-runtime-management.md) | 发现、版本检查、按需安装、升级与回退 |
 | [质量规范](./quality-guidelines.md) | Rust 测试、格式化与静态检查 |
 

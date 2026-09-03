@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use semver::Version;
 use thiserror::Error;
 use tokio::{
     io::{self, AsyncRead, AsyncReadExt},
@@ -18,7 +19,7 @@ use super::connection::{AppServerConnection, ConnectionError};
 use super::runtime_manager::{RuntimeDiscoveryError, find_compatible_codex_binary};
 use super::stderr::spawn_codex_stderr_tasks;
 
-pub const SUPPORTED_CODEX_VERSION: &str = "0.151.0";
+pub const SUPPORTED_CODEX_VERSION: &str = "0.152.1";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const VERSION_OUTPUT_LIMIT: usize = 4 * 1024;
@@ -35,7 +36,7 @@ pub enum ProcessError {
     VersionProbeTimeout,
     #[error("Codex version output exceeded the limit")]
     VersionOutputTooLarge,
-    #[error("unsupported Codex version; expected 0.151.0 or newer")]
+    #[error("unsupported Codex version; expected >=0.152.1,<0.153.0")]
     UnsupportedVersion,
     #[error(transparent)]
     RuntimeDiscovery(#[from] RuntimeDiscoveryError),
@@ -195,20 +196,11 @@ fn parse_codex_version(output: &str) -> Option<&str> {
 }
 
 pub(super) fn is_compatible_codex_version(version: &str) -> bool {
-    let mut parts = version.split('.');
-    let (Some(major), Some(minor), Some(patch), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
+    let Ok(version) = Version::parse(version) else {
         return false;
     };
-    let (Ok(major), Ok(minor), Ok(_patch)) = (
-        major.parse::<u64>(),
-        minor.parse::<u64>(),
-        patch.parse::<u64>(),
-    ) else {
-        return false;
-    };
-    major > 0 || (major == 0 && minor >= 151)
+    // experimentalApi 仅锁定到已验证的 0.152 协议面，不接受预发行版或未知次版本。
+    version.major == 0 && version.minor == 152 && version.patch >= 1 && version.pre.is_empty()
 }
 
 fn parse_codex_cli_version(output: &str) -> Option<&str> {
@@ -238,7 +230,7 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     if let Some(runtime_path) = runtime_path {
-        // Codex 0.151 会从自身环境复制 PATH，再用它解析 npx 等 stdio MCP 命令。
+        // Codex 0.152 会从自身环境复制 PATH，再用它解析 npx 等 stdio MCP 命令。
         command.env("PATH", runtime_path);
     }
     command
@@ -336,20 +328,22 @@ mod tests {
     }
 
     #[test]
-    fn codex_version_should_enforce_a_minimum_protocol_version() {
+    fn codex_version_should_enforce_the_152_protocol_range() {
         assert_eq!(
-            parse_codex_version("codex-cli 0.151.0\n"),
+            parse_codex_version("codex-cli 0.152.1\n"),
             Some(SUPPORTED_CODEX_VERSION)
         );
         assert_eq!(parse_codex_version("codex-cli 0.152.3\n"), Some("0.152.3"));
-        assert_eq!(parse_codex_version("codex-cli 1.0.0\n"), Some("1.0.0"));
-        assert_eq!(parse_codex_version("codex-cli 0.150.1\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.151.0\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.152.0\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.153.0\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 1.0.0\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.152.0-beta.1\n"), None);
-        assert_eq!(parse_codex_version("codex-cli 0.151.0 unexpected\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.152.1 unexpected\n"), None);
     }
 
     #[tokio::test]
-    #[ignore = "requires the installed codex-cli 0.151.0 binary"]
+    #[ignore = "requires the installed codex-cli 0.152.1 binary"]
     async fn installed_codex_should_complete_real_app_server_lifecycle() {
         let process = CodexProcess::start(&std::env::temp_dir())
             .await
@@ -381,6 +375,7 @@ mod tests {
                     "historyMode": "paginated",
                     "projectId": null,
                     "runtimeWorkspaceRoots": [],
+                    "config": {"tools.update_plan.enabled": true},
                 }),
                 Duration::from_secs(10),
             )

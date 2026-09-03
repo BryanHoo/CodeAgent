@@ -21,7 +21,7 @@ use std::ffi::OsStr;
 fn private_runtime_should_use_the_provider_version_directory() {
     assert_eq!(
         private_codex_binary_path(Path::new("/application-data")),
-        Path::new("/application-data/providers/codex/bin/0.151.0/bin")
+        Path::new("/application-data/providers/codex/bin/0.152.1/bin")
             .join(format!("codex{}", std::env::consts::EXE_SUFFIX))
     );
 }
@@ -70,7 +70,7 @@ fn current_managed_private_runtime_should_not_update_again() {
         app_data.join("providers/codex/active.json"),
         serde_json::to_vec(&serde_json::json!({
             "path": binary,
-            "version": "0.151.0",
+            "version": "0.152.1",
         }))
         .unwrap(),
     )
@@ -123,35 +123,35 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
             "aarch64",
             "aarch64-apple-darwin",
             "darwin-arm64",
-            "g7YzpaCZGCw19R/gly3vRPjnLqaW7JcBAu2WQQ6e8PIlvBPmS/gMplIUURMgNO6gi8LsPzdlQtLqkwoeOOlIdg==",
+            "H8i0uZHILM0Z2Ep+MryCF5rGXmXjmXTzXf5ZK6bobKtZc2yfomi42ZrQWuYQ5P02H0oLG7B5jLaSWZQ+VFgjbA==",
         ),
         (
             "linux",
             "aarch64",
             "aarch64-unknown-linux-musl",
             "linux-arm64",
-            "CsLgFeX4TQ6I2Gdrxd2r5UbgIbDLCdtcLAlnMYjr06bCL057MTNGec7Ewb3+Z2DBiMuXCljdTBGqLOePkMV0sQ==",
+            "qZXqf7fxn/SCmaJW6tYrzWqwcDo0gMDJjj1Pm4OtrWXR7Oc0Y2e8ngAh/Mep9iFhVbsqntY1eGLaQaXssGvFgA==",
         ),
         (
             "linux",
             "x86_64",
             "x86_64-unknown-linux-musl",
             "linux-x64",
-            "xcVyY1FtwvVYhh2JBmz8fX8CQqFAxO/lxJ2IXsh8x5uwxZVHVl5fZHFHf8JdRaOGG0vpkYmu/DKKVoLd56/DDQ==",
+            "ar59rr3CX5j4MLMnRcHqcE0eHZPsZlmXlz37ZS2yP3BsV5pNhO+wFXTOzXFdaYmg2cALX7a3Eqv+vB2jQlXnjQ==",
         ),
         (
             "windows",
             "aarch64",
             "aarch64-pc-windows-msvc",
             "win32-arm64",
-            "zDWzOoh9wHm+Om1Nhn7os47rAVeSGPh0SnM3YOttdq6iPJz2zn4vBnbGUZjeih1qW/3mvNF3Oyd4owlaHmphmg==",
+            "YZjWCcArfSLlqG/4r2Ox5ZZhz1FAFQBZisz8U8r5JLxeLk0tXwZHleu8RjNjly++0S5zsgPtAuF0viSIj7NyRA==",
         ),
         (
             "windows",
             "x86_64",
             "x86_64-pc-windows-msvc",
             "win32-x64",
-            "sLT7xvID3jhU6tkzcwRPnMEclKRwUPbpo0mtfxIF9KpdZH3VJV7sM2/kXWXyvUM7Zt/YeyOaeATTEysbRz8Yog==",
+            "B8h0/2Kt+rKQv2+vqBhlhWkMEdhf4dsn46FNKMEBTXj3YC5hwSioOcTX2hMgJxMEMtKIMH6Ire1eNrQPvaL9og==",
         ),
     ];
 
@@ -161,7 +161,7 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
         assert_eq!(
             distribution.url,
             format!(
-                "https://registry.npmjs.org/@openai/codex/-/codex-0.151.0-{package_suffix}.tgz"
+                "https://registry.npmjs.org/@openai/codex/-/codex-0.152.1-{package_suffix}.tgz"
             )
         );
         assert_eq!(distribution.integrity, integrity);
@@ -230,7 +230,7 @@ async fn inspection_should_find_the_compatible_private_runtime() {
     let app_data = std::env::temp_dir().join(format!("codeagent-runtime-{unique}"));
     let binary = private_codex_binary_path(&app_data);
     std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, "#!/bin/sh\necho 'codex-cli 0.152.0'\n").unwrap();
+    std::fs::write(&binary, "#!/bin/sh\necho 'codex-cli 0.152.1'\n").unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let availability = inspect_codex_runtime(&app_data).await;
@@ -239,7 +239,7 @@ async fn inspection_should_find_the_compatible_private_runtime() {
         availability.status,
         CodexRuntimeAvailabilityStatus::Compatible
     );
-    assert_eq!(availability.detected_version.as_deref(), Some("0.152.0"));
+    assert_eq!(availability.detected_version.as_deref(), Some("0.152.1"));
     std::fs::remove_dir_all(app_data).unwrap();
 }
 
@@ -258,7 +258,7 @@ async fn discovery_and_probe_should_use_the_login_shell_path() {
     let interpreter = bin_dir.join("codeagent-test-node");
     std::fs::create_dir_all(&bin_dir).unwrap();
     std::fs::write(&binary, "#!/usr/bin/env codeagent-test-node\n").unwrap();
-    std::fs::write(&interpreter, "#!/bin/sh\necho 'codex-cli 0.151.0'\n").unwrap();
+    std::fs::write(&interpreter, "#!/bin/sh\necho 'codex-cli 0.152.1'\n").unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::set_permissions(&interpreter, std::fs::Permissions::from_mode(0o755)).unwrap();
 
@@ -270,7 +270,7 @@ async fn discovery_and_probe_should_use_the_login_shell_path() {
         probe_codex_version(&binary, Some(OsStr::new(&bin_dir)))
             .await
             .unwrap(),
-        "0.151.0"
+        "0.152.1"
     );
     std::fs::remove_dir_all(root).unwrap();
 }

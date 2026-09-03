@@ -74,7 +74,7 @@ fn official_thread_items_should_keep_visible_semantics() {
 }
 
 #[test]
-fn codex_151_items_should_keep_native_tool_semantics() {
+fn codex_152_items_should_keep_native_tool_semantics() {
     let function_output = map_item(json!({
         "id": "function-output-a",
         "name": "search",
@@ -110,7 +110,7 @@ fn codex_151_items_should_keep_native_tool_semantics() {
             "tool": native_tool,
             "type": "collabAgentToolCall",
         }))
-        .expect("Codex 0.151 collaboration tool should map");
+        .expect("Codex 0.152 collaboration tool should map");
         let mapped = to_value(mapped).unwrap();
         assert_eq!(mapped["name"], mapped_tool);
         assert_eq!(mapped["output"]["agents"][0]["taskId"], "thread-b");

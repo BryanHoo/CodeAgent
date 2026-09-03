@@ -49,6 +49,7 @@ struct NativeProjectRoot {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadStartParams<'a> {
+    config: ThreadConfig,
     cwd: Option<&'a str>,
     history_mode: &'static str,
     project_id: Option<&'a str>,
@@ -74,8 +75,21 @@ struct NativeTask {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadResumeParams<'a> {
+    config: ThreadConfig,
     exclude_turns: bool,
     thread_id: &'a str,
+}
+
+#[derive(Serialize)]
+pub(super) struct ThreadConfig {
+    #[serde(rename = "tools.update_plan.enabled")]
+    update_plan_enabled: bool,
+}
+
+pub(super) const fn thread_config() -> ThreadConfig {
+    ThreadConfig {
+        update_plan_enabled: true,
+    }
 }
 
 #[derive(Deserialize)]
@@ -170,6 +184,7 @@ pub async fn start_task(
         .request(
             "thread/start",
             &ThreadStartParams {
+                config: thread_config(),
                 cwd: root_paths.first().map(String::as_str),
                 history_mode: "paginated",
                 project_id: native_project_id,
@@ -237,6 +252,7 @@ pub async fn resume_task(
         .request(
             "thread/resume",
             &ThreadResumeParams {
+                config: thread_config(),
                 // 历史由分页接口加载，Resume 仅返回元数据，避免极限会话形成超大单帧。
                 exclude_turns: true,
                 thread_id: task_id,

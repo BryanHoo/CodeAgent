@@ -3,7 +3,11 @@ use std::{path::Path, time::Duration};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{AppServerConnection, connection::ConnectionError};
+use super::{
+    AppServerConnection,
+    connection::ConnectionError,
+    conversation_commands::{ThreadConfig, thread_config},
+};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_PROMPT: &str = "根据给定的 Git 变更生成准确、简洁的 Conventional Commit message。首行不超过 72 个字符；必要时添加最多 3 条以 `- ` 开头的正文。只描述实际变更，不添加 Markdown 代码块或解释。";
@@ -17,6 +21,7 @@ pub struct CommitMessageSettings {
 #[serde(rename_all = "camelCase")]
 struct ThreadStartParams<'a> {
     approval_policy: &'static str,
+    config: ThreadConfig,
     cwd: &'a str,
     developer_instructions: &'static str,
     ephemeral: bool,
@@ -90,6 +95,7 @@ pub async fn start_commit_message_thread(
             "thread/start",
             &ThreadStartParams {
                 approval_policy: "never",
+                config: thread_config(),
                 cwd,
                 developer_instructions: "Do not call tools. Generate only the requested commit message from the supplied changes.",
                 ephemeral: true,
@@ -194,6 +200,10 @@ mod tests {
                     assert_eq!(request["params"]["model"], "gpt-commit");
                     assert_eq!(request["params"]["ephemeral"], true);
                     assert_eq!(request["params"]["sandbox"], "read-only");
+                    assert_eq!(
+                        request["params"]["config"]["tools.update_plan.enabled"],
+                        true
+                    );
                 }
                 if method == "turn/start" {
                     assert_eq!(request["params"]["model"], "gpt-commit");

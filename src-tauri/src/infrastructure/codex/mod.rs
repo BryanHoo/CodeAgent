@@ -38,6 +38,9 @@ mod auth_tests;
 #[path = "catalogs_tests.rs"]
 mod catalogs_tests;
 #[cfg(test)]
+#[path = "codex_152_contract_tests.rs"]
+mod codex_152_contract_tests;
+#[cfg(test)]
 #[path = "connection_message_tests.rs"]
 mod connection_message_tests;
 #[cfg(test)]

@@ -189,7 +189,7 @@ fn map_skill(skill: &Value) -> Option<Value> {
 fn map_mcp_server(server: Value) -> Option<Value> {
     let name = server.get("name")?.as_str()?;
     let info = server.get("serverInfo").filter(|value| !value.is_null());
-    // 保留 0.151 的线程连接态；仅按官方 TUI 规则补全无运行态但未登录的服务。
+    // 保留 0.152 的线程连接态；仅按官方 TUI 规则补全无运行态但未登录的服务。
     let status = match server.get("runtimeStatus")? {
         Value::Null if server.get("authStatus").and_then(Value::as_str) == Some("notLoggedIn") => {
             "authenticationRequired"

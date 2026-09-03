@@ -193,7 +193,7 @@ fn map_command_request(
         "writeStdin" => {
             let command = required_string(params, "command")?;
             let parts = shlex::split(command).ok_or(ConnectionError::InvalidMessage)?;
-            // Codex 0.151 将终端输入编码为固定四段命令，严格解析可避免误判普通命令。
+            // Codex 0.152 将终端输入编码为固定四段命令，严格解析可避免误判普通命令。
             if parts.len() != 4 || parts[0] != "write_stdin" || parts[1] != "--session-id" {
                 return Err(ConnectionError::InvalidMessage);
             }
@@ -303,7 +303,7 @@ fn map_mcp_request(
             fields.extend(json!({"mode": "url", "url": url}).as_object().unwrap().clone());
         }
         "form" => fields.extend(json!({"fields": map_mcp_fields(params.get("requestedSchema").ok_or(ConnectionError::InvalidMessage)?)?, "mode": "form"}).as_object().unwrap().clone()),
-        "openai/form" => { fields.insert("mode".to_owned(), json!("unsupported")); }
+        "openai/form" | "openaiForm" => { fields.insert("mode".to_owned(), json!("unsupported")); }
         _ => return Err(ConnectionError::InvalidMessage),
     }
     Ok(request)

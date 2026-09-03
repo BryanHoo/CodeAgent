@@ -45,6 +45,14 @@ pub fn map_server_message(
     }
 
     let event = match message.method.as_str() {
+        "modelProvider/authRecoveryStarted" | "modelProvider/authRecoveryCompleted" => {
+            // 当前没有认证恢复进度 UI；校验 152 通知结构后显式消费，避免落入未知通知分支。
+            required_string(params_object, "threadId")?;
+            required_string(params_object, "turnId")?;
+            required_string(params_object, "provider")?;
+            required_string(params_object, "message")?;
+            return Ok(None);
+        }
         "turn/started" | "turn/completed" => {
             let native: TurnNotification = serde_json::from_value(params)?;
             let turn = map_turn(native.turn)?;

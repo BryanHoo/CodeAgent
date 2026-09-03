@@ -6,7 +6,7 @@ use crate::infrastructure::codex::connection::AppServerConnection;
 
 fn native_project(id: &str, name: &str, path: &str, position: i64) -> String {
     format!(
-        "{{\"id\":\"{id}\",\"name\":\"{name}\",\"roots\":[{{\"path\":\"{path}\"}}],\"metadata\":{{}},\"position\":{position},\"createdAt\":1735689600,\"updatedAt\":1735689600}}"
+        "{{\"id\":\"{id}\",\"name\":\"{name}\",\"roots\":[{{\"path\":\"{path}\"}}],\"metadata\":{{}},\"position\":{position},\"createdAt\":1735689600,\"updatedAt\":1735689600,\"recencyAt\":1735689700}}"
     )
 }
 
@@ -23,6 +23,8 @@ async fn list_projects_should_map_codex_projects_in_position_order() {
             .expect("request should be JSON");
         assert_eq!(request["method"], "project/list");
         assert_eq!(request["params"]["limit"], 100);
+        assert!(request["params"].get("sortKey").is_none());
+        assert!(request["params"].get("sortDirection").is_none());
         let id = &request["id"];
         let project_b = native_project("project-b", "B", "/work/b", 2);
         let project_a = native_project("project-a", "A", "/work/a", 1);

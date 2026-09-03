@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use super::{connection::ServerMessage, conversation_events::map_server_message};
 
 #[test]
-fn codex_151_errors_should_keep_public_classification() {
+fn codex_152_errors_should_keep_public_classification() {
     let cases = [
         (json!("rateLimitExceeded"), "rate_limit_exceeded", None),
         (
