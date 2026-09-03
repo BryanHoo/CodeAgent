@@ -13,7 +13,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::value::RawValue;
 use thiserror::Error;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
+    io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     sync::{Mutex as AsyncMutex, mpsc, oneshot},
     task::JoinHandle,
     time::{sleep, timeout},
@@ -32,6 +32,9 @@ type AsyncWriter = Pin<Box<dyn AsyncWrite + Send>>;
 const OVERLOAD_RETRY_DELAYS: [Duration; 2] =
     [Duration::from_millis(25), Duration::from_millis(100)];
 const NOTIFICATION_OVERFLOW_CAPACITY: usize = 256;
+// 普通 JSONL 帧控制在 8 MiB；图片帧为 50 MiB 解码内容预留 Base64 和信封空间。
+pub(super) const MAX_STANDARD_FRAME_BYTES: usize = 8 * 1024 * 1024;
+pub(super) const MAX_IMAGE_FRAME_BYTES: usize = 72 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
 enum PendingError {
@@ -240,6 +243,68 @@ impl Drop for AppServerConnection {
     }
 }
 
+#[derive(Debug)]
+pub(super) enum FrameReadError {
+    Io(std::io::Error),
+    TooLarge,
+}
+
+impl From<std::io::Error> for FrameReadError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+pub(super) async fn read_bounded_frame<R>(
+    reader: &mut R,
+    frame: &mut Vec<u8>,
+    standard_limit: usize,
+    image_limit: usize,
+) -> Result<bool, FrameReadError>
+where
+    R: AsyncBufRead + Unpin,
+{
+    let mut is_image = false;
+    let mut scan_from = 0;
+
+    loop {
+        let buffer = reader.fill_buf().await?;
+        if buffer.is_empty() {
+            return Ok(!frame.is_empty());
+        }
+
+        let newline = buffer.iter().position(|byte| *byte == b'\n');
+        let data_len = newline.unwrap_or(buffer.len());
+        let limit = if is_image {
+            image_limit
+        } else {
+            standard_limit
+        };
+        // 只复制预算内字节，保证恶意无换行输入不会先触发超额扩容。
+        let copy_len = data_len.min(limit.saturating_sub(frame.len()));
+        frame.extend_from_slice(&buffer[..copy_len]);
+
+        if !is_image && GeneratedImageStore::contains_image_generation(&frame[scan_from..]) {
+            is_image = true;
+        }
+        scan_from = frame
+            .len()
+            .saturating_sub(GeneratedImageStore::marker_len().saturating_sub(1));
+        reader.consume(copy_len);
+
+        if copy_len < data_len {
+            if is_image && frame.len() < image_limit {
+                continue;
+            }
+            return Err(FrameReadError::TooLarge);
+        }
+        if newline.is_some() {
+            reader.consume(1);
+            return Ok(true);
+        }
+    }
+}
+
 async fn read_responses<R>(
     reader: R,
     pending: PendingRequests,
@@ -255,11 +320,22 @@ async fn read_responses<R>(
     loop {
         line.clear();
         let read_result = if queued_notifications.is_empty() {
-            reader.read_until(b'\n', &mut line).await
+            read_bounded_frame(
+                &mut reader,
+                &mut line,
+                MAX_STANDARD_FRAME_BYTES,
+                MAX_IMAGE_FRAME_BYTES,
+            )
+            .await
         } else {
             tokio::select! {
                 biased;
-                result = reader.read_until(b'\n', &mut line) => result,
+                result = read_bounded_frame(
+                    &mut reader,
+                    &mut line,
+                    MAX_STANDARD_FRAME_BYTES,
+                    MAX_IMAGE_FRAME_BYTES,
+                ) => result,
                 permit = server_messages.reserve() => {
                     let Ok(permit) = permit else {
                         queued_notifications.clear();
@@ -271,7 +347,7 @@ async fn read_responses<R>(
             }
         };
         match read_result {
-            Ok(0) => {
+            Ok(false) => {
                 fail_pending(&pending, PendingError::ConnectionClosed);
                 // stdout 已关闭且不再有 response；尽量交付此前已接收的通知。
                 while let Some(notification) = queued_notifications.pop_front() {
@@ -281,14 +357,18 @@ async fn read_responses<R>(
                 }
                 return;
             }
-            Err(_) => {
+            Err(FrameReadError::Io(_error)) => {
                 fail_pending(&pending, PendingError::ConnectionClosed);
                 return;
             }
-            Ok(_) => {}
+            Err(FrameReadError::TooLarge) => {
+                fail_pending(&pending, PendingError::InvalidMessage);
+                return;
+            }
+            Ok(true) => {}
         }
 
-        while matches!(line.last(), Some(b'\n' | b'\r')) {
+        while matches!(line.last(), Some(b'\r')) {
             line.pop();
         }
         if line.is_empty() {

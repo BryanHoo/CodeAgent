@@ -1,22 +1,45 @@
 use std::{
-    fs::{self, OpenOptions},
-    io::Write,
+    collections::HashMap,
+    fs::{self, File, OpenOptions},
+    io::{Cursor, Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use serde_json::{Map, Value, json};
+use base64::{engine::general_purpose::STANDARD, read::DecoderReader};
+use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
 pub(super) const IMAGE_ATTACHMENT_FIELD: &str = "codeagentAttachment";
 const IMAGE_GENERATION_MARKER: &[u8] = b"\"imageGeneration\"";
 const MAX_GENERATED_IMAGE_BYTES: usize = 50 * 1024 * 1024;
+const COPY_BUFFER_BYTES: usize = 64 * 1024;
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub(super) struct GeneratedImageStore {
     directory: PathBuf,
+}
+
+struct ImageOccurrence<'a> {
+    object_insert: usize,
+    result: Option<&'a RawValue>,
+    attachment: Option<&'a RawValue>,
+    saved_path: Option<String>,
+    completed: bool,
+}
+
+struct StoredImage {
+    path: PathBuf,
+    media_type: &'static str,
+    extension: &'static str,
+    size: usize,
+}
+
+struct Edit {
+    start: usize,
+    end: usize,
+    replacement: Vec<u8>,
 }
 
 impl GeneratedImageStore {
@@ -26,6 +49,10 @@ impl GeneratedImageStore {
         }
     }
 
+    pub(super) const fn marker_len() -> usize {
+        IMAGE_GENERATION_MARKER.len()
+    }
+
     pub(super) fn contains_image_generation(frame: &[u8]) -> bool {
         frame
             .windows(IMAGE_GENERATION_MARKER.len())
@@ -33,81 +60,102 @@ impl GeneratedImageStore {
     }
 
     pub(super) fn sanitize_frame(&self, frame: Vec<u8>) -> Result<Vec<u8>, serde_json::Error> {
-        let mut value: Value = serde_json::from_slice(&frame)?;
-        if !self.sanitize_value(&mut value) {
+        let root: &RawValue = serde_json::from_slice(&frame)?;
+        let mut images = Vec::new();
+        collect_image_occurrences(root, &frame, &mut images)?;
+        if images.is_empty() {
             return Ok(frame);
         }
-        serde_json::to_vec(&value)
-    }
 
-    fn sanitize_value(&self, value: &mut Value) -> bool {
-        match value {
-            Value::Array(values) => {
-                let mut changed = false;
-                for value in values {
-                    changed |= self.sanitize_value(value);
-                }
-                changed
+        let mut edits = Vec::with_capacity(images.len() * 2);
+        for image in images {
+            let stored = image.completed.then(|| self.store_image(&image)).flatten();
+            if let Some(result) = image.result {
+                let (start, end) = raw_span(result, &frame);
+                edits.push(Edit {
+                    start,
+                    end,
+                    replacement: b"null".to_vec(),
+                });
             }
-            Value::Object(object) => {
-                let mut changed = false;
-                if object.get("type").and_then(Value::as_str) == Some("imageGeneration") {
-                    self.sanitize_image_generation(object);
-                    changed = true;
-                }
-                for value in object.values_mut() {
-                    changed |= self.sanitize_value(value);
-                }
-                changed
+
+            let mut insertion = Vec::new();
+            if image.result.is_none() {
+                insertion.extend_from_slice(b",\"result\":null");
             }
-            _ => false,
+            if let Some(stored) = stored {
+                let metadata = attachment_json(&stored)?;
+                if let Some(attachment) = image.attachment {
+                    let (start, end) = raw_span(attachment, &frame);
+                    edits.push(Edit {
+                        start,
+                        end,
+                        replacement: metadata,
+                    });
+                } else {
+                    insertion.extend_from_slice(b",\"");
+                    insertion.extend_from_slice(IMAGE_ATTACHMENT_FIELD.as_bytes());
+                    insertion.extend_from_slice(b"\":");
+                    insertion.extend_from_slice(&metadata);
+                }
+            }
+            if !insertion.is_empty() {
+                edits.push(Edit {
+                    start: image.object_insert,
+                    end: image.object_insert,
+                    replacement: insertion,
+                });
+            }
         }
+
+        edits.sort_unstable_by_key(|edit| edit.start);
+        let mut sanitized = Vec::with_capacity(frame.len().min(8 * 1024));
+        let mut cursor = 0;
+        for edit in edits {
+            debug_assert!(edit.start >= cursor);
+            sanitized.extend_from_slice(&frame[cursor..edit.start]);
+            sanitized.extend_from_slice(&edit.replacement);
+            cursor = edit.end;
+        }
+        sanitized.extend_from_slice(&frame[cursor..]);
+        Ok(sanitized)
     }
 
-    fn sanitize_image_generation(&self, object: &mut Map<String, Value>) {
-        let encoded = object
-            .remove("result")
-            .and_then(|value| value.as_str().map(str::to_owned));
-        // 无论落盘是否成功，Base64 都不能继续进入事件映射和 WebView。
-        object.insert("result".to_owned(), Value::Null);
-        if object.get("status").and_then(Value::as_str) != Some("completed") {
-            return;
-        }
-        let content = object
-            .get("savedPath")
-            .and_then(Value::as_str)
-            .and_then(read_saved_image)
-            .or_else(|| encoded.as_deref().and_then(decode_image));
-        let Some((content, media_type, extension)) = content else {
-            return;
-        };
-        let Some(path) = self.store_content(&content, extension) else {
-            return;
-        };
-        object.insert(
-            IMAGE_ATTACHMENT_FIELD.to_owned(),
-            json!({
-                "id": path.to_string_lossy(),
-                "kind": "image",
-                "mediaType": media_type,
-                "name": format!("generated-image.{extension}"),
-                "size": content.len(),
-            }),
-        );
+    fn store_image(&self, image: &ImageOccurrence<'_>) -> Option<StoredImage> {
+        // Codex 已落盘时直接复制文件，避免扫描和解码帧内的大型 Base64 字段。
+        image
+            .saved_path
+            .as_deref()
+            .and_then(|path| self.store_saved_path(path))
+            .or_else(|| image.result.and_then(|result| self.store_base64(result)))
     }
 
-    fn store_content(&self, content: &[u8], extension: &str) -> Option<PathBuf> {
+    fn store_saved_path(&self, path: &str) -> Option<StoredImage> {
+        let file = File::open(path).ok()?;
+        let metadata = file.metadata().ok()?;
+        let size = usize::try_from(metadata.len()).ok()?;
+        if !metadata.is_file() || size == 0 || size > MAX_GENERATED_IMAGE_BYTES {
+            return None;
+        }
+        self.store_reader(file)
+    }
+
+    fn store_base64(&self, result: &RawValue) -> Option<StoredImage> {
+        let literal = result.get().as_bytes();
+        let encoded = literal.strip_prefix(b"\"")?.strip_suffix(b"\"")?;
+        let max_encoded = MAX_GENERATED_IMAGE_BYTES.div_ceil(3) * 4;
+        if encoded.is_empty() || encoded.len() > max_encoded || encoded.contains(&b'\\') {
+            return None;
+        }
+        let decoder = DecoderReader::new(Cursor::new(encoded), &STANDARD);
+        self.store_reader(decoder)
+    }
+
+    fn store_reader(&self, reader: impl Read) -> Option<StoredImage> {
         fs::create_dir_all(&self.directory).ok()?;
-        let digest = Sha256::digest(content)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let destination = self.directory.join(format!("{digest}.{extension}"));
-        if destination.is_file() {
-            return Some(destination);
-        }
         let temp = self.directory.join(format!(
-            ".{digest}.{}.tmp",
+            ".generated.{}.{}.tmp",
+            std::process::id(),
             NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed)
         ));
         let mut file = OpenOptions::new()
@@ -115,40 +163,139 @@ impl GeneratedImageStore {
             .write(true)
             .open(&temp)
             .ok()?;
-        if file.write_all(content).is_err() || file.sync_all().is_err() {
+        let mut reader = reader.take((MAX_GENERATED_IMAGE_BYTES + 1) as u64);
+        let mut hasher = Sha256::new();
+        let mut header = [0_u8; 12];
+        let mut header_len = 0;
+        let mut total = 0;
+        let mut buffer = [0_u8; COPY_BUFFER_BYTES];
+
+        let write_result = (|| -> std::io::Result<()> {
+            loop {
+                let read = reader.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                total += read;
+                if total > MAX_GENERATED_IMAGE_BYTES {
+                    return Err(std::io::Error::other("generated image exceeds size limit"));
+                }
+                let header_copy = (header.len() - header_len).min(read);
+                header[header_len..header_len + header_copy]
+                    .copy_from_slice(&buffer[..header_copy]);
+                header_len += header_copy;
+                hasher.update(&buffer[..read]);
+                file.write_all(&buffer[..read])?;
+            }
+            file.sync_all()
+        })();
+
+        let Some((media_type, extension)) = (write_result.ok())
+            .filter(|_| total > 0)
+            .and_then(|_| detect_image(&header[..header_len]))
+        else {
+            drop(file);
             let _ = fs::remove_file(&temp);
             return None;
-        }
+        };
         drop(file);
-        if fs::rename(&temp, &destination).is_err() {
+
+        let digest = hex_digest(hasher.finalize().as_slice());
+        let destination = self.directory.join(format!("{digest}.{extension}"));
+        if destination.is_file() {
+            let _ = fs::remove_file(&temp);
+        } else if fs::rename(&temp, &destination).is_err() {
             let _ = fs::remove_file(&temp);
             if !destination.is_file() {
                 return None;
             }
         }
-        Some(destination)
+        Some(StoredImage {
+            path: destination,
+            media_type,
+            extension,
+            size: total,
+        })
     }
 }
 
-fn read_saved_image(path: &str) -> Option<(Vec<u8>, &'static str, &'static str)> {
-    let metadata = fs::metadata(path).ok()?;
-    let size = usize::try_from(metadata.len()).ok()?;
-    if !metadata.is_file() || size == 0 || size > MAX_GENERATED_IMAGE_BYTES {
-        return None;
+fn collect_image_occurrences<'a>(
+    raw: &'a RawValue,
+    frame: &[u8],
+    images: &mut Vec<ImageOccurrence<'a>>,
+) -> Result<(), serde_json::Error> {
+    match raw
+        .get()
+        .as_bytes()
+        .iter()
+        .find(|byte| !byte.is_ascii_whitespace())
+    {
+        Some(b'{') => {
+            let fields: HashMap<String, &'a RawValue> = serde_json::from_str(raw.get())?;
+            let is_image = fields
+                .get("type")
+                .and_then(|value| serde_json::from_str::<&str>(value.get()).ok())
+                == Some("imageGeneration");
+            if is_image {
+                let (object_start, _) = raw_span(raw, frame);
+                let closing_brace = raw
+                    .get()
+                    .as_bytes()
+                    .iter()
+                    .rposition(|byte| !byte.is_ascii_whitespace())
+                    .expect("JSON object is not empty");
+                images.push(ImageOccurrence {
+                    object_insert: object_start + closing_brace,
+                    result: fields.get("result").copied(),
+                    attachment: fields.get(IMAGE_ATTACHMENT_FIELD).copied(),
+                    saved_path: fields
+                        .get("savedPath")
+                        .and_then(|value| serde_json::from_str::<String>(value.get()).ok()),
+                    completed: fields
+                        .get("status")
+                        .and_then(|value| serde_json::from_str::<&str>(value.get()).ok())
+                        == Some("completed"),
+                });
+            } else {
+                for value in fields.values() {
+                    collect_image_occurrences(value, frame, images)?;
+                }
+            }
+        }
+        Some(b'[') => {
+            let values: Vec<&'a RawValue> = serde_json::from_str(raw.get())?;
+            for value in values {
+                collect_image_occurrences(value, frame, images)?;
+            }
+        }
+        _ => {}
     }
-    let content = fs::read(path).ok()?;
-    detect_image(&content).map(|(media_type, extension)| (content, media_type, extension))
+    Ok(())
 }
 
-fn decode_image(encoded: &str) -> Option<(Vec<u8>, &'static str, &'static str)> {
-    if encoded.is_empty() || encoded.len() > MAX_GENERATED_IMAGE_BYTES * 4 / 3 + 4 {
-        return None;
+fn raw_span(raw: &RawValue, frame: &[u8]) -> (usize, usize) {
+    let start = raw.get().as_ptr() as usize - frame.as_ptr() as usize;
+    (start, start + raw.get().len())
+}
+
+fn attachment_json(stored: &StoredImage) -> Result<Vec<u8>, serde_json::Error> {
+    serde_json::to_vec(&serde_json::json!({
+        "id": stored.path.to_string_lossy(),
+        "kind": "image",
+        "mediaType": stored.media_type,
+        "name": format!("generated-image.{}", stored.extension),
+        "size": stored.size,
+    }))
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
     }
-    let content = STANDARD.decode(encoded).ok()?;
-    if content.is_empty() || content.len() > MAX_GENERATED_IMAGE_BYTES {
-        return None;
-    }
-    detect_image(&content).map(|(media_type, extension)| (content, media_type, extension))
+    output
 }
 
 fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
@@ -169,24 +316,30 @@ fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
 mod tests {
     use std::time::SystemTime;
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    use base64::write::EncoderWriter;
+    use serde_json::Value;
+
     use super::*;
 
-    #[test]
-    fn image_generation_frame_should_store_body_and_keep_only_metadata() {
+    fn test_root(label: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("codeagent-generated-image-{unique}"));
+        std::env::temp_dir().join(format!("codeagent-generated-image-{label}-{unique}"))
+    }
+
+    #[test]
+    fn image_generation_frame_should_store_body_and_keep_only_metadata() {
+        let root = test_root("base64");
         let store = GeneratedImageStore::new(&root);
         let encoded = "iVBORw0KGgo=";
         let frame = format!(
-            r#"{{"method":"item/completed","params":{{"item":{{"id":"image-a","result":"{encoded}","status":"completed","type":"imageGeneration"}}}}}}"#
+            r#"{{"method":"item/completed","params":{{"item":{{"type":"imageGeneration","id":"image-a","result":"{encoded}","status":"completed"}}}}}}"#
         );
 
-        let sanitized = store
-            .sanitize_frame(frame.into_bytes())
-            .expect("frame should remain valid JSON");
+        let sanitized = store.sanitize_frame(frame.into_bytes()).unwrap();
         let value: Value = serde_json::from_slice(&sanitized).unwrap();
         let attachment = &value["params"]["item"][IMAGE_ATTACHMENT_FIELD];
 
@@ -196,5 +349,111 @@ mod tests {
         assert!(!String::from_utf8(sanitized).unwrap().contains(encoded));
         assert!(Path::new(attachment["id"].as_str().unwrap()).is_file());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn saved_path_should_be_preferred_over_base64_result() {
+        let root = test_root("saved-path");
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.png");
+        fs::write(&source, b"\x89PNG\r\n\x1a\nsaved").unwrap();
+        let frame = serde_json::to_vec(&serde_json::json!({
+            "method": "item/completed",
+            "params": {"item": {
+                "type": "imageGeneration",
+                "status": "completed",
+                "savedPath": source,
+                "result": "not-valid-base64"
+            }}
+        }))
+        .unwrap();
+
+        let sanitized = GeneratedImageStore::new(&root)
+            .sanitize_frame(frame)
+            .unwrap();
+        let value: Value = serde_json::from_slice(&sanitized).unwrap();
+        let attachment = &value["params"]["item"][IMAGE_ATTACHMENT_FIELD];
+
+        assert_eq!(attachment["size"], 13);
+        assert_eq!(value["params"]["item"]["result"], Value::Null);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "manual peak RSS baseline"]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn performance_baseline_generated_image_peak_rss() {
+        const CHILD_ROOT: &str = "CODEAGENT_IMAGE_RSS_CHILD_ROOT";
+        if let Some(root) = std::env::var_os(CHILD_ROOT) {
+            run_max_image_workload(Path::new(&root));
+            return;
+        }
+
+        let root = test_root("rss");
+        let mut command = std::process::Command::new("/usr/bin/time");
+        if cfg!(target_os = "macos") {
+            command.arg("-l");
+        } else {
+            command.arg("-v");
+        }
+        let output = command
+            .arg(std::env::current_exe().unwrap())
+            .arg("performance_baseline_generated_image_peak_rss")
+            .arg("--ignored")
+            .arg("--nocapture")
+            .env(CHILD_ROOT, &root)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        let line = stderr
+            .lines()
+            .find(|line| {
+                line.to_ascii_lowercase()
+                    .contains("maximum resident set size")
+            })
+            .expect("time should report maximum resident set size");
+        let measured = line
+            .split_whitespace()
+            .filter_map(|part| part.parse::<u64>().ok())
+            .next_back()
+            .unwrap();
+        let peak_rss_bytes = if cfg!(target_os = "linux") {
+            measured * 1024
+        } else {
+            measured
+        };
+        println!(
+            "PERFORMANCE_BASELINE {{\"benchmark\":\"generated_image_peak_rss\",\"imageBytes\":{MAX_GENERATED_IMAGE_BYTES},\"peakRssBytes\":{peak_rss_bytes}}}"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn run_max_image_workload(root: &Path) {
+        let mut frame = br#"{"method":"item/completed","params":{"item":{"type":"imageGeneration","status":"completed","result":""#.to_vec();
+        {
+            let mut encoder = EncoderWriter::new(&mut frame, &STANDARD);
+            encoder.write_all(b"\x89PNG\r\n\x1a\n").unwrap();
+            let block = [0_u8; COPY_BUFFER_BYTES];
+            let mut remaining = MAX_GENERATED_IMAGE_BYTES - 8;
+            while remaining > 0 {
+                let write = remaining.min(block.len());
+                encoder.write_all(&block[..write]).unwrap();
+                remaining -= write;
+            }
+            encoder.finish().unwrap();
+        }
+        frame.extend_from_slice(br#""}}}"#);
+
+        let sanitized = GeneratedImageStore::new(root)
+            .sanitize_frame(frame)
+            .unwrap();
+        let value: Value = serde_json::from_slice(&sanitized).unwrap();
+        assert_eq!(
+            value["params"]["item"][IMAGE_ATTACHMENT_FIELD]["size"],
+            MAX_GENERATED_IMAGE_BYTES
+        );
     }
 }

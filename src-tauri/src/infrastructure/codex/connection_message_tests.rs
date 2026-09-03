@@ -3,7 +3,59 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
-use super::connection::AppServerConnection;
+use super::connection::{AppServerConnection, FrameReadError, read_bounded_frame};
+
+#[tokio::test]
+async fn bounded_reader_should_reject_oversized_standard_frame() {
+    let input = b"{\"value\":\"0123456789\"}\n";
+    let mut reader = BufReader::new(input.as_slice());
+    let mut frame = Vec::new();
+
+    let result = read_bounded_frame(&mut reader, &mut frame, 16, 64).await;
+
+    assert!(matches!(result, Err(FrameReadError::TooLarge)));
+    assert_eq!(frame.len(), 16);
+}
+
+#[tokio::test]
+async fn bounded_reader_should_accept_standard_frame_at_limit() {
+    let input = b"12345678\n";
+    let mut reader = BufReader::new(input.as_slice());
+    let mut frame = Vec::new();
+
+    assert!(
+        read_bounded_frame(&mut reader, &mut frame, 8, 64)
+            .await
+            .unwrap()
+    );
+    assert_eq!(frame, b"12345678");
+}
+
+#[tokio::test]
+async fn bounded_reader_should_apply_image_frame_limit() {
+    let input = b"\"imageGeneration\":\"0123456789\"\n";
+    let mut reader = BufReader::new(input.as_slice());
+    let mut frame = Vec::new();
+
+    assert!(
+        read_bounded_frame(&mut reader, &mut frame, 20, 64)
+            .await
+            .unwrap()
+    );
+    assert_eq!(frame, &input[..input.len() - 1]);
+}
+
+#[tokio::test]
+async fn bounded_reader_should_reject_oversized_image_frame() {
+    let input = b"\"imageGeneration\":\"0123456789\"\n";
+    let mut reader = BufReader::new(input.as_slice());
+    let mut frame = Vec::new();
+
+    let result = read_bounded_frame(&mut reader, &mut frame, 20, 24).await;
+
+    assert!(matches!(result, Err(FrameReadError::TooLarge)));
+    assert_eq!(frame.len(), 24);
+}
 
 #[tokio::test]
 async fn initialize_should_complete_required_handshake() {
