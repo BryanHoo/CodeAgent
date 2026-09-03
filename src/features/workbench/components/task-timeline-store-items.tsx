@@ -28,6 +28,7 @@ export type StoredTurnTimelineGroup =
 export function groupStoredTurnTimelineItems(
   itemKeys: readonly string[],
   itemStoresByKey: ReadonlyMap<string, TaskItemStore>,
+  hiddenItemKeys?: ReadonlySet<string>,
 ): StoredTurnTimelineGroup[] {
   const groups: StoredTurnTimelineGroup[] = [];
   let assistantItemKeys: string[] = [];
@@ -42,6 +43,9 @@ export function groupStoredTurnTimelineItems(
   };
 
   for (const itemKey of itemKeys) {
+    if (hiddenItemKeys?.has(itemKey) === true) {
+      continue;
+    }
     const item = itemStoresByKey.get(itemKey)?.peek();
     if (item?.type === "review" || (item?.type === "message" && item.role === "user")) {
       flushAssistantItems();

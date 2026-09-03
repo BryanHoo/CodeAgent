@@ -177,7 +177,6 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
   }
   const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
   const itemStoresByKey = store.getState().itemStoresByKey;
-  const timelineGroups = groupStoredTurnTimelineItems(itemKeys, itemStoresByKey);
   const processNativeItemIds = new Set(
     resolveCompletedTurnProcessItemIds(
       itemKeys.flatMap((itemKey) => itemStoresByKey.get(itemKey)?.peek() ?? []),
@@ -188,6 +187,14 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
     itemKeys.filter((itemKey) =>
       processNativeItemIds.has(itemStoresByKey.get(itemKey)?.peek().id ?? ""),
     ),
+  );
+  // 折叠项必须在分组前移除，否则隐藏的引导仍会切断最终答复与文件审核卡片。
+  const hiddenProcessItemKeys =
+    turn.status === "running" || processExpanded ? undefined : processItemKeys;
+  const timelineGroups = groupStoredTurnTimelineItems(
+    itemKeys,
+    itemStoresByKey,
+    hiddenProcessItemKeys,
   );
   const processToggleAvailable = processItemKeys.size > 0;
   const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");

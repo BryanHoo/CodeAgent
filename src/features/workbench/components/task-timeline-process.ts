@@ -14,9 +14,16 @@ export function resolveCompletedTurnProcessItemIds(
     return [];
   }
 
+  const initialUserItemId = items.find(
+    (item) => item.type === "review" || (item.type === "message" && item.role === "user"),
+  )?.id;
+
   return items.slice(0, finalAnswerIndex).flatMap((item) => {
     if (item.type === "message") {
-      return item.role === "assistant" && item.phase === "commentary" ? [item.id] : [];
+      const isAssistantCommentary = item.role === "assistant" && item.phase === "commentary";
+      // 首条用户项是 Turn 入口；后续用户消息均为运行中引导，完成后归入执行过程。
+      const isInTurnUserMessage = item.role === "user" && item.id !== initialUserItemId;
+      return isAssistantCommentary || isInTurnUserMessage ? [item.id] : [];
     }
     // 瞬时活动完成后不进入历史过程；File Change 继续由最终摘要统一展示。
     return item.type === "file_change" ||
