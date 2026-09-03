@@ -45,6 +45,7 @@ type TaskBoardProps = Readonly<{
   hasNextCompletedPage: boolean;
   isCompletedPending: boolean;
   isLoadingMoreCompleted: boolean;
+  isTaskUnviewed: (projectId: string, taskId: string) => boolean;
   onCreateTask: (projectId: string | null) => void;
   onLoadMoreCompleted: () => Promise<void>;
   onOpenDraft: (draft: ProjectDraftItem) => void;
@@ -152,6 +153,7 @@ function TaskCard({
   statusLabel,
   title,
   tone,
+  unviewed = false,
   runningFor,
   updatedAt,
 }: Readonly<{
@@ -163,13 +165,18 @@ function TaskCard({
   statusLabel: string;
   title: string;
   tone: TaskCardTone;
+  unviewed?: boolean;
   runningFor?: string;
   updatedAt?: number | string;
 }>) {
   const { t, i18n } = useTranslation("workbench");
   return (
     <div role="listitem">
-      <div className="task-board-card" data-tone={tone}>
+      <div
+        className="task-board-card"
+        data-attention={unviewed ? "new-completion" : undefined}
+        data-tone={tone}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -202,7 +209,7 @@ function TaskCard({
           </Tooltip>
           <span className="task-board-card-status">
             <span aria-hidden="true" className="task-board-card-status-dot" />
-            {statusLabel}
+            {unviewed ? t("taskBoard.newCompleted") : statusLabel}
           </span>
         </span>
         <span className="task-board-card-title" title={title}>
@@ -269,6 +276,7 @@ export function TaskBoard({
   hasNextCompletedPage,
   isCompletedPending,
   isLoadingMoreCompleted,
+  isTaskUnviewed,
   onCreateTask,
   onLoadMoreCompleted,
   onOpenDraft,
@@ -447,6 +455,7 @@ export function TaskBoard({
               statusLabel={t("taskBoard.completed")}
               title={task.title}
               tone="completed"
+              unviewed={isTaskUnviewed(task.projectId, task.id)}
               updatedAt={task.updatedAt}
             />
           ))}

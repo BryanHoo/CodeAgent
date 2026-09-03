@@ -147,6 +147,19 @@
   --task-board-card-tone: var(--ui-color-task-completed);
 }
 
+/* 新完成只强调未查看状态；进入任务后由 Runtime 清除 attention 并恢复普通完成卡片。 */
+.task-board-card[data-attention="new-completion"] {
+  border-inline-start: 3px solid var(--ui-color-task-completed);
+  background: color-mix(in srgb, var(--ui-color-task-completed) 7%, var(--ui-color-raised));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ui-color-task-completed) 12%, transparent),
+    var(--ui-shadow-control);
+}
+
+.task-board-card[data-attention="new-completion"] .task-board-card-status {
+  font-weight: var(--ui-font-weight-semibold);
+}
+
 .task-board-card:hover {
   border-color: color-mix(in srgb, var(--ui-color-text) 18%, var(--ui-color-separator-strong));
   background: var(--ui-color-raised);

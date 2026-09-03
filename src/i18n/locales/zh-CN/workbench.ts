@@ -457,6 +457,7 @@ export const workbench = {
     label: "任务看板",
     loading: "正在加载任务看板",
     loadingMore: "正在加载更多任务",
+    newCompleted: "新完成",
     openDraft: "打开待办：{{draft}}",
     openTask: "打开任务：{{task}}",
     pinned: "已固定",

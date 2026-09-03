@@ -461,6 +461,7 @@ export const workbench = {
     label: "Task board",
     loading: "Loading task board",
     loadingMore: "Loading more tasks",
+    newCompleted: "Newly completed",
     openDraft: "Open todo: {{draft}}",
     openTask: "Open task: {{task}}",
     pinned: "Pinned",

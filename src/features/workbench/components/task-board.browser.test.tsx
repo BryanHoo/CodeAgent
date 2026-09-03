@@ -82,6 +82,7 @@ function TaskBoardHarness({
   onOpenDraft,
   onRetryCompleted = vi.fn(),
   onOpenTask,
+  unviewedCompletedTaskKeys = new Set(),
 }: Readonly<{
   completedError?: boolean;
   onCreateTask: (projectId: string | null) => void;
@@ -89,6 +90,7 @@ function TaskBoardHarness({
   onOpenDraft: (draft: { projectId: string; record: ProjectDraftRecord }) => void;
   onRetryCompleted?: () => void;
   onOpenTask: (task: TaskBoardTask) => void;
+  unviewedCompletedTaskKeys?: ReadonlySet<string>;
 }>) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   return (
@@ -100,6 +102,9 @@ function TaskBoardHarness({
         hasNextCompletedPage
         isCompletedPending={false}
         isLoadingMoreCompleted={false}
+        isTaskUnviewed={(projectId, taskId) =>
+          unviewedCompletedTaskKeys.has(`${projectId}\u0000${taskId}`)
+        }
         onCreateTask={onCreateTask}
         onLoadMoreCompleted={onLoadMoreCompleted}
         onOpenDraft={onOpenDraft}
@@ -224,6 +229,40 @@ describe("TaskBoard", () => {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(".task-board-card"));
     expect(cards.length).toBeGreaterThan(2);
     expect(new Set(cards.map((card) => card.getBoundingClientRect().height)).size).toBe(1);
+  });
+
+  it("突出显示未查看的新完成任务并保持旧完成任务为普通样式", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <div className="flex h-[360px] w-[1280px]" style={{ colorScheme: "light" }}>
+          <TaskBoardHarness
+            onCreateTask={vi.fn()}
+            onLoadMoreCompleted={vi.fn(async () => undefined)}
+            onOpenDraft={vi.fn()}
+            onOpenTask={vi.fn()}
+            unviewedCompletedTaskKeys={new Set(["project-b\u0000completed-0"])}
+          />
+        </div>
+      </I18nextProvider>,
+    );
+
+    const newCompletedCard = screen
+      .getByText("已完成任务 1", { exact: true })
+      .element()
+      .closest(".task-board-card");
+    const viewedCompletedCard = screen
+      .getByText("已完成任务 2", { exact: true })
+      .element()
+      .closest(".task-board-card");
+
+    expect(newCompletedCard?.getAttribute("data-attention")).toBe("new-completion");
+    expect(viewedCompletedCard?.hasAttribute("data-attention")).toBe(false);
+    await expect.element(screen.getByText("新完成", { exact: true })).toBeVisible();
+    expect(getComputedStyle(newCompletedCard!).borderLeftWidth).toBe("3px");
+    expect(getComputedStyle(newCompletedCard!).backgroundColor).not.toBe(
+      getComputedStyle(viewedCompletedCard!).backgroundColor,
+    );
   });
 
   it("以留白分隔灰色任务池并仅在列头使用状态底色", async () => {

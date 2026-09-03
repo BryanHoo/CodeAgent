@@ -2,6 +2,7 @@ import { TEMPORARY_TASK_SCOPE_ID } from "@/protocol/index.js";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
+import { getTaskActivity } from "../../conversation/runtime/task-activity.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import {
   useCompletedTasks,
@@ -47,6 +48,9 @@ export function TaskBoardContainer({ projectId }: Readonly<{ projectId: string }
       hasNextCompletedPage={completedQuery.hasNextPage}
       isCompletedPending={completedQuery.isPending}
       isLoadingMoreCompleted={completedQuery.isFetchingNextPage}
+      isTaskUnviewed={(taskProjectId, taskId) =>
+        getTaskActivity(taskActivity, taskProjectId, taskId).attention === "completed"
+      }
       onCreateTask={(selectedProjectId) => {
         const targetProjectId = selectedProjectId ?? projectId;
         void (targetProjectId === TEMPORARY_TASK_SCOPE_ID
