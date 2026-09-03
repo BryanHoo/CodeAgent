@@ -72,7 +72,7 @@ pub(super) async fn project_root(
     let connection = state.codex_connection().await?;
     let project = codex::read_project(&connection, project_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     let root = project
         .roots
         .into_iter()
@@ -174,7 +174,7 @@ pub async fn read_project_source_file(
     let connection = state.codex_connection().await?;
     let project = codex::read_project(&connection, &project_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     let configured_root = match root_path {
         Some(root_path) => project
             .roots
@@ -388,9 +388,9 @@ pub async fn generate_commit_message(
     let settings = codex::resolve_commit_message_settings(&global_settings);
     let thread_id = codex::start_commit_message_thread(&connection, &root, &settings.model)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     let completed = state.register_model_turn(&thread_id).await;
-    if codex::start_commit_message_turn(
+    if let Err(error) = codex::start_commit_message_turn(
         &connection,
         &thread_id,
         &settings.model,
@@ -398,10 +398,9 @@ pub async fn generate_commit_message(
         &context.changes,
     )
     .await
-    .is_err()
     {
         state.cancel_model_turn(&thread_id).await;
-        return Err(AppError::CodexRequestFailed);
+        return Err(AppError::from(error));
     }
     let output = match timeout(Duration::from_secs(120), completed).await {
         Ok(Ok(Some(output))) => output,
@@ -448,7 +447,7 @@ async fn project_for_worktree(
 ) -> Result<crate::domain::sidebar::Project, AppError> {
     let projects = codex::list_projects(connection)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     if let Some(project) = projects
         .data
         .into_iter()
@@ -459,5 +458,5 @@ async fn project_for_worktree(
     codex::add_project(connection, vec![path.to_owned()])
         .await
         .map(|response| response.project)
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(AppError::from)
 }

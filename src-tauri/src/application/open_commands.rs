@@ -14,7 +14,7 @@ pub async fn get_project_open_capabilities(
     let connection = state.codex_connection().await?;
     codex::read_project(&connection, &project_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     let (platform, apps) = workspace::platform_apps();
     Ok(json!({"apps": apps, "platform": platform}))
 }
@@ -33,7 +33,7 @@ pub async fn open_project(
             let connection = state.codex_connection().await?;
             let project = codex::read_project(&connection, &project_id)
                 .await
-                .map_err(|_| AppError::CodexRequestFailed)?;
+                .map_err(AppError::from)?;
             let root = project
                 .roots
                 .first()
@@ -77,7 +77,7 @@ pub async fn open_task_attachment(
     let connection = state.codex_connection().await?;
     codex::read_task(&connection, project_id.clone(), task_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     let app_data = app
         .path()
         .app_data_dir()

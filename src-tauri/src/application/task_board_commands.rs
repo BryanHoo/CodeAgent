@@ -17,7 +17,7 @@ pub async fn list_completed_tasks(
             let connection = state.codex_connection().await?;
             codex::list_completed_tasks(&connection, input)
                 .await
-                .map_err(|_| AppError::CodexRequestFailed)
+                .map_err(AppError::from)
         })
         .await
 }

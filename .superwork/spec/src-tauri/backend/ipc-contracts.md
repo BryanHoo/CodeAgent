@@ -11,7 +11,7 @@
 
 - 对外结构使用 `serde(rename_all = "camelCase")`
 - 事件枚举使用 `serde(tag = "type", content = "data")`
-- Codex 线程被其他 writer 占用时返回 `{ code: "CODEX_THREAD_BUSY", message }`；其他 Provider 错误继续使用通用错误，避免透传底层敏感细节
+- Codex 线程被其他 writer 占用时返回 `{ code: "CODEX_THREAD_BUSY", message }`；其他 Codex RPC 错误返回 `{ code: "CODEX_RPC_ERROR", message, rpcCode }`，保留上游错误信息供用户处理，非 RPC 的传输与解析错误继续使用通用错误
 - IPC 结构变化时同步修改 `src/domain/` 中对应的 TypeScript 类型
 - Channel 事件保持单调递增序号，前端据此忽略陈旧事件
 - 为序列化结果编写精确 JSON 断言，防止字段名或标签漂移
@@ -34,6 +34,7 @@
 ## 诊断日志
 
 - Rust、WebView 与 Codex stderr 统一写入带 `schemaVersion`、`timestamp`、`sessionId`、`source`、`level` 和稳定 `event` 的 JSONL；所有来源必须在 Rust 边界脱敏，凭据和提示内容不得落盘，路径必须替换，Project/Task/Thread 标识仅保留会话内稳定伪名
+- Codex RPC 最终失败必须记录 `codex_rpc_request_failed`，并保留经过格式校验的 `rpcMethod`、数字 `rpcCode` 与经过脱敏的原始错误消息；重试中的瞬时过载错误不得重复记录
 - Codex stderr 必须使用 JSON 格式、受控 `RUST_LOG`、有界单行读取和有界队列；丢弃 `debug/trace`，非法、超长或队列溢出只记录计数，不得回显原始内容
 - 本地日志写入系统应用日志目录，单文件不超过 5 MiB，并最多保留 5 份历史日志；正常退出删除运行标记，残留标记在下次启动时记录异常退出事件
 - `record_frontend_diagnostic` 只接受有界结构化上下文；`export_diagnostics` 必须先由用户选择保存位置，再流式生成不超过 30 MiB 的 ZIP，归档白名单仅包含 `codeagent*.log`、版本清单、已脱敏运行指标和说明文件，响应不得返回完整保存路径

@@ -19,6 +19,8 @@ use tokio::{
     time::{sleep, timeout},
 };
 
+use crate::infrastructure::diagnostics;
+
 use super::generated_image_store::GeneratedImageStore;
 use super::protocol::{
     ClientInfo, IGNORED_NOTIFICATION_METHODS, IncomingMessage, InitializeCapabilities,
@@ -161,10 +163,15 @@ impl AppServerConnection {
         for delay in OVERLOAD_RETRY_DELAYS {
             match self.request_once(method, params, request_timeout).await {
                 Err(ConnectionError::Request { code: -32001, .. }) => sleep(delay).await,
-                result => return result,
+                result => {
+                    record_rpc_error(method, &result);
+                    return result;
+                }
             }
         }
-        self.request_once(method, params, request_timeout).await
+        let result = self.request_once(method, params, request_timeout).await;
+        record_rpc_error(method, &result);
+        result
     }
 
     async fn request_once<P, R>(
@@ -234,6 +241,12 @@ impl AppServerConnection {
             .map_err(|_| ConnectionError::StateUnavailable)?
             .remove(&id);
         Ok(())
+    }
+}
+
+fn record_rpc_error<T>(method: &str, result: &Result<T, ConnectionError>) {
+    if let Err(ConnectionError::Request { code, message }) = result {
+        diagnostics::record_codex_rpc_error(method, *code, message);
     }
 }
 

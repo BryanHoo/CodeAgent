@@ -20,7 +20,7 @@ async fn validate_task(
     let connection = state.codex_connection().await?;
     codex::read_task(&connection, project_id, task_id.to_owned())
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     Ok(connection)
 }
 
@@ -34,7 +34,7 @@ pub async fn update_task_goal(
     let connection = validate_task(&state, project_id, &task_id).await?;
     let response = codex::update_goal(&connection, &task_id, &status)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -47,7 +47,7 @@ pub async fn clear_task_goal(
     let connection = validate_task(&state, project_id, &task_id).await?;
     let response = codex::clear_goal(&connection, &task_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -67,7 +67,7 @@ pub async fn upload_feedback(
         input.include_logs,
     )
     .await
-    .map_err(|_| AppError::CodexRequestFailed)?;
+    .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -80,7 +80,7 @@ pub async fn list_background_terminals(
     let connection = validate_task(&state, project_id, &task_id).await?;
     let response = codex::list_background_terminals(&connection, &task_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -94,7 +94,7 @@ pub async fn terminate_background_terminal(
     let connection = validate_task(&state, project_id, &task_id).await?;
     let response = codex::terminate_background_terminal(&connection, &task_id, &terminal_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -110,7 +110,7 @@ pub async fn list_queued_submissions(
     let mut response =
         codex::list_queued_submissions(&connection, &task_id, cursor.as_deref(), limit)
             .await
-            .map_err(|_| AppError::CodexRequestFailed)?;
+            .map_err(AppError::from)?;
     if let Some(editing_id) = state.queue_editing_submission(&task_id).await {
         if let Some(submission) = response.data.iter_mut().find(|item| item.id == editing_id) {
             submission.status = "editing";
@@ -140,7 +140,7 @@ pub async fn add_queued_submission(
     let response =
         codex::add_queued_submission(&connection, &task_id, &input, &client_user_message_id)
             .await
-            .map_err(|_| AppError::CodexRequestFailed)?;
+            .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -169,7 +169,7 @@ pub async fn update_queued_submission(
     let mut response =
         codex::update_queued_submission(&connection, &task_id, &queued_submission_id, &input)
             .await
-            .map_err(|_| AppError::CodexRequestFailed)?;
+            .map_err(AppError::from)?;
     response.queued_submission.status = if editing { "editing" } else { "queued" };
     state
         .update_queue_editing(&task_id, &queued_submission_id, editing)
@@ -187,7 +187,7 @@ pub async fn delete_queued_submission(
     let connection = validate_task(&state, project_id, &task_id).await?;
     let response = codex::delete_queued_submission(&connection, &task_id, &queued_submission_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state
         .update_queue_editing(&task_id, &queued_submission_id, false)
         .await;
@@ -204,7 +204,7 @@ pub async fn reorder_queued_submissions(
     let connection = validate_task(&state, project_id, &task_id).await?;
     let response = codex::reorder_queued_submissions(&connection, &task_id, &queued_submission_ids)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -219,7 +219,7 @@ pub async fn start_queued_submission(
     let response =
         codex::start_queued_submission(&connection, &task_id, queued_submission_id.as_deref())
             .await
-            .map_err(|_| AppError::CodexRequestFailed)?;
+            .map_err(AppError::from)?;
     state.clear_queue_editing(&task_id).await;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }

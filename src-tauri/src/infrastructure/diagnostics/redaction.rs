@@ -67,6 +67,13 @@ pub(super) fn sanitize_text(value: &str, max_chars: usize) -> String {
 
 fn sanitize_context_value(key: &str, value: Value, session: &DiagnosticSession) -> Option<Value> {
     let normalized = key.to_ascii_lowercase();
+    if key == "rpcMethod" {
+        // RPC 方法名是固定协议标识，先校验字符集再保留其中合法的 `/`。
+        return value
+            .as_str()
+            .filter(|value| valid_rpc_method(value))
+            .map(|value| Value::String(value.to_owned()));
+    }
     if normalized.contains("path") || normalized == "cwd" {
         return Some(Value::String("[path]".to_owned()));
     }
@@ -80,6 +87,14 @@ fn sanitize_context_value(key: &str, value: Value, session: &DiagnosticSession) 
         Value::Bool(_) | Value::Null | Value::Number(_) => Some(value),
         Value::Array(_) | Value::Object(_) => None,
     }
+}
+
+fn valid_rpc_method(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-'))
 }
 
 fn hash_identifier(key: &str, value: &str, session: &DiagnosticSession) -> String {

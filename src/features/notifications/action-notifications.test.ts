@@ -18,4 +18,14 @@ describe("actionErrorMessage", () => {
       i18n.t("errors.attachmentTooLarge", { ns: "common" }),
     );
   });
+
+  it("shows the Codex RPC error message", () => {
+    const error = new NativeCommandError(
+      "CODEX_RPC_ERROR",
+      "invalid value: expected TOML value",
+      -32600,
+    );
+
+    expect(actionErrorMessage(error)).toBe("invalid value: expected TOML value");
+  });
 });

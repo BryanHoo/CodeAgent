@@ -28,7 +28,7 @@ pub async fn list_projects(state: State<'_, AppState>) -> Result<ProjectPage, Ap
     let connection = state.codex_connection().await?;
     let response = codex::list_projects(&connection)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state.remember_project_page(&response).await;
     Ok(response)
 }
@@ -41,7 +41,7 @@ pub async fn add_project(
     let connection = state.codex_connection().await?;
     let response = codex::add_project(&connection, root_paths)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state.remember_project(&response.project).await;
     Ok(response)
 }
@@ -55,7 +55,7 @@ pub async fn rename_project(
     let connection = state.codex_connection().await?;
     let response = codex::rename_project(&connection, project_id, name)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state.remember_project(&response.project).await;
     Ok(response)
 }
@@ -69,7 +69,7 @@ pub async fn remove_project(
     let connection = state.codex_connection().await?;
     let response = codex::remove_project(&connection, project_id.clone())
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     delete_project_task_settings(&app_data_dir(&app)?, &project_id)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
@@ -85,7 +85,7 @@ pub async fn reorder_projects(
     let connection = state.codex_connection().await?;
     let response = codex::reorder_projects(&connection, project_ids)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state.remember_project_page(&response).await;
     Ok(response)
 }
@@ -102,7 +102,7 @@ pub async fn list_tasks(
             let project_id = input.project_id.clone();
             let response = codex::list_tasks(&connection, input)
                 .await
-                .map_err(|_| AppError::CodexRequestFailed)?;
+                .map_err(AppError::from)?;
             state
                 .remember_task_metadata(
                     &project_id,
@@ -137,7 +137,7 @@ pub async fn read_task(
                 cursor.as_deref(),
             )
             .await
-            .map_err(|_| AppError::CodexRequestFailed)?;
+            .map_err(AppError::from)?;
             response.snapshot.settings =
                 effective_task_settings(&app, &project_id, &task_id).await?;
             response.checkpoint.sequence = state.project_sequence(&project_id).await;
@@ -155,7 +155,7 @@ pub async fn start_task(
     let connection = state.codex_connection().await?;
     let response = codex::start_task(&connection, project_id.clone())
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state
         .remember_task_metadata(
             &project_id,
@@ -206,10 +206,10 @@ pub async fn start_turn(
         let result = async {
             codex::update_thread_settings(&connection, &task_id, &options)
                 .await
-                .map_err(|_| AppError::CodexRequestFailed)?;
+                .map_err(AppError::from)?;
             codex::set_goal_objective(&connection, &task_id, &input.text)
                 .await
-                .map_err(|_| AppError::CodexRequestFailed)?;
+                .map_err(AppError::from)?;
             timeout(Duration::from_secs(30), turn_started)
                 .await
                 .map_err(|_| AppError::CodexRequestFailed)?
@@ -256,7 +256,7 @@ pub async fn get_task_settings(
     let connection = state.codex_connection().await?;
     codex::read_task(&connection, project_id.clone(), task_id.clone())
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     Ok(json!({
         "settings": effective_task_settings(&app, &project_id, &task_id).await?,
     }))
@@ -276,7 +276,7 @@ pub async fn update_task_settings(
     let connection = state.codex_connection().await?;
     codex::read_task(&connection, project_id.clone(), task_id.clone())
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     write_task_settings(&app_data_dir(&app)?, &project_id, &task_id, &settings)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
@@ -301,7 +301,7 @@ pub async fn steer_turn(
     let connection = state.codex_connection().await?;
     codex::steer_turn(&connection, task_id, turn_id, input)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(AppError::from)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -313,7 +313,7 @@ pub async fn interrupt_turn(
     let connection = state.codex_connection().await?;
     codex::interrupt_turn(&connection, task_id, turn_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(AppError::from)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -353,7 +353,7 @@ pub async fn start_review(
     let target = input.get("target").ok_or(AppError::CodexRequestFailed)?;
     let response = codex::start_review(&connection, &project_id, &task_id, target)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -366,7 +366,7 @@ pub async fn compact_task(
     let connection = state.codex_connection().await?;
     let response = codex::compact_task(&connection, &project_id, &task_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -382,7 +382,7 @@ pub async fn fork_task(
     let settings = effective_task_settings(&app, &project_id, &task_id).await?;
     let response = codex::fork_task(&connection, &project_id, &task_id, last_turn_id.as_deref())
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     write_task_settings(
         &app_data_dir(&app)?,
         &project_id,
@@ -410,7 +410,7 @@ pub async fn rename_task(
     let connection = state.codex_connection().await?;
     let response = codex::rename_task(&connection, project_id.clone(), task_id, title)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state
         .remember_task_metadata(
             &project_id,
@@ -430,7 +430,7 @@ pub async fn pin_task(
     let connection = state.codex_connection().await?;
     let response = codex::pin_task(&connection, project_id.clone(), task_id, pinned)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state
         .remember_task_metadata(
             &project_id,
@@ -449,7 +449,7 @@ pub async fn archive_task(
     let connection = state.codex_connection().await?;
     codex::archive_task(&connection, project_id, task_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)
+        .map_err(AppError::from)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -461,7 +461,7 @@ pub async fn unarchive_task(
     let connection = state.codex_connection().await?;
     let response = codex::unarchive_task(&connection, project_id.clone(), task_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     state
         .remember_task_metadata(
             &project_id,
@@ -481,7 +481,7 @@ pub async fn delete_task(
     let connection = state.codex_connection().await?;
     let response = codex::delete_task(&connection, project_id.clone(), task_id.clone())
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     delete_task_settings(&app_data_dir(&app)?, &project_id, &task_id)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;

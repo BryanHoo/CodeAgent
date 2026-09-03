@@ -221,4 +221,29 @@ describe("TauriWorkspaceClient", () => {
       ),
     );
   });
+
+  it("preserves Codex RPC error details", async () => {
+    const client = new TauriWorkspaceClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: vi.fn(async () =>
+        Promise.reject({
+          code: "CODEX_RPC_ERROR",
+          message: "invalid turn options",
+          rpcCode: -32600,
+        }),
+      ) as InvokeImplementation,
+    });
+
+    const error = await client
+      .switchProjectBranch("project-a", "/work/a", {
+        branch: "main",
+        expectedSnapshot: "a".repeat(64),
+      })
+      .catch((reason: unknown) => reason);
+
+    expect(error).toEqual(
+      new NativeCommandError("CODEX_RPC_ERROR", "invalid turn options", -32600),
+    );
+    expect(error).toHaveProperty("rpcCode", -32600);
+  });
 });

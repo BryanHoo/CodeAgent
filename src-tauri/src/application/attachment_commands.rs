@@ -145,7 +145,7 @@ pub async fn cache_project_image(
     let connection = state.codex_connection().await?;
     let project = codex::read_project(&connection, &project_id)
         .await
-        .map_err(|_| AppError::CodexRequestFailed)?;
+        .map_err(AppError::from)?;
     let root = project
         .roots
         .iter()

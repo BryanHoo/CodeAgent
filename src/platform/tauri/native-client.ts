@@ -11,11 +11,13 @@ export type TauriClientOptions = Readonly<{
 
 export class NativeCommandError extends Error {
   public readonly code: string;
+  public readonly rpcCode: number | null;
 
-  public constructor(code: string, message: string) {
+  public constructor(code: string, message: string, rpcCode: number | null = null) {
     super(message);
     this.name = "NativeCommandError";
     this.code = code;
+    this.rpcCode = rpcCode;
   }
 }
 
@@ -28,7 +30,8 @@ function normalizeNativeError(error: unknown): unknown {
     "message" in error &&
     typeof error.message === "string"
   ) {
-    return new NativeCommandError(error.code, error.message);
+    const rpcCode = "rpcCode" in error && typeof error.rpcCode === "number" ? error.rpcCode : null;
+    return new NativeCommandError(error.code, error.message, rpcCode);
   }
   return error;
 }

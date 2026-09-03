@@ -4,8 +4,8 @@ use tauri::{AppHandle, Manager, State};
 use super::{error::AppError, state::AppState};
 use crate::infrastructure::{codex, local_settings};
 
-fn request_error(_: impl std::fmt::Debug) -> AppError {
-    AppError::CodexRequestFailed
+fn request_error(error: codex::ConnectionError) -> AppError {
+    AppError::from(error)
 }
 
 #[tauri::command]

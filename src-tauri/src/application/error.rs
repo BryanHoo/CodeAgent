@@ -23,6 +23,8 @@ pub enum AppError {
     CodexRuntimeUnavailable,
     #[error("Codex request failed")]
     CodexRequestFailed,
+    #[error("{message}")]
+    CodexRpc { rpc_code: i64, message: String },
     #[error("Codex thread is active in another session")]
     CodexThreadBusy,
     #[error("native request was cancelled")]
@@ -52,6 +54,13 @@ impl Serialize for AppError {
     where
         S: Serializer,
     {
+        if let Self::CodexRpc { rpc_code, message } = self {
+            let mut payload = serializer.serialize_struct("AppError", 3)?;
+            payload.serialize_field("code", "CODEX_RPC_ERROR")?;
+            payload.serialize_field("message", message)?;
+            payload.serialize_field("rpcCode", rpc_code)?;
+            return payload.end();
+        }
         let structured_error = match self {
             Self::CodexThreadBusy => Some(("CODEX_THREAD_BUSY", self.to_string())),
             Self::RequestCancelled => Some(("REQUEST_CANCELLED", self.to_string())),
@@ -70,7 +79,7 @@ impl Serialize for AppError {
 
 impl From<ConnectionError> for AppError {
     fn from(error: ConnectionError) -> Self {
-        // active writer 是用户可处理的会话冲突，其余 Provider 细节继续留在后端边界。
+        // active writer 保持稳定业务码，其余 RPC 错误保留 Codex 返回的诊断信息。
         match error {
             ConnectionError::Request {
                 code: -32600,
@@ -80,6 +89,10 @@ impl From<ConnectionError> for AppError {
             {
                 Self::CodexThreadBusy
             }
+            ConnectionError::Request { code, message } => Self::CodexRpc {
+                rpc_code: code,
+                message,
+            },
             _ => Self::CodexRequestFailed,
         }
     }
@@ -134,7 +147,7 @@ mod tests {
     }
 
     #[test]
-    fn unrelated_codex_errors_should_remain_generic() {
+    fn codex_rpc_errors_should_preserve_code_and_message() {
         let error = crate::infrastructure::codex::ConnectionError::Request {
             code: -32600,
             message: "invalid turn options".to_owned(),
@@ -142,7 +155,11 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(AppError::from(error)).unwrap(),
-            json!("Codex request failed")
+            json!({
+                "code": "CODEX_RPC_ERROR",
+                "message": "invalid turn options",
+                "rpcCode": -32600
+            })
         );
     }
 }

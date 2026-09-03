@@ -10,8 +10,8 @@ use serde_json::{Value, json};
 
 use super::{
     CodexLogParseError, DiagnosticLevel, DiagnosticSession, DiagnosticSource,
-    FrontendDiagnosticInput, codex::MAX_CODEX_LOG_LINE_BYTES, parse_codex_event,
-    sanitize_frontend_event, write_diagnostic_archive,
+    FrontendDiagnosticInput, codex::MAX_CODEX_LOG_LINE_BYTES, codex_rpc_error_event,
+    parse_codex_event, sanitize_frontend_event, write_diagnostic_archive,
 };
 
 #[test]
@@ -117,6 +117,26 @@ fn codex_log_rejects_malformed_and_oversized_lines_without_echoing_content() {
         parse_codex_event(&vec![b'x'; MAX_CODEX_LOG_LINE_BYTES + 1], &session),
         Err(CodexLogParseError::TooLarge)
     );
+}
+
+#[test]
+fn codex_rpc_error_log_preserves_protocol_details() {
+    let event = codex_rpc_error_event(
+        "config/batchWrite",
+        -32600,
+        "invalid value: expected TOML value",
+        &DiagnosticSession::fixed(),
+        "2026-09-03T08:00:00Z",
+    );
+
+    assert_eq!(event.event, "codex_rpc_request_failed");
+    assert_eq!(event.level, DiagnosticLevel::Error);
+    assert_eq!(
+        event.message.as_deref(),
+        Some("invalid value: expected TOML value")
+    );
+    assert_eq!(event.context["rpcCode"], json!(-32600));
+    assert_eq!(event.context["rpcMethod"], json!("config/batchWrite"));
 }
 
 #[test]

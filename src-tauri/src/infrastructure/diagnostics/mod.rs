@@ -188,6 +188,16 @@ pub fn record_error(event: &str, error: impl Display) {
     );
 }
 
+pub fn record_codex_rpc_error(method: &str, code: i64, message: &str) {
+    emit(codex_rpc_error_event(
+        method,
+        code,
+        message,
+        session(),
+        &timestamp(),
+    ));
+}
+
 pub fn record_warning(event: &str, error: impl Display) {
     record(
         DiagnosticLevel::Warn,
@@ -203,8 +213,46 @@ pub fn record(
     message: Option<String>,
     context: BTreeMap<String, Value>,
 ) {
-    emit(DiagnosticEvent {
-        context: redaction::sanitize_context(context, session()),
+    emit(rust_event(
+        level,
+        event,
+        message,
+        context,
+        session(),
+        &timestamp(),
+    ));
+}
+
+fn codex_rpc_error_event(
+    method: &str,
+    code: i64,
+    message: &str,
+    session: &DiagnosticSession,
+    timestamp: &str,
+) -> DiagnosticEvent {
+    rust_event(
+        DiagnosticLevel::Error,
+        "codex_rpc_request_failed",
+        Some(message.to_owned()),
+        BTreeMap::from([
+            ("rpcCode".to_owned(), json!(code)),
+            ("rpcMethod".to_owned(), json!(method)),
+        ]),
+        session,
+        timestamp,
+    )
+}
+
+fn rust_event(
+    level: DiagnosticLevel,
+    event: &str,
+    message: Option<String>,
+    context: BTreeMap<String, Value>,
+    session: &DiagnosticSession,
+    timestamp: &str,
+) -> DiagnosticEvent {
+    DiagnosticEvent {
+        context: redaction::sanitize_context(context, session),
         event: redaction::sanitize_event_code(event, "invalid_rust_event"),
         level,
         message: message
@@ -212,11 +260,11 @@ pub fn record(
             .map(|message| redaction::sanitize_text(message, 512))
             .filter(|message| !message.is_empty()),
         schema_version: 1,
-        session_id: session().id.clone(),
+        session_id: session.id.clone(),
         source: DiagnosticSource::Rust,
         stack: None,
-        timestamp: timestamp(),
-    });
+        timestamp: timestamp.to_owned(),
+    }
 }
 
 fn emit(event: DiagnosticEvent) {
