@@ -38,10 +38,10 @@ pub async fn list_provider_models(
 ) -> Result<Value, ConnectionError> {
     let config = read_config(connection).await?;
     if selected_provider_id(&config) == CUSTOM_PROVIDER_ID
-        && let Some(models) = config.pointer("/desktop/codeagent/provider/customModels")
-        && valid_model_page(models)
+        && let Some(data) = config.pointer("/desktop/codeagent/provider/customModels")
+        && data.is_array()
     {
-        return Ok(models.clone());
+        return Ok(json!({"data": data, "nextCursor": null}));
     }
     list_models(connection).await
 }
@@ -173,7 +173,8 @@ pub async fn configure_custom_provider(
     let private = json!({
         "mode": "custom",
         "customBaseUrl": base_url,
-        "customModels": models,
+        // Codex 配置写入 TOML，持久化层不能包含分页响应中的 JSON null。
+        "customModels": models["data"].clone(),
     });
     write_config(
         connection,
@@ -320,12 +321,4 @@ fn disconnected_status(mode: &str, custom_base_url: Option<&str>, pending: Optio
         "account": null, "customBaseUrl": custom_base_url, "mode": mode,
         "pendingLogin": pending, "state": state
     })
-}
-
-fn valid_model_page(value: &Value) -> bool {
-    value.get("data").is_some_and(Value::is_array)
-        && matches!(
-            value.get("nextCursor"),
-            Some(Value::Null) | Some(Value::String(_))
-        )
 }

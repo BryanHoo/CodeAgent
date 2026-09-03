@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
 use super::{
-    AppServerConnection, configure_custom_provider, get_provider_connection,
+    AppServerConnection, configure_custom_provider, get_provider_connection, list_provider_models,
     start_official_provider_login,
 };
 
@@ -70,6 +70,52 @@ async fn provider_connection_should_detect_openai_base_url_override() {
 }
 
 #[tokio::test]
+async fn custom_provider_models_should_restore_page_from_persisted_data() {
+    let (client, server) = duplex(32 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+
+    let server_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(server_reader).lines();
+        let request: Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(request["method"], "config/read");
+        server_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({
+                        "id": request["id"].clone(),
+                        "result": {
+                            "config": {
+                                "desktop": {
+                                    "codeagent": {
+                                        "provider": {
+                                            "customModels": [{"id": "custom-a"}]
+                                        }
+                                    }
+                                },
+                                "model_provider": "codeagent-custom"
+                            }
+                        }
+                    })
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+
+    let models = list_provider_models(&connection).await.unwrap();
+    assert_eq!(
+        models,
+        json!({"data": [{"id": "custom-a"}], "nextCursor": null})
+    );
+    server_task.await.unwrap();
+}
+
+#[tokio::test]
 async fn provider_login_should_keep_secrets_out_of_config_payloads() {
     let (client, server) = duplex(32 * 1024);
     let (client_reader, client_writer) = split(client);
@@ -102,6 +148,17 @@ async fn provider_login_should_keep_secrets_out_of_config_payloads() {
             serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
         assert_eq!(custom_config["method"], "config/batchWrite");
         assert!(!custom_config.to_string().contains("secret-key"));
+        let private_models = custom_config["params"]["edits"]
+            .as_array()
+            .and_then(|edits| {
+                edits
+                    .iter()
+                    .find(|edit| edit["keyPath"] == "desktop.codeagent.provider")
+            })
+            .map(|edit| &edit["value"]["customModels"])
+            .unwrap();
+        // Codex 配置最终写入 TOML，持久化载荷中不能包含 JSON null。
+        assert!(private_models.is_array());
         server_writer
             .write_all(
                 format!(
