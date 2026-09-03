@@ -9,7 +9,10 @@ import {
 } from "../../conversation/runtime/task-store.js";
 import { TimelineOperationGroupDisclosure } from "./task-timeline-operation-groups.js";
 
-type TimelineOperation = Extract<AgentItem, { type: "command" } | { type: "tool" }>;
+type TimelineOperation = Extract<
+  AgentItem,
+  { type: "command" } | { type: "file_change" } | { type: "tool" }
+>;
 
 describe("TimelineOperationGroupDisclosure", () => {
   it("collapses completed operations after following assistant text starts streaming", async () => {
@@ -28,6 +31,16 @@ describe("TimelineOperationGroupDisclosure", () => {
         name: "mcp__fast_context__fast_context_search",
         status: "completed",
         type: "tool",
+      },
+      {
+        changes: [
+          { diff: "+created", kind: "create", path: "src/created.ts" },
+          { diff: "-before\n+after", kind: "update", path: "src/updated.ts" },
+          { diff: "-deleted", kind: "delete", path: "src/deleted.ts" },
+        ],
+        id: "file-change-1",
+        status: "completed",
+        type: "file_change",
       },
     ];
     const followingMessage = {
@@ -55,7 +68,9 @@ describe("TimelineOperationGroupDisclosure", () => {
     );
 
     await expect.element(screen.getByText("原始操作列表")).toBeVisible();
-    expect(screen.getByText("操作完成：调用 1 个工具，执行 1 条命令").query()).toBeNull();
+    expect(
+      screen.getByText("操作完成：变更 3 个文件，调用 1 个工具，执行 1 条命令").query(),
+    ).toBeNull();
 
     // Delta 先进入延迟物化缓冲区，折叠触发必须读取完整文本而非初始空实体。
     const messageDelta = {
@@ -75,7 +90,9 @@ describe("TimelineOperationGroupDisclosure", () => {
     expect(followingMessageStore?.appendDelta(messageDelta)).toBe(true);
     followingMessageStore?.publish();
 
-    const summaryText = screen.getByText("操作完成：调用 1 个工具，执行 1 条命令");
+    const summaryText = screen.getByText(
+      "操作完成：变更 3 个文件，调用 1 个工具，执行 1 条命令",
+    );
     await vi.waitFor(() => {
       expect(summaryText.query()).not.toBeNull();
     });

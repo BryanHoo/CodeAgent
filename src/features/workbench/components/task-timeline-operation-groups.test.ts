@@ -31,6 +31,16 @@ const mcpTool: AgentItem = {
   status: "completed",
   type: "tool",
 };
+const fileChange: AgentItem = {
+  changes: [
+    { diff: "+created", kind: "create", path: "src/created.ts" },
+    { diff: "-before\n+after", kind: "update", path: "src/updated.ts" },
+    { diff: "-deleted", kind: "delete", path: "src/deleted.ts" },
+  ],
+  id: "file-change-1",
+  status: "completed",
+  type: "file_change",
+};
 
 describe("groupConsecutiveTimelineOperations", () => {
   it("groups visually consecutive operations across hidden reasoning items", () => {
@@ -40,16 +50,27 @@ describe("groupConsecutiveTimelineOperations", () => {
       command,
       { content: "raw reasoning", id: "reasoning-2", summary: "", type: "reasoning" },
       mcpTool,
+      fileChange,
       { id: "assistant-1", role: "assistant", text: "继续分析", type: "message" },
     ];
 
     expect(groupItems(items)).toEqual([
       {
-        itemKeys: ["search-1", "command-1", "mcp-1"],
+        itemKeys: ["search-1", "command-1", "mcp-1", "file-change-1"],
         key: "search-1",
         type: "operation_group",
       },
       { itemKey: "assistant-1", type: "item" },
+    ]);
+  });
+
+  it("groups multiple file changes stored in one item", () => {
+    expect(groupItems([fileChange])).toEqual([
+      {
+        itemKeys: ["file-change-1"],
+        key: "file-change-1",
+        type: "operation_group",
+      },
     ]);
   });
 

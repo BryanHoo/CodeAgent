@@ -280,7 +280,12 @@ export const conversation = {
       commandsOnly: "Commands complete: {{count}}",
       expand: "Expand operation details: {{summary}}",
       failed: "; {{count}} failed",
+      filesAndCommands: "Operations complete: {{fileCount}} file changes, {{commandCount}} commands",
+      filesAndTools: "Operations complete: {{fileCount}} file changes, {{toolCount}} tool calls",
+      filesOnly: "File changes complete: {{count}}",
       summary: "Operations complete: {{toolCount}} tool calls, {{commandCount}} commands",
+      summaryWithFiles:
+        "Operations complete: {{fileCount}} file changes, {{toolCount}} tool calls, {{commandCount}} commands",
       toolsOnly: "Tool calls complete: {{count}}",
     },
     buildPlan: "Build",

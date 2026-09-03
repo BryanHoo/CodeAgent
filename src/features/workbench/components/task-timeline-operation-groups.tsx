@@ -12,14 +12,17 @@ import {
 import { i18n } from "../../../i18n/i18n.js";
 import type { TaskStore } from "../../conversation/runtime/task-store.js";
 
-type TimelineOperationItem = Extract<AgentItem, { type: "command" } | { type: "tool" }>;
+type TimelineOperationItem = Extract<
+  AgentItem,
+  { type: "command" } | { type: "file_change" } | { type: "tool" }
+>;
 
 export type TimelineOperationGroup =
   | Readonly<{ itemKey: string; type: "item" }>
   | Readonly<{ itemKeys: readonly string[]; key: string; type: "operation_group" }>;
 
 function isTimelineOperation(item: AgentItem | undefined): item is TimelineOperationItem {
-  return item?.type === "command" || item?.type === "tool";
+  return item?.type === "command" || item?.type === "file_change" || item?.type === "tool";
 }
 
 function isHiddenReasoning(item: AgentItem | undefined): boolean {
@@ -32,6 +35,7 @@ export function groupConsecutiveTimelineOperations(
 ): TimelineOperationGroup[] {
   const groups: TimelineOperationGroup[] = [];
   let operationKeys: string[] = [];
+  let operationDisplayCount = 0;
 
   const flushOperations = () => {
     const firstKey = operationKeys[0];
@@ -39,13 +43,14 @@ export function groupConsecutiveTimelineOperations(
       return;
     }
 
-    // 单项继续使用原有 Tool 渲染，只有连续操作才压缩为摘要。
+    // 单个可见操作继续使用原有渲染，多项操作才压缩为摘要。
     groups.push(
-      operationKeys.length === 1
+      operationDisplayCount === 1
         ? { itemKey: firstKey, type: "item" }
         : { itemKeys: operationKeys, key: firstKey, type: "operation_group" },
     );
     operationKeys = [];
+    operationDisplayCount = 0;
   };
 
   for (const itemKey of itemKeys) {
@@ -56,6 +61,8 @@ export function groupConsecutiveTimelineOperations(
     }
     if (isTimelineOperation(item)) {
       operationKeys.push(itemKey);
+      // 一个 file_change Item 可包含多行文件操作，按实际可见行决定是否聚合。
+      operationDisplayCount += item.type === "file_change" ? Math.max(item.changes.length, 1) : 1;
       continue;
     }
 
@@ -70,6 +77,7 @@ export function groupConsecutiveTimelineOperations(
 export type TimelineOperationSummary = Readonly<{
   commandCount: number;
   failedCount: number;
+  fileCount: number;
   isActive: boolean;
   toolCount: number;
 }>;
@@ -77,6 +85,7 @@ export type TimelineOperationSummary = Readonly<{
 export function summarizeTimelineOperations(items: readonly AgentItem[]): TimelineOperationSummary {
   let commandCount = 0;
   let failedCount = 0;
+  let fileCount = 0;
   let isActive = false;
   let toolCount = 0;
 
@@ -86,6 +95,8 @@ export function summarizeTimelineOperations(items: readonly AgentItem[]): Timeli
     }
     if (item.type === "command") {
       commandCount += 1;
+    } else if (item.type === "file_change") {
+      fileCount += item.changes.length;
     } else {
       toolCount += 1;
     }
@@ -103,28 +114,55 @@ export function summarizeTimelineOperations(items: readonly AgentItem[]): Timeli
   return {
     commandCount,
     failedCount,
+    fileCount,
     isActive,
     toolCount,
   };
 }
 
 function formatTimelineOperationSummary(summary: TimelineOperationSummary): string {
-  const baseSummary =
-    summary.toolCount > 0 && summary.commandCount > 0
-      ? i18n.t("timeline.operationGroup.summary", {
-          commandCount: summary.commandCount,
-          ns: "conversation",
-          toolCount: summary.toolCount,
-        })
-      : summary.toolCount > 0
-        ? i18n.t("timeline.operationGroup.toolsOnly", {
-            count: summary.toolCount,
-            ns: "conversation",
-          })
-        : i18n.t("timeline.operationGroup.commandsOnly", {
-            count: summary.commandCount,
-            ns: "conversation",
-          });
+  let baseSummary: string;
+  if (summary.fileCount > 0 && summary.toolCount > 0 && summary.commandCount > 0) {
+    baseSummary = i18n.t("timeline.operationGroup.summaryWithFiles", {
+      commandCount: summary.commandCount,
+      fileCount: summary.fileCount,
+      ns: "conversation",
+      toolCount: summary.toolCount,
+    });
+  } else if (summary.fileCount > 0 && summary.toolCount > 0) {
+    baseSummary = i18n.t("timeline.operationGroup.filesAndTools", {
+      fileCount: summary.fileCount,
+      ns: "conversation",
+      toolCount: summary.toolCount,
+    });
+  } else if (summary.fileCount > 0 && summary.commandCount > 0) {
+    baseSummary = i18n.t("timeline.operationGroup.filesAndCommands", {
+      commandCount: summary.commandCount,
+      fileCount: summary.fileCount,
+      ns: "conversation",
+    });
+  } else if (summary.fileCount > 0) {
+    baseSummary = i18n.t("timeline.operationGroup.filesOnly", {
+      count: summary.fileCount,
+      ns: "conversation",
+    });
+  } else if (summary.toolCount > 0 && summary.commandCount > 0) {
+    baseSummary = i18n.t("timeline.operationGroup.summary", {
+      commandCount: summary.commandCount,
+      ns: "conversation",
+      toolCount: summary.toolCount,
+    });
+  } else if (summary.toolCount > 0) {
+    baseSummary = i18n.t("timeline.operationGroup.toolsOnly", {
+      count: summary.toolCount,
+      ns: "conversation",
+    });
+  } else {
+    baseSummary = i18n.t("timeline.operationGroup.commandsOnly", {
+      count: summary.commandCount,
+      ns: "conversation",
+    });
+  }
 
   return summary.failedCount === 0
     ? baseSummary
