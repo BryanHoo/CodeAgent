@@ -3,9 +3,10 @@
 ## 版本与分发
 
 - 应用私有 Codex 运行时固定为 `0.152.1`，全局安装提示使用 `npm install -g @openai/codex@0.152.1`
-- 外部运行时仅接受 `>=0.152.1,<0.153.0`；拒绝预发行版、更低版本、`0.153.0` 及以上版本
+- 外部运行时仅接受精确版本 `0.152.1`；拒绝其他 patch、预发行版和构建元数据版本
 - 私有下载仅使用 npm 官方的 Darwin arm64、Linux arm64/x64、Windows arm64/x64 五个平台包，并对完整内容校验官方 SHA-512 integrity
 - 项目启用了 `experimentalApi`，未经源码和契约验证不得扩大兼容版本范围
+- CI 使用 `codex-cli 0.152.1` 生成带 `--experimental` 的 JSON Schema bundle，并与已提交快照执行字节级差异检查
 
 ## 线程协议
 
@@ -22,7 +23,8 @@
 
 ## 验证要求
 
-- 覆盖版本上下界、五个平台 URL 与 SHA-512、安装命令和前端恢复提示
+- 覆盖精确版本门禁、五个平台 URL 与 SHA-512、安装命令和前端恢复提示
 - 覆盖所有线程创建路径、恢复与 Fork 的计划工具配置，并断言恢复请求不携带 `cwd`
 - 覆盖 `recencyAt` 兼容、认证恢复通知结构和 `openaiForm` 降级
 - 使用本机 `codex-cli 0.152.1` 运行真实 App Server 生命周期冒烟，并运行 `pnpm check`
+- 运行 `pnpm codex:protocol:check` 验证实验协议 schema 未发生漂移

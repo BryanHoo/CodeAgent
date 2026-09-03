@@ -36,7 +36,7 @@ pub enum ProcessError {
     VersionProbeTimeout,
     #[error("Codex version output exceeded the limit")]
     VersionOutputTooLarge,
-    #[error("unsupported Codex version; expected >=0.152.1,<0.153.0")]
+    #[error("unsupported Codex version; expected 0.152.1")]
     UnsupportedVersion,
     #[error(transparent)]
     RuntimeDiscovery(#[from] RuntimeDiscoveryError),
@@ -199,8 +199,8 @@ pub(super) fn is_compatible_codex_version(version: &str) -> bool {
     let Ok(version) = Version::parse(version) else {
         return false;
     };
-    // experimentalApi 仅锁定到已验证的 0.152 协议面，不接受预发行版或未知次版本。
-    version.major == 0 && version.minor == 152 && version.patch >= 1 && version.pre.is_empty()
+    // experimentalApi 使用手写协议适配，只允许经过 schema 契约验证的精确版本。
+    version == Version::new(0, 152, 1)
 }
 
 fn parse_codex_cli_version(output: &str) -> Option<&str> {
@@ -328,12 +328,12 @@ mod tests {
     }
 
     #[test]
-    fn codex_version_should_enforce_the_152_protocol_range() {
+    fn codex_version_should_require_the_verified_protocol_version() {
         assert_eq!(
             parse_codex_version("codex-cli 0.152.1\n"),
             Some(SUPPORTED_CODEX_VERSION)
         );
-        assert_eq!(parse_codex_version("codex-cli 0.152.3\n"), Some("0.152.3"));
+        assert_eq!(parse_codex_version("codex-cli 0.152.3\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.151.0\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.152.0\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.153.0\n"), None);

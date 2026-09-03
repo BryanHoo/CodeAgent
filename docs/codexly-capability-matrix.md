@@ -9,14 +9,14 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ```
 
 运行时不再使用 Codexly HTTP、WebSocket 或 mock。协议基线固定为只读的本地
-`/Users/bryanhu/Develop/person/codex` `rust-v0.152.1`；外部稳定运行时仅接受
-`>=0.152.1,<0.153.0`，应用私有回退包固定为 `0.152.1` 并校验 SHA-512。
+`/Users/bryanhu/Develop/person/codex` `rust-v0.152.1`；外部稳定运行时仅接受精确版本
+`0.152.1`，应用私有回退包固定为 `0.152.1` 并校验 SHA-512。
 
 ## 逐项矩阵
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
-| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页仅接受 `>=0.152.1,<0.153.0` 并在启动时完成 app-server 初始化；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检；Rust supervisor 独立维护状态并按 1–30 秒有界退避恢复 | 已实现 |
+| 运行时与健康 | `getHealth`, `getCapabilities` | 启动页仅接受精确版本 `0.152.1` 并在启动时完成 app-server 初始化；CI 对带实验字段的官方 JSON Schema bundle 执行契约差异检查；支持全局安装提示、五个平台官方 npm 包 SHA-512 校验后写入应用私有目录、手动复检；Rust supervisor 独立维护状态并按 1–30 秒有界退避恢复 | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法；兼容 0.152 `recencyAt`，继续按用户维护的 `position` 排序且不请求 `recencyAt` 排序 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
 | 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 按系统安装状态探测编辑器、终端与文件管理器，再通过受限应用 ID 打开 | 已实现 |

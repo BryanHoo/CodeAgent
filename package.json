@@ -13,6 +13,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check": "pnpm version:check && pnpm supply-chain:policy:test && pnpm check:web && pnpm check:rust",
+    "codex:protocol:check": "node scripts/codex-protocol-contract.mjs",
+    "codex:protocol:update": "node scripts/codex-protocol-contract.mjs --write",
     "check:rust": "pnpm rust:fmt:check && pnpm rust:clippy && pnpm rust:test && pnpm performance:rust",
     "check:web": "pnpm lint && pnpm typecheck && pnpm test:run && pnpm tauri:constraints:test && pnpm performance:budget:test && pnpm build && pnpm performance:budget",
     "lint": "oxlint --deny-warnings .",
@@ -36,7 +38,7 @@
     "test:webview": "wdio run wdio.conf.ts",
     "test:webview:build": "cross-env VITE_WEBVIEW_TEST=1 node scripts/run-tauri.mjs build --debug --features webview-tests --no-bundle --no-sign --ci --config src-tauri/tauri.webview-test.conf.json",
     "test:webview:real": "cross-env CODEAGENT_REAL_RUNTIME_TEST=1 wdio run wdio.conf.ts",
-    "tauri:constraints:test": "node --test scripts/app-icon.test.mjs scripts/changelog.test.mjs scripts/run-tauri.test.mjs scripts/webview-bridge-readiness.test.mjs scripts/windows-subsystem.test.mjs",
+    "tauri:constraints:test": "node --test scripts/app-icon.test.mjs scripts/changelog.test.mjs scripts/codex-protocol-contract.test.mjs scripts/run-tauri.test.mjs scripts/webview-bridge-readiness.test.mjs scripts/windows-subsystem.test.mjs",
     "typecheck": "tsc -b",
     "version:check": "node scripts/check-version.mjs",
     "tauri": "node scripts/run-tauri.mjs"
