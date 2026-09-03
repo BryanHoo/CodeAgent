@@ -34,6 +34,6 @@
 - 应用入口必须通过 React 根回调、`window.error` 与 `unhandledrejection` 上报结构化诊断；后台失败使用同一诊断入口且不得影响主流程。关于页必须提供诊断 ZIP 导出按钮，并明确展示导出中禁用状态和完成/失败通知
 - 桌面宠物不得挂载到工作台 DOM；主窗口只提交宠物标识，Rust 从统一任务活动状态投影动画与有界任务摘要；宠物和气泡共用一个专用透明 WebView 与最小 Provider 装配，气泡点击通过固定事件回到主窗口路由，避免重复连接 Provider Runtime；任务气泡必须按投影顺序自然排列，不得叠放或按完成状态重排；设置中的启用状态使用带明确开关选项的下拉组件
 - 状态栏任务与宠物气泡打开已存在的主窗口时，Rust 必须发送 `main-window://navigate`，由 TanStack Router 完成 SPA 导航；主窗口 capability 必须同时授权 `core:event:allow-listen` 与 `core:event:allow-unlisten`；仅主 WebView 不存在时允许按目标路由重建，禁止调用 `window.navigate(...)` 重载现有工作台
-- 桌面宠物必须支持 macOS、Ubuntu Wayland/X11 与 Windows；macOS 使用一次原生拖拽命令跟踪至 `mouseUp`，Linux 保留 GTK 自动选择的原生显示后端，Windows 使用公开虚拟桌面 API 跟随当前桌面并恢复 topmost 层级；Linux 与 Windows 的位置 IPC 按动画帧合并到最新坐标
+- 桌面宠物必须支持 macOS、Ubuntu Wayland/X11 与 Windows；macOS 使用一次原生拖拽命令跟踪至 `mouseUp`，Linux Wayland 会话在 GTK 初始化前按 `x11,wayland` 顺序选择后端，以获得桌宠所需的全局窗口坐标并保留无 XWayland 时的启动回退，Windows 使用公开虚拟桌面 API 跟随当前桌面并恢复 topmost 层级；Linux 与 Windows 的位置 IPC 按动画帧合并到最新坐标
 - macOS 宠物在 CodeAgent 未激活时不得获取 key focus；切换到原生拖拽前必须先释放 WebView pointer capture，物理主键释放后再恢复 main key window 并同步位置、气泡布局和持久化；WebView fallback 必须在 `buttons` 不含主键时兜底结束拖动
 - Tauri asset protocol 的宠物图集使用 `HTMLImageElement` 解码后绘制到 Canvas；不得依赖 WKWebView 对自定义协议执行 `fetch` 后再 `createImageBitmap`

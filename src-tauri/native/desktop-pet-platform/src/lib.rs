@@ -1,3 +1,13 @@
+#[cfg(any(target_os = "linux", test))]
+fn linux_backend_preference(
+    session_type: Option<&str>,
+    has_wayland_display: bool,
+) -> Option<&'static str> {
+    (has_wayland_display
+        || session_type.is_some_and(|value| value.eq_ignore_ascii_case("wayland")))
+    .then_some("x11,wayland")
+}
+
 #[cfg(any(target_os = "windows", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DesktopFollowAction {
@@ -136,9 +146,35 @@ pub fn configure_windows_desktop_pet(hwnd: isize) -> Result<(), String> {
     windows_overlay::configure(hwnd)
 }
 
+#[cfg(target_os = "linux")]
+pub fn prepare_linux_window_backend() {
+    let session_type = std::env::var("XDG_SESSION_TYPE").ok();
+    let preference = linux_backend_preference(
+        session_type.as_deref(),
+        std::env::var_os("WAYLAND_DISPLAY").is_some(),
+    );
+    if let Some(backends) = preference {
+        // 桌宠依赖全局坐标；优先 XWayland，并在 X11 不可用时回退原生 Wayland，保证应用仍可启动。
+        std::env::set_var("GDK_BACKEND", backends);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prefers_x11_with_wayland_fallback_for_wayland_sessions() {
+        assert_eq!(
+            linux_backend_preference(Some("wayland"), false),
+            Some("x11,wayland")
+        );
+        assert_eq!(
+            linux_backend_preference(None, true),
+            Some("x11,wayland")
+        );
+        assert_eq!(linux_backend_preference(Some("x11"), false), None);
+    }
 
     #[test]
     fn follows_windows_virtual_desktop_without_busy_work() {

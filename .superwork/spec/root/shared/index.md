@@ -10,7 +10,7 @@
 
 ## 桌面宠物契约
 
-- `DesktopPetState` 只同步宠物标识、活动动画、本地访问标志和最多 256 条任务气泡摘要；macOS 由原生窗口维护拖动，并以 AppKit 物理主键状态确认释放，前端维护动画生命周期，Linux 与 Windows 按帧合并物理坐标
+- `DesktopPetState` 只同步宠物标识、活动动画、本地访问标志和最多 256 条任务气泡摘要；macOS 由原生窗口维护拖动，并以 AppKit 物理主键状态确认释放，前端维护动画生命周期，Linux Wayland 会话优先使用 XWayland 后端，Linux 与 Windows 按帧合并物理坐标
 - 任务动画和气泡摘要必须由 Rust `TaskActivityState` 投影；主 WebView 只能配置宠物标识，不得回传任务活动状态
 - 宠物移动、状态更新和任务跳转使用固定 `desktop-pet://*` 事件，独立窗口不得连接 Provider Runtime
 

@@ -49,9 +49,11 @@ mac-notification-sys = "=0.6.15"
 macos-panel-activation = { path = "native/macos-panel-activation", version = "=0.1.0" }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "c9ec2130422200f0863b23dfdad02b133a529b07", version = "=2.1.0" }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+desktop-pet-platform = { path = "native/desktop-pet-platform", version = "=0.1.0" }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 atomicwrites = "0.4.4"
-desktop-pet-platform = { path = "native/desktop-pet-platform", version = "=0.1.0" }
 tauri-winrt-notification = "=0.7.3"
 windows-process-platform = { path = "native/windows-process-platform", version = "=0.1.0" }
 winreg = "0.55.0"
