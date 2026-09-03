@@ -26,7 +26,7 @@ async fn list_tasks_should_filter_and_map_native_threads() {
         assert_eq!(request["method"], "thread/list");
         assert_eq!(request["params"]["projectId"], "project-a");
         assert_eq!(request["params"]["sectionId"], PINNED_SECTION_ID);
-        assert_eq!(request["params"]["sortKey"], "updated_at");
+        assert_eq!(request["params"]["sortKey"], "recency_at");
         assert_eq!(request["params"]["sortDirection"], "desc");
         assert_eq!(request["params"]["modelProviders"], json!([]));
         assert_eq!(request["params"]["searchTerm"], "fix");

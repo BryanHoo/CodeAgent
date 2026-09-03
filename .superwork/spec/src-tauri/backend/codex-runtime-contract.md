@@ -13,6 +13,7 @@
 - 每个 `thread/start`、`thread/resume`、`thread/fork` 请求必须在 `config` 中传入 `tools.update_plan.enabled: true`
 - 只使用请求级覆盖，不得改写用户全局 `config.toml`
 - `thread/resume` 不传 `cwd`，由 Codex 从已保存线程恢复工作目录；恢复响应新增字段必须保持可解析
+- Project 任务列表必须使用 `thread/list` 的 `recency_at` 倒序；Codex 在 `TurnStarted` 时单调推进该字段，确保用户再次发送消息后任务回到左栏首位
 - `project/list` 接受项目的 `recencyAt` 字段，但不得请求 `recencyAt` 排序，产品顺序继续由 `position` 决定
 
 ## Provider 配置
@@ -31,7 +32,7 @@
 
 - 覆盖精确版本门禁、五个平台 URL 与 SHA-512、安装命令和前端恢复提示
 - 覆盖所有线程创建路径、恢复与 Fork 的计划工具配置，并断言恢复请求不携带 `cwd`
-- 覆盖 `recencyAt` 兼容、认证恢复通知结构和 `openaiForm` 降级
+- 覆盖 Project 任务 `recency_at` 排序、项目 `recencyAt` 兼容、认证恢复通知结构和 `openaiForm` 降级
 - 覆盖 Provider 重连、端点隔离、旧模型目录迁移及 `desktop.codeagent.provider` 清理
 - 使用本机 `codex-cli 0.152.1` 运行真实 App Server 生命周期冒烟，并运行 `pnpm check`
 - 运行 `pnpm codex:protocol:check` 验证实验协议 schema 未发生漂移

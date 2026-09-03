@@ -251,6 +251,7 @@ export class ProjectRuntimeManager {
             this.#onMcpServerStatusChanged(eventProjectId, event.taskId);
           } else if (event.type === "turn.started") {
             this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_started");
+            this.#onTaskMetadataChanged(eventProjectId, event.taskId, "turn_started", event.timestamp);
           } else if (
             event.type === "item.completed" &&
             event.payload.item.type === "file_change" &&

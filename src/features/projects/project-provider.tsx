@@ -32,6 +32,7 @@ import {
   projectsQueryOptions,
   removeArchivedProjectTaskAndRefill,
   reorderProjectPage,
+  refreshStartedProjectTask,
   updateTaskTitleInProjectListCaches,
 } from "./project-queries.js";
 import type { ProjectProviderProps } from "./project-provider-types.js";
@@ -96,8 +97,11 @@ export function ProjectProvider({
           queryKey: ["projects", projectId, "tasks", taskId],
         });
       },
-      onTaskMetadataChanged(projectId, taskId, reason) {
+      onTaskMetadataChanged(projectId, taskId, reason, updatedAt) {
         const syncTaskMetadata = async () => {
+          if (reason === "turn_started") {
+            return refreshStartedProjectTask(queryClient, projectId, taskId, updatedAt ?? new Date().toISOString());
+          }
           if (reason === "turn_completed" || reason === "native_notification") {
             // 终态先校准服务端列表顺序，再用 Task Snapshot 保证标题不会被旧列表覆盖。
             await Promise.all([
@@ -402,7 +406,6 @@ export function ProjectProvider({
   const retry = useCallback(async () => {
     await queryClient.invalidateQueries();
   }, [queryClient]);
-
   useEffect(
     () => () => {
       projectRuntime.dispose();
@@ -410,7 +413,6 @@ export function ProjectProvider({
     },
     [gitStatusCoordinator, projectRuntime],
   );
-
   const dataValue = useMemo<ProjectDataContextValue>(
     () => ({
       capabilities: capabilitiesQuery.data,
@@ -481,7 +483,6 @@ export function ProjectProvider({
     () => ({ selectedRootIds, setSelectedProjectRoot }),
     [selectedRootIds, setSelectedProjectRoot],
   );
-
   return (
     <ProjectProviderView
       actions={actionsValue}

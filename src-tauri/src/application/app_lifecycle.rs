@@ -168,6 +168,20 @@ fn queue_main_window_restore(app: &AppHandle, route: Option<String>) {
     });
 }
 
+trait MainWindowFullscreen {
+    fn set_fullscreen(&self, fullscreen: bool);
+}
+
+impl MainWindowFullscreen for WebviewWindow {
+    fn set_fullscreen(&self, fullscreen: bool) {
+        let _ = WebviewWindow::set_fullscreen(self, fullscreen);
+    }
+}
+
+fn reset_main_window_fullscreen(window: &impl MainWindowFullscreen) {
+    window.set_fullscreen(false);
+}
+
 fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option<String>) {
     #[cfg(target_os = "macos")]
     let _ = app.set_dock_visibility(true);
@@ -203,7 +217,8 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
         );
     }
 
-    // 恢复时同时处理最小化状态，确保托盘操作始终把工作台带到前台。
+    // 先清除复用窗口的原生全屏状态，避免窗口重新显示后滞留在 macOS 全屏空间。
+    reset_main_window_fullscreen(&window);
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
@@ -277,6 +292,27 @@ fn app_route_from_url(url: &Url) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    #[derive(Default)]
+    struct RecordingWindow {
+        fullscreen: Cell<Option<bool>>,
+    }
+
+    impl MainWindowFullscreen for RecordingWindow {
+        fn set_fullscreen(&self, fullscreen: bool) {
+            self.fullscreen.set(Some(fullscreen));
+        }
+    }
+
+    #[test]
+    fn reopening_main_window_resets_fullscreen_before_showing_it() {
+        let window = RecordingWindow::default();
+
+        reset_main_window_fullscreen(&window);
+
+        assert_eq!(window.fullscreen.get(), Some(false));
+    }
 
     #[test]
     fn main_window_close_moves_the_app_to_background() {

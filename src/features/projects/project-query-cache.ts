@@ -109,6 +109,45 @@ export async function cacheCreatedProjectTask(queryClient: QueryClient, task: Ag
   );
 }
 
+function promoteStartedTaskInTasks(
+  currentTasks: readonly AgentTask[] | undefined,
+  taskId: string,
+  updatedAt: string,
+): readonly AgentTask[] | undefined {
+  if (currentTasks === undefined) {
+    return undefined;
+  }
+  const task = currentTasks.find((currentTask) => currentTask.id === taskId);
+  return task === undefined
+    ? currentTasks
+    : [{ ...task, updatedAt }, ...currentTasks.filter((currentTask) => currentTask.id !== taskId)];
+}
+
+export async function refreshStartedProjectTask(
+  queryClient: QueryClient,
+  projectId: string,
+  taskId: string,
+  updatedAt: string,
+): Promise<void> {
+  const projectTasksQueryKey = ["projects", projectId, "tasks"] as const;
+  await queryClient.cancelQueries({ exact: true, queryKey: projectTasksQueryKey });
+
+  // 先跨页置顶，避免等待 thread/list 往返；随后由权威首屏顺序校准分页 Cursor。
+  queryClient.setQueryData<ProjectTaskInfiniteData>(projectTasksQueryKey, (currentData) => {
+    const task = flattenProjectTaskPages(currentData).find((currentTask) => currentTask.id === taskId);
+    return task === undefined
+      ? currentData
+      : upsertProjectTaskInInfiniteData(currentData, { ...task, updatedAt });
+  });
+  for (const sourceKey of [PROJECT_PINNED_TASKS_KEY, PROJECT_TASK_SEARCH_SOURCE_KEY]) {
+    queryClient.setQueryData<readonly AgentTask[]>(
+      [...projectTasksQueryKey, sourceKey],
+      (currentTasks) => promoteStartedTaskInTasks(currentTasks, taskId, updatedAt),
+    );
+  }
+  await queryClient.invalidateQueries({ exact: true, queryKey: projectTasksQueryKey });
+}
+
 export async function cacheCompletedProjectTask(queryClient: QueryClient, task: AgentTask) {
   const matchingQueryKeys = queryClient
     .getQueriesData<ProjectTaskInfiniteData>({ queryKey: TASK_BOARD_COMPLETED_TASKS_QUERY_KEY })

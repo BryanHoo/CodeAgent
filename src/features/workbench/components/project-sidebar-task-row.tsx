@@ -51,7 +51,7 @@ export function TaskLink({
   const taskRoute = getTaskRoute(task.projectId, task.id);
 
   return (
-    <div className="group relative min-w-0">
+    <div className="group relative mr-1 min-w-0">
       <Link
         aria-current={active ? "page" : undefined}
         className={`flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-body-small transition-colors ${

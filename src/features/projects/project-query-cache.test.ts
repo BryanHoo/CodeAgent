@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   cacheCompletedProjectTask,
   cacheCreatedProjectTask,
+  refreshStartedProjectTask,
 } from "./project-query-cache.js";
 
 const existingTask: AgentTask = {
@@ -83,5 +84,35 @@ describe("cacheCompletedProjectTask", () => {
       pages: [{ data: [createdTask, existingTask], nextCursor: null }],
     });
     expect(queryClient.getQueryData(otherProjectKey)).toEqual(currentData);
+  });
+});
+
+describe("refreshStartedProjectTask", () => {
+  it("moves a task from a later page to the front without duplicating it", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = ["projects", "project-a", "tasks"] as const;
+    const laterTask = { ...existingTask, id: "task-later", title: "后页任务" };
+    queryClient.setQueryData(queryKey, {
+      pageParams: [undefined, "cursor-2", "cursor-3"],
+      pages: [
+        { data: [createdTask], nextCursor: "cursor-2" },
+        { data: [existingTask], nextCursor: "cursor-3" },
+        { data: [laterTask], nextCursor: null },
+      ],
+    });
+
+    await refreshStartedProjectTask(
+      queryClient,
+      "project-a",
+      "task-later",
+      "2026-09-03T08:00:00.000Z",
+    );
+
+    const data = queryClient.getQueryData<{ pages: AgentTaskPage[] }>(queryKey);
+    expect(data?.pages[0]?.data[0]).toEqual({
+      ...laterTask,
+      updatedAt: "2026-09-03T08:00:00.000Z",
+    });
+    expect(data?.pages.flatMap((page) => page.data).filter((task) => task.id === laterTask.id)).toHaveLength(1);
   });
 });

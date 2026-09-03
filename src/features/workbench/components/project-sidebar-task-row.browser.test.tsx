@@ -11,7 +11,6 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
 } from "../../../shared/components/core/dropdown-menu.js";
-import { sidebarWidthLimits } from "./workbench-panel-layout.js";
 import { TaskActionMenu, TaskLink } from "./project-sidebar-task-row.js";
 
 vi.mock("@tanstack/react-router", () => ({
@@ -89,7 +88,7 @@ describe("TaskActionMenu", () => {
 });
 
 describe("TaskLink", () => {
-  it("在默认宽度侧边栏中单行完整展示常见长任务标题", async () => {
+  it("在父容器内保留完整任务行并单行省略溢出标题", async () => {
     await i18n.changeLanguage("zh-CN");
     const longTask = {
       ...task,
@@ -97,7 +96,7 @@ describe("TaskLink", () => {
     };
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <div style={{ width: sidebarWidthLimits.default }}>
+        <div data-testid="task-clip-boundary" style={{ overflow: "hidden", width: 288 }}>
           <TaskLink
             active
             attention={null}
@@ -114,10 +113,17 @@ describe("TaskLink", () => {
       </I18nextProvider>,
     );
 
+    const boundary = screen.getByTestId("task-clip-boundary").element();
     const title = screen.getByText(longTask.title).element();
+    const link = title.closest("a");
 
-    // 常见长度的任务名应保持单行且无需省略。
+    expect(link).not.toBeNull();
+    // 标题保持单行省略，任务行同时为 3px 焦点阴影保留裁切安全区。
     expect(getComputedStyle(title).whiteSpace).toBe("nowrap");
-    expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
+    expect(getComputedStyle(title).textOverflow).toBe("ellipsis");
+    expect(title.scrollWidth).toBeGreaterThan(title.clientWidth);
+    expect(
+      boundary.getBoundingClientRect().right - link!.getBoundingClientRect().right,
+    ).toBeGreaterThanOrEqual(3);
   });
 });

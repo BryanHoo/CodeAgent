@@ -1,4 +1,5 @@
-import type { AgentTaskSnapshotResponse, TaskActivitySnapshot } from "@/protocol/index.js";
+import type { SubscribeAgentEventsOptions } from "@/platform/native-client-types.js";
+import type { AgentEvent, AgentTaskSnapshotResponse, TaskActivitySnapshot } from "@/protocol/index.js";
 import { describe, expect, it, vi } from "vitest";
 
 import type { NativeRuntimeClient } from "../../projects/project-queries.js";
@@ -79,6 +80,54 @@ describe("ProjectRuntimeManager task activity restoration", () => {
     ]);
     expect(readTask).toHaveBeenCalledTimes(2);
     expect(subscribeEvents).toHaveBeenCalledTimes(1);
+    runtime.dispose();
+  });
+
+  it("reports task recency as soon as a turn starts", () => {
+    let onEvent: SubscribeAgentEventsOptions["onEvent"] = () => undefined;
+    const onTaskMetadataChanged = vi.fn();
+    const client = {
+      readTask: vi.fn(async (projectId: string, taskId: string) =>
+        createSnapshot(projectId, taskId),
+      ),
+      releaseTaskSubscription: vi.fn(async () => undefined),
+      retainTaskSubscription: vi.fn(async () => undefined),
+      subscribeEvents: vi.fn((options: SubscribeAgentEventsOptions) => {
+        onEvent = options.onEvent;
+        return () => undefined;
+      }),
+    } as unknown as NativeRuntimeClient;
+    const runtime = createProjectRuntimeManager(client, { onTaskMetadataChanged });
+    runtime.observeSnapshot(createSnapshot("project-1", "task-1"));
+    const event: AgentEvent = {
+      payload: {
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-1",
+          items: [],
+          startedAt: "2026-09-03T08:00:00.000Z",
+          status: "running",
+        },
+      },
+      provider: "codex",
+      sequence: 5,
+      sessionId: "session-1",
+      taskId: "task-1",
+      timestamp: "2026-09-03T08:00:00.000Z",
+      turnId: "turn-1",
+      type: "turn.started",
+      version: 2,
+    };
+
+    onEvent(event);
+
+    expect(onTaskMetadataChanged).toHaveBeenCalledWith(
+      "project-1",
+      "task-1",
+      "turn_started",
+      event.timestamp,
+    );
     runtime.dispose();
   });
 });

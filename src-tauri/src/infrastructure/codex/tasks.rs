@@ -126,7 +126,8 @@ pub async fn list_tasks(
                 search_term: input.search_term.as_deref(),
                 section_id: Some(input.pinned.unwrap_or(false).then_some(PINNED_SECTION_ID)),
                 sort_direction: "desc",
-                sort_key: "updated_at",
+                // TurnStarted 会单调推进 recency_at，精确表达用户最近激活的任务。
+                sort_key: "recency_at",
             },
             REQUEST_TIMEOUT,
         )

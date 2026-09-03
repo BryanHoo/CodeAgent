@@ -37,7 +37,8 @@ export type ProjectRuntimeManagerOptions = Readonly<{
   onTaskMetadataChanged?: (
     projectId: string,
     taskId: string,
-    reason: "assistant_reply_started" | "native_notification" | "turn_completed",
+    reason: "assistant_reply_started" | "native_notification" | "turn_completed" | "turn_started",
+    updatedAt?: string,
   ) => void;
 }>;
 
