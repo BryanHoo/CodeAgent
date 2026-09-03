@@ -248,8 +248,8 @@ function RuntimeUpdating({ progress }: Readonly<{ progress: CodexRuntimeInstallP
                 role="progressbar"
               >
                 <div
-                  className={`h-full rounded-pill bg-brand transition-[width] duration-150 ${percentage === null ? "w-1/3 animate-pulse" : ""}`}
-                  style={percentage === null ? undefined : { width: `${percentage}%` }}
+                  className="h-full rounded-pill bg-brand transition-[width] duration-150"
+                  style={{ width: `${percentage ?? 0}%` }}
                 />
               </div>
             </div>
@@ -447,8 +447,8 @@ function RuntimeDownloadProgress({
         role="progressbar"
       >
         <div
-          className={`h-full rounded-pill bg-brand transition-[width] duration-150 ${percentage === null ? "w-1/3" : ""}`}
-          style={percentage === null ? undefined : { width: `${percentage}%` }}
+          className="h-full rounded-pill bg-brand transition-[width] duration-150"
+          style={{ width: `${percentage ?? 0}%` }}
         />
       </div>
     </div>

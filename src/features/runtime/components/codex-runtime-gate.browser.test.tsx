@@ -34,7 +34,7 @@ describe("CodexRuntimeGate", () => {
           phase: string;
           sequence: number;
           targetVersion: string;
-          totalBytes: number;
+          totalBytes: number | null;
         }) => void)
       | undefined;
     runtimeMocks.inspect.mockImplementation(
@@ -59,18 +59,32 @@ describe("CodexRuntimeGate", () => {
     await vi.waitFor(() => expect(reportProgress).toBeDefined());
     reportProgress?.({
       currentVersion: "0.150.0",
+      downloadedBytes: 0,
+      phase: "preparing",
+      sequence: 1,
+      targetVersion: "0.152.1",
+      totalBytes: null,
+    });
+
+    await expect.element(screen.getByRole("heading", { name: "Updating Codex" })).toBeVisible();
+    const progressbar = screen.getByRole("progressbar", { name: "Codex update progress" });
+    const progressFill = progressbar.element().firstElementChild;
+    expect(progressFill).toBeInstanceOf(HTMLElement);
+    expect(getComputedStyle(progressFill as HTMLElement).width).toBe("0px");
+
+    reportProgress?.({
+      currentVersion: "0.150.0",
       downloadedBytes: 42,
       phase: "downloading",
-      sequence: 1,
+      sequence: 2,
       targetVersion: "0.152.1",
       totalBytes: 100,
     });
 
-    await expect.element(screen.getByRole("heading", { name: "Updating Codex" })).toBeVisible();
     await expect.element(screen.getByText("0.150.0")).toBeVisible();
     await expect.element(screen.getByText("0.152.1")).toBeVisible();
     await expect
-      .element(screen.getByRole("progressbar", { name: "Codex update progress" }))
+      .element(progressbar)
       .toHaveAttribute("aria-valuenow", "42");
   });
 
