@@ -11,10 +11,10 @@ const releaseWorkflow = await readFile(
 );
 
 void test("extracts the dated changelog section for a release", () => {
-  const notes = extractVersionNotes(changelog, "0.1.3");
+  const notes = extractVersionNotes(changelog, "0.1.4");
 
-  assert.match(notes, /^## \[0\.1\.3\] - 2026-09-03$/m);
-  assert.match(notes, /^### Added$/m);
+  assert.match(notes, /^## \[0\.1\.4\] - 2026-09-03$/m);
+  assert.match(notes, /^### Fixed$/m);
   assert.doesNotMatch(notes, /^## \[Unreleased\]$/m);
 });
 

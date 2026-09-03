@@ -25,6 +25,18 @@ const TURN_OVERSCAN = 2;
 const SCROLL_END_THRESHOLD_PX = 80;
 const VERTICAL_PADDING_PX = 28;
 
+type ItemBoundary = Readonly<{
+  firstKey: Key;
+  lastKey: Key;
+  length: number;
+}>;
+
+type PrependScrollSnapshot = Readonly<{
+  nextLength: number;
+  scrollHeight: number;
+  scrollTop: number;
+}>;
+
 export type ConversationVirtualListProps<TItem> = Omit<
   HTMLAttributes<HTMLDivElement>,
   "children"
@@ -62,6 +74,8 @@ export function ConversationVirtualList<TItem>({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigationFrameRef = useRef(0);
   const lastObservedScrollTopRef = useRef(0);
+  const committedItemBoundaryRef = useRef<ItemBoundary | null>(null);
+  const prependScrollSnapshotRef = useRef<PrependScrollSnapshot | null>(null);
   const previousScrollToBottomSignalRef = useRef(scrollToBottomSignal);
   const [, commitColdJump] = useReducer((revision: number) => revision + 1, 0);
   const [atBottom, setAtBottom] = useState(true);
@@ -72,6 +86,26 @@ export function ConversationVirtualList<TItem>({
   const headerOffset = header === undefined ? 0 : 1;
   const footerOffset = footer === undefined ? 0 : 1;
   const count = headerOffset + items.length + footerOffset;
+  const previousBoundary = committedItemBoundaryRef.current;
+  const addedItemCount = previousBoundary === null ? 0 : items.length - previousBoundary.length;
+  const scrollElementBeforeCommit = scrollContainerRef.current;
+  if (
+    previousBoundary !== null &&
+    addedItemCount > 0 &&
+    scrollElementBeforeCommit !== null &&
+    Object.is(
+      getItemKey(items[addedItemCount] as TItem, addedItemCount),
+      previousBoundary.firstKey,
+    ) &&
+    Object.is(getItemKey(items[items.length - 1] as TItem, items.length - 1), previousBoundary.lastKey)
+  ) {
+    // React render 仍对应旧 DOM，此时记录 prepend 前的稳定视口位置。
+    prependScrollSnapshotRef.current = {
+      nextLength: items.length,
+      scrollHeight: scrollElementBeforeCommit.scrollHeight,
+      scrollTop: scrollElementBeforeCommit.scrollTop,
+    };
+  }
   const getVirtualKey = useCallback(
     (virtualIndex: number): string => {
       if (header !== undefined && virtualIndex === 0) return `${conversationId}:header`;
@@ -115,6 +149,25 @@ export function ConversationVirtualList<TItem>({
       setAtBottom((current) => (current === nextAtBottom ? current : nextAtBottom));
     },
   });
+
+  useLayoutEffect(() => {
+    const scrollElement = scrollContainerRef.current;
+    const snapshot = prependScrollSnapshotRef.current;
+    if (scrollElement !== null && snapshot?.nextLength === items.length) {
+      const addedHeight = scrollElement.scrollHeight - snapshot.scrollHeight;
+      scrollElement.scrollTop = snapshot.scrollTop + addedHeight;
+      lastObservedScrollTopRef.current = scrollElement.scrollTop;
+      prependScrollSnapshotRef.current = null;
+    }
+    committedItemBoundaryRef.current =
+      items.length === 0
+        ? null
+        : {
+            firstKey: getItemKey(items[0] as TItem, 0),
+            lastKey: getItemKey(items[items.length - 1] as TItem, items.length - 1),
+            length: items.length,
+          };
+  }, [getItemKey, items]);
 
   useLayoutEffect(() => {
     // 会话首次呈现时从最新 Turn 开始，后续追加和流式增长交给 end anchor。

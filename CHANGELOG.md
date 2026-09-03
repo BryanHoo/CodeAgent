@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-03
+
+### Fixed
+
+- 修复浏览器质量门禁对虚拟列表 prepend 锚点的脆弱断言，避免虚拟节点卸载造成误报。
+- 修复真实 Codex 运行时检查缺少进度 Channel 导致三平台发布门禁失败的问题。
+
 ## [0.1.3] - 2026-09-03
 
 ### Added
@@ -44,7 +51,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.0...v0.1.1

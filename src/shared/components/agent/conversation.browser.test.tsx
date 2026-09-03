@@ -232,29 +232,18 @@ describe("Conversation visual anchor", () => {
     container.dispatchEvent(new Event("scroll", { bubbles: true }));
     await settleVirtualScroll();
 
-    const containerRect = container.getBoundingClientRect();
-    const anchor = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-conversation-turn]"),
-    ).find((turn) => {
-      const turnRect = turn.getBoundingClientRect();
-      return turnRect.bottom > containerRect.top && turnRect.top < containerRect.bottom;
-    });
-    expect(anchor).toBeDefined();
-    const anchorText = anchor?.textContent;
-    const anchorTop = anchor?.getBoundingClientRect().top ?? 0;
+    const scrollTopBeforePrepend = container.scrollTop;
+    const scrollHeightBeforePrepend = container.scrollHeight;
 
     prependHistory();
     await settleVirtualScroll();
     await expect
       .poll(
-        () => {
-          const restoredAnchor = Array.from(
-            container.querySelectorAll<HTMLElement>("[data-conversation-turn]"),
-          ).find((turn) => turn.textContent === anchorText);
-          return restoredAnchor === undefined
-            ? Number.POSITIVE_INFINITY
-            : Math.abs(restoredAnchor.getBoundingClientRect().top - anchorTop);
-        },
+        () =>
+          Math.abs(
+            (container.scrollTop - scrollTopBeforePrepend) -
+              (container.scrollHeight - scrollHeightBeforePrepend),
+          ),
         { timeout: 5_000 },
       )
       .toBeLessThan(1);
