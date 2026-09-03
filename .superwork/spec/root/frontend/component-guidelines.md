@@ -11,7 +11,7 @@
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
 - 完成态 Turn 必须保留首条用户入口，并将同一 Turn 内后续用户引导与执行过程统一折叠；折叠项必须先从可见序列移除再执行消息分组，确保最终答复与文件审核摘要归入末组
-- 运行中 Turn 的连续 `command` 与 `tool`（包括 MCP）必须在后续 Assistant 文本开始输出后收起为摘要，此前保留原始操作行；流式 `message.delta` 与完整 Item 到达时必须保持相同触发行为，Turn 终态继续使用整体执行过程折叠
+- 运行中 Turn 的连续 `command` 与 `tool`（包括 MCP）必须在后续 Assistant 文本开始输出后收起为摘要，此前保留原始操作行；不可见的空摘要 `reasoning` 不得切断连续操作，也不得进入渲染与订阅；流式 `message.delta` 与完整 Item 到达时必须保持相同触发行为，Turn 终态继续使用整体执行过程折叠
 - 桌面文件系统选择器切换盘符或路径时必须保留最近一次成功发现的根列表，加载或失败状态不得卸载盘符选择器；Windows `\\?\` verbatim 路径必须先按普通盘符语义归一化再匹配当前根项
 - 对话 Turn 列表必须使用 TanStack Virtual 2026 Chat 模式：以稳定 Turn ID 作为 `getItemKey`，使用 `anchorTo: "end"`、`followOnAppend`、动态 `measureElement` 和有界 overscan；滚动容器、虚拟 sizer 与行位置必须由同一个 Virtualizer 实例管理，滚动容器必须设置 `overflow-anchor: none`，避免浏览器原生锚定与 Virtualizer 重复修正位置，启用 `directDomUpdates` 降低滚动期 React 提交；WebKit 使用 `directDomUpdatesMode: "position"`，禁止行级 transform 合成层和应用侧重复 `scrollTop` 补偿；历史 prepend 依赖 end anchor 保持可见 Turn，流式增长仅在用户已经置底时跟随；分页头、Turn 与待处理尾部必须进入同一虚拟序列，导航先定位 Turn 再定位内部消息锚点；`content-visibility` 不得用于对话列表正确性或替代 DOM 窗口化
 - 时间线右侧轻量导航必须使用自然文档流完整挂载，不得使用虚拟 sizer、尺寸测量或绝对位移；固定行高虚拟化仅用于可达万级数据的源码行和项目文件树
