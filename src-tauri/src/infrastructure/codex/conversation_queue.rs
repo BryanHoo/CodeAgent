@@ -341,7 +341,7 @@ mod tests {
             id: "queue-a".to_owned(),
             input: vec![json!({
                 "text": &path,
-                "text_elements": [{
+                "textElements": [{
                     "byteRange": {"start": 0, "end": path.len()},
                     "placeholder": FILE_PLACEHOLDER,
                 }],

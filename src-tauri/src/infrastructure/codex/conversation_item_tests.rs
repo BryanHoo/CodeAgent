@@ -156,16 +156,16 @@ fn command_output_should_keep_bounded_utf8_head_and_tail() {
 }
 
 #[test]
-fn user_file_should_restore_attachment_without_exposing_its_path_as_text() {
-    let path = absolute_test_path("report.json");
+fn user_pasted_text_wire_input_should_remain_an_attachment() {
+    let path = absolute_test_path("Pasted text.txt");
     let mapped = map_item(json!({
         "id": "user-file",
         "type": "userMessage",
         "content": [{
             "text": &path,
-            "text_elements": [{
+            "textElements": [{
                 "byteRange": {"start": 0, "end": path.len()},
-                "placeholder": "codexly-file:eyJraW5kIjoiZmlsZSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJuYW1lIjoicmVwb3J0Lmpzb24iLCJzaXplIjoxN30",
+                "placeholder": "codexly-file:eyJraW5kIjoidGV4dCIsIm1lZGlhVHlwZSI6InRleHQvcGxhaW4iLCJuYW1lIjoiUGFzdGVkIHRleHQudHh0Iiwic2l6ZSI6MTd9",
             }],
             "type": "text",
         }],
@@ -175,7 +175,8 @@ fn user_file_should_restore_attachment_without_exposing_its_path_as_text() {
 
     assert_eq!(value["text"], "");
     assert_eq!(value["attachments"][0]["id"], path);
-    assert_eq!(value["attachments"][0]["name"], "report.json");
+    assert_eq!(value["attachments"][0]["kind"], "text");
+    assert_eq!(value["attachments"][0]["name"], "Pasted text.txt");
 }
 
 #[test]

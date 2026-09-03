@@ -49,7 +49,8 @@ pub(super) fn read_file_text_input(
     object: &Map<String, Value>,
 ) -> Result<Option<Value>, ConnectionError> {
     let text = required_string(object, "text")?;
-    let Some(elements) = object.get("text_elements").and_then(Value::as_array) else {
+    // Codex 入站 UserInput 使用 camelCase，不能复用出站请求的 snake_case 字段名。
+    let Some(elements) = object.get("textElements").and_then(Value::as_array) else {
         return Ok(None);
     };
     let [element] = elements.as_slice() else {
