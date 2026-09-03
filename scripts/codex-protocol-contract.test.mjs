@@ -8,6 +8,8 @@ import {
   REQUIRED_CODEX_VERSION,
   assertCodexVersion,
   compareSchemaBundles,
+  resolveCodexBinary,
+  resolveCodexInvocation,
 } from "./codex-protocol-contract.mjs";
 
 const BUNDLES = [
@@ -25,6 +27,32 @@ void test("requires the exact verified Codex version", () => {
     () => assertCodexVersion("codex-cli 0.152.3\n"),
     /expected codex-cli 0\.152\.1/u,
   );
+});
+
+void test("resolves the npm Codex shim on Windows", () => {
+  assert.equal(resolveCodexBinary("win32", undefined), "codex.cmd");
+  assert.equal(resolveCodexBinary("linux", undefined), "codex");
+  assert.equal(resolveCodexBinary("win32", " C:/tools/codex.exe "), "C:/tools/codex.exe");
+  assert.deepEqual(
+    resolveCodexInvocation(
+      "win32",
+      "codex.cmd",
+      ["--version"],
+      "C:/Windows/System32/cmd.exe",
+    ),
+    {
+      file: "C:/Windows/System32/cmd.exe",
+      args: ["/d", "/s", "/c", "codex.cmd", "--version"],
+    },
+  );
+  assert.deepEqual(resolveCodexInvocation("win32", "C:/tools/codex.exe", ["--version"]), {
+    file: "C:/tools/codex.exe",
+    args: ["--version"],
+  });
+  assert.deepEqual(resolveCodexInvocation("linux", "codex", ["--version"]), {
+    file: "codex",
+    args: ["--version"],
+  });
 });
 
 void test("runs the pinned protocol contract check in CI", () => {

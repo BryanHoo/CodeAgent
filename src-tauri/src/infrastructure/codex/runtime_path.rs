@@ -174,7 +174,6 @@ mod tests {
     use super::merge_unix_path_values;
     use super::parse_shell_path_output;
 
-    #[cfg(unix)]
     #[test]
     fn shell_path_should_ignore_shell_startup_output() {
         assert_eq!(
@@ -184,6 +183,7 @@ mod tests {
         assert_eq!(parse_shell_path_output(b"missing markers"), None);
     }
 
+    #[cfg(unix)]
     #[test]
     fn runtime_path_should_merge_shell_and_process_directories() {
         assert_eq!(

@@ -14,6 +14,7 @@
 - 运行中 Turn 的连续 `command`、`tool`（包括 MCP）与 `file_change` 必须按同一操作组处理，单个 `file_change` 内的多文件按多项操作计数；操作组在后续 Assistant 文本开始输出后收起为摘要，此前保留原始操作行；不可见的空摘要 `reasoning` 不得切断连续操作，也不得进入渲染与订阅；流式 `message.delta` 与完整 Item 到达时必须保持相同触发行为，Turn 终态继续使用整体执行过程折叠
 - 桌面文件系统选择器切换盘符或路径时必须保留最近一次成功发现的根列表，加载或失败状态不得卸载盘符选择器；Windows `\\?\` verbatim 路径必须先按普通盘符语义归一化再匹配当前根项
 - 对话 Turn 列表必须使用 TanStack Virtual 2026 Chat 模式：以稳定 Turn ID 作为 `getItemKey`，使用 `anchorTo: "end"`、`followOnAppend`、动态 `measureElement`、有界 overscan 和按 Item 规模提供的保守 `estimateSize`；滚动容器、虚拟 sizer 与行位置必须由同一个 Virtualizer 实例管理，滚动容器必须设置 `overflow-anchor: none`，避免浏览器原生锚定与 Virtualizer 重复修正位置，启用 `directDomUpdates` 降低滚动期 React 提交；WebKit 使用 `directDomUpdatesMode: "position"`，禁止行级 transform 合成层和应用侧重复 `scrollTop` 补偿；历史 prepend 先依赖 end anchor 保持可见 Turn，虚拟 sizer 提交最终高度后一帧若浏览器位置仍未同步，只允许经同一 Virtualizer API 执行一次确定性校正；流式增长仅在用户已经置底时跟随；异步内容、Composer 或状态栏改变滚动内容或容器高度时，仅对变化前已置底的会话经 Virtualizer 按真实滚动范围置底，用户阅读历史时必须保持位置；分页头、Turn 与待处理尾部必须进入同一虚拟序列，导航先定位 Turn 再定位内部消息锚点；`content-visibility` 不得用于对话列表正确性或替代 DOM 窗口化
+- 对话滚动容器必须以 `conversationId` 提供稳定且唯一的 `data-scroll-restoration-id`，防止 TanStack Router 在任务切换时按结构选择器迁移其他任务的滚动位置；原生 WebView 测试必须覆盖离开并重新打开巨型任务后仍置底
 - 时间线右侧轻量导航必须使用自然文档流完整挂载，不得使用虚拟 sizer、尺寸测量或绝对位移；固定行高虚拟化仅用于可达万级数据的源码行和项目文件树
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
 - 工具型独立窗口必须由受限 Tauri 命令创建，使用专用轻量启动面和最小 capability；不得使用 WebView `window.open()`，也不得挂载完整工作台 Provider 树

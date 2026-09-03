@@ -5,7 +5,8 @@
     {
       "name": "root",
       "layers": [
-        "frontend"
+        "frontend",
+        "backend"
       ]
     },
     {

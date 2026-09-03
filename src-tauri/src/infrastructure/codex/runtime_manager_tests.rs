@@ -185,23 +185,26 @@ fn windows_runtime_should_include_the_npm_cmd_shim() {
 
 #[test]
 fn official_install_locations_should_cover_all_platform_layouts() {
-    let unix = official_binary_directories(
-        "linux",
-        Some(Path::new("/home/user")),
-        Some(Path::new("/custom/codex-home")),
-        Some(Path::new("/custom/bin")),
-        None,
-    );
-    assert!(unix.contains(&Path::new("/custom/bin").to_path_buf()));
-    assert!(
-        unix.contains(
+    #[cfg(unix)]
+    {
+        let unix = official_binary_directories(
+            "linux",
+            Some(Path::new("/home/user")),
+            Some(Path::new("/custom/codex-home")),
+            Some(Path::new("/custom/bin")),
+            None,
+        );
+        assert!(unix.contains(&Path::new("/custom/bin").to_path_buf()));
+        assert!(unix.contains(
             &Path::new("/custom/codex-home/packages/standalone/current/bin").to_path_buf()
-        )
-    );
-    assert!(
-        unix.contains(&Path::new("/custom/codex-home/packages/standalone/current").to_path_buf())
-    );
-    assert!(unix.contains(&Path::new("/home/user/.local/bin").to_path_buf()));
+        ));
+        assert!(
+            unix.contains(
+                &Path::new("/custom/codex-home/packages/standalone/current").to_path_buf()
+            )
+        );
+        assert!(unix.contains(&Path::new("/home/user/.local/bin").to_path_buf()));
+    }
 
     let windows = official_binary_directories(
         "windows",

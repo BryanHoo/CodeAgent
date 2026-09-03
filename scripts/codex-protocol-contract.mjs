@@ -27,6 +27,31 @@ export function assertCodexVersion(output) {
   return REQUIRED_CODEX_VERSION;
 }
 
+export function resolveCodexBinary(platform, configuredBinary) {
+  return configuredBinary?.trim() || (platform === "win32" ? "codex.cmd" : "codex");
+}
+
+export function resolveCodexInvocation(
+  platform,
+  codexBinary,
+  args,
+  commandShell = process.env.ComSpec || "cmd.exe",
+) {
+  if (platform === "win32" && /\.(?:cmd|bat)$/iu.test(codexBinary)) {
+    return {
+      file: commandShell,
+      args: ["/d", "/s", "/c", codexBinary, ...args],
+    };
+  }
+
+  return { file: codexBinary, args };
+}
+
+function execCodexFileSync(codexBinary, args, options) {
+  const invocation = resolveCodexInvocation(process.platform, codexBinary, args);
+  return execFileSync(invocation.file, invocation.args, options);
+}
+
 export async function compareSchemaBundles(expectedDirectory, generatedDirectory) {
   const comparisons = await Promise.all(
     SCHEMA_BUNDLES.map(async (name) => {
@@ -46,13 +71,13 @@ export async function compareSchemaBundles(expectedDirectory, generatedDirectory
 }
 
 async function generateSchemaBundles(codexBinary, outputDirectory) {
-  const versionOutput = execFileSync(codexBinary, ["--version"], {
+  const versionOutput = execCodexFileSync(codexBinary, ["--version"], {
     encoding: "utf8",
   });
   assertCodexVersion(versionOutput);
 
-  // 项目开启 experimentalApi，快照必须覆盖对应实验字段和方法。
-  execFileSync(
+  // The project enables experimentalApi, so snapshots must include its schema.
+  execCodexFileSync(
     codexBinary,
     [
       "app-server",
@@ -76,7 +101,7 @@ async function writeSnapshots(generatedDirectory) {
 
 async function main() {
   const write = process.argv.slice(2).includes("--write");
-  const codexBinary = process.env.CODEX_BIN?.trim() || "codex";
+  const codexBinary = resolveCodexBinary(process.platform, process.env.CODEX_BIN);
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "codeagent-codex-schema-"));
 
   try {
