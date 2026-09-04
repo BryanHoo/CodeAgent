@@ -27,6 +27,7 @@ pub(crate) struct MainWindowLifecycle {
 #[derive(Default)]
 struct MainWindowLifecycleState {
     destroy_generation: u64,
+    restore_windowed: bool,
     route: Option<String>,
 }
 
@@ -37,6 +38,7 @@ impl MainWindowLifecycle {
         if route.is_some() {
             state.route = route;
         }
+        state.restore_windowed = true;
         state.destroy_generation
     }
 
@@ -47,6 +49,14 @@ impl MainWindowLifecycle {
             state.route = route;
         }
         state.destroy_generation
+    }
+
+    fn take_windowed_restore(&self, generation: u64) -> bool {
+        let mut state = self.lock();
+        if state.destroy_generation != generation {
+            return false;
+        }
+        std::mem::take(&mut state.restore_windowed)
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, MainWindowLifecycleState> {
@@ -217,8 +227,10 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
         );
     }
 
-    // 先清除复用窗口的原生全屏状态，避免窗口重新显示后滞留在 macOS 全屏空间。
-    reset_main_window_fullscreen(&window);
+    // 只有明确关闭后的首次唤醒才退出全屏；通知聚焦可见窗口时保留用户当前状态。
+    if lifecycle.take_windowed_restore(generation) {
+        reset_main_window_fullscreen(&window);
+    }
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
@@ -312,6 +324,21 @@ mod tests {
         reset_main_window_fullscreen(&window);
 
         assert_eq!(window.fullscreen.get(), Some(false));
+    }
+
+    #[test]
+    fn fullscreen_reset_is_consumed_only_after_explicit_close() {
+        let lifecycle = MainWindowLifecycle::default();
+
+        let notification_focus = lifecycle.prepare_show(None);
+        assert!(!lifecycle.take_windowed_restore(notification_focus));
+
+        lifecycle.schedule_destroy(None);
+        let closed_window_restore = lifecycle.prepare_show(None);
+        assert!(lifecycle.take_windowed_restore(closed_window_restore));
+
+        let later_notification_focus = lifecycle.prepare_show(None);
+        assert!(!lifecycle.take_windowed_restore(later_notification_focus));
     }
 
     #[test]
