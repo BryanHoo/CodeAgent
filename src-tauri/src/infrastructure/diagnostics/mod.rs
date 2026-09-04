@@ -18,6 +18,8 @@ use tauri::{AppHandle, Manager as _, Runtime, plugin::TauriPlugin};
 use tauri_plugin_log::{Builder, RotationStrategy, Target, TargetKind};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
+use crate::encoding::encode_lower_hex;
+
 pub use codex::{CodexLogParseError, MAX_CODEX_LOG_LINE_BYTES, parse_codex_event};
 pub use export::write_diagnostic_archive;
 
@@ -85,10 +87,7 @@ impl DiagnosticSession {
         let mut salt = [0_u8; 32];
         salt.copy_from_slice(&digest);
         Self {
-            id: digest[..12]
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect(),
+            id: encode_lower_hex(&digest[..12]),
             salt,
         }
     }

@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 
+use crate::encoding::encode_lower_hex;
+
 use super::DiagnosticSession;
 
 pub(super) fn sanitize_context(
@@ -103,10 +105,7 @@ fn hash_identifier(key: &str, value: &str, session: &DiagnosticSession) -> Strin
     hasher.update(key.as_bytes());
     hasher.update(value.as_bytes());
     let digest = hasher.finalize();
-    digest[..12]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    encode_lower_hex(&digest[..12])
 }
 
 pub(super) fn pseudonymize_identifier(

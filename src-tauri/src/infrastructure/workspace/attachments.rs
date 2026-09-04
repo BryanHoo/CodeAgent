@@ -1,12 +1,11 @@
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::{
-    fmt::Write as _,
-    path::{Path, PathBuf},
-};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+use crate::encoding::encode_lower_hex;
 
 use super::path_guard::WorkspaceError;
 
@@ -45,7 +44,7 @@ pub async fn store_attachment(
     tokio::fs::create_dir_all(&directory).await?;
     let mut hasher = content_hasher(project_id, name);
     hasher.update(bytes);
-    let hash = hex_digest(hasher.finalize());
+    let hash = encode_lower_hex(hasher.finalize());
     let extension = safe_extension(name);
     let path = directory.join(format!("{hash}{extension}"));
     persist_bytes(&path, bytes).await?;
@@ -317,7 +316,7 @@ async fn persist_streamed_file(
         temporary_file.sync_data().await?;
         let destination = directory.join(format!(
             "{}{}",
-            hex_digest(hasher.finalize()),
+            encode_lower_hex(hasher.finalize()),
             safe_extension(name)
         ));
         commit_temporary(&temporary, &destination).await?;
@@ -343,15 +342,6 @@ async fn commit_temporary(temporary: &Path, destination: &Path) -> Result<(), Wo
         }
         Err(error) => Err(error.into()),
     }
-}
-
-fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
-    let bytes = bytes.as_ref();
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-    encoded
 }
 
 fn is_supported_image(name: &str, bytes: &[u8]) -> bool {

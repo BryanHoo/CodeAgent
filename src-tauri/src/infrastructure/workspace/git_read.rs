@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::encoding::encode_lower_hex;
+
 use super::{
     git_diff::add_diffs,
     git_process::run_git,
@@ -401,11 +403,7 @@ fn hash_parts(parts: &[String]) -> String {
         hasher.update(part.as_bytes());
         hasher.update([0]);
     }
-    hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    encode_lower_hex(hasher.finalize())
 }
 
 async fn git_lines(repo: &Path, args: &[&str]) -> Result<Vec<String>, WorkspaceError> {

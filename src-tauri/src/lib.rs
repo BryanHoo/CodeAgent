@@ -3,6 +3,7 @@ compile_error!("CodeAgent only supports aarch64-apple-darwin on macOS");
 
 mod application;
 pub mod domain;
+mod encoding;
 mod infrastructure;
 
 use tauri::Manager;
