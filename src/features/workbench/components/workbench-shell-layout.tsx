@@ -2,22 +2,14 @@ import { PanelLeft, Pencil } from "lucide-react";
 import { useRef, type CSSProperties } from "react";
 import { Button } from "../../../shared/components/core/button.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../shared/components/core/tooltip.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { TaskBoardContainer } from "./task-board-container.js";
+import { SkillsMarketContainer } from "../../skills-market/skills-market-container.js";
 import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
-import {
-  inspectorWidthLimits,
-  resolveInspectorVisibility,
-  resolveQuickOpenVisibility,
-  sidebarWidthLimits,
-} from "./workbench-panel-layout.js";
+import { inspectorWidthLimits, resolveInspectorVisibility, resolveQuickOpenVisibility, sidebarWidthLimits } from "./workbench-panel-layout.js";
 import { ProjectQuickOpenMenu } from "./project-open-menu.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
@@ -33,6 +25,7 @@ export function WorkbenchShellLayout({
   context,
   draftId,
   projectId,
+  skillsMarket,
   taskId,
   temporary,
 }: Readonly<{
@@ -40,6 +33,7 @@ export function WorkbenchShellLayout({
   board: boolean;
   draftId?: string;
   projectId: string;
+  skillsMarket: boolean;
   taskId?: string;
   temporary: boolean;
 }>) {
@@ -121,8 +115,9 @@ export function WorkbenchShellLayout({
     workbenchShellRef,
     t,
   } = context;
-  const viewTitle = board ? t("taskBoard.title") : title;
-  const inspectorVisible = resolveInspectorVisibility(board, inspectorOpen);
+  const utilityView = board || skillsMarket;
+  const viewTitle = skillsMarket ? t("skillsMarket.title") : board ? t("taskBoard.title") : title;
+  const inspectorVisible = resolveInspectorVisibility(utilityView, inspectorOpen);
   return (
     <div
       className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
@@ -230,7 +225,7 @@ export function WorkbenchShellLayout({
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {resolveQuickOpenVisibility(board, temporary) ? (
+            {resolveQuickOpenVisibility(utilityView, temporary) ? (
               <ProjectQuickOpenMenu
                 apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
                 className="hidden min-workbench:flex"
@@ -248,7 +243,7 @@ export function WorkbenchShellLayout({
                 }}
               />
             ) : null}
-            {board ? null : (
+            {utilityView ? null : (
               <WorkbenchInspectorToggle
                 collapseLabel={t("shell.collapseInspector")}
                 expandLabel={t("shell.expandInspector")}
@@ -260,7 +255,12 @@ export function WorkbenchShellLayout({
             )}
           </div>
         </header>
-        {error !== null ||
+        {skillsMarket ? (
+          <SkillsMarketContainer
+            {...(temporary ? {} : { projectId })}
+            {...(selectedRootPath === undefined ? {} : { rootPath: selectedRootPath })}
+          />
+        ) : error !== null ||
         (projectTaskState?.error ?? null) !== null ||
         modelsQuery.error !== null ||
         skillsQuery.error !== null ||

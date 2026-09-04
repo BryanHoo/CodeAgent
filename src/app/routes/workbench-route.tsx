@@ -19,6 +19,7 @@ function WorkbenchLayout() {
       const params = state.matches.at(-1)?.params;
       return {
         board: state.location.pathname.endsWith("/board"),
+        skillsMarket: state.location.pathname.endsWith("/skills"),
         draftId: params !== undefined && "draftId" in params ? params.draftId : undefined,
         projectId: params !== undefined && "projectId" in params ? params.projectId : undefined,
         taskId: params !== undefined && "taskId" in params ? params.taskId : undefined,
@@ -33,6 +34,7 @@ function WorkbenchLayout() {
     <WorkbenchBackground>
       <WorkbenchRoute
         board={routeParams.board}
+        skillsMarket={routeParams.skillsMarket}
         {...(routeParams.draftId === undefined ? {} : { draftId: routeParams.draftId })}
         projectId={projectId}
         temporary={temporary}

@@ -1,7 +1,10 @@
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
-use super::{AppServerConnection, catalogs::list_models, list_mcp_servers, list_skills};
+use super::{
+    AppServerConnection, catalogs::list_models, list_installed_skills, list_mcp_servers,
+    list_skills, set_skill_enabled,
+};
 
 #[tokio::test]
 async fn catalogs_should_map_codex_protocol_without_losing_order() {
@@ -35,6 +38,16 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
                     {"name": "review", "description": "Review code", "path": "/skills/review/SKILL.md", "scope": "repo", "enabled": true,
                      "interface": {"displayName": "Code Review", "iconSmallUrl": null, "iconLargeUrl": null}},
                     {"name": "disabled", "description": "Hidden", "path": "/skills/disabled/SKILL.md", "scope": "user", "enabled": false}
+                ], "errors": []}]}),
+            ),
+            (
+                "skills/list",
+                json!({"data": [{"cwd": "/work", "skills": [
+                    {"name": "review", "description": "Review code", "path": "/skills/review/SKILL.md", "scope": "repo", "enabled": true,
+                     "interface": {"displayName": "Code Review", "iconSmallUrl": null, "iconLargeUrl": null}},
+                    {"name": "disabled", "description": "Hidden", "path": "/skills/disabled/SKILL.md", "scope": "user", "enabled": false}
+                ], "errors": []}, {"cwd": "/other", "skills": [
+                    {"name": "lint", "description": "Lint code", "path": "/other/.agents/skills/lint/SKILL.md", "scope": "repo", "enabled": true}
                 ], "errors": []}]}),
             ),
             (
@@ -89,7 +102,15 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
                 serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
             assert_eq!(request["method"], method);
             if method == "skills/list" {
-                assert_eq!(request["params"]["cwds"], json!(["/work"]));
+                let expected = if result["data"]
+                    .as_array()
+                    .is_some_and(|data| data.len() == 2)
+                {
+                    json!(["/work", "/other"])
+                } else {
+                    json!(["/work"])
+                };
+                assert_eq!(request["params"]["cwds"], expected);
             }
             if method == "mcpServerStatus/list" {
                 assert_eq!(request["params"]["threadId"], "thread-a");
@@ -120,6 +141,14 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
     let skills = list_skills(&connection, "/work", false).await.unwrap();
     assert_eq!(skills["data"].as_array().unwrap().len(), 1);
     assert_eq!(skills["data"][0]["displayName"], "Code Review");
+    let installed = list_installed_skills(&connection, &["/work", "/other"], true)
+        .await
+        .unwrap();
+    assert_eq!(installed["data"].as_array().unwrap().len(), 3);
+    assert_eq!(installed["data"][1]["enabled"], false);
+    assert_eq!(installed["data"][1]["path"], "/skills/disabled/SKILL.md");
+    assert_eq!(installed["data"][1]["scope"], "user");
+    assert_eq!(installed["data"][2]["cwd"], "/other");
     let servers = list_mcp_servers(&connection, "thread-a").await.unwrap();
     assert_eq!(
         servers["data"],
@@ -134,5 +163,44 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
             {"displayName": "unavailable", "name": "unavailable", "status": "unknown", "toolCount": 0},
         ])
     );
+    server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn skill_toggle_should_use_the_official_path_selector() {
+    let (client, server) = duplex(8 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+    let server_task = tokio::spawn(async move {
+        let request: Value = serde_json::from_str(
+            &BufReader::new(server_reader)
+                .lines()
+                .next_line()
+                .await
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(request["method"], "skills/config/write");
+        assert_eq!(request["params"]["path"], "/skills/review/SKILL.md");
+        assert_eq!(request["params"]["name"], Value::Null);
+        assert_eq!(request["params"]["enabled"], false);
+        server_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({"id": request["id"].clone(), "result": {"effectiveEnabled": false}})
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+
+    let response = set_skill_enabled(&connection, "/skills/review/SKILL.md", false)
+        .await
+        .unwrap();
+    assert_eq!(response["effectiveEnabled"], false);
     server_task.await.unwrap();
 }

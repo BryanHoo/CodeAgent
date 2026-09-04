@@ -1,3 +1,5 @@
+import { skillsMarket } from "./skills-market.js";
+
 export const workbench = {
   pet: {
     activeTasks: "活动任务",
@@ -442,6 +444,7 @@ export const workbench = {
     toggleProject: "切换项目 {{project}}",
     unpin: "取消固定",
   },
+  skillsMarket,
   taskBoard: {
     allProjects: "全部项目",
     approval: "待审批",

@@ -75,7 +75,9 @@ pub use auth::{
     ProviderError, cancel_provider_login, configure_custom_provider, get_provider_connection,
     list_provider_models, logout_provider, start_official_provider_login,
 };
-pub use catalogs::{list_mcp_servers, list_skills, reload_mcp_servers};
+pub use catalogs::{
+    list_installed_skills, list_mcp_servers, list_skills, reload_mcp_servers, set_skill_enabled,
+};
 pub use commit_message::{
     parse_commit_message_output, resolve_commit_message_settings, start_commit_message_thread,
     start_commit_message_turn,

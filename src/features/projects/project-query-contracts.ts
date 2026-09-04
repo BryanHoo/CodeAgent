@@ -64,7 +64,16 @@ export type NativeAppUpdateClient = Pick<NativeClient, "getAppInfo" | "installAp
 export type NativeDiagnosticsClient = Pick<NativeClient, "exportDiagnostics">;
 export type NativeMcpServersClient = Pick<NativeClient, "listMcpServers">;
 export type NativeMcpServersMutationClient = Pick<NativeClient, "retryMcpServers">;
-export type NativeSkillsClient = Pick<NativeClient, "listSkills">;
+export type NativeSkillsClient = Pick<
+  NativeClient,
+  | "getClawhubSkill"
+  | "installClawhubSkill"
+  | "listClawhubSkills"
+  | "listInstalledSkills"
+  | "listSkills"
+  | "openSkillDirectory"
+  | "setSkillEnabled"
+>;
 export type NativeSettingsClient = Pick<
   NativeClient,
   | "getGlobalSettings"

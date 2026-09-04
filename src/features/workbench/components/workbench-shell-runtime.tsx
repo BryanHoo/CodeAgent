@@ -65,7 +65,6 @@ import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 import { useSubmissionStartedAt } from "./use-submission-started-at.js";
 
 export { useSubmissionStartedAt } from "./use-submission-started-at.js";
-
 const emptyExpandedFileTreePaths = new Set<string>();
 
 export function taskLaunchQueryKey(projectId: string, taskId: string) {
@@ -112,6 +111,7 @@ export type WorkbenchShellProps = Readonly<{
   board?: boolean;
   draftId?: string;
   projectId: string;
+  skillsMarket?: boolean;
   taskId?: string;
   temporary?: boolean;
 }>;

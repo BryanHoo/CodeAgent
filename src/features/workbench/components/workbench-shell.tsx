@@ -6,6 +6,7 @@ export function WorkbenchShell({
   board = false,
   draftId,
   projectId,
+  skillsMarket = false,
   taskId,
   temporary = false,
 }: WorkbenchShellProps) {
@@ -15,6 +16,7 @@ export function WorkbenchShell({
   return (
     <WorkbenchShellLayout
       board={board}
+      skillsMarket={skillsMarket}
       context={context}
       {...(draftId === undefined ? {} : { draftId })}
       {...taskScope}

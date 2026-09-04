@@ -25,6 +25,7 @@ pub mod sidebar_commands;
 pub mod sidebar_directory_commands;
 mod sidebar_prompt_title;
 mod sidebar_task_settings;
+pub mod skills_market_commands;
 pub mod state;
 mod task_activity;
 pub mod task_activity_commands;

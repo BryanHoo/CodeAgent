@@ -12,6 +12,11 @@ import type {
   ConfigureCustomProviderRequest,
   ConfigureCustomProviderResponse,
   StartOfficialProviderLoginResponse,
+  ClawhubSkillDetail,
+  ClawhubSkillPage,
+  InstalledSkillPage,
+  SkillInstallResult,
+  SkillInstallScope,
 } from "@/protocol/index.js";
 
 import { TauriWorkspaceClient } from "./workspace-client.js";
@@ -86,6 +91,55 @@ export class TauriCatalogClient extends TauriWorkspaceClient {
     _options: ReadOptions = {},
   ): Promise<AgentSkillPage> {
     return this.call("list_skills", { forceReload: false, projectId });
+  }
+
+  public async listInstalledSkills(
+    _options: ReadOptions = {},
+  ): Promise<InstalledSkillPage> {
+    return this.call("list_installed_skills", { forceReload: false });
+  }
+
+  public async openSkillDirectory(
+    path: string,
+    _options: MutationOptions = {},
+  ): Promise<Readonly<{ status: string }>> {
+    return this.call("open_skill_directory", { path });
+  }
+
+  public async setSkillEnabled(
+    path: string,
+    enabled: boolean,
+    _options: MutationOptions = {},
+  ): Promise<Readonly<{ effectiveEnabled: boolean }>> {
+    return this.call("set_skill_enabled", { enabled, path });
+  }
+
+  public async listClawhubSkills(
+    query: string,
+    cursor: string | null,
+    sort: string,
+    _options: ReadOptions = {},
+  ): Promise<ClawhubSkillPage> {
+    return this.call("list_clawhub_skills", { cursor, query, sort });
+  }
+
+  public async getClawhubSkill(
+    owner: string,
+    slug: string,
+    _options: ReadOptions = {},
+  ): Promise<ClawhubSkillDetail> {
+    return this.call("get_clawhub_skill", { owner, slug });
+  }
+
+  public async installClawhubSkill(
+    owner: string,
+    slug: string,
+    scope: SkillInstallScope,
+    projectId?: string,
+    rootPath?: string,
+    _options: MutationOptions = {},
+  ): Promise<SkillInstallResult> {
+    return this.call("install_clawhub_skill", { owner, projectId, rootPath, scope, slug });
   }
 
   public async listMcpServers(

@@ -19,8 +19,16 @@ struct PageParams {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SkillsParams<'a> {
-    cwds: [&'a str; 1],
+    cwds: Vec<&'a str>,
     force_reload: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillConfigParams<'a> {
+    path: &'a str,
+    name: Option<&'a str>,
+    enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -48,33 +56,87 @@ pub async fn list_skills(
     cwd: &str,
     force_reload: bool,
 ) -> Result<Value, ConnectionError> {
+    let skills = request_skills(connection, &[cwd], force_reload)
+        .await?
+        .into_iter()
+        .filter(|(_, skill)| skill.get("enabled").and_then(Value::as_bool) != Some(false))
+        .filter_map(|(_, skill)| map_skill(&skill))
+        .take(MAX_CATALOG_ITEMS)
+        .collect::<Vec<_>>();
+    Ok(json!({"data": skills, "nextCursor": null}))
+}
+
+pub async fn list_installed_skills(
+    connection: &AppServerConnection,
+    cwds: &[&str],
+    force_reload: bool,
+) -> Result<Value, ConnectionError> {
+    let skills = request_skills(connection, cwds, force_reload)
+        .await?
+        .into_iter()
+        .filter_map(|(cwd, skill)| {
+            let mut mapped = map_installed_skill(&skill)?;
+            mapped.as_object_mut()?.insert("cwd".to_owned(), json!(cwd));
+            Some(mapped)
+        })
+        .take(MAX_CATALOG_ITEMS)
+        .collect::<Vec<_>>();
+    Ok(json!({"data": skills, "nextCursor": null}))
+}
+
+pub async fn set_skill_enabled(
+    connection: &AppServerConnection,
+    path: &str,
+    enabled: bool,
+) -> Result<Value, ConnectionError> {
+    connection
+        .request(
+            "skills/config/write",
+            &SkillConfigParams {
+                path,
+                name: None,
+                enabled,
+            },
+            REQUEST_TIMEOUT,
+        )
+        .await
+}
+
+async fn request_skills(
+    connection: &AppServerConnection,
+    cwds: &[&str],
+    force_reload: bool,
+) -> Result<Vec<(String, Value)>, ConnectionError> {
     let response: Value = connection
         .request(
             "skills/list",
             &SkillsParams {
-                cwds: [cwd],
+                cwds: cwds.to_vec(),
                 force_reload,
             },
             REQUEST_TIMEOUT,
         )
         .await?;
-    let skills = response
+    Ok(response
         .get("data")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
         .flat_map(|entry| {
+            let cwd = entry
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
             entry
                 .get("skills")
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
+                .cloned()
+                .map(move |skill| (cwd.clone(), skill))
         })
-        .filter(|skill| skill.get("enabled").and_then(Value::as_bool) != Some(false))
-        .filter_map(map_skill)
-        .take(MAX_CATALOG_ITEMS)
-        .collect::<Vec<_>>();
-    Ok(json!({"data": skills, "nextCursor": null}))
+        .collect())
 }
 
 pub async fn list_mcp_servers(
@@ -183,6 +245,25 @@ fn map_skill(skill: &Value) -> Option<Value> {
         "id": skill.get("path").and_then(Value::as_str).unwrap_or(name),
         "name": name,
         "scope": skill.get("scope").and_then(Value::as_str).unwrap_or("user"),
+    }))
+}
+
+fn map_installed_skill(skill: &Value) -> Option<Value> {
+    let path = skill.get("path")?.as_str()?;
+    let name = skill.get("name")?.as_str()?;
+    let display_name = skill
+        .pointer("/interface/displayName")
+        .and_then(Value::as_str)
+        .unwrap_or(name);
+    Some(json!({
+        "description": skill.get("description").and_then(Value::as_str).unwrap_or_default(),
+        "displayName": display_name,
+        "enabled": skill.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+        "id": path,
+        "name": name,
+        "path": path,
+        "scope": skill.get("scope").and_then(Value::as_str).unwrap_or("user"),
+        "source": "local",
     }))
 }
 

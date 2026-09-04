@@ -43,6 +43,15 @@
 - 正式 release 必须生成 updater artifact、`.sig` 与 `latest.json`，使用仓库 Secret 中的长期签名私钥；Windows 必须同时发布无 Authenticode 签名的 portable EXE 与可更新的 NSIS 安装包，portable 不得作为更新目标
 - 每个发布版本必须在 `CHANGELOG.md` 中包含 `## [版本] - YYYY-MM-DD` 条目，GitHub release 正文必须由该条目生成
 
+## Skills 市场契约
+
+- 已安装 Skill 必须以 Codex `skills/list` 为发现来源，一次传入全部左栏 Project roots，按绝对路径去重并保留 `path`、`scope`、`enabled` 与 Project 归属；启停必须使用 `skills/config/write` 的绝对路径选择器，文件管理器打开前必须再次匹配已发现路径
+- 已安装 Skill 必须依次按“系统”“全局”和左栏 Project 顺序分组展示，各分组默认展开；Project Skill 必须显示在所属 Project 分组中，不得合并为通用“项目”分组
+- ClawHub 包必须以 `ownerHandle/slug` 作为完整身份；列表与搜索只能读取目录中的名称、简介与统计信息，不得下载 `SKILL.md`；详情与安装阶段必须排除声明 OpenClaw 专属 `config`、`envVars`、`primaryEnv`、`install`、`nix`、`skillKey`、`requires.env`、`requires.bins`、`requires.anyBins` 或 `requires.config` 的 Skill
+- 安装前必须重新读取详情与安全扫描，仅允许 `clean` 包；托管 ZIP 与 `public-github` handoff 均限制响应大小、文件数和解压体积，拒绝路径穿越与符号链接，GitHub handoff 还必须限制 HTTPS host、提取指定子目录并验证 `contentHash`
+- 全局 Skill 安装到 `~/.agents/skills/<slug>`，项目 Skill 必须从左栏 Project 中显式选择，并安装到其已校验 root 下 `.agents/skills/<slug>`；安装使用同目录 staging 与原子替换，并写入 `.clawhub/origin.json`，更新前必须验证发布者身份和已安装内容指纹，存在本地修改时不得覆盖
+- 安装请求期间仅实际触发的目标按钮显示 loading，其他安装入口保持禁用；安装成功后关闭详情弹窗，安装失败时保留弹窗以便重试
+
 ## 验证要求
 
 - 覆盖远程 release 新旧版本映射、仅 `0.1.0` 允许空 release、关于页常驻日志入口、安装 IPC 单调进度，以及签名 artifact 与 `latest.json` 发布约束
@@ -55,3 +64,4 @@
 - 覆盖全屏主窗口关闭后从状态栏或通知恢复为非全屏普通窗口，以及未关闭时通知聚焦保持全屏状态
 - 覆盖 Rust 任务活动的运行、等待、完成、失败、运行时崩溃和 WebView 重建恢复
 - 覆盖五类审批请求、普通用户输入排除、运行开始时间恢复及看板运行时长投影
+- 覆盖 Skills 市场兼容性过滤、Codex 路径启停、ZIP 路径穿越、GitHub 子目录提取、内容指纹冲突以及安装/更新浏览器交互

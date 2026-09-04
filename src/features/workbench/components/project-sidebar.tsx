@@ -47,6 +47,7 @@ import { ProjectSidebarDialogs } from "./project-sidebar-dialogs.js";
 import { ArchivedTasksDialog, type ArchivedTaskScope } from "./archived-tasks-dialog.js";
 import { ProjectSidebarTaskList } from "./project-sidebar-task-list.js";
 import { SidebarTaskBoardLink } from "./sidebar-task-board-link.js";
+import { SidebarSkillsMarketLink } from "./sidebar-skills-market-link.js";
 import { TaskDeleteDialog } from "./task-delete-dialog.js";
 import { SidebarSettingsButton, type SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { groupTasksByProjectId } from "./project-sidebar-state.js";
@@ -363,6 +364,11 @@ export function ProjectSidebar({
           <Send className={primaryActionIconClassName} aria-hidden="true" />
           {t("sidebar.newTask")}
         </Link>
+        <SidebarSkillsMarketLink
+          className={primaryActionClassName}
+          iconClassName={primaryActionIconClassName}
+          {...(projectId === undefined ? {} : { projectId })}
+        />
         <SidebarTaskBoardLink
           className={primaryActionClassName}
           iconClassName={primaryActionIconClassName}

@@ -4,6 +4,7 @@ pub mod diagnostics;
 pub mod filesystem;
 pub mod local_settings;
 pub mod provider_models;
+pub mod skills_market;
 pub mod task_settings;
 pub mod workspace;
 
