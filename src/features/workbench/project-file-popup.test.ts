@@ -24,12 +24,13 @@ describe("project file popup", () => {
       projectId: "project-a",
       reference: { lineNumber: 12, path: "src/main.ts" },
       rootPath: "/workspace/project-a",
+      taskId: "task-a",
     });
 
     expect(invoke).toHaveBeenCalledOnce();
     expect(invoke).toHaveBeenCalledWith("open_project_file_window", {
       route: expect.stringMatching(
-        /^p\/project-a\/file\?.*path=src%2Fmain\.ts.*window=project-file/u,
+        /^p\/project-a\/file\?.*path=src%2Fmain\.ts.*taskId=task-a.*window=project-file/u,
       ),
     });
   });

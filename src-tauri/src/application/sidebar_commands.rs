@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State};
 
 use super::{
     error::AppError, scheduled_task_runner::start_turn_for_task,
-    sidebar_task_settings::effective_task_settings, state::AppState,
+    sidebar_task_settings::effective_task_settings, state::AppState, task_workspace,
 };
 use crate::{
     domain::conversation::{
@@ -146,13 +146,12 @@ pub async fn read_task(
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn start_task(
+    app: AppHandle,
     project_id: String,
     state: State<'_, AppState>,
 ) -> Result<AgentTaskMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    let response = codex::start_task(&connection, project_id.clone())
-        .await
-        .map_err(AppError::from)?;
+    let response = task_workspace::start_task(&app, &connection, project_id.clone()).await?;
     state
         .remember_task_metadata(
             &project_id,
@@ -417,13 +416,19 @@ pub async fn delete_task(
     state: State<'_, AppState>,
 ) -> Result<AgentTaskStatusResponse, AppError> {
     let connection = state.codex_connection().await?;
-    let response = codex::delete_task(&connection, project_id.clone(), task_id.clone())
+    let deleted = codex::delete_task(&connection, project_id.clone(), task_id.clone())
         .await
         .map_err(AppError::from)?;
+    task_workspace::remove_deleted_workspace(
+        &app,
+        &project_id,
+        deleted.working_directory.as_deref(),
+    )
+    .await?;
     delete_task_settings(&app_data_dir(&app)?, &project_id, &task_id)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    Ok(response)
+    Ok(deleted.response)
 }
 
 fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {

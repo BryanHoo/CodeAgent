@@ -4,12 +4,9 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State, ipc::InvokeBody, ipc::Request};
 
-use super::{error::AppError, state::AppState};
+use super::{error::AppError, state::AppState, task_workspace};
 use crate::infrastructure::filesystem::list_host_files as read_host_files;
-use crate::{
-    domain::conversation::AgentPromptInput,
-    infrastructure::{codex, workspace},
-};
+use crate::{domain::conversation::AgentPromptInput, infrastructure::workspace};
 
 const MAX_TEXT_BYTES: u64 = 1024 * 1024;
 const MAX_AUDIO_BYTES: u64 = 50 * 1024 * 1024;
@@ -139,27 +136,21 @@ pub async fn cache_project_image(
     app: AppHandle,
     project_id: String,
     root_path: Option<String>,
+    task_id: Option<String>,
     path: String,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let connection = state.codex_connection().await?;
-    let project = codex::read_project(&connection, &project_id)
-        .await
-        .map_err(AppError::from)?;
-    let root = project
-        .roots
-        .iter()
-        .find(|root| root_path.as_ref().is_none_or(|path| root.path == *path))
-        .ok_or(AppError::FilesystemRequestFailed)?;
-    let canonical_root = workspace::canonical_root(&root.path)
-        .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
-    let relative = Path::new(&path)
-        .strip_prefix(&canonical_root)
-        .ok()
-        .and_then(Path::to_str)
-        .unwrap_or(&path);
-    let image_path = workspace::resolve_existing(&canonical_root, Some(relative))
+    let canonical_root = task_workspace::resolve_preview_root(
+        &app,
+        &state,
+        &project_id,
+        task_id.as_deref(),
+        root_path.as_deref(),
+        &path,
+    )
+    .await?;
+    let relative = task_workspace::relative_preview_path(&canonical_root, &path)?;
+    let image_path = workspace::resolve_existing(&canonical_root, Some(&relative))
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
     if !image_path.is_file() || !is_image_path(&image_path) {

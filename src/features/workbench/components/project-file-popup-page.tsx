@@ -31,6 +31,7 @@ export function ProjectFilePopupPage({
         projectId={projectId}
         reference={{ lineNumber: search.lineNumber, path: search.path }}
         {...(search.rootPath === undefined ? {} : { rootPath: search.rootPath })}
+        {...(search.taskId === undefined ? {} : { taskId: search.taskId })}
       />
     </main>
   );

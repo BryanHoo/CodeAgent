@@ -41,6 +41,7 @@ mod task_subscription;
 pub mod task_subscription_commands;
 #[cfg(test)]
 mod task_subscription_tests;
+mod task_workspace;
 pub mod tray_commands;
 #[cfg(test)]
 mod tray_commands_tests;

@@ -265,6 +265,7 @@ export function WorkbenchInspector({
               projectId={projectId ?? projectName}
               reference={fileSelection.reference}
               {...(sourceRootPath === undefined ? {} : { rootPath: sourceRootPath })}
+              {...(taskId === undefined ? {} : { taskId })}
             />
           )
         ) : activeTab === "project" ? (

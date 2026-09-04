@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -160,6 +160,7 @@ struct TurnInterruptParams<'a> {
 pub async fn start_task(
     connection: &AppServerConnection,
     project_id: String,
+    temporary_cwd: Option<&Path>,
 ) -> Result<AgentTaskMutationResponse, ConnectionError> {
     let root_paths = if project_id == TEMPORARY_PROJECT_ID {
         Vec::new()
@@ -180,12 +181,21 @@ pub async fn start_task(
         project.roots.into_iter().map(|root| root.path).collect()
     };
     let native_project_id = (project_id != TEMPORARY_PROJECT_ID).then_some(project_id.as_str());
+    let cwd = if project_id == TEMPORARY_PROJECT_ID {
+        let cwd = temporary_cwd
+            .filter(|path| path.is_absolute())
+            .and_then(Path::to_str)
+            .ok_or(ConnectionError::InvalidMessage)?;
+        Some(cwd)
+    } else {
+        root_paths.first().map(String::as_str)
+    };
     let response: NativeTaskResponse = connection
         .request(
             "thread/start",
             &ThreadStartParams {
                 config: thread_config(),
-                cwd: root_paths.first().map(String::as_str),
+                cwd,
                 history_mode: "paginated",
                 project_id: native_project_id,
                 runtime_workspace_roots: (!root_paths.is_empty()).then_some(root_paths.as_slice()),

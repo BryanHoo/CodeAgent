@@ -111,5 +111,5 @@ pub use sidebar::{
 };
 pub use tasks::{
     archive_task, delete_task, list_completed_tasks, list_tasks, pin_task, read_task, rename_task,
-    unarchive_task, unsubscribe_task,
+    task_working_directory, unarchive_task, unsubscribe_task,
 };

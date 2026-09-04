@@ -37,6 +37,7 @@ type ProjectSourcePanelProps = Readonly<{
   projectId: string;
   reference: MessageFileReference;
   rootPath?: string;
+  taskId?: string;
 }>;
 
 function getFileName(path: string): string {
@@ -161,6 +162,7 @@ export function ProjectSourcePanel({
   projectId,
   reference,
   rootPath,
+  taskId,
 }: ProjectSourcePanelProps) {
   const { t } = useTranslation("workbench");
   const [preferMarkdownPreview, setPreferMarkdownPreview] = useState(() =>
@@ -176,15 +178,35 @@ export function ProjectSourcePanel({
     ) => getNextSourceCursor(lastPage, lastPageParam),
     initialPageParam: undefined as number | undefined,
     queryFn: async ({ pageParam, signal }): Promise<ProjectSourceFile> =>
-      client.readProjectSourceFile(projectId, rootPath, reference.path, pageParam, { signal }),
-    queryKey: ["projects", projectId, rootPath ?? null, "source-file", reference.path] as const,
+      client.readProjectSourceFile(projectId, rootPath, reference.path, pageParam, {
+        signal,
+        ...(taskId === undefined ? {} : { taskId }),
+      }),
+    queryKey: [
+      "projects",
+      projectId,
+      taskId ?? null,
+      rootPath ?? null,
+      "source-file",
+      reference.path,
+    ] as const,
     staleTime: 30_000,
   });
   const imageQuery = useQuery({
     enabled: previewKind === "image",
     queryFn: ({ signal }) =>
-      client.cacheProjectImage(projectId, rootPath, reference.path, { signal }),
-    queryKey: ["projects", projectId, rootPath ?? null, "image-file", reference.path] as const,
+      client.cacheProjectImage(projectId, rootPath, reference.path, {
+        signal,
+        ...(taskId === undefined ? {} : { taskId }),
+      }),
+    queryKey: [
+      "projects",
+      projectId,
+      taskId ?? null,
+      rootPath ?? null,
+      "image-file",
+      reference.path,
+    ] as const,
     staleTime: 30_000,
   });
   const sourcePages = sourceQuery.data?.pages;

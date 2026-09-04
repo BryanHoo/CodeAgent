@@ -392,7 +392,10 @@ async fn temporary_task_should_start_without_project_context() {
             true
         );
         assert!(request["params"]["projectId"].is_null());
-        assert!(request["params"]["cwd"].is_null());
+        assert_eq!(
+            request["params"]["cwd"],
+            "/app-data/temporary-workspaces/task-1"
+        );
         assert!(request["params"]["runtimeWorkspaceRoots"].is_null());
         server_writer
             .write_all(
@@ -409,7 +412,8 @@ async fn temporary_task_should_start_without_project_context() {
             .unwrap();
     });
 
-    let response = start_task(&connection, "temporary".to_owned())
+    let temporary_cwd = std::path::Path::new("/app-data/temporary-workspaces/task-1");
+    let response = start_task(&connection, "temporary".to_owned(), Some(temporary_cwd))
         .await
         .expect("temporary task should start");
     assert_eq!(response.task.project_id, "temporary");

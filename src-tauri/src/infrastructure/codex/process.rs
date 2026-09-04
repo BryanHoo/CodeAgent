@@ -408,12 +408,13 @@ mod tests {
         assert!(mapped_skills["data"].is_array());
 
         // 使用产品真实命令创建并立即删除临时任务，验证持久化生命周期参数。
-        let task = conversation_commands::start_task(&connection, "temporary".to_owned())
-            .await
-            .expect("CodeAgent temporary task should start");
+        let task =
+            conversation_commands::start_task(&connection, "temporary".to_owned(), Some(&cwd))
+                .await
+                .expect("CodeAgent temporary task should start");
         let deleted = tasks::delete_task(&connection, "temporary".to_owned(), task.task.id)
             .await
             .expect("CodeAgent temporary task should be removable");
-        assert_eq!(deleted.status, "deleted");
+        assert_eq!(deleted.response.status, "deleted");
     }
 }

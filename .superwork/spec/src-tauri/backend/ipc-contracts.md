@@ -47,6 +47,7 @@
 - app-server 只维持一个长生命周期 Channel；事件序号、通知队列、历史页、命令输出和附件必须保持有界
 - 分页历史使用 `thread/turns/list(itemsView: "notLoaded")`，再并发调用 `thread/items/list` 补全同页 Turn；必须拒绝空游标、重复游标和错误 `turnId`
 - 文件、Git、附件和自定义资源均由 Rust 校验项目根或资源目录边界，WebView 不得获得通用 shell 与任意文件访问能力
+- 临时任务必须在 `app_data_dir()/temporary-workspaces/` 分配独立 `cwd`；生成文件预览必须由 Rust 通过 `thread/read.cwd` 解析根目录，并验证为受控目录的直接子目录；删除任务只能清理通过该验证的目录
 - 附件必须映射为 Codex 0.151 原生 `text`、`localImage` 或 `localAudio` 输入；图片固定使用 `detail: auto`，普通二进制仅作为带身份元数据的本地路径引用，不得伪装成上游不存在的 `input_file`
 - 附件 raw IPC、缓存和提交边界必须校验名称、类型、实际大小与聚合预算；文本不超过 1 MiB，文件合计不超过 50 MiB，图片合计不超过 512 MiB 且最多 1500 张
 - `McpServerStatus.runtimeStatus` 必须精确映射 `notStarted`、`starting`、`connected`、`authenticationRequired`、`failed`、`cancelled` 与 `disabled`；`null` 映射为 `unknown`，未登录时按官方 TUI 规则映射为 `authenticationRequired`，不得用启动通知缓存覆盖线程权威快照

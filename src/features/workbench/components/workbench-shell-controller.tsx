@@ -161,6 +161,7 @@ export function useWorkbenchShellController(
           projectId,
           reference,
           ...(selectedRootPath === undefined ? {} : { rootPath: selectedRootPath }),
+          ...(taskId === undefined ? {} : { taskId }),
         });
         return;
       }
@@ -184,6 +185,7 @@ export function useWorkbenchShellController(
       setInspectorOpen,
       setInspectorTab,
       setInspectorFileSelection,
+      taskId,
     ],
   );
   const openProjectFile = useCallback(

@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +47,8 @@ struct NativeThreadPage {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct NativeThread {
+    #[serde(default)]
+    cwd: Option<String>,
     id: String,
     name: Option<String>,
     preview: String,
@@ -54,6 +56,11 @@ pub(super) struct NativeThread {
     section: Option<NativeThreadSection>,
     status: NativeThreadStatus,
     updated_at: i64,
+}
+
+pub struct DeletedTask {
+    pub response: AgentTaskStatusResponse,
+    pub working_directory: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -220,6 +227,19 @@ pub async fn read_task(
     Ok(map_task(thread, &project_id))
 }
 
+pub async fn task_working_directory(
+    connection: &AppServerConnection,
+    project_id: &str,
+    task_id: &str,
+) -> Result<PathBuf, ConnectionError> {
+    read_native_task(connection, project_id, task_id)
+        .await?
+        .cwd
+        .filter(|cwd| !cwd.is_empty())
+        .map(PathBuf::from)
+        .ok_or(ConnectionError::InvalidMessage)
+}
+
 pub async fn rename_task(
     connection: &AppServerConnection,
     project_id: String,
@@ -311,8 +331,11 @@ pub async fn delete_task(
     connection: &AppServerConnection,
     project_id: String,
     task_id: String,
-) -> Result<AgentTaskStatusResponse, ConnectionError> {
-    read_native_task(connection, &project_id, &task_id).await?;
+) -> Result<DeletedTask, ConnectionError> {
+    let working_directory = read_native_task(connection, &project_id, &task_id)
+        .await?
+        .cwd
+        .map(PathBuf::from);
     request_empty(
         connection,
         "thread/delete",
@@ -321,9 +344,12 @@ pub async fn delete_task(
         },
     )
     .await?;
-    Ok(AgentTaskStatusResponse {
-        status: "deleted",
-        task_id,
+    Ok(DeletedTask {
+        response: AgentTaskStatusResponse {
+            status: "deleted",
+            task_id,
+        },
+        working_directory,
     })
 }
 

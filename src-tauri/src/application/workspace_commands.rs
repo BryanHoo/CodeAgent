@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State};
 use tokio::time::timeout;
 
-use super::{error::AppError, state::AppState};
+use super::{error::AppError, state::AppState, task_workspace};
 use crate::infrastructure::{codex, local_settings, workspace};
 
 #[derive(Deserialize)]
@@ -165,41 +165,24 @@ pub async fn delete_project_file(
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn read_project_source_file(
+    app: AppHandle,
     project_id: String,
     root_path: Option<String>,
+    task_id: Option<String>,
     path: String,
     cursor: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let connection = state.codex_connection().await?;
-    let project = codex::read_project(&connection, &project_id)
-        .await
-        .map_err(AppError::from)?;
-    let configured_root = match root_path {
-        Some(root_path) => project
-            .roots
-            .into_iter()
-            .find(|root| root.path == root_path)
-            .ok_or(AppError::FilesystemRequestFailed)?,
-        None => project
-            .roots
-            .into_iter()
-            .find(|root| PathBuf::from(&path).starts_with(&root.path))
-            .ok_or(AppError::FilesystemRequestFailed)?,
-    };
-    let root = workspace::canonical_root(&configured_root.path)
-        .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
-    let relative = PathBuf::from(&path);
-    let relative = if relative.is_absolute() {
-        relative
-            .strip_prefix(&root)
-            .map_err(|_| AppError::FilesystemRequestFailed)?
-            .to_string_lossy()
-            .into_owned()
-    } else {
-        path
-    };
+    let root = task_workspace::resolve_preview_root(
+        &app,
+        &state,
+        &project_id,
+        task_id.as_deref(),
+        root_path.as_deref(),
+        &path,
+    )
+    .await?;
+    let relative = task_workspace::relative_preview_path(&root, &path)?;
     let response = workspace::read_source_file(&root, &relative, cursor)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;

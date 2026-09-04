@@ -3,6 +3,7 @@ import type {
   AgentAttachmentUploadInput,
   ListFilesystemEntriesOptions,
   MutationOptions,
+  ProjectFileReadOptions,
   ReadOptions,
 } from "@/platform/native-client-types.js";
 import type {
@@ -49,12 +50,13 @@ export class TauriWorkspaceClient extends TauriNativeClient {
     projectId: string,
     rootPath: string | undefined,
     path: string,
-    _options: ReadOptions = {},
+    options: ProjectFileReadOptions = {},
   ): Promise<string> {
     const response = await this.call<AgentAttachmentUploadResponse>("cache_project_image", {
       path,
       projectId,
       rootPath: rootPath ?? null,
+      taskId: options.taskId ?? null,
     });
     return buildNativeAssetUrl(response.attachment.id);
   }
@@ -310,13 +312,14 @@ export class TauriWorkspaceClient extends TauriNativeClient {
     rootPath: string | undefined,
     path: string,
     cursor?: number,
-    _options: ReadOptions = {},
+    options: ProjectFileReadOptions = {},
   ): Promise<ProjectSourceFile> {
     return this.call("read_project_source_file", {
       cursor: cursor ?? null,
       path,
       projectId,
       rootPath: rootPath ?? null,
+      taskId: options.taskId ?? null,
     });
   }
 }

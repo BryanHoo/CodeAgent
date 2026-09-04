@@ -23,7 +23,7 @@
 - MCP URL elicitation 必须使用 `new URL()` 严格解析并仅允许 `http/https`，在用户操作前展示完整 URL、突出 `hostname` 并明确征得同意；同意后必须先通过 `src/platform/tauri/` 在系统浏览器打开，成功后才能提交 `accept`，不得使用 WebView 链接导航
 - 当前 Task 的 MCP 右栏必须使用线程级权威清单，精确展示连接态与工具数；不得在 WebView 缓存启动通知、展开完整工具定义或混入任务时间线中的 `mcpToolCall` 执行记录
 - 服务端快照通过 TanStack Query 读取，实时任务状态通过功能域 Runtime/Store 的选择器读取，避免订阅无关状态
-- `temporary` 是合成任务作用域；依赖真实 Project 或根目录的查询必须在该作用域禁用
+- `temporary` 是合成任务作用域；依赖真实 Project 或根目录的查询必须在该作用域禁用。任务生成文件预览是唯一例外，前端必须在面板、独立窗口 URL 与 Tauri IPC 中完整透传 `taskId`，不得传递或推断可信文件根目录
 - Inspector 始终显示可用 Tab；数据模块仅在存在实体时渲染，无内容时在面板内容区显示空状态
 - Inspector 的项目 Tab 固定排在上下文 Tab 前；普通 Task 启动后保持项目 Tab，仅当计划或目标出现时自动切换到上下文 Tab
 - 同一 Project 内切换 Task 时必须保留 Inspector 外壳与项目文件树挂载，仅重置任务上下文，避免无变化的项目数据重新加载和闪烁

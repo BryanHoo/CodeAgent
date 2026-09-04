@@ -89,7 +89,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
         }
     });
 
-    let task = start_task(&connection, "project-a".to_owned())
+    let task = start_task(&connection, "project-a".to_owned(), None)
         .await
         .expect("task should start");
     assert_eq!(task.task.id, "thread-a");
@@ -159,7 +159,7 @@ async fn new_task_first_turn_should_skip_thread_resume() {
         }
     });
 
-    let task = start_task(&connection, "project-a".to_owned())
+    let task = start_task(&connection, "project-a".to_owned(), None)
         .await
         .expect("task should start");
     let turn = start_turn(

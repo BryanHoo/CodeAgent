@@ -3,7 +3,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
 use super::{
     archive_task, delete_task, list_completed_tasks, list_tasks, pin_task, rename_task,
-    unarchive_task, unsubscribe_task,
+    task_working_directory, unarchive_task, unsubscribe_task,
 };
 use crate::{
     domain::sidebar::{ListCompletedTasksInput, ListTasksInput},
@@ -172,6 +172,44 @@ fn task_thread_with(id: &str, project_id: &str, status: &str, updated_at: i64) -
         "status": {"type": status},
         "updatedAt": updated_at
     })
+}
+
+#[tokio::test]
+async fn task_working_directory_should_read_native_thread_cwd() {
+    let (client, server) = duplex(8 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+    let server_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(server_reader).lines();
+        let request: Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(request["method"], "thread/read");
+        server_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({"id": request["id"].clone(), "result": {"thread": {
+                        "cwd": "/app-data/temporary-workspaces/task-1",
+                        "id": "thread-temp", "name": null, "preview": "",
+                        "projectId": null, "section": null,
+                        "status": {"type": "idle"}, "updatedAt": 1735689600
+                    }}})
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+
+    let cwd = task_working_directory(&connection, "temporary", "thread-temp")
+        .await
+        .unwrap();
+    assert_eq!(
+        cwd,
+        std::path::Path::new("/app-data/temporary-workspaces/task-1")
+    );
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -346,6 +384,7 @@ async fn task_mutations_should_complete_native_protocol_round_trips() {
         delete_task(&connection, "project-a".into(), "thread-a".into())
             .await
             .unwrap()
+            .response
             .status,
         "deleted"
     );

@@ -55,7 +55,9 @@ describe("TauriWorkspaceClient", () => {
       path: "src/main.rs",
     });
     await client.deleteProjectFile("project-a", "/work/a", { path: "src/old.rs" });
-    await client.readProjectSourceFile("project-a", "/work/a", "src/lib.rs", 10);
+    await client.readProjectSourceFile("project-a", "/work/a", "src/lib.rs", 10, {
+      taskId: "task-a",
+    });
 
     expect(invoke).toHaveBeenNthCalledWith(1, "list_project_files", {
       directoryPath: "src",
@@ -83,6 +85,7 @@ describe("TauriWorkspaceClient", () => {
       path: "src/lib.rs",
       projectId: "project-a",
       rootPath: "/work/a",
+      taskId: "task-a",
     });
   });
 
