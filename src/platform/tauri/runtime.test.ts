@@ -53,4 +53,31 @@ describe("Tauri runtime recovery", () => {
     expect(sequences[0]).toBe(2);
     expect(sequences.at(-1)).toBe(1_025);
   });
+
+  it("routes native retention overflow to resync subscribers", async () => {
+    const runtime = await import("./runtime.js");
+    await runtime.ensureCodexRuntime();
+    const onResyncRequired = vi.fn();
+    runtime.subscribeAgentEvents({
+      afterSequence: 17,
+      onEvent: vi.fn(),
+      onResyncRequired,
+    });
+
+    channelHandler?.({
+      data: {
+        latestSequence: 17,
+        projectId: "project-a",
+        reason: "event_retention_exceeded",
+        sessionId: "codeagent-runtime",
+        type: "resync.required",
+        version: 3,
+      },
+      type: "resyncRequired",
+    });
+
+    expect(onResyncRequired).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "project-a", type: "resync.required" }),
+    );
+  });
 });

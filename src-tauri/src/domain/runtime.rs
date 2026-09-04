@@ -213,6 +213,18 @@ pub enum AppEvent {
     AgentEvent {
         event: AgentEvent,
     },
+    ResyncRequired {
+        #[serde(rename = "latestSequence")]
+        latest_sequence: u64,
+        #[serde(rename = "projectId")]
+        project_id: String,
+        reason: &'static str,
+        #[serde(rename = "sessionId")]
+        session_id: &'static str,
+        #[serde(rename = "type")]
+        message_type: &'static str,
+        version: u16,
+    },
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     path::Path,
     pin::Pin,
     sync::{
@@ -21,6 +21,7 @@ use tokio::{
 
 use crate::infrastructure::diagnostics;
 
+use super::connection_event_buffer::NotificationBuffer;
 use super::generated_image_store::GeneratedImageStore;
 use super::protocol::{
     ClientInfo, IGNORED_NOTIFICATION_METHODS, IncomingMessage, InitializeCapabilities,
@@ -328,7 +329,7 @@ async fn read_responses<R>(
 {
     let mut reader = BufReader::new(reader);
     let mut line = Vec::with_capacity(8 * 1024);
-    let mut queued_notifications = VecDeque::with_capacity(NOTIFICATION_OVERFLOW_CAPACITY);
+    let mut queued_notifications = NotificationBuffer::new(NOTIFICATION_OVERFLOW_CAPACITY);
 
     loop {
         line.clear();
@@ -426,11 +427,8 @@ async fn read_responses<R>(
                     Err(mpsc::error::TrySendError::Closed(_)) => continue,
                 }
             }
-            // channel 满时写入有界环形缓冲，stdout reader 继续读取并优先路由 response。
-            if queued_notifications.len() == NOTIFICATION_OVERFLOW_CAPACITY {
-                queued_notifications.pop_front();
-            }
-            queued_notifications.push_back(notification);
+            // channel 满时只淘汰可恢复 delta；生命周期与审批事实流必须完整保留。
+            queued_notifications.push(notification);
             continue;
         }
         route_response(&pending, message);

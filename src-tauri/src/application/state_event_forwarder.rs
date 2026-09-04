@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::AppHandle;
 use tokio::{
@@ -23,7 +24,10 @@ use super::{
 };
 use crate::{
     domain::runtime::{AgentEvent, AppEvent, ProviderKind, RuntimeStatus},
-    infrastructure::codex::{MappedServerRequest, PendingServerRequest, ServerMessage},
+    infrastructure::codex::{
+        EVENT_RETENTION_EXCEEDED_METHOD, MappedServerRequest, PendingServerRequest,
+        RUNTIME_SESSION_ID, ServerMessage,
+    },
 };
 
 pub(super) fn spawn_event_forwarder(
@@ -52,6 +56,13 @@ pub(super) fn spawn_event_forwarder(
             let Some(message) = message else {
                 break;
             };
+
+            if message.method == EVENT_RETENTION_EXCEEDED_METHOD {
+                if !publish_resync_required(&runtime, &message).await {
+                    break;
+                }
+                continue;
+            }
 
             // JSON 建树和协议映射可能随 delta 体积增长，必须在全局状态锁之外完成。
             observe_model_turn(&runtime, &message).await;
@@ -100,6 +111,48 @@ pub(super) fn spawn_event_forwarder(
 
         finish_runtime(&runtime, app.as_ref()).await;
     })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResyncTaskScope<'a> {
+    thread_id: &'a str,
+}
+
+async fn publish_resync_required(
+    runtime: &Arc<Mutex<RuntimeSession>>,
+    message: &ServerMessage,
+) -> bool {
+    let Ok(scope) = serde_json::from_str::<ResyncTaskScope<'_>>(message.params.get()) else {
+        return true;
+    };
+    let (sender, event) = {
+        let session = runtime.lock().await;
+        let Some(project_id) = session.task_projects.get(scope.thread_id).cloned() else {
+            return true;
+        };
+        let latest_sequence = session
+            .project_sequences
+            .get(&project_id)
+            .copied()
+            .unwrap_or_default();
+        (
+            session.event_sender.clone(),
+            AppEvent::ResyncRequired {
+                latest_sequence,
+                project_id,
+                reason: "event_retention_exceeded",
+                session_id: RUNTIME_SESSION_ID,
+                message_type: "resync.required",
+                version: 3,
+            },
+        )
+    };
+    let Some(sender) = sender else {
+        return true;
+    };
+    // Resync 与生命周期事件共用可靠背压队列，不能再次退化为 try_send 丢弃。
+    sender.send(event).await.is_ok()
 }
 
 async fn publish_mapped_event(

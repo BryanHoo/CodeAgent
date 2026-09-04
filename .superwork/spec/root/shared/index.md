@@ -28,6 +28,7 @@
 
 - Rust 映射实时 Delta 时写入 Unix 毫秒字段 `receivedAtUnixMs`；合并 Delta 保留该合并组首个事件的接收时间，前端只对实际进入可见 Task Store 的事件计算 React commit 延迟
 - `get_runtime_performance_metrics` 按项目返回 Provider 接收数、IPC 发布数、最近 1 秒 events/s、合并率与有界事件队列高水位
+- App-server 背压缓冲只允许淘汰可由快照恢复的 Delta；`turn/*`、`item/*` 生命周期、服务端请求与终态通知不得丢弃。发生淘汰时必须按 Project 发送 `resync.required`，原因固定为 `event_retention_exceeded`
 
 ## MCP Elicitation 契约
 
@@ -71,6 +72,7 @@
 - 覆盖宿主附件超限错误码透传、本地化提示及超长路径下选择器操作按钮不溢出行为
 - 覆盖生成图片落盘、Base64 移除和时间线附件映射行为
 - 覆盖性能分位数、IPC 合并统计、源码虚拟化 DOM 上限和生产 Chunk 预算
+- 覆盖超过 512 条 Delta、生命周期与审批请求混合事件的背压压力测试，断言事实流完整且 Delta 淘汰触发 `resync.required`
 - 覆盖 MCP form/URL Resolution Schema 差异，以及 URL 外部打开成功后才提交 `accept` 的交互顺序
 - 覆盖状态栏计数清零、Provider 终态归约、左键菜单、前后台系统通知、运行态恢复、菜单目标解析和普通/`temporary` 任务跳转
 - 覆盖全屏主窗口关闭后从状态栏或通知恢复为非全屏普通窗口，以及未关闭时通知聚焦保持全屏状态

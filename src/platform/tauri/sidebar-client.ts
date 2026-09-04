@@ -12,7 +12,6 @@ import type {
   AddAgentQueuedSubmissionResponse,
   AddProjectResponse,
   AgentBackgroundTerminalPage,
-  AgentEvent,
   AgentPromptInput,
   AgentQueuedSubmissionPage,
   AgentQueuedSubmissionStatus,
@@ -62,6 +61,7 @@ type StartTurnMutationOptions = MutationOptions &
   }>;
 
 import type { TauriClientOptions } from "./native-client.js";
+import { subscribeProjectEvents } from "./project-event-subscription.js";
 import { TauriRuntimeClient } from "./runtime-client.js";
 
 export type { InvokeImplementation } from "./native-client.js";
@@ -464,37 +464,7 @@ export class TauriSidebarClient extends TauriRuntimeClient {
   }
 
   public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {
-    let active = true;
-    let lastSequence = options.afterSequence;
-    options.onConnectionState?.("connected");
-    const cleanup = this.subscribeNativeEvents({
-      afterSequence: options.afterSequence,
-      onEvent: (event: AgentEvent) => {
-        if (!active || event.sessionId !== options.sessionId) return;
-        if (this.taskProjects.get(event.taskId) !== options.projectId) return;
-        if (event.sequence <= lastSequence) return;
-        if (event.sequence !== lastSequence + 1) {
-          active = false;
-          options.onResyncRequired({
-            latestSequence: event.sequence,
-            reason: "sequence_gap",
-            sessionId: event.sessionId,
-            type: "resync.required",
-            version: 3,
-          });
-          options.onConnectionState?.("closed");
-          return;
-        }
-        lastSequence = event.sequence;
-        options.onEvent(event);
-      },
-    });
-    return () => {
-      if (!active) return cleanup();
-      active = false;
-      cleanup();
-      options.onConnectionState?.("closed");
-    };
+    return subscribeProjectEvents(this.subscribeNativeEvents, this.taskProjects, options);
   }
 
 }

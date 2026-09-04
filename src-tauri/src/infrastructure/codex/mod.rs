@@ -3,6 +3,7 @@ mod catalogs;
 mod commit_message;
 mod config;
 mod connection;
+mod connection_event_buffer;
 mod conversation;
 mod conversation_advanced;
 mod conversation_background;
@@ -84,6 +85,7 @@ pub use commit_message::{
 };
 pub(crate) use connection::ConnectionError;
 pub use connection::{AppServerConnection, ServerMessage};
+pub(crate) use connection_event_buffer::EVENT_RETENTION_EXCEEDED_METHOD;
 pub(crate) use conversation::RUNTIME_SESSION_ID;
 pub use conversation::read_task_snapshot;
 pub use conversation_advanced::{

@@ -1,5 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
-import type { AgentEvent } from "@/protocol/index.js";
+import type { AgentEvent, ResyncRequired } from "@/protocol/index.js";
 import { RingBuffer } from "@/shared/memory/ring-buffer.js";
 import {
   applicationPerformanceMetrics,
@@ -25,15 +25,23 @@ type AgentRuntimeEvent = Readonly<{
   type: "agentEvent";
 }>;
 
-type RuntimeEvent = AgentRuntimeEvent | RuntimeStatusEvent;
-type AgentEventSubscription = Readonly<{
+export type NativeResyncRequired = ResyncRequired & Readonly<{ projectId: string }>;
+
+type ResyncRequiredRuntimeEvent = Readonly<{
+  data: NativeResyncRequired;
+  type: "resyncRequired";
+}>;
+
+type RuntimeEvent = AgentRuntimeEvent | ResyncRequiredRuntimeEvent | RuntimeStatusEvent;
+export type AgentEventSubscription = Readonly<{
   afterSequence: number;
   onEvent: (event: AgentEvent) => void;
+  onResyncRequired?: (message: NativeResyncRequired) => void;
 }>;
 
 let runtimePromise: Promise<RuntimeSnapshot> | undefined;
 const runtimeListeners = new Set<(event: RuntimeStatusEvent) => void>();
-const agentEventListeners = new Set<(event: AgentEvent) => void>();
+const agentEventSubscriptions = new Set<AgentEventSubscription>();
 const MAX_BUFFERED_AGENT_EVENTS = 1_024;
 const recentAgentEvents = new RingBuffer<AgentEvent>(MAX_BUFFERED_AGENT_EVENTS);
 
@@ -43,12 +51,12 @@ export function subscribeRuntime(listener: (event: RuntimeStatusEvent) => void):
 }
 
 export function subscribeAgentEvents(options: AgentEventSubscription): () => void {
-  agentEventListeners.add(options.onEvent);
+  agentEventSubscriptions.add(options);
   // Channel 在页面订阅前已经可能收到事件，按 checkpoint 回放避免首帧丢失。
   recentAgentEvents.forEach((event) => {
     if (event.sequence > options.afterSequence) options.onEvent(event);
   });
-  return () => agentEventListeners.delete(options.onEvent);
+  return () => agentEventSubscriptions.delete(options);
 }
 
 export function ensureCodexRuntime(): Promise<RuntimeSnapshot> {
@@ -60,11 +68,17 @@ export function ensureCodexRuntime(): Promise<RuntimeSnapshot> {
         if (event.data.status === "failed") runtimePromise = undefined;
         return;
       }
+      if (event.type === "resyncRequired") {
+        for (const subscription of agentEventSubscriptions) {
+          subscription.onResyncRequired?.(event.data);
+        }
+        return;
+      }
       recentAgentEvents.append(event.data.event);
       if (PERFORMANCE_MONITORING_ENABLED) {
         applicationPerformanceMetrics.recordIpcEvent(recentAgentEvents.size, performance.now());
       }
-      for (const listener of agentEventListeners) listener(event.data.event);
+      for (const subscription of agentEventSubscriptions) subscription.onEvent(event.data.event);
     });
     await invoke<RuntimeSnapshot>("connect_runtime", { onEvent: channel });
     return invoke<RuntimeSnapshot>("start_runtime");

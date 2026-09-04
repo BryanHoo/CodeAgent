@@ -276,3 +276,92 @@ async fn response_should_bypass_notification_queue_backpressure() {
     }
     server_task.await.expect("fake server should finish");
 }
+
+#[tokio::test]
+async fn overflow_should_preserve_lifecycle_events_and_report_dropped_deltas() {
+    const MESSAGE_COUNT: usize = 600;
+    const CONTROL_INTERVAL: usize = 3;
+
+    let (client, server) = duplex(256 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+    let mut received = connection
+        .take_server_messages()
+        .await
+        .expect("message receiver should remain connected without consuming");
+
+    let server_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(server_reader).lines();
+        let request: Value = serde_json::from_str(
+            &lines
+                .next_line()
+                .await
+                .expect("server should read request")
+                .expect("client request should exist"),
+        )
+        .expect("client request should be JSON");
+        let mut payload = String::new();
+        for index in 0..MESSAGE_COUNT {
+            if index % CONTROL_INTERVAL == 0 {
+                let control_index = index / CONTROL_INTERVAL;
+                let (id, method) = match control_index % 3 {
+                    0 => ("null".to_owned(), "turn/completed"),
+                    1 => ("null".to_owned(), "item/completed"),
+                    _ => (
+                        (10_000 + control_index).to_string(),
+                        "item/tool/requestUserInput",
+                    ),
+                };
+                payload.push_str(&format!(
+                    "{{\"id\":{id},\"method\":\"{method}\",\"params\":{{\"threadId\":\"thread-a\",\"index\":{control_index}}}}}\n"
+                ));
+            } else {
+                payload.push_str(&format!(
+                    "{{\"method\":\"item/agentMessage/delta\",\"params\":{{\"threadId\":\"thread-a\",\"turnId\":\"turn-a\",\"itemId\":\"item-a\",\"delta\":\"{index}\"}}}}\n"
+                ));
+            }
+        }
+        payload.push_str(&format!(
+            "{{\"id\":{},\"result\":{{\"done\":true}}}}\n",
+            request["id"]
+        ));
+        server_writer
+            .write_all(payload.as_bytes())
+            .await
+            .expect("server should write mixed messages and response");
+    });
+
+    let response: Value = connection
+        .request(
+            "test/mixed-backpressure",
+            &json!({}),
+            Duration::from_millis(500),
+        )
+        .await
+        .expect("response should bypass mixed notification backpressure");
+    assert_eq!(response["done"], true);
+
+    let mut control_indexes = Vec::new();
+    let mut saw_resync = false;
+    while let Some(message) = received.recv().await {
+        if message.method == "codeagent/eventRetentionExceeded" {
+            saw_resync = true;
+            continue;
+        }
+        if message.method != "item/agentMessage/delta" {
+            let params: Value = serde_json::from_str(message.params.get()).unwrap();
+            control_indexes.push(params["index"].as_u64().unwrap() as usize);
+        }
+    }
+
+    assert_eq!(
+        control_indexes,
+        (0..MESSAGE_COUNT / CONTROL_INTERVAL).collect::<Vec<_>>()
+    );
+    assert!(
+        saw_resync,
+        "discarded deltas must trigger an explicit resync signal"
+    );
+    server_task.await.expect("fake server should finish");
+}

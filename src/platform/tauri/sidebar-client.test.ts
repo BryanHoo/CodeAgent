@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentEvent, PendingRequest } from "@/protocol/index.js";
 
 import { TauriSidebarClient, type InvokeImplementation } from "./sidebar-client.js";
+import type { AgentEventSubscription, NativeResyncRequired } from "./runtime.js";
 
 describe("TauriSidebarClient", () => {
   it("maps sidebar reads and project creation to direct Tauri commands", async () => {
@@ -270,6 +271,47 @@ describe("TauriSidebarClient", () => {
     expect(onEvent).toHaveBeenCalledTimes(1);
     expect(onEvent).toHaveBeenCalledWith(event);
     cleanup();
+  });
+
+  it("forwards native retention overflow as a project resync request", async () => {
+    let emitResync: ((message: NativeResyncRequired) => void) | undefined;
+    const subscribeAgentEvents = vi.fn((options: AgentEventSubscription) => {
+      emitResync = options.onResyncRequired;
+      return () => undefined;
+    });
+    const client = new TauriSidebarClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: vi.fn() as InvokeImplementation,
+      subscribeAgentEvents,
+    });
+    const onConnectionState = vi.fn();
+    const onResyncRequired = vi.fn();
+    client.subscribeEvents({
+      afterSequence: 17,
+      onConnectionState,
+      onEvent: vi.fn(),
+      onResyncRequired,
+      projectId: "project-a",
+      sessionId: "codeagent-runtime",
+    });
+
+    emitResync?.({
+      latestSequence: 17,
+      projectId: "project-a",
+      reason: "event_retention_exceeded",
+      sessionId: "codeagent-runtime",
+      type: "resync.required",
+      version: 3,
+    });
+
+    expect(onResyncRequired).toHaveBeenCalledWith({
+      latestSequence: 17,
+      reason: "event_retention_exceeded",
+      sessionId: "codeagent-runtime",
+      type: "resync.required",
+      version: 3,
+    });
+    expect(onConnectionState).toHaveBeenLastCalledWith("closed");
   });
 
   it("resolves app-server approvals through the Tauri command", async () => {
