@@ -12,6 +12,8 @@ mod path_guard;
 mod performance_baseline_tests;
 
 #[cfg(test)]
+mod git_diff_tests;
+#[cfg(test)]
 mod git_tests;
 
 pub use attachments::{

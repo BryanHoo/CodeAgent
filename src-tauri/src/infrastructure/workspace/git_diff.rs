@@ -1,5 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
+use tokio::io::AsyncReadExt;
+
 use super::{git_process::run_git, git_read::GitChange, path_guard::WorkspaceError};
 
 const MAX_DIFF_BYTES: usize = 512 * 1024;
@@ -10,27 +12,81 @@ pub(super) async fn add_diffs(
     changes: &mut [GitChange],
     staged: bool,
 ) -> Result<(), WorkspaceError> {
-    if changes.is_empty()
-        || changes
-            .iter()
-            .all(|change| change.kind == "create" && !staged)
-    {
+    if changes.is_empty() {
         return Ok(());
     }
-    // raw `-z` 元数据提供无歧义路径，patch 主体按同序切分；每个区段只启动一次 Git。
-    let mut args = vec![
-        "diff",
-        "--raw",
-        "-z",
-        "--patch",
-        "--no-ext-diff",
-        "--no-color",
-    ];
-    if staged {
-        args.push("--cached");
+
+    if staged || changes.iter().any(|change| change.kind != "create") {
+        // raw `-z` 元数据提供无歧义路径，patch 主体按同序切分；每个区段只启动一次 Git。
+        let mut args = vec![
+            "diff",
+            "--raw",
+            "-z",
+            "--patch",
+            "--no-ext-diff",
+            "--no-color",
+        ];
+        if staged {
+            args.push("--cached");
+        }
+        let (output, _) = run_git(repo, &args, MAX_GIT_OUTPUT_BYTES).await?;
+        apply_combined_diff(&output, changes)?;
     }
-    let (output, _) = run_git(repo, &args, MAX_GIT_OUTPUT_BYTES).await?;
-    apply_combined_diff(&output, changes)
+
+    if !staged {
+        add_untracked_diffs(repo, changes).await?;
+    }
+    Ok(())
+}
+
+async fn add_untracked_diffs(repo: &Path, changes: &mut [GitChange]) -> Result<(), WorkspaceError> {
+    let existing_bytes = changes
+        .iter()
+        .map(|change| change.diff.len())
+        .sum::<usize>();
+    let mut remaining_bytes = MAX_GIT_OUTPUT_BYTES.saturating_sub(existing_bytes);
+
+    for change in changes.iter_mut().filter(|change| change.kind == "create") {
+        let read_limit = remaining_bytes.min(MAX_DIFF_BYTES);
+        if read_limit == 0 {
+            break;
+        }
+        let path = repo.join(&change.path);
+        let metadata = match tokio::fs::symlink_metadata(&path).await {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        // 符号链接不展开，避免把仓库外目标内容作为 Diff 返回。
+        if !metadata.is_file() {
+            continue;
+        }
+        let mut content = Vec::with_capacity(read_limit.min(8 * 1024));
+        let file = match tokio::fs::File::open(path).await {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        file.take(read_limit as u64)
+            .read_to_end(&mut content)
+            .await?;
+        if content.contains(&0) {
+            continue;
+        }
+
+        let content = String::from_utf8_lossy(&content);
+        let mut diff = String::with_capacity(read_limit);
+        for line in content.split_inclusive('\n') {
+            if diff.len() + line.len() + 1 > read_limit {
+                break;
+            }
+            diff.push('+');
+            diff.push_str(line);
+        }
+        remaining_bytes = remaining_bytes.saturating_sub(diff.len());
+        change.diff = diff;
+    }
+    Ok(())
 }
 
 fn apply_combined_diff(output: &[u8], changes: &mut [GitChange]) -> Result<(), WorkspaceError> {
