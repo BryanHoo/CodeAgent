@@ -1,15 +1,9 @@
-export const BACKGROUND_DETAIL_SUSPEND_DELAY_MS = 5_000;
+export const BACKGROUND_DETAIL_SUSPEND_DELAY_MS = 60_000;
 
 type VisibilityTarget = Readonly<{
   visibilityState: DocumentVisibilityState;
-  hasFocus: () => boolean;
   addEventListener: (type: "visibilitychange", listener: () => void) => void;
   removeEventListener: (type: "visibilitychange", listener: () => void) => void;
-}>;
-
-type FocusTarget = Readonly<{
-  addEventListener: (type: "blur" | "focus", listener: () => void) => void;
-  removeEventListener: (type: "blur" | "focus", listener: () => void) => void;
 }>;
 
 export type DetailViewUpdateGate = Readonly<{
@@ -62,7 +56,6 @@ export function runDetailViewInterval(
 
 export class DelayedBackgroundSuspension implements DetailViewUpdateGate {
   readonly #listeners = new Set<() => void>();
-  readonly #focusTarget: FocusTarget;
   readonly #suspendDelayMs: number;
   readonly #target: VisibilityTarget;
   #disposed = false;
@@ -71,18 +64,14 @@ export class DelayedBackgroundSuspension implements DetailViewUpdateGate {
 
   public constructor(
     target: VisibilityTarget,
-    focusTarget: FocusTarget,
     suspendDelayMs = BACKGROUND_DETAIL_SUSPEND_DELAY_MS,
   ) {
     if (!Number.isFinite(suspendDelayMs) || suspendDelayMs < 0) {
       throw new RangeError("Background suspension delay must be a non-negative number");
     }
     this.#target = target;
-    this.#focusTarget = focusTarget;
     this.#suspendDelayMs = suspendDelayMs;
     this.#target.addEventListener("visibilitychange", this.#handleVisibilityChange);
-    this.#focusTarget.addEventListener("blur", this.#handleVisibilityChange);
-    this.#focusTarget.addEventListener("focus", this.#handleVisibilityChange);
     this.#handleVisibilityChange();
   }
 
@@ -92,8 +81,6 @@ export class DelayedBackgroundSuspension implements DetailViewUpdateGate {
     this.#clearTimer();
     this.#listeners.clear();
     this.#target.removeEventListener("visibilitychange", this.#handleVisibilityChange);
-    this.#focusTarget.removeEventListener("blur", this.#handleVisibilityChange);
-    this.#focusTarget.removeEventListener("focus", this.#handleVisibilityChange);
   }
 
   public isSuspended(): boolean {
@@ -108,7 +95,7 @@ export class DelayedBackgroundSuspension implements DetailViewUpdateGate {
 
   readonly #handleVisibilityChange = (): void => {
     if (this.#disposed) return;
-    if (this.#isApplicationActive()) {
+    if (this.#target.visibilityState === "visible") {
       this.#clearTimer();
       this.#setSuspended(false);
       return;
@@ -117,13 +104,9 @@ export class DelayedBackgroundSuspension implements DetailViewUpdateGate {
     // 短暂切换不进入暂停态，避免反复清空和恢复详细视图流水线。
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
-      if (!this.#isApplicationActive()) this.#setSuspended(true);
+      if (this.#target.visibilityState !== "visible") this.#setSuspended(true);
     }, this.#suspendDelayMs);
   };
-
-  #isApplicationActive(): boolean {
-    return this.#target.visibilityState === "visible" && this.#target.hasFocus();
-  }
 
   #clearTimer(): void {
     if (this.#timer !== undefined) clearTimeout(this.#timer);
@@ -146,8 +129,8 @@ let applicationGate: DetailViewUpdateGate | undefined;
 
 export function getApplicationDetailViewUpdateGate(): DetailViewUpdateGate {
   applicationGate ??=
-    typeof document === "undefined" || typeof window === "undefined"
+    typeof document === "undefined"
       ? alwaysActiveGate
-      : new DelayedBackgroundSuspension(document, window);
+      : new DelayedBackgroundSuspension(document);
   return applicationGate;
 }

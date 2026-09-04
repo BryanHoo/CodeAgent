@@ -12,7 +12,7 @@
 - 已完成卡片必须消费 Runtime 的 `attention: "completed"` 区分未查看的新完成任务，并同时使用结构、底色和明确文案提示；进入任务后复用 `acknowledgeTaskActivity` 清除 attention，不得在 WebView 新增第二套已读状态
 - `turn.completed` 后必须以 `readTask` 的 `idle` 快照即时写入匹配的已完成 Query Cache；写入前取消同 Key 的旧请求，避免瞬时 `active` 列表响应导致任务只能在重新进入看板后出现
 - `turn.started` 必须按事件时间将已加载 Task 跨页去重并置于左栏首位，再失效对应 Project 的任务列表，以服务端 `recency_at` 顺序校准分页 Cursor
-- 主窗口持续失焦、最小化或不可见达到延迟阈值后，暂停详细 Task Store 投影、动画、视图计时器和轮询；Runtime、Activity 和桌面通知必须继续消费事件。恢复时批量提交有界积压，Snapshot 前后事件必须按 session/checkpoint 截断，溢出时改用权威 Snapshot 恢复
+- 主窗口持续最小化或进入后台不可见 60 秒后，暂停详细 Task Store 投影、动画、视图计时器和轮询；窗口在前台可见时即使失焦也必须继续运行。Runtime、Activity 和桌面通知必须继续消费事件。恢复时批量提交有界积压，Snapshot 前后事件必须按 session/checkpoint 截断，溢出时改用权威 Snapshot 恢复
 - Query Key、失效和乐观更新集中在对应功能域的 query options/cache 模块
 - Mutation 写入 Query Cache 前必须精确取消同 Key 的在途旧快照请求，避免迟到响应覆盖已确认的服务端变更；相关测试必须覆盖旧请求晚于 Mutation 完成的时序
 - 事件投影按序列处理并拒绝陈旧会话事件；快照恢复不得覆盖更新的本地状态

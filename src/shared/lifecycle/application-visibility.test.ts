@@ -8,7 +8,6 @@ import {
 } from "./application-visibility.js";
 
 class FakeApplicationTarget {
-  public focused = true;
   public visibilityState: DocumentVisibilityState = "visible";
   readonly #listeners = new Map<string, Set<() => void>>();
 
@@ -18,16 +17,11 @@ class FakeApplicationTarget {
     this.#listeners.set(type, listeners);
   }
 
-  public hasFocus(): boolean {
-    return this.focused;
-  }
-
   public removeEventListener(type: string, listener: () => void): void {
     this.#listeners.get(type)?.delete(listener);
   }
 
   public setFocused(focused: boolean): void {
-    this.focused = focused;
     this.#dispatch(focused ? "focus" : "blur");
   }
 
@@ -49,21 +43,21 @@ describe("DelayedBackgroundSuspension", () => {
   it("只在持续隐藏达到阈值后暂停，并忽略短时间前后台切换", () => {
     vi.useFakeTimers();
     const target = new FakeApplicationTarget();
-    const suspension = new DelayedBackgroundSuspension(target, target, 5_000);
+    const suspension = new DelayedBackgroundSuspension(target);
     const listener = vi.fn();
     suspension.subscribe(listener);
 
     target.setVisibility("hidden");
-    vi.advanceTimersByTime(4_999);
+    vi.advanceTimersByTime(59_999);
     expect(suspension.isSuspended()).toBe(false);
 
     target.setVisibility("visible");
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(60_000);
     expect(suspension.isSuspended()).toBe(false);
     expect(listener).not.toHaveBeenCalled();
 
     target.setVisibility("hidden");
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(60_000);
     expect(suspension.isSuspended()).toBe(true);
     expect(listener).toHaveBeenCalledTimes(1);
 
@@ -74,24 +68,23 @@ describe("DelayedBackgroundSuspension", () => {
     suspension.dispose();
   });
 
-  it("持续失焦达到阈值后暂停，短暂失焦不切换状态", () => {
+  it("可见时持续失焦仍保持运行，仅在隐藏后暂停", () => {
     vi.useFakeTimers();
     const target = new FakeApplicationTarget();
-    const suspension = new DelayedBackgroundSuspension(target, target, 5_000);
+    const suspension = new DelayedBackgroundSuspension(target, 5_000);
     const listener = vi.fn();
     suspension.subscribe(listener);
 
     target.setFocused(false);
-    vi.advanceTimersByTime(4_999);
-    target.setFocused(true);
     vi.advanceTimersByTime(5_000);
     expect(suspension.isSuspended()).toBe(false);
     expect(listener).not.toHaveBeenCalled();
 
-    target.setFocused(false);
+    target.setVisibility("hidden");
     vi.advanceTimersByTime(5_000);
     expect(suspension.isSuspended()).toBe(true);
 
+    target.setVisibility("visible");
     target.setFocused(true);
     expect(suspension.isSuspended()).toBe(false);
     expect(listener).toHaveBeenCalledTimes(2);
