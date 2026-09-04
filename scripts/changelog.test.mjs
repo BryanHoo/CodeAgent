@@ -11,17 +11,17 @@ const releaseWorkflow = await readFile(
 );
 
 void test("extracts the dated changelog section for a release", () => {
-  const notes = extractVersionNotes(changelog, "0.1.5");
+  const notes = extractVersionNotes(changelog, "0.1.6");
 
-  assert.match(notes, /^## \[0\.1\.5\] - 2026-09-03$/m);
+  assert.match(notes, /^## \[0\.1\.6\] - 2026-09-04$/m);
   assert.match(notes, /^### Added$/m);
-  assert.match(notes, /Codex 协议契约校验/u);
-  assert.match(notes, /文件变更操作分组/u);
+  assert.match(notes, /桌面端定时任务/u);
+  assert.match(notes, /Skills 市场/u);
   assert.match(notes, /^### Changed$/m);
-  assert.match(notes, /Provider 配置/u);
+  assert.match(notes, /应用生命周期/u);
   assert.match(notes, /^### Fixed$/m);
-  assert.match(notes, /通知背压/u);
-  assert.match(notes, /Windows Codex shim/u);
+  assert.match(notes, /全屏状态/u);
+  assert.match(notes, /事件背压/u);
   assert.doesNotMatch(notes, /^## \[Unreleased\]$/m);
 });
 

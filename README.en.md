@@ -26,7 +26,9 @@ CodeAgent brings AI coding tasks, conversations, approvals, project files, and G
 
 - Run project or temporary tasks and follow responses, commands, plans, approvals, and file changes in real time
 - Keep follow-up work in a persistent task queue, then edit, reorder, or cancel messages before they run
-- Attach files and images, reference project files with `@`, use Skills, and answer MCP input requests
+- Attach files and images, reference project files with `@`, and safely install or manage Skills from the Skills marketplace
+- Enable, disable, and hot-reload MCP services, and answer MCP input requests
+- Create scheduled tasks with one-time or recurring schedules, then review their run history
 - Choose the model, reasoning effort, Fast mode, approval behavior, and file access for each task
 - Manage multiple project roots, temporary tasks, and archived tasks, and fork new tasks from existing conversations
 - Browse and manage project files, then review diffs, uncommitted changes, and commit history

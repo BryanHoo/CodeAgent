@@ -5,9 +5,23 @@
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-04
+
+### Added
+
+- 添加桌面端定时任务，支持调度、持久化、运行记录与崩溃恢复。
+- 添加 Skills 市场与安全安装流程，并支持 MCP 服务管理和运行时热重载。
+- 添加临时任务受控工作区，完善文件预览上下文与任务删除清理。
+
 ### Changed
 
-- 更新 Skills 市场为 `Skills & MCP`，添加 MCP 服务启停与运行时热重载。
+- 调整应用生命周期，仅在窗口后台不可见满 60 秒后暂停详细视图。
+
+### Fixed
+
+- 修复通知聚焦时用户全屏状态被错误清除的问题。
+- 修复新任务被过期列表覆盖，以及未跟踪文本文件缺少 Diff 内容的问题。
+- 修复运行时事件背压丢弃后项目状态未及时重同步的问题。
 
 ## [0.1.5] - 2026-09-03
 
@@ -85,7 +99,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.2...v0.1.3
