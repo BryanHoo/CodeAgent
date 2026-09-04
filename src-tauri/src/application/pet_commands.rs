@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
 use tokio::{fs, io::AsyncWriteExt};
 
+use crate::encoding::encode_lower_hex;
+
 use super::pet_assets::scan_custom_pets;
 use super::{error::AppError, state::AppState};
 
@@ -266,7 +268,7 @@ fn stable_asset_id(pet: &BuiltinPet) -> String {
 pub(super) fn stable_asset_id_for(value: &str) -> String {
     let mut hash = Sha256::new();
     hash.update(value);
-    format!("{:x}", hash.finalize())
+    encode_lower_hex(hash.finalize())
 }
 
 pub(super) fn webp_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {

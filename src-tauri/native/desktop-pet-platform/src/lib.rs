@@ -3,9 +3,8 @@ fn linux_backend_preference(
     session_type: Option<&str>,
     has_wayland_display: bool,
 ) -> Option<&'static str> {
-    (has_wayland_display
-        || session_type.is_some_and(|value| value.eq_ignore_ascii_case("wayland")))
-    .then_some("x11,wayland")
+    (has_wayland_display || session_type.is_some_and(|value| value.eq_ignore_ascii_case("wayland")))
+        .then_some("x11,wayland")
 }
 
 #[cfg(any(target_os = "windows", test))]
@@ -169,10 +168,7 @@ mod tests {
             linux_backend_preference(Some("wayland"), false),
             Some("x11,wayland")
         );
-        assert_eq!(
-            linux_backend_preference(None, true),
-            Some("x11,wayland")
-        );
+        assert_eq!(linux_backend_preference(None, true), Some("x11,wayland"));
         assert_eq!(linux_backend_preference(Some("x11"), false), None);
     }
 

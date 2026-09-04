@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zip::ZipArchive;
 
+use crate::encoding::encode_lower_hex;
+
 use super::{DownloadedSkillArchive, SkillsMarketError, compatibility::is_codex_compatible_skill};
 
 const MAX_FILES: usize = 2_048;
@@ -265,7 +267,7 @@ fn skill_content_hash(root: &Path) -> Result<String, SkillsMarketError> {
         let bytes =
             fs::read(root.join(&relative)).map_err(|_| SkillsMarketError::InvalidArchive)?;
         let path = relative.to_string_lossy().replace('\\', "/");
-        let file_hash = format!("{:x}", Sha256::digest(&bytes));
+        let file_hash = encode_lower_hex(Sha256::digest(&bytes));
         if index > 0 {
             combined.update(b"\n");
         }
@@ -275,7 +277,7 @@ fn skill_content_hash(root: &Path) -> Result<String, SkillsMarketError> {
         combined.update([0]);
         combined.update(file_hash.as_bytes());
     }
-    Ok(format!("{:x}", combined.finalize()))
+    Ok(encode_lower_hex(combined.finalize()))
 }
 
 #[cfg(test)]

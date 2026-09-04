@@ -10,6 +10,8 @@ use base64::{engine::general_purpose::STANDARD, read::DecoderReader};
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
+use crate::encoding::encode_lower_hex;
+
 pub(super) const IMAGE_ATTACHMENT_FIELD: &str = "codeagentAttachment";
 const IMAGE_GENERATION_MARKER: &[u8] = b"\"imageGeneration\"";
 const MAX_GENERATED_IMAGE_BYTES: usize = 50 * 1024 * 1024;
@@ -200,7 +202,7 @@ impl GeneratedImageStore {
         };
         drop(file);
 
-        let digest = hex_digest(hasher.finalize().as_slice());
+        let digest = encode_lower_hex(hasher.finalize());
         let destination = self.directory.join(format!("{digest}.{extension}"));
         if destination.is_file() {
             let _ = fs::remove_file(&temp);
@@ -286,16 +288,6 @@ fn attachment_json(stored: &StoredImage) -> Result<Vec<u8>, serde_json::Error> {
         "name": format!("generated-image.{}", stored.extension),
         "size": stored.size,
     }))
-}
-
-fn hex_digest(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        output.push(HEX[(byte >> 4) as usize] as char);
-        output.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    output
 }
 
 fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
