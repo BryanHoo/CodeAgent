@@ -178,6 +178,14 @@ pub async fn list_installed_skills(
     Ok(response)
 }
 
+#[tauri::command]
+pub async fn list_configured_mcp_servers(state: State<'_, AppState>) -> Result<Value, AppError> {
+    let connection = state.codex_connection().await?;
+    codex::list_configured_mcp_servers(&connection)
+        .await
+        .map_err(AppError::from)
+}
+
 #[tauri::command(rename_all = "camelCase")]
 pub async fn open_skill_directory(
     path: String,
@@ -213,6 +221,18 @@ pub async fn set_skill_enabled(
 ) -> Result<Value, AppError> {
     let connection = state.codex_connection().await?;
     codex::set_skill_enabled(&connection, &path, enabled)
+        .await
+        .map_err(AppError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn set_mcp_server_enabled(
+    name: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<Value, AppError> {
+    let connection = state.codex_connection().await?;
+    codex::set_mcp_server_enabled(&connection, &name, enabled)
         .await
         .map_err(AppError::from)
 }

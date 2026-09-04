@@ -77,7 +77,8 @@ pub use auth::{
     list_provider_models, logout_provider, start_official_provider_login,
 };
 pub use catalogs::{
-    list_installed_skills, list_mcp_servers, list_skills, reload_mcp_servers, set_skill_enabled,
+    list_configured_mcp_servers, list_installed_skills, list_mcp_servers, list_skills,
+    reload_mcp_servers, set_mcp_server_enabled, set_skill_enabled,
 };
 pub use commit_message::{
     parse_commit_message_output, resolve_commit_message_settings, start_commit_message_thread,

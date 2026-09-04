@@ -13,8 +13,10 @@ const mocks = vi.hoisted(() => ({
   getClawhubSkill: vi.fn(),
   installClawhubSkill: vi.fn(),
   listClawhubSkills: vi.fn(),
+  listConfiguredMcpServers: vi.fn(),
   listInstalledSkills: vi.fn(),
   openSkillDirectory: vi.fn(),
+  setMcpServerEnabled: vi.fn(),
   setSkillEnabled: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -120,6 +122,13 @@ describe("SkillsMarketContainer", () => {
       nextCursor: null,
     });
     mocks.setSkillEnabled.mockResolvedValue({ effectiveEnabled: false });
+    mocks.listConfiguredMcpServers.mockResolvedValue({
+      data: [
+        { enabled: true, name: "docs" },
+        { enabled: false, name: "linear" },
+      ],
+    });
+    mocks.setMcpServerEnabled.mockResolvedValue({ enabled: false });
     mocks.openSkillDirectory.mockResolvedValue({ status: "opened" });
     mocks.listClawhubSkills.mockResolvedValue({ items: [summary], nextCursor: null });
     mocks.getClawhubSkill.mockResolvedValue({
@@ -139,6 +148,7 @@ describe("SkillsMarketContainer", () => {
 
   it("opens installed skills and installs into a selected sidebar project", async () => {
     const screen = await renderMarket();
+    await expect.element(screen.getByRole("heading", { name: "Skills & MCP" })).toBeVisible();
     await expect.element(screen.getByText("Local Review")).toBeVisible();
     await expect.element(screen.getByText("Project Lint")).toBeVisible();
     const groupHeadings = [...screen.container.querySelectorAll(".skills-installed-group h3")]
@@ -213,5 +223,21 @@ describe("SkillsMarketContainer", () => {
     await vi.waitFor(() => {
       expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
+  });
+
+  it("lists configured MCP servers and stops the selected server", async () => {
+    const screen = await renderMarket();
+
+    await screen.getByRole("tab", { name: "MCP" }).click();
+    await expect.element(screen.getByText("docs", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("linear", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("2 个 MCP 服务")).toBeVisible();
+    const tabs = screen.container.querySelector(".skills-market-tabs")!;
+    expect(tabs.scrollWidth).toBeLessThanOrEqual(tabs.clientWidth);
+    await screen.getByRole("switch", { name: "启用或停止 docs" }).click();
+    expect(mocks.setMcpServerEnabled).toHaveBeenCalledWith("docs", false);
+
+    await screen.getByRole("switch", { name: "启用或停止 linear" }).click();
+    expect(mocks.setMcpServerEnabled).toHaveBeenCalledWith("linear", true);
   });
 });

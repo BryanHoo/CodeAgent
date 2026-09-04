@@ -44,8 +44,10 @@
 - 正式 release 必须生成 updater artifact、`.sig` 与 `latest.json`，使用仓库 Secret 中的长期签名私钥；Windows 必须同时发布无 Authenticode 签名的 portable EXE 与可更新的 NSIS 安装包，portable 不得作为更新目标
 - 每个发布版本必须在 `CHANGELOG.md` 中包含 `## [版本] - YYYY-MM-DD` 条目，GitHub release 正文必须由该条目生成
 
-## Skills 市场契约
+## Skills & MCP 契约
 
+- 扩展管理入口统一显示为 `Skills & MCP`；MCP 标签只展示全局 Codex 配置中的服务名称与启用状态，不得向 WebView 传输命令、URL、请求头或环境变量
+- MCP 启停必须通过 `config/value/write` 写入 `mcp_servers.<name>.enabled`，服务名必须作为带引号的单一 keyPath 段处理；写入成功后调用 `config/mcpServer/reload`，确保停用立即结束连接、启用立即加载配置
 - 已安装 Skill 必须以 Codex `skills/list` 为发现来源，一次传入全部左栏 Project roots，按绝对路径去重并保留 `path`、`scope`、`enabled` 与 Project 归属；启停必须使用 `skills/config/write` 的绝对路径选择器，文件管理器打开前必须再次匹配已发现路径
 - 已安装 Skill 必须依次按“系统”“全局”和左栏 Project 顺序分组展示，各分组默认展开；Project Skill 必须显示在所属 Project 分组中，不得合并为通用“项目”分组
 - ClawHub 包必须以 `ownerHandle/slug` 作为完整身份；列表与搜索只能读取目录中的名称、简介与统计信息，不得下载 `SKILL.md`；详情与安装阶段必须排除声明 OpenClaw 专属 `config`、`envVars`、`primaryEnv`、`install`、`nix`、`skillKey`、`requires.env`、`requires.bins`、`requires.anyBins` 或 `requires.config` 的 Skill
@@ -78,5 +80,5 @@
 - 覆盖全屏主窗口关闭后从状态栏或通知恢复为非全屏普通窗口，以及未关闭时通知聚焦保持全屏状态
 - 覆盖 Rust 任务活动的运行、等待、完成、失败、运行时崩溃和 WebView 重建恢复
 - 覆盖五类审批请求、普通用户输入排除、运行开始时间恢复及看板运行时长投影
-- 覆盖 Skills 市场兼容性过滤、Codex 路径启停、ZIP 路径穿越、GitHub 子目录提取、内容指纹冲突以及安装/更新浏览器交互
+- 覆盖 Skills & MCP 兼容性过滤、Codex 路径启停、MCP 配置摘要与热重载启停、ZIP 路径穿越、GitHub 子目录提取、内容指纹冲突以及安装/更新浏览器交互
 - 覆盖 RRULE 时区与夏令时、漏跑合并、并发跳过、崩溃恢复、原子持久化、前端输入从创建落盘到认领完成、嵌套调度字段 camelCase、Tauri 命令注册与窗口授权、IPC CRUD 映射、内容区列表操作、紧凑主色图标创建按钮、日期时间选择器语言切换、任意分钟输入、弹层布局稳定性与选中日期悬停状态、提示词区域无底部分割线、表单不完整时保存禁用、运行与删除操作分区、删除危险色与可取消确认、保存失败仅显示一个具体错误 Toast，以及 Composer 捕获不启动即时 Turn

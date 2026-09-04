@@ -34,6 +34,21 @@ export const InstalledSkillPageSchema = Type.Object(
 );
 export type InstalledSkillPage = Readonly<Static<typeof InstalledSkillPageSchema>>;
 
+export const ConfiguredMcpServerSchema = Type.Object(
+  {
+    enabled: Type.Boolean(),
+    name: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export type ConfiguredMcpServer = Readonly<Static<typeof ConfiguredMcpServerSchema>>;
+
+export const ConfiguredMcpServerPageSchema = Type.Object(
+  { data: Type.Array(ConfiguredMcpServerSchema, { uniqueItems: true }) },
+  { additionalProperties: false },
+);
+export type ConfiguredMcpServerPage = Readonly<Static<typeof ConfiguredMcpServerPageSchema>>;
+
 export const ClawhubSkillSummarySchema = Type.Object(
   {
     canonicalUrl: Type.String(),

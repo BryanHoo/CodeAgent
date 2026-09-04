@@ -14,6 +14,7 @@ import type {
   StartOfficialProviderLoginResponse,
   ClawhubSkillDetail,
   ClawhubSkillPage,
+  ConfiguredMcpServerPage,
   InstalledSkillPage,
   SkillInstallResult,
   SkillInstallScope,
@@ -99,6 +100,12 @@ export class TauriCatalogClient extends TauriWorkspaceClient {
     return this.call("list_installed_skills", { forceReload: false });
   }
 
+  public async listConfiguredMcpServers(
+    _options: ReadOptions = {},
+  ): Promise<ConfiguredMcpServerPage> {
+    return this.call("list_configured_mcp_servers");
+  }
+
   public async openSkillDirectory(
     path: string,
     _options: MutationOptions = {},
@@ -112,6 +119,14 @@ export class TauriCatalogClient extends TauriWorkspaceClient {
     _options: MutationOptions = {},
   ): Promise<Readonly<{ effectiveEnabled: boolean }>> {
     return this.call("set_skill_enabled", { enabled, path });
+  }
+
+  public async setMcpServerEnabled(
+    name: string,
+    enabled: boolean,
+    _options: MutationOptions = {},
+  ): Promise<Readonly<{ enabled: boolean }>> {
+    return this.call("set_mcp_server_enabled", { enabled, name });
   }
 
   public async listClawhubSkills(

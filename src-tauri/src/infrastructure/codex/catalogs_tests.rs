@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
 use super::{
-    AppServerConnection, catalogs::list_models, list_installed_skills, list_mcp_servers,
-    list_skills, set_skill_enabled,
+    AppServerConnection, catalogs::list_models, list_configured_mcp_servers, list_installed_skills,
+    list_mcp_servers, list_skills, set_mcp_server_enabled, set_skill_enabled,
 };
 
 #[tokio::test]
@@ -202,5 +202,105 @@ async fn skill_toggle_should_use_the_official_path_selector() {
         .await
         .unwrap();
     assert_eq!(response["effectiveEnabled"], false);
+    server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn configured_mcp_servers_should_only_expose_name_and_enabled_state() {
+    let (client, server) = duplex(8 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+    let server_task = tokio::spawn(async move {
+        let request: Value = serde_json::from_str(
+            &BufReader::new(server_reader)
+                .lines()
+                .next_line()
+                .await
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(request["method"], "config/read");
+        assert_eq!(request["params"], json!({"includeLayers": false}));
+        server_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({
+                        "id": request["id"].clone(),
+                        "result": {
+                            "config": {"mcp_servers": {
+                                "docs": {"command": "secret-command"},
+                                "linear": {"enabled": false, "url": "https://example.test"}
+                            }},
+                            "origins": {}
+                        }
+                    })
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+
+    let response = list_configured_mcp_servers(&connection).await.unwrap();
+    assert_eq!(
+        response,
+        json!({"data": [
+            {"enabled": true, "name": "docs"},
+            {"enabled": false, "name": "linear"}
+        ]})
+    );
+    server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_toggle_should_write_quoted_name_and_reload_runtime() {
+    let (client, server) = duplex(8 * 1024);
+    let (client_reader, client_writer) = split(client);
+    let (server_reader, mut server_writer) = split(server);
+    let connection = AppServerConnection::new(client_reader, client_writer);
+    let server_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(server_reader).lines();
+        let write: Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(write["method"], "config/value/write");
+        assert_eq!(
+            write["params"]["keyPath"],
+            "mcp_servers.\"docs.search\".enabled"
+        );
+        assert_eq!(write["params"]["value"], false);
+        assert_eq!(write["params"]["mergeStrategy"], "replace");
+        server_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({"id": write["id"].clone(), "result": {
+                        "filePath": "/home/user/.codex/config.toml",
+                        "status": "ok",
+                        "version": "2"
+                    }})
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+
+        let reload: Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(reload["method"], "config/mcpServer/reload");
+        server_writer
+            .write_all(
+                format!("{}\n", json!({"id": reload["id"].clone(), "result": {}})).as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+
+    let response = set_mcp_server_enabled(&connection, "docs.search", false)
+        .await
+        .unwrap();
+    assert_eq!(response, json!({"enabled": false}));
     server_task.await.unwrap();
 }

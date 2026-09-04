@@ -35,7 +35,7 @@
 
 .skills-market-tabs {
   display: flex;
-  width: 224px;
+  width: 300px;
   height: 32px;
   border: 1px solid var(--ui-color-separator-strong);
   border-radius: var(--ui-radius-control);
@@ -155,6 +155,26 @@
   cursor: pointer;
   outline: none;
   text-align: left;
+}
+
+.skills-mcp-row__content {
+  display: flex;
+  min-width: 0;
+  min-height: 61px;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0 9px 12px;
+}
+
+.skills-mcp-status {
+  display: block;
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-label);
+}
+
+.skills-mcp-status[data-enabled="true"] {
+  color: var(--ui-color-task-completed);
 }
 
 .skills-installed-row__open:focus-visible {

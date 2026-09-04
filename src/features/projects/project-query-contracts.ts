@@ -69,9 +69,11 @@ export type NativeSkillsClient = Pick<
   | "getClawhubSkill"
   | "installClawhubSkill"
   | "listClawhubSkills"
+  | "listConfiguredMcpServers"
   | "listInstalledSkills"
   | "listSkills"
   | "openSkillDirectory"
+  | "setMcpServerEnabled"
   | "setSkillEnabled"
 >;
 export type NativeSettingsClient = Pick<

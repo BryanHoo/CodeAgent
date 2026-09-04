@@ -1,6 +1,7 @@
 import type {
   ClawhubSkillSummary,
   ClawhubSkillPage,
+  ConfiguredMcpServer,
   InstalledSkill,
   SkillInstallScope,
 } from "@/protocol/index.js";
@@ -11,7 +12,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { Blocks, Download, FolderOpen, RefreshCw, Search, Star } from "lucide-react";
+import { Blocks, Download, FolderOpen, RefreshCw, Search, Server, Star } from "lucide-react";
 import { Switch } from "radix-ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -28,7 +29,7 @@ import {
 import { useProjectData } from "../projects/project-context.js";
 import { SkillDetailDialog } from "./skill-detail-dialog.js";
 
-type MarketTab = "installed" | "market";
+type MarketTab = "installed" | "market" | "mcp";
 
 function useDebouncedValue(value: string): string {
   const [debounced, setDebounced] = useState(value);
@@ -105,6 +106,36 @@ function SkillCard({ skill, onOpen }: Readonly<{
   );
 }
 
+function McpServerRow({ pending, server, toggle }: Readonly<{
+  pending: boolean;
+  server: ConfiguredMcpServer;
+  toggle: (server: ConfiguredMcpServer) => void;
+}>) {
+  const { t } = useTranslation("workbench");
+  return (
+    <li className="skills-installed-row">
+      <span className="skills-mcp-row__content">
+        <span className="skills-market-glyph" aria-hidden="true"><Server /></span>
+        <span className="min-w-0 flex-1">
+          <strong className="block truncate text-body-small">{server.name}</strong>
+          <span className="skills-mcp-status" data-enabled={server.enabled}>
+            {t(server.enabled ? "skillsMarket.mcpEnabled" : "skillsMarket.mcpStopped")}
+          </span>
+        </span>
+      </span>
+      <Switch.Root
+        aria-label={t("skillsMarket.toggleMcp", { name: server.name })}
+        checked={server.enabled}
+        className="skills-switch"
+        disabled={pending}
+        onCheckedChange={() => toggle(server)}
+      >
+        <Switch.Thumb className="skills-switch__thumb" />
+      </Switch.Root>
+    </li>
+  );
+}
+
 export function SkillsMarketContainer({ projectId, rootPath }: Readonly<{
   projectId?: string;
   rootPath?: string;
@@ -130,6 +161,11 @@ export function SkillsMarketContainer({ projectId, rootPath }: Readonly<{
     queryKey: ["skills-market", "catalog", deferredQuery, sort],
     staleTime: 2 * 60_000,
   });
+  const mcpServers = useQuery({
+    enabled: tab === "mcp",
+    queryFn: () => client.listConfiguredMcpServers(),
+    queryKey: ["skills-market", "mcp"],
+  });
   const toggle = useMutation({
     mutationFn: (skill: InstalledSkill) => client.setSkillEnabled(skill.path, !skill.enabled),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["skills-market", "installed"] }),
@@ -137,6 +173,11 @@ export function SkillsMarketContainer({ projectId, rootPath }: Readonly<{
   const openSkill = useMutation({
     meta: { actionNotification: { successMessage: false } },
     mutationFn: (path: string) => client.openSkillDirectory(path),
+  });
+  const toggleMcp = useMutation({
+    mutationFn: (server: ConfiguredMcpServer) =>
+      client.setMcpServerEnabled(server.name, !server.enabled),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["skills-market", "mcp"] }),
   });
   const install = useMutation({
     meta: { actionNotification: { successMessage: t("skillsMarket.installComplete") } },
@@ -191,11 +232,11 @@ export function SkillsMarketContainer({ projectId, rootPath }: Readonly<{
     <section aria-label={t("skillsMarket.title")} className="skills-market">
       <div className="skills-market-hero">
         <div>
-          <span className="skills-market-eyebrow">CODEX SKILLS REGISTRY</span>
+          <span className="skills-market-eyebrow">CODEX EXTENSIONS</span>
           <h2>{t("skillsMarket.title")}</h2>
         </div>
         <div className="skills-market-tabs" role="tablist">
-          {(["installed", "market"] as const).map((item) => (
+          {(["installed", "market", "mcp"] as const).map((item) => (
             <button aria-selected={tab === item} key={item} onClick={() => setTab(item)} role="tab" type="button">
               {t(`skillsMarket.tabs.${item}`)}
             </button>
@@ -224,7 +265,7 @@ export function SkillsMarketContainer({ projectId, rootPath }: Readonly<{
             </div>
           )}
         </div>
-      ) : (
+      ) : tab === "market" ? (
         <div className="skills-market-pane">
           <div className="skills-market-toolbar">
             <div className="skills-market-search"><Search aria-hidden="true" /><Input aria-label={t("skillsMarket.search")} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("skillsMarket.search")} value={query} /></div>
@@ -232,6 +273,23 @@ export function SkillsMarketContainer({ projectId, rootPath }: Readonly<{
           </div>
           {market.isPending ? <div className="skills-market-state" role="status">{t("skillsMarket.loadingMarket")}</div> : market.error !== null ? <div className="skills-market-state" role="alert">{t("skillsMarket.marketError")}</div> : marketItems.length === 0 ? <div className="skills-market-state">{t("skillsMarket.emptyMarket")}</div> : <div className="skills-market-grid">{marketItems.map((skill) => <SkillCard key={skill.id} onOpen={setSelected} skill={skill} />)}</div>}
           {market.hasNextPage ? <Button className="mx-auto" disabled={market.isFetchingNextPage} onClick={() => void market.fetchNextPage()} type="button" variant="outline">{t(market.isFetchingNextPage ? "skillsMarket.loading" : "skillsMarket.loadMore")}</Button> : null}
+        </div>
+      ) : (
+        <div className="skills-market-pane">
+          <div className="skills-market-toolbar">
+            <span className="text-body-small text-muted-foreground">
+              {t("skillsMarket.mcpCount", { count: mcpServers.data?.data.length ?? 0 })}
+            </span>
+            <Button aria-label={t("skillsMarket.refreshMcp")} disabled={mcpServers.isFetching} onClick={() => void mcpServers.refetch()} size="icon-sm" title={t("skillsMarket.refreshMcp")} type="button" variant="ghost">
+              <RefreshCw className={mcpServers.isFetching ? "animate-spin" : ""} aria-hidden="true" />
+            </Button>
+          </div>
+          {mcpServers.isPending ? <div className="skills-market-state" role="status">{t("skillsMarket.loadingMcp")}</div> : mcpServers.error !== null ? <div className="skills-market-state" role="alert">{t("skillsMarket.mcpError")}</div> : mcpServers.data.data.length === 0 ? <div className="skills-market-state">{t("skillsMarket.emptyMcp")}</div> : (
+            <section className="skills-installed-group">
+              <header><h3>MCP</h3><span>{mcpServers.data.data.length}</span></header>
+              <ul>{mcpServers.data.data.map((server) => <McpServerRow key={server.name} pending={toggleMcp.isPending && toggleMcp.variables?.name === server.name} server={server} toggle={(item) => toggleMcp.mutate(item)} />)}</ul>
+            </section>
+          )}
         </div>
       )}
       {selected === null ? null : <SkillDetailDialog client={client} currentProjectId={projectId} currentRootPath={rootPath} installedSkills={installed.data?.data ?? []} installingScope={install.isPending ? install.variables?.scope ?? null : null} onClose={() => setSelected(null)} onInstall={(skill, scope, target) => install.mutate({ scope, skill, ...target })} projects={projects} skill={selected} />}

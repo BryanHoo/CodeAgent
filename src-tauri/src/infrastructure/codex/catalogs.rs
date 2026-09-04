@@ -40,6 +40,22 @@ struct McpParams {
     thread_id: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigReadParams {
+    include_layers: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigValueWriteParams {
+    expected_version: Option<String>,
+    file_path: Option<String>,
+    key_path: String,
+    merge_strategy: &'static str,
+    value: bool,
+}
+
 pub async fn list_models(connection: &AppServerConnection) -> Result<Value, ConnectionError> {
     let data = collect_pages(connection, "model/list", |cursor| PageParams {
         cursor: cursor.map(str::to_owned),
@@ -100,6 +116,70 @@ pub async fn set_skill_enabled(
             REQUEST_TIMEOUT,
         )
         .await
+}
+
+pub async fn list_configured_mcp_servers(
+    connection: &AppServerConnection,
+) -> Result<Value, ConnectionError> {
+    let response: Value = connection
+        .request(
+            "config/read",
+            &ConfigReadParams {
+                include_layers: false,
+            },
+            REQUEST_TIMEOUT,
+        )
+        .await?;
+    let mut servers = response
+        .pointer("/config/mcp_servers")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, config)| {
+            config.as_object().map(|config| {
+                json!({
+                    "enabled": config.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+                    "name": name,
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+    servers.sort_unstable_by(|left, right| left["name"].as_str().cmp(&right["name"].as_str()));
+    Ok(json!({"data": servers}))
+}
+
+pub async fn set_mcp_server_enabled(
+    connection: &AppServerConnection,
+    name: &str,
+    enabled: bool,
+) -> Result<Value, ConnectionError> {
+    let key_path = format!("mcp_servers.{}.enabled", quote_config_key_segment(name));
+    let _: Value = connection
+        .request(
+            "config/value/write",
+            &ConfigValueWriteParams {
+                expected_version: None,
+                file_path: None,
+                key_path,
+                merge_strategy: "replace",
+                value: enabled,
+            },
+            REQUEST_TIMEOUT,
+        )
+        .await?;
+    let _: Value = connection
+        .request(
+            "config/mcpServer/reload",
+            &Map::<String, Value>::new(),
+            REQUEST_TIMEOUT,
+        )
+        .await?;
+    Ok(json!({"enabled": enabled}))
+}
+
+fn quote_config_key_segment(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
 }
 
 async fn request_skills(

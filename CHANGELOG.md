@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 更新 Skills 市场为 `Skills & MCP`，添加 MCP 服务启停与运行时热重载。
+
 ## [0.1.5] - 2026-09-03
 
 ### Added
