@@ -33,6 +33,7 @@
 - Composer 必须按 `model/list.inputModalities` 禁止模型不支持的图片或音频提交；图片固定使用 `detail: auto`，浏览器附件走 raw IPC，宿主选择走路径导入，不提供逐图档位选择
 - 宿主附件选择器底栏必须限制路径显示宽度并单行省略，操作按钮使用不可收缩的独立布局列；中文长路径必须在 Chromium 与 WebKit 浏览器测试中验证无裁切和溢出
 - Composer 必须将 `CODEX_THREAD_BUSY` 映射为本地化的可操作提示；未知原生拒绝不得显示硬编码英文兜底文案
+- Composer 捕获模式中的 Mutation 失败必须只有一个通知所有者；由 Composer 展示错误时必须关闭根级 `MutationCache` 的重复错误 Toast
 - 仅在多个调用方确有一致需求时提取通用组件
 - 应用入口必须通过 React 根回调、`window.error` 与 `unhandledrejection` 上报结构化诊断；后台失败使用同一诊断入口且不得影响主流程。关于页必须提供诊断 ZIP 导出按钮，并明确展示导出中禁用状态和完成/失败通知
 - 桌面宠物不得挂载到工作台 DOM；主窗口只提交宠物标识，Rust 从统一任务活动状态投影动画与有界任务摘要；宠物和气泡共用一个专用透明 WebView 与最小 Provider 装配，气泡点击通过固定事件回到主窗口路由，避免重复连接 Provider Runtime；任务气泡必须按投影顺序自然排列，不得叠放或按完成状态重排；设置中的启用状态使用带明确开关选项的下拉组件

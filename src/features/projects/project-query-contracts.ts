@@ -116,6 +116,7 @@ export type NativeMutationClient = Pick<
 >;
 export type NativePendingRequestClient = Pick<NativeClient, "resolvePendingRequest">;
 export type NativeWorkbenchClient = NativeReadClient &
+  NativeScheduledTaskClient &
   NativeBackgroundTerminalClient &
   NativeGitStatusClient &
   NativeGitHistoryClient &
@@ -138,6 +139,15 @@ export type NativeWorkbenchClient = NativeReadClient &
   NativeSettingsClient &
   NativeSourceFileClient;
 export type NativeSnapshotClient = Pick<NativeClient, "readTask">;
+export type NativeScheduledTaskClient = Pick<
+  NativeClient,
+  | "createScheduledTask"
+  | "deleteScheduledTask"
+  | "listScheduledTasks"
+  | "runScheduledTaskNow"
+  | "setScheduledTaskEnabled"
+  | "updateScheduledTask"
+>;
 
 export const PROJECT_TASK_PAGE_SIZE = 5;
 export const COMPLETED_TASK_PAGE_SIZE = 10;

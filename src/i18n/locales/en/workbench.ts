@@ -1,4 +1,5 @@
 import { skillsMarket } from "./skills-market.js";
+import { scheduledTasks } from "./scheduled-tasks.js";
 
 export const workbench = {
   pet: {
@@ -449,6 +450,7 @@ export const workbench = {
     unpin: "Unpin",
   },
   skillsMarket,
+  scheduledTasks,
   taskBoard: {
     allProjects: "All projects",
     approval: "Awaiting approval",

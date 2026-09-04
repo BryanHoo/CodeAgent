@@ -23,6 +23,7 @@ import type {
   PromptInputAttachment,
 } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
+import type { ComposerDraft } from "../composer-draft-context.js";
 import type { NativeMutationClient } from "../../projects/project-queries.js";
 import type {
   NativeGitMutationClient,
@@ -51,6 +52,7 @@ export function createComposerTurnOptions(
 export type WorkbenchComposerHandle = Readonly<{
   buildPlan: () => Promise<boolean>;
   referenceProjectPath: (file: ProjectFileSearchEntry) => void;
+  submitCurrent: () => Promise<boolean>;
 }>;
 
 export type WorkbenchComposerProps = Readonly<{
@@ -70,6 +72,11 @@ export type WorkbenchComposerProps = Readonly<{
   fastModeDefault: boolean;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   initialProjectDraftId?: string;
+  initialDraft?: ComposerDraft;
+  composerDraftId?: string;
+  captureSubmitVisible?: boolean;
+  captureSubmitLabel?: string;
+  footerVisible?: boolean;
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
@@ -82,6 +89,13 @@ export type WorkbenchComposerProps = Readonly<{
   onOpenProjectPath: () => void;
   onProjectRootChange: (rootId: string) => void;
   onDirectSubmission?: () => void;
+  onCaptureSubmission?: (
+    input: AgentPromptInput,
+    options: AgentTurnOptions,
+    messageAttachments: readonly AgentMessageAttachment[],
+  ) => Promise<void>;
+  /** 向外层表单同步提示词、Skill 或附件是否已有可提交内容。 */
+  onInputStateChange?: (hasInput: boolean) => void;
   onSubmissionStateChange?: (submitting: boolean) => void;
   onTaskCreated?: (task: AgentTask) => void;
   onTurnStarted?: (

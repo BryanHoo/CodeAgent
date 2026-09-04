@@ -137,4 +137,29 @@ mod tests {
             "main-window-commands must allow list_completed_tasks"
         );
     }
+
+    #[test]
+    fn scheduled_task_commands_should_be_registered_and_allowed() {
+        let build_manifest = include_str!("../../build.rs");
+        let permissions = include_str!("../../permissions/window-command-sets.toml");
+
+        for command in [
+            "list_scheduled_tasks",
+            "create_scheduled_task",
+            "update_scheduled_task",
+            "delete_scheduled_task",
+            "set_scheduled_task_enabled",
+            "run_scheduled_task_now",
+        ] {
+            assert!(
+                build_manifest.contains(&format!("\"{command}\"")),
+                "Tauri app manifest must register {command}"
+            );
+            let permission = format!("allow-{}", command.replace('_', "-"));
+            assert!(
+                permissions.contains(&format!("\"{permission}\"")),
+                "main-window-commands must include {permission}"
+            );
+        }
+    }
 }

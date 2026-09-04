@@ -63,7 +63,6 @@ import {
 import { shouldEnableWorkbenchSkills } from "../workbench-query-availability.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 import { useSubmissionStartedAt } from "./use-submission-started-at.js";
-
 export { useSubmissionStartedAt } from "./use-submission-started-at.js";
 const emptyExpandedFileTreePaths = new Set<string>();
 
@@ -111,6 +110,7 @@ export type WorkbenchShellProps = Readonly<{
   board?: boolean;
   draftId?: string;
   projectId: string;
+  scheduledTasks?: boolean;
   skillsMarket?: boolean;
   taskId?: string;
   temporary?: boolean;

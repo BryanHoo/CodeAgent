@@ -48,6 +48,7 @@ import { ArchivedTasksDialog, type ArchivedTaskScope } from "./archived-tasks-di
 import { ProjectSidebarTaskList } from "./project-sidebar-task-list.js";
 import { SidebarTaskBoardLink } from "./sidebar-task-board-link.js";
 import { SidebarSkillsMarketLink } from "./sidebar-skills-market-link.js";
+import { SidebarScheduledTasksLink } from "./sidebar-scheduled-tasks-link.js";
 import { TaskDeleteDialog } from "./task-delete-dialog.js";
 import { SidebarSettingsButton, type SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { groupTasksByProjectId } from "./project-sidebar-state.js";
@@ -188,12 +189,10 @@ export function ProjectSidebar({
       setExpandedProjects(nextExpandedProjectIds);
     }
   }, [projects]);
-
   useEffect(() => {
     // 任务列表请求跟随可见文件夹；当前路由 Project 由 ProjectProvider 单独保持激活。
     setExpandedProjectTaskIds(expandedProjects);
   }, [expandedProjects, setExpandedProjectTaskIds]);
-
   const updateExpandedProjects = useCallback(
     (update: (current: ReadonlySet<string>) => ReadonlySet<string>) => {
       const nextExpandedProjectIds = update(expandedProjectsRef.current);
@@ -365,6 +364,11 @@ export function ProjectSidebar({
           {t("sidebar.newTask")}
         </Link>
         <SidebarSkillsMarketLink
+          className={primaryActionClassName}
+          iconClassName={primaryActionIconClassName}
+          {...(projectId === undefined ? {} : { projectId })}
+        />
+        <SidebarScheduledTasksLink
           className={primaryActionClassName}
           iconClassName={primaryActionIconClassName}
           {...(projectId === undefined ? {} : { projectId })}

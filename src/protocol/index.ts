@@ -2,6 +2,7 @@
 export * from "./workbench-pets.js";
 export * from "./skill-market.js";
 export * from "./task-activity.js";
+export * from "./scheduled-task.js";
 export * from "./diagnostics.js";
 export type {
   CodexRuntimeAvailability,

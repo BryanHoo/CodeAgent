@@ -48,6 +48,7 @@ type ComposerSubmissionOptions = Readonly<{
   editingQueuedSubmission: boolean;
   fastMode: boolean;
   onDirectSubmission: WorkbenchComposerProps["onDirectSubmission"];
+  onCaptureSubmission: WorkbenchComposerProps["onCaptureSubmission"];
   onTaskCreated: WorkbenchComposerProps["onTaskCreated"];
   onTaskStarted: WorkbenchComposerProps["onTaskStarted"];
   onTurnStarted: WorkbenchComposerProps["onTurnStarted"];
@@ -117,6 +118,7 @@ export function createComposerSubmission({
   editingQueuedSubmission,
   fastMode,
   onDirectSubmission,
+  onCaptureSubmission,
   onTaskCreated,
   onTaskStarted,
   onTurnStarted,
@@ -213,7 +215,7 @@ export function createComposerSubmission({
       selectedModel === undefined ||
       selectedReasoningEffort === undefined ||
       turnControlsDisabled ||
-      (action !== "steer" && !canSubmit) ||
+      (onCaptureSubmission === undefined && action !== "steer" && !canSubmit) ||
       (action === "steer" &&
         (!canSteer || activeTaskId === undefined || activeTurnId === undefined))
     ) {
@@ -221,7 +223,11 @@ export function createComposerSubmission({
     }
 
     // 排队项由调用方关闭置底请求，只有用户当前发出的即时消息改变阅读位置。
-    if (action !== "queue" && options.requestTimelineScroll !== false) {
+    if (
+      onCaptureSubmission === undefined &&
+      action !== "queue" &&
+      options.requestTimelineScroll !== false
+    ) {
       onDirectSubmission?.();
     }
     setIsSubmitting(true);
@@ -281,6 +287,25 @@ export function createComposerSubmission({
         setIsSubmitting(false);
       }
       return false;
+    }
+
+    const turnOptions = createComposerTurnOptions(
+      activeSettings,
+      selectedModel.id,
+      selectedReasoningEffort,
+      requestedComposerMode,
+      fastMode,
+    );
+    if (onCaptureSubmission !== undefined) {
+      try {
+        await onCaptureSubmission(input, turnOptions, messageAttachments);
+        return true;
+      } catch (error) {
+        if (isCurrentScope(requestScope)) setMutationError(toPromptSubmissionError(error, t));
+        return false;
+      } finally {
+        if (isCurrentScope(requestScope)) setIsSubmitting(false);
+      }
     }
 
     if (action === "queue") {
@@ -351,13 +376,6 @@ export function createComposerSubmission({
       }
     }
 
-    const turnOptions = createComposerTurnOptions(
-      activeSettings,
-      selectedModel.id,
-      selectedReasoningEffort,
-      requestedComposerMode,
-      fastMode,
-    );
     const turnAttempt = resolveIdempotencyAttempt(
       startTurnAttempt.current,
       JSON.stringify({ input, options: turnOptions }),

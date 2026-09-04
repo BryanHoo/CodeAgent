@@ -20,41 +20,27 @@ import { useComposerSession } from "./workbench-composer-session.js";
 import { createComposerSubmission } from "./workbench-composer-submission.js";
 import { WorkbenchComposerView } from "./workbench-composer-view.js";
 export * from "./workbench-composer-contracts.js";
-export {
-  applyApprovalMode,
-  deriveApprovalMode,
-  deriveComposerActions,
-  deriveComposerInputAvailability,
-  deriveComposerState,
-  interruptPromptTurn,
-  LARGE_PASTE_CHARACTER_THRESHOLD,
-  PASTED_TEXT_ATTACHMENT_NAME,
-  resolveActiveTurnId,
-  resolveComposerPlaceholder,
-  resolveComposerSubmitAction,
-  resolveIdempotencyAttempt,
-  resolveReasoningEffort,
-  startPromptTurn,
-  startTaskReview,
-  steerPromptTurn,
-  type ApprovalMode,
-  type ComposerState,
-  type ComposerSubmitAction,
-  type IdempotencyAttempt,
-} from "../composer-state.js";
+export * from "../composer-state.js";
 export function WorkbenchComposer({
   composerRef,
   capabilities,
+  captureSubmitVisible = true,
+  captureSubmitLabel,
   client,
   fastModeAvailable,
   fastModeDefault,
+  footerVisible = true,
   followUpBehavior,
+  composerDraftId,
+  initialDraft,
   initialProjectDraftId,
   models,
   modelsError,
   modelsPending,
   onDirectSubmission,
+  onCaptureSubmission,
   onFastModeChange,
+  onInputStateChange,
   onOpenProjectPath,
   onProjectRootChange,
   onSettingsChange,
@@ -89,9 +75,11 @@ export function WorkbenchComposer({
   const session = useComposerSession({
     capabilities,
     client,
+    composerDraftId,
     editingProjectDraftId,
     gitStatus,
     models,
+    initialDraft,
     onSubmissionStateChange,
     projectId,
     projectPath,
@@ -231,6 +219,7 @@ export function WorkbenchComposer({
     followUpBehavior,
     fastMode: fastModeEnabled,
     onDirectSubmission,
+    onCaptureSubmission,
     onGoalStarted: () => {
       setComposerModeState(undefined);
     },
@@ -252,6 +241,8 @@ export function WorkbenchComposer({
     turnControlsDisabled,
   });
   const hasComposerInput = !isPromptSkillContentEmpty(promptContent) || attachmentCount > 0;
+  // 捕获模式的外层保存按钮只订阅轻量布尔值，避免复制完整 Composer 草稿。
+  useEffect(() => onInputStateChange?.(hasComposerInput), [hasComposerInput, onInputStateChange]);
   const projectDraftActions = createProjectDraftComposerActions({
     actionLock: composerActionLock,
     attachmentUploadPromises,
@@ -289,6 +280,11 @@ export function WorkbenchComposer({
       });
     },
     referenceProjectPath,
+    submitCurrent: () =>
+      submitPrompt({
+        files: attachments,
+        text: promptSubmission.text,
+      }),
   }));
   const {
     executePromptCommand,
@@ -353,6 +349,9 @@ export function WorkbenchComposer({
       canInterrupt={canInterrupt}
       canSteer={canSteer}
       canSubmit={canSubmit}
+      captureMode={onCaptureSubmission !== undefined}
+      captureSubmitVisible={captureSubmitVisible}
+      {...(captureSubmitLabel === undefined ? {} : { captureSubmitLabel })}
       commandMenuId={commandMenuId}
       commandMenuOpen={commandMenuOpen}
       commandSurfaceRef={commandSurfaceRef}
@@ -370,6 +369,7 @@ export function WorkbenchComposer({
       fileSearchResults={fileSearchResults}
       fastModeAvailable={fastModeAvailable}
       fastModeEnabled={fastModeEnabled}
+      footerVisible={footerVisible}
       getCommandAvailability={getCommandAvailability}
       gitStatus={gitStatus}
       goal={runtime?.metadata?.goal}

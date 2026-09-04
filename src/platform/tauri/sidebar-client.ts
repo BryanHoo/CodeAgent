@@ -26,6 +26,7 @@ import type {
   ClearAgentGoalResponse,
   DeleteAgentTaskResponse,
   DeleteAgentQueuedSubmissionResponse,
+  DeleteScheduledTaskResponse,
   ForkAgentTaskRequest,
   ForkAgentTaskResponse,
   InterruptAgentTurnResponse,
@@ -45,6 +46,9 @@ import type {
   StartAgentTurnResponse,
   StartAgentQueuedSubmissionResponse,
   SteerAgentTurnResponse,
+  ScheduledTaskInput,
+  ScheduledTaskMutationResponse,
+  ScheduledTaskPage,
   TerminateAgentBackgroundTerminalResponse,
   UnarchiveAgentTaskResponse,
   UpdateAgentGoalRequest,
@@ -69,6 +73,38 @@ export class TauriSidebarClient extends TauriRuntimeClient {
 
   public async listProjects(_options: ReadOptions = {}): Promise<ProjectPage> {
     return this.call("list_projects");
+  }
+
+  public async listScheduledTasks(): Promise<ScheduledTaskPage> {
+    return this.invokeCommand("list_scheduled_tasks");
+  }
+
+  public async createScheduledTask(
+    input: ScheduledTaskInput,
+  ): Promise<ScheduledTaskMutationResponse> {
+    return this.invokeCommand("create_scheduled_task", { input });
+  }
+
+  public async updateScheduledTask(
+    taskId: string,
+    input: ScheduledTaskInput,
+  ): Promise<ScheduledTaskMutationResponse> {
+    return this.invokeCommand("update_scheduled_task", { input, taskId });
+  }
+
+  public async deleteScheduledTask(taskId: string): Promise<DeleteScheduledTaskResponse> {
+    return this.invokeCommand("delete_scheduled_task", { taskId });
+  }
+
+  public async setScheduledTaskEnabled(
+    taskId: string,
+    enabled: boolean,
+  ): Promise<ScheduledTaskMutationResponse> {
+    return this.invokeCommand("set_scheduled_task_enabled", { enabled, taskId });
+  }
+
+  public async runScheduledTaskNow(taskId: string): Promise<ScheduledTaskMutationResponse> {
+    return this.invokeCommand("run_scheduled_task_now", { taskId });
   }
 
   public async listTasks(

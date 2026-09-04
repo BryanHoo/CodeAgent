@@ -8,7 +8,7 @@ import {
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   MAX_AGENT_TEXT_BYTES,
 } from "@/protocol/index.js";
-import { ArrowDown, ArrowUp, Folder, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Folder, LoaderCircle, Pencil, Save, SendHorizontal, X } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/components/agent/context.js";
@@ -398,36 +398,42 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 selectedModel={props.selectedModel}
                 selectedReasoningEffort={props.selectedReasoningEffort}
               />
-              <ComposerDraftSaveButton
-                disabled={!props.hasComposerInput || props.isSubmitting}
-                editing={props.editingProjectDraftId !== undefined}
-                onSave={props.onProjectDraftSave}
-              />
-              <PromptInputSubmit
-                aria-label={
-                  props.submitAction === "queue"
-                    ? t("composer.queueMessage")
-                    : props.submitAction === "steer"
-                      ? t("composer.sendSteer")
-                      : props.submitAction === "interrupt"
-                        ? t("composer.stop")
-                        : t("composer.submit")
-                }
-                disabled={
-                  props.turnControlsDisabled ||
-                  props.submitAction === "blocked" ||
-                  (props.submitAction === "start" &&
-                    (!props.canSubmit ||
-                      props.selectedModel === undefined ||
-                      props.selectedReasoningEffort === undefined)) ||
-                  (props.submitAction === "interrupt" &&
-                    (!props.canInterrupt || props.activeTurnId === undefined))
-                }
-                className="max-workbench:w-8 max-workbench:min-w-8 max-[360px]:!w-6 max-[360px]:!min-w-6"
-                onClick={props.submitAction === "interrupt" ? props.onInterrupt : undefined}
-                status={props.state === "running" && props.hasComposerInput ? "idle" : props.state}
-                type={props.submitAction === "interrupt" ? "button" : "submit"}
-              />
+              {props.captureMode ? null : (
+                <ComposerDraftSaveButton
+                  disabled={!props.hasComposerInput || props.isSubmitting}
+                  editing={props.editingProjectDraftId !== undefined}
+                  onSave={props.onProjectDraftSave}
+                />
+              )}
+              {!props.captureMode || props.captureSubmitVisible ? (
+                <PromptInputSubmit
+                  aria-label={
+                    props.captureSubmitLabel ?? (props.submitAction === "queue"
+                      ? t("composer.queueMessage")
+                      : props.submitAction === "steer"
+                        ? t("composer.sendSteer")
+                        : props.submitAction === "interrupt"
+                          ? t("composer.stop")
+                          : t("composer.submit"))
+                  }
+                  disabled={
+                    props.turnControlsDisabled ||
+                    props.submitAction === "blocked" ||
+                    (props.submitAction === "start" &&
+                      ((!props.captureMode && !props.canSubmit) ||
+                        props.selectedModel === undefined ||
+                        props.selectedReasoningEffort === undefined)) ||
+                    (props.submitAction === "interrupt" &&
+                      (!props.canInterrupt || props.activeTurnId === undefined))
+                  }
+                  className="max-workbench:w-8 max-workbench:min-w-8 max-[360px]:!w-6 max-[360px]:!min-w-6"
+                  onClick={props.submitAction === "interrupt" ? props.onInterrupt : undefined}
+                  status={props.state === "running" && props.hasComposerInput ? "idle" : props.state}
+                  type={props.submitAction === "interrupt" ? "button" : "submit"}
+                >
+                  {props.captureMode ? <Save aria-hidden="true" /> : undefined}
+                </PromptInputSubmit>
+              ) : null}
             </div>
           </PromptInputFooter>
         </PromptInput>
@@ -437,7 +443,8 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           {t("composer.modelListFailed")}
         </p>
       )}
-      <div className="mx-auto mt-1.5 flex h-9 w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
+      {props.footerVisible ? (
+        <div className="mx-auto mt-1.5 flex h-9 w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
         {props.projectToolsEnabled ? (
           <>
             <div className="flex min-w-0 shrink items-center gap-0.5">
@@ -466,13 +473,15 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           </>
         ) : null}
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <ProjectDraftList
-            composerHasInput={props.hasComposerInput}
-            drafts={props.projectDrafts}
-            onDelete={props.onProjectDraftDelete}
-            onRestore={props.onProjectDraftRestore}
-            projectName={props.projectName}
-          />
+          {props.captureMode ? null : (
+            <ProjectDraftList
+              composerHasInput={props.hasComposerInput}
+              drafts={props.projectDrafts}
+              onDelete={props.onProjectDraftDelete}
+              onRestore={props.onProjectDraftRestore}
+              projectName={props.projectName}
+            />
+          )}
           <Context
             maxTokens={props.contextUsage?.contextWindow}
             usedTokens={props.contextUsage?.usedTokens}
@@ -480,7 +489,8 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
             <ContextTrigger />
           </Context>
         </div>
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }

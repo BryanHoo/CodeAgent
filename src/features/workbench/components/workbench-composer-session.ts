@@ -11,7 +11,7 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "
 
 import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
-import { useComposerDraftStore } from "../composer-draft-context.js";
+import { useComposerDraftStore, type ComposerDraft } from "../composer-draft-context.js";
 import {
   createComposerDraftBinding,
   shouldRestoreComposerBinding,
@@ -54,10 +54,12 @@ import type { ComposerMode } from "./workbench-composer-contracts.js";
 
 type ComposerSessionOptions = Readonly<{
   capabilities: AgentCapabilities | undefined;
+  composerDraftId: string | undefined;
   client: WorkbenchComposerProps["client"];
   editingProjectDraftId: string | undefined;
   gitStatus: ProjectGitStatus | undefined;
   models: readonly AgentModel[];
+  initialDraft: ComposerDraft | undefined;
   onSubmissionStateChange: WorkbenchComposerProps["onSubmissionStateChange"];
   projectId: string;
   projectPath: string;
@@ -73,10 +75,12 @@ const emptyProjectFileSearchResults: readonly ProjectFileSearchEntry[] = [];
 
 export function useComposerSession({
   capabilities,
+  composerDraftId,
   client,
   editingProjectDraftId,
   gitStatus,
   models,
+  initialDraft,
   onSubmissionStateChange,
   projectId,
   projectPath,
@@ -97,12 +101,12 @@ export function useComposerSession({
         editingDraftId: editingProjectDraftId,
         projectDrafts: projectDraftStore,
         projectId,
-        taskId,
+        taskId: composerDraftId ?? taskId,
       }),
-    [composerDraftStore, editingProjectDraftId, projectDraftStore, projectId, taskId],
+    [composerDraftId, composerDraftStore, editingProjectDraftId, projectDraftStore, projectId, taskId],
   );
   const composerScope = composerDraftBinding.scope;
-  const initialComposerDraft = composerDraftBinding.read();
+  const initialComposerDraft = initialDraft ?? composerDraftBinding.read();
   const [settingsOverride, setSettingsOverride] = useState<{
     scope: string;
     settings: AgentTaskSettings;

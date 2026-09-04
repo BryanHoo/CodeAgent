@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use serde_json::Value;
 
 #[derive(Debug, Serialize)]
@@ -18,7 +18,7 @@ pub struct AgentTaskSettings {
     pub sandbox_mode: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentPromptInput {
     #[serde(default)]
@@ -26,6 +26,20 @@ pub struct AgentPromptInput {
     #[serde(default)]
     pub skills: Vec<Value>,
     pub text: String,
+}
+
+impl Serialize for AgentPromptInput {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("AgentPromptInput", 4)?;
+        state.serialize_field("attachments", &self.attachments)?;
+        state.serialize_field("skills", &self.skills)?;
+        state.serialize_field("text", &self.text)?;
+        state.serialize_field("type", "prompt")?;
+        state.end()
+    }
 }
 
 impl AgentPromptInput {
@@ -39,20 +53,24 @@ impl AgentPromptInput {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentTurnOptions {
     pub approval_policy: Value,
     pub approvals_reviewer: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collaboration_mode: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub fast_mode: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub goal_mode: bool,
     pub model: String,
     pub reasoning_effort: String,
     pub sandbox_mode: String,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl Default for AgentTurnOptions {

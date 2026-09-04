@@ -33,6 +33,12 @@ pub enum AppError {
     RequestCancelled,
     #[error("filesystem request failed")]
     FilesystemRequestFailed,
+    #[error("scheduled task input is invalid")]
+    ScheduledTaskInvalid,
+    #[error("scheduled task was not found")]
+    ScheduledTaskNotFound,
+    #[error("scheduled task is already starting")]
+    ScheduledTaskBusy,
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
     #[error(transparent)]
@@ -68,6 +74,9 @@ impl Serialize for AppError {
         let structured_error = match self {
             Self::CodexThreadBusy => Some(("CODEX_THREAD_BUSY", self.to_string())),
             Self::RequestCancelled => Some(("REQUEST_CANCELLED", self.to_string())),
+            Self::ScheduledTaskInvalid => Some(("SCHEDULED_TASK_INVALID", self.to_string())),
+            Self::ScheduledTaskNotFound => Some(("SCHEDULED_TASK_NOT_FOUND", self.to_string())),
+            Self::ScheduledTaskBusy => Some(("SCHEDULED_TASK_BUSY", self.to_string())),
             Self::Workspace(error) => Some((error.code(), error.to_string())),
             Self::SkillsMarket(error) => Some((error.code(), error.to_string())),
             _ => None,

@@ -1,5 +1,5 @@
 import { PanelLeft, Pencil } from "lucide-react";
-import { useRef, type CSSProperties } from "react";
+import { lazy, Suspense, useRef, type CSSProperties } from "react";
 import { Button } from "../../../shared/components/core/button.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/components/core/tooltip.js";
@@ -9,7 +9,8 @@ import { TaskBoardContainer } from "./task-board-container.js";
 import { SkillsMarketContainer } from "../../skills-market/skills-market-container.js";
 import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
-import { inspectorWidthLimits, resolveInspectorVisibility, resolveQuickOpenVisibility, sidebarWidthLimits } from "./workbench-panel-layout.js";
+import { inspectorWidthLimits, resolveInspectorVisibility, resolveQuickOpenVisibility } from "./workbench-panel-layout.js";
+import { WorkbenchSidebarChrome } from "./workbench-sidebar-chrome.js";
 import { ProjectQuickOpenMenu } from "./project-open-menu.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
@@ -18,13 +19,19 @@ import { WorkbenchInspector } from "./workbench-inspector.js";
 import { WorkbenchInspectorToggle } from "./workbench-inspector-toggle.js";
 import { WorkbenchPetLayer } from "../../pets/components/workbench-pet-layer.js";
 import { getWorkbenchInspectorMountKey } from "../workbench-inspector-activation.js";
-type WorkbenchShellStyle = CSSProperties &
-  Readonly<{ "--inspector-open-width": string; "--sidebar-open-width": string }>;
+
+// 定时任务是低频独立视图，按需加载可保持常用工作区启动体积稳定。
+const ScheduledTasksContainer = lazy(async () => {
+  const module = await import("../../scheduled-tasks/scheduled-tasks-container.js");
+  return { default: module.ScheduledTasksContainer };
+});
+
 export function WorkbenchShellLayout({
   board,
   context,
   draftId,
   projectId,
+  scheduledTasks,
   skillsMarket,
   taskId,
   temporary,
@@ -33,6 +40,7 @@ export function WorkbenchShellLayout({
   board: boolean;
   draftId?: string;
   projectId: string;
+  scheduledTasks: boolean;
   skillsMarket: boolean;
   taskId?: string;
   temporary: boolean;
@@ -115,8 +123,8 @@ export function WorkbenchShellLayout({
     workbenchShellRef,
     t,
   } = context;
-  const utilityView = board || skillsMarket;
-  const viewTitle = skillsMarket ? t("skillsMarket.title") : board ? t("taskBoard.title") : title;
+  const utilityView = board || skillsMarket || scheduledTasks;
+  const viewTitle = scheduledTasks ? t("scheduledTasks.title") : skillsMarket ? t("skillsMarket.title") : board ? t("taskBoard.title") : title;
   const inspectorVisible = resolveInspectorVisibility(utilityView, inspectorOpen);
   return (
     <div
@@ -128,7 +136,7 @@ export function WorkbenchShellLayout({
         {
           "--inspector-open-width": `${String(inspectorWidth)}px`,
           "--sidebar-open-width": `${String(sidebarWidth)}px`,
-        } as WorkbenchShellStyle
+        } as CSSProperties
       }
     >
       <ProjectSidebar
@@ -144,38 +152,15 @@ export function WorkbenchShellLayout({
             ? {}
             : { taskId })}
       />
-      {sidebarOpen ? (
-        <Button
-          variant="ghost"
-          aria-label={t("shell.closeSidebar")}
-          className="workbench-sidebar-scrim"
-          onClick={closeSidebar}
-          type="button"
-        />
-      ) : null}
-      {sidebarOpen ? (
-        <WorkbenchPanelResizer
-          direction={1}
-          label={t("shell.resizeSidebar")}
-          maximumWidth={sidebarWidthLimits.maximum}
-          minimumWidth={sidebarWidthLimits.minimum}
-          onResize={(width) => {
-            workbenchShellRef.current?.style.setProperty(
-              "--sidebar-open-width",
-              `${String(width)}px`,
-            );
-          }}
-          onResizeEnd={(width) => {
-            workbenchShellRef.current?.removeAttribute("data-resizing-panel");
-            setSidebarWidth(width);
-          }}
-          onResizeStart={() => {
-            workbenchShellRef.current?.setAttribute("data-resizing-panel", "sidebar");
-          }}
-          panel="sidebar"
-          width={sidebarWidth}
-        />
-      ) : null}
+      <WorkbenchSidebarChrome
+        closeLabel={t("shell.closeSidebar")}
+        onClose={closeSidebar}
+        onWidthChange={setSidebarWidth}
+        open={sidebarOpen}
+        resizeLabel={t("shell.resizeSidebar")}
+        shellRef={workbenchShellRef}
+        width={sidebarWidth}
+      />
       <main aria-label={t("shell.timeline")} className="flex min-h-0 min-w-0 flex-col bg-content">
         <header className="flex h-workbench-header shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -255,7 +240,11 @@ export function WorkbenchShellLayout({
             )}
           </div>
         </header>
-        {skillsMarket ? (
+        {scheduledTasks ? (
+          <Suspense fallback={<div aria-busy="true" style={{ flex: 1 }} />}>
+            <ScheduledTasksContainer context={context} projectId={projectId} temporary={temporary} />
+          </Suspense>
+        ) : skillsMarket ? (
           <SkillsMarketContainer
             {...(temporary ? {} : { projectId })}
             {...(selectedRootPath === undefined ? {} : { rootPath: selectedRootPath })}

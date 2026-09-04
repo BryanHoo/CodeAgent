@@ -21,6 +21,11 @@ mod pet_assets;
 pub mod pet_commands;
 pub mod project_file_window_commands;
 mod request_cancellation;
+pub mod scheduled_task_commands;
+mod scheduled_task_runner;
+pub mod scheduled_task_runtime;
+#[cfg(test)]
+mod scheduled_task_runtime_tests;
 pub mod sidebar_commands;
 pub mod sidebar_directory_commands;
 mod sidebar_prompt_title;

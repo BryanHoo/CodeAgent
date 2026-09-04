@@ -1,4 +1,5 @@
 import { skillsMarket } from "./skills-market.js";
+import { scheduledTasks } from "./scheduled-tasks.js";
 
 export const workbench = {
   pet: {
@@ -445,6 +446,7 @@ export const workbench = {
     unpin: "取消固定",
   },
   skillsMarket,
+  scheduledTasks,
   taskBoard: {
     allProjects: "全部项目",
     approval: "待审批",

@@ -17,6 +17,10 @@ import { taskRoute } from "./routes/task-route.js";
 import { temporaryRoute } from "./routes/temporary-route.js";
 import { temporaryTaskRoute } from "./routes/temporary-task-route.js";
 import { workbenchLayoutRoute } from "./routes/workbench-route.js";
+import {
+  projectScheduledTasksRoute,
+  temporaryScheduledTasksRoute,
+} from "./routes/scheduled-tasks-route.js";
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -25,10 +29,12 @@ const routeTree = rootRoute.addChildren([
     projectRoute,
     projectDraftRoute,
     projectTaskBoardRoute,
+    projectScheduledTasksRoute,
     projectSkillsMarketRoute,
     taskRoute,
     temporaryRoute,
     temporaryTaskBoardRoute,
+    temporaryScheduledTasksRoute,
     temporarySkillsMarketRoute,
     temporaryTaskRoute,
   ]),

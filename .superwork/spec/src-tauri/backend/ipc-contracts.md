@@ -9,9 +9,10 @@
 
 ## 数据契约
 
-- 对外结构使用 `serde(rename_all = "camelCase")`
+- 对外结构使用 `serde(rename_all = "camelCase")`；带标签枚举的变体字段必须同时使用 `rename_all_fields = "camelCase"`，防止嵌套字段退化为 snake_case
 - 事件枚举使用 `serde(tag = "type", content = "data")`
 - Codex 线程被其他 writer 占用时返回 `{ code: "CODEX_THREAD_BUSY", message }`；其他 Codex RPC 错误返回 `{ code: "CODEX_RPC_ERROR", message, rpcCode }`，保留上游错误信息供用户处理，非 RPC 的传输与解析错误继续使用通用错误
+- Tauri 框架以字符串拒绝参数或 ACL 错误时，WebView 客户端必须包装为 `Error` 并保留原始消息，不得在 Composer 中退化为无上下文兜底文案
 - IPC 结构变化时同步修改 `src/domain/` 中对应的 TypeScript 类型
 - Channel 事件保持单调递增序号，前端据此忽略陈旧事件
 - 为序列化结果编写精确 JSON 断言，防止字段名或标签漂移

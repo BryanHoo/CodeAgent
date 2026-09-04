@@ -1,0 +1,459 @@
+/* 定时任务采用稳定双栏与时间轨道，异步刷新只更新内容，不改变面板尺寸。 */
+.scheduled-tasks {
+  display: grid;
+  min-width: 780px;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 292px minmax(480px, 1fr);
+  overflow: hidden;
+  background: var(--ui-color-content);
+}
+
+.scheduled-task-list {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  border-right: 1px solid var(--ui-color-separator);
+  background: color-mix(in srgb, var(--ui-color-text) 1.5%, var(--ui-color-content));
+}
+
+.scheduled-task-list__header {
+  display: flex;
+  height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 16px;
+  gap: 10px;
+}
+
+.scheduled-task-list__header > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.scheduled-task-list__header h2,
+.scheduled-task-prompt h3,
+.scheduled-task-runs h3 {
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-body-small);
+  font-weight: var(--ui-font-weight-semibold);
+}
+
+.scheduled-task-list__header span {
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-caption);
+}
+
+.scheduled-task-search {
+  position: relative;
+  margin: 0 12px 10px;
+}
+
+.scheduled-task-search svg {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  left: 9px;
+  width: 14px;
+  color: var(--ui-color-text-subtle);
+}
+
+.scheduled-task-search input {
+  height: 31px;
+  padding-left: 30px;
+  background: var(--ui-color-control);
+}
+
+.scheduled-task-list__items {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+  scrollbar-gutter: stable;
+}
+
+.scheduled-task-list__empty,
+.scheduled-task-welcome {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  gap: 8px;
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-body-small);
+  text-align: center;
+}
+
+.scheduled-task-list__empty svg {
+  width: 20px;
+  margin: auto;
+}
+
+.scheduled-task-row {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 82px;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  overflow: hidden;
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-color-text);
+  text-align: left;
+}
+
+.scheduled-task-row:hover { background: var(--ui-color-control-hover); }
+.scheduled-task-row[data-active="true"] { background: var(--ui-color-control-active); }
+
+.scheduled-task-row__rail { background: var(--ui-color-task-running); }
+.scheduled-task-row[data-tone="failed"] .scheduled-task-row__rail { background: var(--ui-color-task-failed); }
+.scheduled-task-row[data-tone="paused"] .scheduled-task-row__rail { background: var(--ui-color-text-subtle); }
+.scheduled-task-row[data-tone="running"] .scheduled-task-row__rail { background: var(--ui-color-warning); }
+
+.scheduled-task-row__content {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 3px;
+  padding: 10px 12px;
+  color: inherit;
+  text-align: left;
+}
+
+.scheduled-task-row__content strong,
+.scheduled-task-row__content > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scheduled-task-row__content strong { font-size: var(--ui-font-size-body-small); font-weight: var(--ui-font-weight-semibold); }
+.scheduled-task-row__content > span { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-label); }
+.scheduled-task-row__time { display: flex; align-items: center; gap: 5px; }
+.scheduled-task-row__time svg { width: 12px; }
+.scheduled-task-row__switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  align-self: center;
+  border-radius: 999px;
+  margin-right: 10px;
+  background: var(--ui-color-control-active);
+  outline: none;
+}
+.scheduled-task-row__switch[data-state="checked"] { background: var(--ui-color-accent); }
+.scheduled-task-row__switch:focus-visible { box-shadow: var(--ui-shadow-focus); }
+.scheduled-task-row__switch-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  transform: translateX(2px);
+  transition: transform var(--ui-motion-fast) var(--ui-ease-standard);
+}
+.scheduled-task-row__switch-thumb[data-state="checked"] { transform: translateX(16px); }
+
+.scheduled-task-editor {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 0 28px;
+  scrollbar-gutter: stable;
+}
+
+.scheduled-task-editor__toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  display: flex;
+  height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ui-color-separator);
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--ui-color-content) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.scheduled-task-fields {
+  display: grid;
+  max-width: 920px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+  padding: 24px 28px 18px;
+}
+
+.scheduled-task-fields label { display: grid; min-width: 0; gap: 7px; }
+.scheduled-task-fields label > span { color: var(--ui-color-text-muted); font-size: var(--ui-font-size-label); font-weight: var(--ui-font-weight-medium); }
+.scheduled-task-fields input,
+.scheduled-task-fields select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--ui-color-separator-strong);
+  border-radius: var(--ui-radius-control);
+  padding: 0 10px;
+  color: var(--ui-color-text);
+  background: var(--ui-color-panel);
+  font-size: var(--ui-font-size-body-small);
+  outline: none;
+}
+.scheduled-task-fields input:focus,
+.scheduled-task-fields select:focus { box-shadow: var(--ui-shadow-focus); }
+.scheduled-task-fields__wide { grid-column: 1 / -1; }
+
+.scheduled-task-date-time-field {
+  min-width: 0;
+  height: 34px;
+}
+
+.scheduled-task-date-time-picker,
+.scheduled-task-date-time-picker .react-datepicker__input-container {
+  display: block;
+  width: 100%;
+  height: 34px;
+}
+
+.scheduled-task-date-time-picker .react-datepicker__input-container .react-datepicker__calendar-icon {
+  top: 50%;
+  right: 10px;
+  left: auto;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  color: var(--ui-color-text-subtle);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.scheduled-task-date-time-picker .react-datepicker__view-calendar-icon input {
+  padding-right: 38px;
+  padding-left: 10px;
+  cursor: pointer;
+}
+.scheduled-task-date-time-picker__popper { z-index: 30; padding-top: 5px; }
+
+.react-datepicker.scheduled-task-date-time-picker__calendar {
+  width: 292px;
+  border: 1px solid var(--ui-color-separator-strong);
+  border-radius: var(--ui-radius-surface);
+  color: var(--ui-color-text);
+  background: var(--ui-color-raised);
+  box-shadow: var(--ui-shadow-floating);
+  font-family: inherit;
+  font-size: var(--ui-font-size-label);
+  overflow: hidden;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__header {
+  border-radius: 0;
+  border-color: var(--ui-color-separator);
+  padding: 12px 12px 8px;
+  background: var(--ui-color-panel);
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__current-month,
+.scheduled-task-date-time-picker__calendar .react-datepicker__day-name,
+.scheduled-task-date-time-picker__calendar .react-datepicker__day,
+.scheduled-task-date-time-picker__calendar .react-datepicker__month-text {
+  color: var(--ui-color-text);
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__current-month {
+  height: 24px;
+  font-size: var(--ui-font-size-body-small);
+  font-weight: var(--ui-font-weight-semibold);
+  line-height: 24px;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__header__dropdown {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__month-dropdown-container--select,
+.scheduled-task-date-time-picker__calendar .react-datepicker__year-dropdown-container--select {
+  margin: 0;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__month-select,
+.scheduled-task-date-time-picker__calendar .react-datepicker__year-select {
+  height: 28px;
+  border: 1px solid var(--ui-color-separator-strong);
+  border-radius: var(--ui-radius-control);
+  padding: 0 7px;
+  color: var(--ui-color-text);
+  background: var(--ui-color-raised);
+  font: inherit;
+  outline: none;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__month-select:focus,
+.scheduled-task-date-time-picker__calendar .react-datepicker__year-select:focus {
+  border-color: var(--ui-color-accent);
+  box-shadow: var(--ui-shadow-focus);
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__month-container {
+  float: none;
+  width: 100%;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__month {
+  margin: 8px 12px 10px;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day-names {
+  margin-top: 8px;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day-name,
+.scheduled-task-date-time-picker__calendar .react-datepicker__day {
+  width: 34px;
+  height: 32px;
+  border-radius: var(--ui-radius-control);
+  margin: 1px;
+  line-height: 32px;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day-name {
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-caption);
+  font-weight: var(--ui-font-weight-medium);
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day:hover,
+.scheduled-task-date-time-picker__calendar .react-datepicker__month-text:hover {
+  background: var(--ui-color-control-hover) !important;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--selected,
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--selected:hover,
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--keyboard-selected,
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--keyboard-selected:hover,
+.scheduled-task-date-time-picker__calendar .react-datepicker__month-text--selected {
+  color: white !important;
+  background: var(--ui-color-accent) !important;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--today {
+  color: var(--ui-color-accent-strong);
+  font-weight: var(--ui-font-weight-semibold);
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--outside-month {
+  color: var(--ui-color-text-subtle);
+  opacity: 0.55;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--disabled {
+  color: var(--ui-color-text-subtle);
+  opacity: 0.45;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__day--disabled:hover {
+  background: transparent !important;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__navigation {
+  top: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ui-radius-control);
+}
+.scheduled-task-date-time-picker__calendar .react-datepicker__navigation:hover {
+  background: var(--ui-color-control-hover);
+}
+.scheduled-task-date-time-picker__calendar .react-datepicker__navigation--previous { left: 9px; }
+.scheduled-task-date-time-picker__calendar .react-datepicker__navigation--next { right: 9px; }
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__navigation-icon::before {
+  border-color: var(--ui-color-text-muted);
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker__input-time-container {
+  display: flex;
+  clear: both;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--ui-color-separator);
+  margin: 0;
+  padding: 11px 14px;
+  background: color-mix(in srgb, var(--ui-color-panel) 72%, var(--ui-color-raised));
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker-time__caption,
+.scheduled-task-date-time-picker__calendar .react-datepicker-time__input-container {
+  float: none;
+  margin: 0;
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker-time__caption {
+  color: var(--ui-color-text-muted);
+  font-weight: var(--ui-font-weight-medium);
+}
+
+.scheduled-task-date-time-picker__calendar .react-datepicker-time__input-container,
+.scheduled-task-date-time-picker__calendar .react-datepicker-time__input {
+  display: block;
+}
+
+.scheduled-task-date-time-picker__calendar
+  .react-datepicker__input-time-container
+  .react-datepicker-time__input-container
+  .react-datepicker-time__input
+  input {
+  width: 112px;
+  height: 30px;
+  border: 1px solid var(--ui-color-separator-strong);
+  border-radius: var(--ui-radius-control);
+  margin: 0;
+  padding: 0 8px;
+  color: var(--ui-color-text);
+  background: var(--ui-color-raised);
+  font: inherit;
+  text-align: center;
+  outline: none;
+  color-scheme: light dark;
+}
+
+.scheduled-task-date-time-picker__calendar
+  .react-datepicker__input-time-container
+  .react-datepicker-time__input-container
+  .react-datepicker-time__input
+  input:focus {
+  border-color: var(--ui-color-accent);
+  box-shadow: var(--ui-shadow-focus);
+}
+
+.scheduled-task-prompt {
+  border-top: 1px solid var(--ui-color-separator);
+  padding-top: 18px;
+}
+.scheduled-task-prompt > h3,
+.scheduled-task-runs > h3 { padding: 0 28px 12px; }
+.scheduled-task-prompt > section { padding-right: 28px; padding-left: 28px; }
+
+.scheduled-task-runs { padding-top: 20px; }
+.scheduled-task-runs > p { padding: 0 28px; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-body-small); }
+.scheduled-task-run {
+  display: grid;
+  min-height: 38px;
+  grid-template-columns: 90px 160px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--ui-color-separator);
+  margin: 0 28px;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-label);
+}
+.scheduled-task-run[data-status="failed"] > :first-child,
+.scheduled-task-run__error { color: var(--ui-color-danger); }
+.scheduled-task-run[data-status="started"] > :first-child { color: var(--ui-color-task-completed); }
+.scheduled-task-run[data-status="running"] > :first-child { color: var(--ui-color-warning); }
+.scheduled-task-run__error { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.scheduled-task-danger-zone {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--ui-color-separator);
+  margin: 24px 28px 0;
+  padding-top: 18px;
+}

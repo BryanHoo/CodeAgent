@@ -1,11 +1,8 @@
-use std::time::Duration;
-
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State};
-use tokio::time::timeout;
 
 use super::{
-    error::AppError, sidebar_prompt_title::prompt_task_title,
+    error::AppError, scheduled_task_runner::start_turn_for_task,
     sidebar_task_settings::effective_task_settings, state::AppState,
 };
 use crate::{
@@ -170,80 +167,21 @@ pub async fn start_turn(
     app: AppHandle,
     project_id: String,
     task_id: String,
-    mut input: AgentPromptInput,
+    input: AgentPromptInput,
     options: AgentTurnOptions,
     resume_task: bool,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    let app_data = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
-    super::attachment_commands::resolve_prompt_attachments(&app_data, &project_id, &mut input)
-        .await?;
-    let connection = state.codex_connection().await?;
-    // App Server 可能先推送 turn/started，再返回 turn/start 响应，必须提前建立归属。
-    state.remember_tasks(&project_id, [task_id.as_str()]).await;
-    if let Some(task_title) = prompt_task_title(&input) {
-        state
-            .promote_task_title(&project_id, &task_id, task_title)
-            .await;
-    }
-    let settings = AgentTaskSettings::from(&options);
-    write_task_settings(&app_data, &project_id, &task_id, &settings)
-        .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
-    if options.goal_mode {
-        if !input.attachments.is_empty() || !input.skills.is_empty() {
-            return Err(AppError::CodexRequestFailed);
-        }
-        if resume_task {
-            codex::resume_task(&connection, &project_id, &task_id)
-                .await
-                .map_err(AppError::from)?;
-        }
-        let (waiter_id, turn_started) = state.register_turn_started(&task_id).await;
-        let result = async {
-            codex::update_thread_settings(&connection, &task_id, &options)
-                .await
-                .map_err(AppError::from)?;
-            codex::set_goal_objective(&connection, &task_id, &input.text)
-                .await
-                .map_err(AppError::from)?;
-            timeout(Duration::from_secs(30), turn_started)
-                .await
-                .map_err(|_| AppError::CodexRequestFailed)?
-                .map_err(|_| AppError::CodexRequestFailed)
-        }
-        .await;
-        let turn = match result {
-            Ok(turn) => turn,
-            Err(error) => {
-                state.cancel_turn_started(&task_id, waiter_id).await;
-                return Err(error);
-            }
-        };
-        return Ok(json!({
-            "checkpoint": {
-                "sequence": state.project_sequence(&project_id).await,
-                "sessionId": codex::RUNTIME_SESSION_ID,
-            },
-            "taskId": task_id,
-            "turn": turn,
-        }));
-    }
-    let mut response = codex::start_turn(
-        &connection,
-        project_id.clone(),
-        task_id,
+    start_turn_for_task(
+        &app,
+        &project_id,
+        &task_id,
         input,
         options,
         resume_task,
+        &state,
     )
     .await
-    .map_err(AppError::from)?;
-    response.checkpoint.sequence = state.project_sequence(&project_id).await;
-    serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
 #[tauri::command(rename_all = "camelCase")]

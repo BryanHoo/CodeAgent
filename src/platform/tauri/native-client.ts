@@ -33,6 +33,8 @@ function normalizeNativeError(error: unknown): unknown {
     const rpcCode = "rpcCode" in error && typeof error.rpcCode === "number" ? error.rpcCode : null;
     return new NativeCommandError(error.code, error.message, rpcCode);
   }
+  // Tauri 参数校验等框架错误以字符串拒绝，统一包装后保留原始诊断信息。
+  if (typeof error === "string" && error.trim().length > 0) return new Error(error);
   return error;
 }
 

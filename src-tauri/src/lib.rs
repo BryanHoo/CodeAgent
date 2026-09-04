@@ -5,6 +5,8 @@ mod application;
 pub mod domain;
 mod infrastructure;
 
+use tauri::Manager;
+
 use application::{
     app_lifecycle::{MainWindowLifecycle, handle_run_event, handle_window_event},
     app_storage_commands::{
@@ -37,6 +39,11 @@ use application::{
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
     pet_commands::{download_workbench_pet, list_workbench_pets},
     project_file_window_commands::open_project_file_window,
+    scheduled_task_commands::{
+        create_scheduled_task, delete_scheduled_task, list_scheduled_tasks, run_scheduled_task_now,
+        set_scheduled_task_enabled, update_scheduled_task,
+    },
+    scheduled_task_runtime::ScheduledTaskRuntime,
     sidebar_commands::{
         add_project, archive_task, compact_task, delete_task, fork_task, get_task_settings,
         interrupt_turn, list_projects, list_tasks, pin_task, read_task, remove_project,
@@ -92,10 +99,14 @@ pub fn run() {
         .manage(AppStorageRuntime::default())
         .manage(DesktopPetRuntime::default())
         .manage(NotificationRuntime::default())
+        .manage(ScheduledTaskRuntime::default())
         .manage(MainWindowLifecycle::default())
         .setup(|app| {
             diagnostics::initialize(app.handle())?;
-            setup_tray(app.handle()).map_err(Into::into)
+            setup_tray(app.handle())?;
+            app.state::<ScheduledTaskRuntime>()
+                .start(app.handle().clone());
+            Ok(())
         })
         .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![
@@ -157,6 +168,12 @@ pub fn run() {
             reorder_projects,
             list_project_directories,
             list_completed_tasks,
+            list_scheduled_tasks,
+            create_scheduled_task,
+            update_scheduled_task,
+            delete_scheduled_task,
+            set_scheduled_task_enabled,
+            run_scheduled_task_now,
             list_tasks,
             read_task,
             start_task,
