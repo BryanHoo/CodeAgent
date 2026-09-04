@@ -1,5 +1,5 @@
 import type { AgentTask, AgentTaskPage } from "@/protocol/index.js";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -114,5 +114,39 @@ describe("refreshStartedProjectTask", () => {
       updatedAt: "2026-09-03T08:00:00.000Z",
     });
     expect(data?.pages.flatMap((page) => page.data).filter((task) => task.id === laterTask.id)).toHaveLength(1);
+  });
+
+  it("keeps a newly created task when the started-task refresh returns an older list", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = ["projects", "project-a", "tasks"] as const;
+    const currentData = {
+      pageParams: [undefined],
+      pages: [{ data: [createdTask, existingTask], nextCursor: null }],
+    };
+    const staleData = {
+      pageParams: [undefined],
+      pages: [{ data: [existingTask], nextCursor: null }],
+    };
+    queryClient.setQueryData(queryKey, currentData);
+    const observer = new QueryObserver(queryClient, {
+      queryFn: async () => staleData,
+      queryKey,
+      staleTime: Number.POSITIVE_INFINITY,
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+
+    await refreshStartedProjectTask(
+      queryClient,
+      "project-a",
+      createdTask.id,
+      "2026-09-03T08:00:00.000Z",
+    );
+
+    const data = queryClient.getQueryData<{ pages: AgentTaskPage[] }>(queryKey);
+    expect(data?.pages[0]?.data[0]).toEqual({
+      ...createdTask,
+      updatedAt: "2026-09-03T08:00:00.000Z",
+    });
+    unsubscribe();
   });
 });
