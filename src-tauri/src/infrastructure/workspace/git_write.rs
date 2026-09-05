@@ -97,7 +97,9 @@ pub async fn prepare_commit_message(
         &repo,
         &staged
             .iter()
-            .map(|change| change.path.as_str())
+            .flat_map(|change| {
+                std::iter::once(change.path.as_str()).chain(change.original_path.as_deref())
+            })
             .collect::<Vec<_>>(),
         true,
         &mut changes,
@@ -106,7 +108,9 @@ pub async fn prepare_commit_message(
     let tracked_unstaged: Vec<_> = unstaged
         .iter()
         .filter(|change| change.kind != "create")
-        .map(|change| change.path.as_str())
+        .flat_map(|change| {
+            std::iter::once(change.path.as_str()).chain(change.original_path.as_deref())
+        })
         .collect();
     append_selected_diff(&repo, &tracked_unstaged, false, &mut changes).await?;
 
@@ -185,7 +189,7 @@ pub async fn commit_changes(
         .iter()
         .map(|change| change.path.as_str())
         .collect();
-    let selected_staged: Vec<_> = paths
+    let mut selected_staged: Vec<_> = paths
         .iter()
         .filter(|path| staged_paths.contains(path.as_str()))
         .collect();
@@ -193,7 +197,20 @@ pub async fn commit_changes(
         .iter()
         .filter(|path| !staged_paths.contains(path.as_str()))
         .collect();
-    let literal_paths: Vec<_> = paths.iter().map(|path| literal_path(path)).collect();
+    // 重命名是一项变更，隔离 index 和真实 index 必须同时处理旧路径删除与新路径写入。
+    for change in &status.staged {
+        if paths.contains(&change.path)
+            && let Some(original) = &change.original_path
+            && !selected_staged.contains(&original)
+        {
+            selected_staged.push(original);
+        }
+    }
+    let literal_paths: Vec<_> = selected_staged
+        .iter()
+        .chain(&selected_unstaged)
+        .map(|path| literal_path(path))
+        .collect();
     let (temporary_root, temporary_index) = create_temporary_index().await?;
 
     let commit_result = async {
@@ -256,6 +273,8 @@ pub async fn commit_changes(
             )
             .await?;
         }
+        // 隔离 index 构建期间内容仍可能变化，提交前再次拒绝过期预览。
+        validate_snapshot(root, repository, expected_snapshot).await?;
         run_git_with_index(
             &repo,
             &["commit", "--no-gpg-sign", "-m", message],

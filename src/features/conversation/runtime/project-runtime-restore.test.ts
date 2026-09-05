@@ -33,6 +33,38 @@ function createSnapshot(projectId: string, taskId: string): AgentTaskSnapshotRes
 }
 
 describe("ProjectRuntimeManager task activity restoration", () => {
+  it("reconnects after synchronous replay reports an evicted event", async () => {
+    const cleanup = vi.fn();
+    const subscribeEvents = vi.fn((options: SubscribeAgentEventsOptions) => {
+      if (options.afterSequence === 4) {
+        options.onResyncRequired({
+          latestSequence: 5,
+          reason: "event_retention_exceeded",
+          sessionId: "session-1",
+          type: "resync.required",
+          version: 3,
+        });
+      }
+      return cleanup;
+    });
+    const client = {
+      readTask: vi.fn(async () => ({
+        ...createSnapshot("project-1", "task-1"),
+        checkpoint: { sequence: 5, sessionId: "session-1" },
+      })),
+      subscribeEvents,
+    } as unknown as NativeRuntimeClient;
+    const runtime = createProjectRuntimeManager(client);
+    try {
+      runtime.observeSnapshot(createSnapshot("project-1", "task-1"));
+      await vi.waitFor(() => expect(subscribeEvents).toHaveBeenCalledTimes(2));
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(subscribeEvents).toHaveBeenLastCalledWith(expect.objectContaining({ afterSequence: 5 }));
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it("restores native activity and reconnects only active tasks", async () => {
     const readTask = vi.fn(async (projectId: string, taskId: string) =>
       createSnapshot(projectId, taskId),

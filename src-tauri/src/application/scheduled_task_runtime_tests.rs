@@ -23,6 +23,48 @@ fn input(schedule: ScheduledTaskSchedule) -> ScheduledTaskInput {
     }
 }
 
+#[tokio::test]
+async fn failed_scheduled_task_writes_should_preserve_memory_and_allow_retry() {
+    let root = std::env::temp_dir().join(format!(
+        "codeagent-schedule-rollback-{}",
+        std::process::id()
+    ));
+    let runtime = ScheduledTaskRuntime::default();
+    let original_input = input(ScheduledTaskSchedule::Once {
+        at_unix_ms: 2_000_000_000_000,
+    });
+    let created = runtime.create(&root, original_input.clone()).await.unwrap();
+    let directory = root.join("scheduled-tasks");
+    let backup = root.join("backup");
+    tokio::fs::rename(&directory, &backup).await.unwrap();
+    tokio::fs::write(&directory, b"blocked").await.unwrap();
+
+    let mut updated = original_input.clone();
+    updated.name = "Changed".to_owned();
+    assert!(runtime.update(&root, &created.id, updated).await.is_err());
+    assert_eq!(runtime.list(&root).await.unwrap()[0].name, created.name);
+    assert!(
+        runtime
+            .set_enabled(&root, &created.id, false)
+            .await
+            .is_err()
+    );
+    assert!(runtime.list(&root).await.unwrap()[0].enabled);
+    assert!(runtime.delete(&root, &created.id).await.is_err());
+    assert_eq!(runtime.list(&root).await.unwrap().len(), 1);
+    assert!(runtime.create(&root, original_input).await.is_err());
+    assert_eq!(runtime.list(&root).await.unwrap().len(), 1);
+
+    tokio::fs::remove_file(&directory).await.unwrap();
+    tokio::fs::rename(&backup, &directory).await.unwrap();
+    runtime
+        .set_enabled(&root, &created.id, false)
+        .await
+        .unwrap();
+    assert!(!read_scheduled_tasks(&root).await.unwrap()[0].enabled);
+    tokio::fs::remove_dir_all(root).await.unwrap();
+}
+
 #[test]
 fn recurring_task_should_coalesce_missed_occurrences() {
     let schedule = ScheduledTaskSchedule::Rrule {

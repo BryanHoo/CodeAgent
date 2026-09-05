@@ -148,24 +148,10 @@ pub async fn write_scheduled_tasks(
 }
 
 async fn replace_file(temporary: &Path, target: &Path) -> Result<(), ScheduledTaskStoreError> {
-    if let Err(error) = fs::rename(temporary, target).await {
-        if !matches!(
-            error.kind(),
-            io::ErrorKind::AlreadyExists | io::ErrorKind::PermissionDenied
-        ) {
-            let _ = fs::remove_file(temporary).await;
-            return Err(error.into());
-        }
-        match fs::remove_file(target).await {
-            Ok(()) => fs::rename(temporary, target).await?,
-            Err(remove_error) if remove_error.kind() == io::ErrorKind::NotFound => {
-                fs::rename(temporary, target).await?
-            }
-            Err(remove_error) => {
-                let _ = fs::remove_file(temporary).await;
-                return Err(remove_error.into());
-            }
-        }
+    // 复用跨平台原子替换，禁止先删旧数据再重命名。
+    if let Err(error) = super::app_storage::replace_file_atomic(temporary, target).await {
+        let _ = fs::remove_file(temporary).await;
+        return Err(error.into());
     }
     Ok(())
 }

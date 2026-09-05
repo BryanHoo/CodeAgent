@@ -15,6 +15,19 @@ export function subscribeProjectEvents(
   options.onConnectionState?.("connected");
   const cleanup = subscribeNativeEvents({
     afterSequence: options.afterSequence,
+    onReplayGap: (gap) => {
+      if (!active || gap.sessionId !== options.sessionId) return;
+      if (taskProjects.get(gap.taskId) !== options.projectId || gap.sequence <= lastSequence) return;
+      active = false;
+      options.onResyncRequired({
+        latestSequence: gap.sequence,
+        reason: "event_retention_exceeded",
+        sessionId: gap.sessionId,
+        type: "resync.required",
+        version: 3,
+      });
+      options.onConnectionState?.("closed");
+    },
     onEvent: (event: AgentEvent) => {
       if (!active || event.sessionId !== options.sessionId) return;
       if (taskProjects.get(event.taskId) !== options.projectId) return;

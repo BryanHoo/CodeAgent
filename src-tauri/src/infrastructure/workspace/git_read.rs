@@ -31,6 +31,8 @@ pub struct GitChange {
     pub diff: String,
     pub kind: &'static str,
     pub path: String,
+    #[serde(skip)]
+    pub original_path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -97,13 +99,15 @@ pub async fn get_git_status(
             unstaged: Vec::new(),
         });
     };
-    let status_output = run_git(
+    let (status_output, truncated) = run_git(
         &repo,
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
         MAX_GIT_OUTPUT_BYTES,
     )
-    .await?
-    .0;
+    .await?;
+    if truncated {
+        return Err(WorkspaceError::InvalidPath);
+    }
     let branch = optional_git_line(&repo, &["branch", "--show-current"]).await?;
     let head = optional_git_line(&repo, &["rev-parse", "HEAD"]).await?;
     let branches = git_lines(
@@ -124,6 +128,7 @@ pub async fn get_git_status(
     let mut snapshot_parts = vec![String::from_utf8_lossy(&status_output).into_owned()];
     snapshot_parts.push(head.unwrap_or_default());
     snapshot_parts.push(branch.clone().unwrap_or_default());
+    snapshot_parts.push(super::git_snapshot::content_fingerprint(&repo, &unstaged).await?);
     Ok(GitStatus {
         base_branches,
         branch,
@@ -302,10 +307,21 @@ fn parse_status(output: &[u8]) -> Result<(Vec<GitChange>, Vec<GitChange>), Works
         }
         let path = std::str::from_utf8(&record[3..]).map_err(|_| WorkspaceError::InvalidPath)?;
         valid_relative(path)?;
+        let original_path = if matches!(record[0], b'R' | b'C') || matches!(record[1], b'R' | b'C')
+        {
+            let original = records.next().ok_or(WorkspaceError::InvalidPath)?;
+            let original =
+                std::str::from_utf8(original).map_err(|_| WorkspaceError::InvalidPath)?;
+            valid_relative(original)?;
+            Some(original.to_owned())
+        } else {
+            None
+        };
         let change = |code| GitChange {
             diff: String::new(),
             kind: change_kind(code),
             path: path.to_owned(),
+            original_path: (code == b'R').then(|| original_path.clone()).flatten(),
         };
         if record[0] == b'?' && record[1] == b'?' {
             unstaged.push(change(b'?'));
@@ -316,12 +332,6 @@ fn parse_status(output: &[u8]) -> Result<(Vec<GitChange>, Vec<GitChange>), Works
             if record[1] != b' ' {
                 unstaged.push(change(record[1]));
             }
-        }
-        if matches!(record[0], b'R' | b'C') || matches!(record[1], b'R' | b'C') {
-            let original = records.next().ok_or(WorkspaceError::InvalidPath)?;
-            let original =
-                std::str::from_utf8(original).map_err(|_| WorkspaceError::InvalidPath)?;
-            valid_relative(original)?;
         }
     }
     Ok((staged, unstaged))

@@ -24,6 +24,9 @@ use crate::{
 
 use super::{error::AppError, scheduled_task_runner::start_scheduled_task_turn};
 
+#[path = "scheduled_task_dispatch.rs"]
+mod dispatch;
+
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
@@ -32,11 +35,22 @@ pub(super) struct ScheduledTaskClaim {
     pub task: ScheduledTask,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct RuntimeState {
     app_data: Option<PathBuf>,
     running: HashSet<String>,
     tasks: Vec<ScheduledTask>,
+    dirty: bool,
+}
+
+impl RuntimeState {
+    async fn commit_candidate(&mut self, mut candidate: Self) -> Result<(), AppError> {
+        // 发布内存状态前完成原子落盘，失败时原状态仍可用于重试。
+        persist(&candidate).await?;
+        candidate.dirty = false;
+        *self = candidate;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Default)]
@@ -92,10 +106,11 @@ impl ScheduledTaskRuntime {
         self.ensure_loaded(app_data).await?;
         let now = now_unix_ms();
         let task = build_task(new_id("schedule"), input, now).map_err(map_store_error)?;
-        let mut state = self.inner.lock().await;
+        let mut current = self.inner.lock().await;
+        let mut state = current.clone();
         state.tasks.push(task.clone());
-        persist(&state).await?;
-        drop(state);
+        current.commit_candidate(state).await?;
+        drop(current);
         self.notify.notify_one();
         Ok(task)
     }
@@ -108,7 +123,8 @@ impl ScheduledTaskRuntime {
     ) -> Result<ScheduledTask, AppError> {
         self.ensure_loaded(app_data).await?;
         let now = now_unix_ms();
-        let mut state = self.inner.lock().await;
+        let mut current = self.inner.lock().await;
+        let mut state = current.clone();
         let existing = state
             .tasks
             .iter_mut()
@@ -120,15 +136,16 @@ impl ScheduledTaskRuntime {
         updated.last_run_status = existing.last_run_status.clone();
         updated.runs = existing.runs.clone();
         *existing = updated.clone();
-        persist(&state).await?;
-        drop(state);
+        current.commit_candidate(state).await?;
+        drop(current);
         self.notify.notify_one();
         Ok(updated)
     }
 
     pub async fn delete(&self, app_data: &Path, id: &str) -> Result<(), AppError> {
         self.ensure_loaded(app_data).await?;
-        let mut state = self.inner.lock().await;
+        let mut current = self.inner.lock().await;
+        let mut state = current.clone();
         if state.running.contains(id) {
             return Err(AppError::ScheduledTaskBusy);
         }
@@ -137,7 +154,9 @@ impl ScheduledTaskRuntime {
         if state.tasks.len() == before {
             return Err(AppError::ScheduledTaskNotFound);
         }
-        persist(&state).await?;
+        current.commit_candidate(state).await?;
+        drop(current);
+        self.notify.notify_one();
         Ok(())
     }
 
@@ -149,7 +168,8 @@ impl ScheduledTaskRuntime {
     ) -> Result<ScheduledTask, AppError> {
         self.ensure_loaded(app_data).await?;
         let now = now_unix_ms();
-        let mut state = self.inner.lock().await;
+        let mut current = self.inner.lock().await;
+        let mut state = current.clone();
         let task = state
             .tasks
             .iter_mut()
@@ -162,8 +182,8 @@ impl ScheduledTaskRuntime {
                 Some(validate_and_resolve_next_run(&task.schedule, now).map_err(map_store_error)?);
         }
         let updated = task.clone();
-        persist(&state).await?;
-        drop(state);
+        current.commit_candidate(state).await?;
+        drop(current);
         self.notify.notify_one();
         Ok(updated)
     }
@@ -174,78 +194,14 @@ impl ScheduledTaskRuntime {
         app_data: &Path,
         id: &str,
     ) -> Result<ScheduledTask, AppError> {
-        self.ensure_loaded(app_data).await?;
-        let claim = {
-            let mut state = self.inner.lock().await;
-            if state.running.contains(id) {
-                return Err(AppError::ScheduledTaskBusy);
-            }
-            if !state.tasks.iter().any(|task| task.id == id) {
-                return Err(AppError::ScheduledTaskNotFound);
-            }
-            let RuntimeState { tasks, running, .. } = &mut *state;
-            let claim = claim_due_tasks(tasks, running, now_unix_ms(), Some(id))
-                .pop()
-                .ok_or(AppError::ScheduledTaskBusy)?;
-            persist(&state).await?;
-            claim
-        };
+        let claim = self
+            .claim_pending(app_data, Some(id), now_unix_ms())
+            .await?
+            .pop()
+            .ok_or(AppError::ScheduledTaskBusy)?;
         let task = claim.task.clone();
         self.spawn_claim(app, claim);
         Ok(task)
-    }
-
-    async fn run(self, app: AppHandle) {
-        let Ok(app_data) = app.path().app_data_dir() else {
-            return;
-        };
-        if self.ensure_loaded(&app_data).await.is_err() {
-            return;
-        }
-        loop {
-            let (claims, delay) = {
-                let mut state = self.inner.lock().await;
-                let RuntimeState { tasks, running, .. } = &mut *state;
-                let claims = claim_due_tasks(tasks, running, now_unix_ms(), None);
-                if persist(&state).await.is_err() {
-                    return;
-                }
-                let now = now_unix_ms();
-                let delay = state
-                    .tasks
-                    .iter()
-                    .filter(|task| task.enabled)
-                    .filter_map(|task| task.next_run_at_unix_ms)
-                    .min()
-                    .map(|next| Duration::from_millis(next.saturating_sub(now).max(1) as u64))
-                    .unwrap_or(Duration::from_secs(24 * 60 * 60));
-                (claims, delay)
-            };
-            for claim in claims {
-                self.spawn_claim(app.clone(), claim);
-            }
-            tokio::select! {
-                _ = tokio::time::sleep(delay) => {},
-                _ = self.notify.notified() => {},
-            }
-        }
-    }
-
-    fn spawn_claim(&self, app: AppHandle, claim: ScheduledTaskClaim) {
-        let runtime = self.clone();
-        tauri::async_runtime::spawn(async move {
-            let result = start_scheduled_task_turn(&app, &claim.task).await;
-            let finished_at = now_unix_ms();
-            let mut state = runtime.inner.lock().await;
-            let RuntimeState { tasks, running, .. } = &mut *state;
-            finish_claim(tasks, running, &claim, finished_at, result);
-            if let Err(error) = persist(&state).await {
-                crate::infrastructure::diagnostics::record_error(
-                    "scheduled_task_result_persist_failed",
-                    error,
-                );
-            }
-        });
     }
 }
 

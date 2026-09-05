@@ -15,6 +15,7 @@ async fn add_diffs_should_include_untracked_text_file_additions() {
         diff: String::new(),
         kind: "create",
         path: "new.txt".to_owned(),
+        original_path: None,
     }];
 
     add_diffs(&root, &mut changes, false).await.unwrap();

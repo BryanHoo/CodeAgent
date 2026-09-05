@@ -7,10 +7,6 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("runtime event channel is unavailable")]
-    RuntimeChannelUnavailable,
-    #[error("failed to deliver runtime event")]
-    RuntimeEventDeliveryFailed,
     #[error("failed to start Codex runtime")]
     CodexRuntimeStartFailed,
     #[error("failed to install Codex runtime")]

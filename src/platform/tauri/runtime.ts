@@ -1,12 +1,12 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { AgentEvent, ResyncRequired } from "@/protocol/index.js";
-import { RingBuffer } from "@/shared/memory/ring-buffer.js";
 import {
   applicationPerformanceMetrics,
   PERFORMANCE_MONITORING_ENABLED,
 } from "@/shared/performance/performance-metrics.js";
 
 import { invoke } from "./native-invoke.js";
+import { RuntimeEventHistory, type ReplayGap } from "./runtime-event-history.js";
 
 export type RuntimeStatus = "failed" | "idle" | "ready" | "starting";
 export type RuntimeSnapshot = Readonly<{
@@ -36,14 +36,14 @@ type RuntimeEvent = AgentRuntimeEvent | ResyncRequiredRuntimeEvent | RuntimeStat
 export type AgentEventSubscription = Readonly<{
   afterSequence: number;
   onEvent: (event: AgentEvent) => void;
+  onReplayGap?: (gap: ReplayGap) => void;
   onResyncRequired?: (message: NativeResyncRequired) => void;
 }>;
 
 let runtimePromise: Promise<RuntimeSnapshot> | undefined;
 const runtimeListeners = new Set<(event: RuntimeStatusEvent) => void>();
 const agentEventSubscriptions = new Set<AgentEventSubscription>();
-const MAX_BUFFERED_AGENT_EVENTS = 1_024;
-const recentAgentEvents = new RingBuffer<AgentEvent>(MAX_BUFFERED_AGENT_EVENTS);
+const recentAgentEvents = new RuntimeEventHistory();
 
 export function subscribeRuntime(listener: (event: RuntimeStatusEvent) => void): () => void {
   runtimeListeners.add(listener);
@@ -53,9 +53,7 @@ export function subscribeRuntime(listener: (event: RuntimeStatusEvent) => void):
 export function subscribeAgentEvents(options: AgentEventSubscription): () => void {
   agentEventSubscriptions.add(options);
   // Channel 在页面订阅前已经可能收到事件，按 checkpoint 回放避免首帧丢失。
-  recentAgentEvents.forEach((event) => {
-    if (event.sequence > options.afterSequence) options.onEvent(event);
-  });
+  recentAgentEvents.replay(options.afterSequence, options.onEvent, options.onReplayGap);
   return () => agentEventSubscriptions.delete(options);
 }
 

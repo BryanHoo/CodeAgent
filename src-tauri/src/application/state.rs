@@ -12,10 +12,15 @@ use super::error::AppError;
 use super::model_turn_waiters::ModelTurnWaiters;
 use super::request_cancellation::RequestCancellationRegistry;
 use super::turn_waiters::TurnStartedWaiters;
+#[path = "state_event_delivery.rs"]
+mod event_delivery;
 #[path = "state_event_delta_batcher.rs"]
 mod event_delta_batcher;
 #[path = "state_event_forwarder.rs"]
 mod event_forwarder;
+#[path = "state_start.rs"]
+mod runtime_start;
+use event_delivery::prepare_event_delivery;
 #[path = "state_performance_metrics.rs"]
 pub(super) mod performance_metrics;
 #[path = "state_runtime_supervisor.rs"]
@@ -54,11 +59,13 @@ pub struct AppState {
     request_cancellations: RequestCancellationRegistry,
     runtime: Arc<Mutex<RuntimeSession>>,
     runtime_install: Mutex<()>,
+    runtime_start: Mutex<()>,
 }
 
 #[derive(Default)]
 struct RuntimeSession {
     event_sender: Option<mpsc::Sender<AppEvent>>,
+    event_order: Arc<Mutex<()>>,
     snapshot: RuntimeSnapshot,
     codex_process: Option<CodexProcess>,
     _event_task: Option<JoinHandle<()>>,
@@ -157,72 +164,6 @@ impl AppState {
         // 独立发布任务承担序列化和 WebView 调用，状态锁内只执行有界队列入队。
         runtime.set_event_channel(event_channel);
         runtime.snapshot
-    }
-
-    pub async fn start_codex(
-        &self,
-        app: &AppHandle,
-        app_data: &Path,
-    ) -> Result<RuntimeSnapshot, AppError> {
-        {
-            let mut runtime = self.runtime.lock().await;
-            if matches!(
-                runtime.snapshot.status,
-                RuntimeStatus::Starting | RuntimeStatus::Ready
-            ) {
-                return Ok(runtime.snapshot);
-            }
-            invalidate_runtime_restart(&mut runtime);
-            let event = runtime.transition(RuntimeStatus::Starting, Some(ProviderKind::Codex));
-            let _ = runtime.publish(event);
-        }
-
-        self.update_managed_codex(app_data, &|_| {}).await;
-
-        match CodexProcess::start(app_data).await {
-            Ok(process) => {
-                let messages = match process.connection().take_server_messages().await {
-                    Ok(messages) => messages,
-                    Err(error) => {
-                        crate::infrastructure::diagnostics::record_error(
-                            "codex_event_stream_attach_failed",
-                            error,
-                        );
-                        self.fail_codex_start(app).await;
-                        return Err(AppError::CodexRuntimeStartFailed);
-                    }
-                };
-                let event_task =
-                    spawn_event_forwarder(Arc::clone(&self.runtime), messages, Some(app.clone()));
-                let mut runtime = self.runtime.lock().await;
-                runtime.codex_process = Some(process);
-                runtime._event_task = Some(event_task);
-                mark_runtime_started(&mut runtime);
-                let event = runtime.transition(RuntimeStatus::Ready, Some(ProviderKind::Codex));
-                let _ = runtime.publish(event);
-                Ok(runtime.snapshot)
-            }
-            Err(error) => {
-                crate::infrastructure::diagnostics::record_error(
-                    "codex_runtime_start_failed",
-                    error,
-                );
-                self.fail_codex_start(app).await;
-                Err(AppError::CodexRuntimeStartFailed)
-            }
-        }
-    }
-
-    async fn fail_codex_start(&self, app: &AppHandle) {
-        let (generation, delay) = {
-            let mut runtime = self.runtime.lock().await;
-            runtime.codex_process = None;
-            runtime.runtime_started_at = None;
-            let event = runtime.transition(RuntimeStatus::Failed, Some(ProviderKind::Codex));
-            let _ = runtime.publish(event);
-            prepare_runtime_restart(&mut runtime)
-        };
-        schedule_runtime_restart(app.clone(), generation, delay);
     }
 
     pub async fn codex_connection(&self) -> Result<Arc<AppServerConnection>, AppError> {
@@ -395,6 +336,7 @@ impl AppState {
         let task_id = required_event_string(&request, "taskId")?;
         let turn_id = required_event_string(&request, "turnId")?;
         let timestamp = required_event_string(&request, "createdAt")?;
+        let delivery = prepare_event_delivery(&self.runtime).await;
         let mut runtime = self.runtime.lock().await;
         let sequence = runtime.project_sequences.entry(project_id).or_default();
         *sequence += 1;
@@ -410,9 +352,12 @@ impl AppState {
             "type": "pending_request.resolved",
             "version": 2,
         });
-        runtime.publish(AppEvent::AgentEvent {
-            event: event.into(),
-        })?;
+        drop(runtime);
+        delivery
+            .send(AppEvent::AgentEvent {
+                event: event.into(),
+            })
+            .await;
         Ok(request)
     }
 }
@@ -440,16 +385,12 @@ impl RuntimeSession {
         });
         self.event_sender = Some(sender);
     }
-
-    fn publish(&self, event: AppEvent) -> Result<(), AppError> {
-        self.event_sender
-            .as_ref()
-            .ok_or(AppError::RuntimeChannelUnavailable)?
-            .try_send(event)
-            .map_err(|_| AppError::RuntimeEventDeliveryFailed)
-    }
 }
 
 #[cfg(test)]
 #[path = "state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "state_reliability_tests.rs"]
+mod reliability_tests;

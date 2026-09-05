@@ -4,6 +4,7 @@ mod files;
 mod git_diff;
 mod git_process;
 mod git_read;
+mod git_snapshot;
 mod git_worktree;
 mod git_write;
 mod open;
@@ -13,6 +14,8 @@ mod performance_baseline_tests;
 
 #[cfg(test)]
 mod git_diff_tests;
+#[cfg(test)]
+mod git_integrity_tests;
 #[cfg(test)]
 mod git_tests;
 

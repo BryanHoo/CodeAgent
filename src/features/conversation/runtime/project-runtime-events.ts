@@ -212,6 +212,7 @@ export class ProjectEventRuntime {
     this.#eventHistory.reset(checkpoint.sequence);
 
     // 连接只在 Project Runtime 创建一次，Sidebar 与所有 Task Store 消费同一事件源。
+    let invalidatedDuringSubscription = false;
     const cleanup = this.#client.subscribeEvents({
       afterSequence: checkpoint.sequence,
       onConnectionState: (state) => {
@@ -244,6 +245,7 @@ export class ProjectEventRuntime {
         this.#reevaluateIdleRelease();
       },
       onResyncRequired: () => {
+        invalidatedDuringSubscription = true;
         this.#snapshotRecoveryRequired = true;
         this.#stopConnection();
         this.#connectionState = "reconnecting";
@@ -255,7 +257,12 @@ export class ProjectEventRuntime {
       projectId: this.#projectId,
       sessionId: checkpoint.sessionId,
     });
-    this.#connectionCleanup = cleanup;
+    // 缓存回放可同步报告缺口，返回的失效订阅不能阻止权威快照建立下一条连接。
+    if (invalidatedDuringSubscription) {
+      cleanup();
+    } else {
+      this.#connectionCleanup = cleanup;
+    }
   }
 
   #releaseTaskSubscription(taskId: string): void {

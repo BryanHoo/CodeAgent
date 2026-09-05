@@ -20,6 +20,7 @@ use super::super::{
 use super::{
     RuntimeSession,
     event_delta_batcher::{BatchAction, DeltaBatcher},
+    prepare_event_delivery,
     runtime_supervisor::{prepare_runtime_restart, schedule_runtime_restart},
 };
 use crate::{
@@ -126,7 +127,8 @@ async fn publish_resync_required(
     let Ok(scope) = serde_json::from_str::<ResyncTaskScope<'_>>(message.params.get()) else {
         return true;
     };
-    let (sender, event) = {
+    let delivery = prepare_event_delivery(runtime).await;
+    let event = {
         let session = runtime.lock().await;
         let Some(project_id) = session.task_projects.get(scope.thread_id).cloned() else {
             return true;
@@ -136,23 +138,17 @@ async fn publish_resync_required(
             .get(&project_id)
             .copied()
             .unwrap_or_default();
-        (
-            session.event_sender.clone(),
-            AppEvent::ResyncRequired {
-                latest_sequence,
-                project_id,
-                reason: "event_retention_exceeded",
-                session_id: RUNTIME_SESSION_ID,
-                message_type: "resync.required",
-                version: 3,
-            },
-        )
+        AppEvent::ResyncRequired {
+            latest_sequence,
+            project_id,
+            reason: "event_retention_exceeded",
+            session_id: RUNTIME_SESSION_ID,
+            message_type: "resync.required",
+            version: 3,
+        }
     };
-    let Some(sender) = sender else {
-        return true;
-    };
-    // Resync 与生命周期事件共用可靠背压队列，不能再次退化为 try_send 丢弃。
-    sender.send(event).await.is_ok()
+    delivery.send(event).await;
+    true
 }
 
 async fn publish_mapped_event(
@@ -171,6 +167,7 @@ async fn publish_mapped_event(
     };
 
     // 序号只在实际发布时分配，合并后的 delta 不会制造 checkpoint 空洞。
+    let delivery = prepare_event_delivery(runtime).await;
     let mut session = runtime.lock().await;
     let Some(project_id) = session.task_projects.get(&task_id).cloned() else {
         return true;
@@ -238,7 +235,7 @@ async fn publish_mapped_event(
         .record_delivery(&project_id, provider_event_count, 1, queue_depth);
     drop(session);
     if let Some(app) = app {
-        // 原生后台状态必须先于 WebView 队列更新，窗口销毁或背压都不能阻塞托盘与通知。
+        // 原生状态已完成投影；即使窗口已销毁，仍更新托盘、宠物和通知。
         if let Some(task_activities) = task_activities.as_deref() {
             if let Err(error) = render_tray_task_activities(app, task_activities) {
                 crate::infrastructure::diagnostics::record_error(
@@ -264,10 +261,7 @@ async fn publish_mapped_event(
             );
         }
     }
-    if let Some(sender) = event_sender {
-        // 等待前已释放全局状态锁，慢 WebView 不会阻塞其他命令读取 Runtime 状态。
-        let _ = sender.send(AppEvent::AgentEvent { event }).await;
-    }
+    delivery.send(AppEvent::AgentEvent { event }).await;
     true
 }
 
@@ -373,8 +367,7 @@ async fn handle_resolved_request(
     let Ok((project_id, event)) = map_terminal_request(pending, "expired") else {
         return false;
     };
-    let mut session = runtime.lock().await;
-    let _ = publish_terminal_event(&mut session, project_id, event);
+    publish_terminal_event(runtime, project_id, event).await;
     true
 }
 
@@ -416,18 +409,19 @@ async fn finish_runtime(runtime: &Arc<Mutex<RuntimeSession>>, app: Option<&AppHa
         .into_values()
         .filter_map(|request| map_terminal_request(request, "expired").ok())
         .collect::<Vec<_>>();
-    let mut session = runtime.lock().await;
     for (project_id, event) in terminal_events {
-        let _ = publish_terminal_event(&mut session, project_id, event);
+        publish_terminal_event(runtime, project_id, event).await;
     }
+    let delivery = prepare_event_delivery(runtime).await;
+    let mut session = runtime.lock().await;
     let task_activities = session
         .task_activity
         .fail_active()
         .then(|| session.task_activity.snapshot());
     let event = session.transition(RuntimeStatus::Failed, Some(ProviderKind::Codex));
-    let _ = session.publish(event);
     let restart = app.map(|_| prepare_runtime_restart(&mut session));
     drop(session);
+    delivery.send(event).await;
     if let (Some(app), Some(task_activities)) = (app, task_activities.as_deref()) {
         if let Err(error) = render_tray_task_activities(app, task_activities) {
             crate::infrastructure::diagnostics::record_error(
@@ -469,17 +463,22 @@ fn map_terminal_request(
     Ok((project_id, event))
 }
 
-fn publish_terminal_event(
-    runtime: &mut RuntimeSession,
+async fn publish_terminal_event(
+    runtime: &Arc<Mutex<RuntimeSession>>,
     project_id: String,
     mut event: Value,
-) -> Result<(), AppError> {
-    let sequence = runtime.project_sequences.entry(project_id).or_default();
+) {
+    let delivery = prepare_event_delivery(runtime).await;
+    let mut session = runtime.lock().await;
+    let sequence = session.project_sequences.entry(project_id).or_default();
     *sequence += 1;
     event["sequence"] = Value::from(*sequence);
-    runtime.publish(AppEvent::AgentEvent {
-        event: event.into(),
-    })
+    drop(session);
+    delivery
+        .send(AppEvent::AgentEvent {
+            event: event.into(),
+        })
+        .await;
 }
 
 pub(super) fn required_event_string(value: &Value, key: &str) -> Result<String, AppError> {
