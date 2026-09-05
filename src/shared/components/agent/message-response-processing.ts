@@ -1,4 +1,4 @@
-import { parseMarkdownIntoBlocks } from "streamdown";
+import type { TextSnapshot } from "../../lib/append-only-text.js";
 
 import {
   parseCodeCommentDirective,
@@ -16,8 +16,6 @@ const LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN =
 const WHITESPACE_OR_TEXT_PATTERN = /\s+|\S+/gu;
 const WHITESPACE_PATTERN = /^\s+$/u;
 const EXCESSIVE_NEWLINES_PATTERN = /\n{3,}/g;
-const FOOTNOTE_REFERENCE_PATTERN = /\[\^[\w-]{1,200}\](?!:)/;
-const FOOTNOTE_DEFINITION_PATTERN = /\[\^[\w-]{1,200}\]:/;
 
 export const UNC_FILE_REFERENCE_PREFIX = "/__codeagent_unc__/";
 export const RELATIVE_FILE_REFERENCE_PREFIX = "/__codeagent_relative__/";
@@ -50,6 +48,7 @@ export function preprocessMessageResponse(markdown: string): ParsedCodeComments 
 }
 
 class IncrementalWhitespaceBuffer {
+  private delta = "";
   private output: string;
   private trailingWhitespace: string;
 
@@ -75,7 +74,9 @@ class IncrementalWhitespaceBuffer {
       hasContent = true;
     }
     if (additions.length > 0) {
-      this.output += additions.join("");
+      const addition = additions.join("");
+      this.output += addition;
+      this.delta += addition;
     }
   }
 
@@ -86,6 +87,12 @@ class IncrementalWhitespaceBuffer {
   materialize(): string {
     // 尾部空白由 trim() 语义丢弃，仅返回已经由后续正文确认的内容。
     return this.output;
+  }
+
+  takeDelta(): string {
+    const delta = this.delta;
+    this.delta = "";
+    return delta;
   }
 }
 
@@ -113,41 +120,72 @@ function processLine(source: string, hasLineFeed: boolean, state: ProcessingStat
   return false;
 }
 
+export type ProcessedMessageResponse = ParsedCodeComments & Readonly<{
+  replaceFrom: number;
+  replacement: string;
+}>;
+
 export class IncrementalMessageResponseProcessor {
-  private cachedResult: ParsedCodeComments = { comments: [], markdown: "" };
+  private cachedResult: ProcessedMessageResponse = { comments: [], markdown: "", replaceFrom: 0, replacement: "" };
   private committedComments: CodeComment[] = [];
   private discardBlankLines = false;
   private pendingLine = "";
-  private previousSource = "";
+  private lineStarted = false;
+  private previousSource: string | TextSnapshot = "";
   private whitespace = new IncrementalWhitespaceBuffer();
 
-  process(source: string): ParsedCodeComments {
-    if (source === this.previousSource) {
+  process(source: string | TextSnapshot): ProcessedMessageResponse {
+    const previous = this.previousSource;
+    if (source === previous || (typeof source !== "string" && typeof previous !== "string" &&
+      source.chunks === previous.chunks && source.chunkCount === previous.chunkCount)) {
       return this.cachedResult;
     }
-    if (!source.startsWith(this.previousSource)) {
+    let addition: string;
+    if (typeof source === "string") {
+      // 普通字符串没有追加契约；替换时完整重置，流式输入统一使用 Chunk 快照。
       this.reset();
+      addition = source;
+    } else {
+      const continuing = typeof previous !== "string" && previous.chunks === source.chunks &&
+        previous.chunkCount <= source.chunkCount;
+      if (!continuing) this.reset();
+      const start = continuing ? previous.chunkCount : 0;
+      addition = source.chunks.slice(start, source.chunkCount).join("");
     }
 
-    this.pendingLine += source.slice(this.previousSource.length);
+    const replaceFrom = this.whitespace.materialize().length;
+    this.pendingLine += addition;
     this.previousSource = source;
     let lineFeedIndex = this.pendingLine.indexOf("\n");
     while (lineFeedIndex >= 0) {
       const line = this.pendingLine.slice(0, lineFeedIndex);
       this.pendingLine = this.pendingLine.slice(lineFeedIndex + 1);
-      this.discardBlankLines = processLine(line, true, {
-        comments: this.committedComments,
-        discardBlankLines: this.discardBlankLines,
-        whitespace: this.whitespace,
-      });
+      this.commitLine(line, true);
+      this.lineStarted = false;
       lineFeedIndex = this.pendingLine.indexOf("\n");
+    }
+
+    // 普通行无需等换行；只保留可能成为评论指令或文件链接目标的后缀。
+    const directive = "::code-comment{";
+    const mayBeDirective = !this.lineStarted &&
+      (directive.startsWith(this.pendingLine) || this.pendingLine.startsWith(directive));
+    const mayBeDiscardedBlankLine = this.discardBlankLines && !this.lineStarted && this.pendingLine.trim().length === 0;
+    if (!mayBeDirective && !mayBeDiscardedBlankLine) {
+      const targetStart = this.pendingLine.indexOf("]");
+      const committedLength = targetStart < 0 ? this.pendingLine.length : targetStart;
+      if (committedLength > 0) {
+        this.commitLine(this.pendingLine.slice(0, committedLength), false);
+        this.pendingLine = this.pendingLine.slice(committedLength);
+        this.lineStarted = true;
+      }
     }
 
     // 当前行仍可能继续增长，基于已提交状态制作轻量预览，不能污染后续 Chunk。
     const previewComments = [...this.committedComments];
     const previewWhitespace = this.whitespace.clone();
     if (this.pendingLine.length > 0) {
-      processLine(this.pendingLine, false, {
+      if (this.lineStarted) previewWhitespace.append(normalizeMarkdownFileReferences(this.pendingLine));
+      else processLine(this.pendingLine, false, {
         comments: previewComments,
         discardBlankLines: this.discardBlankLines,
         whitespace: previewWhitespace,
@@ -156,63 +194,32 @@ export class IncrementalMessageResponseProcessor {
     this.cachedResult = {
       comments: previewComments,
       markdown: previewWhitespace.materialize(),
+      // 已提交正文不变，只替换上一次的未结束行；分块器直接使用边界，无需比较前缀。
+      replaceFrom,
+      replacement: this.whitespace.takeDelta() + previewWhitespace.takeDelta(),
     };
     return this.cachedResult;
   }
 
+  private commitLine(line: string, hasLineFeed: boolean): void {
+    if (this.lineStarted) {
+      this.whitespace.append(`${normalizeMarkdownFileReferences(line)}${hasLineFeed ? "\n" : ""}`);
+      return;
+    }
+    this.discardBlankLines = processLine(line, hasLineFeed, {
+      comments: this.committedComments,
+      discardBlankLines: this.discardBlankLines,
+      whitespace: this.whitespace,
+    });
+  }
+
   private reset(): void {
-    this.cachedResult = { comments: [], markdown: "" };
+    this.cachedResult = { comments: [], markdown: "", replaceFrom: 0, replacement: "" };
     this.committedComments = [];
     this.discardBlankLines = false;
     this.pendingLine = "";
+    this.lineStarted = false;
     this.previousSource = "";
     this.whitespace = new IncrementalWhitespaceBuffer();
   }
-}
-
-type MarkdownBlockParser = (markdown: string) => string[];
-
-export function createIncrementalMarkdownBlockParser(
-  parseBlocks: MarkdownBlockParser = parseMarkdownIntoBlocks,
-): MarkdownBlockParser {
-  let previousBlocks: string[] = [];
-  let previousMarkdown = "";
-
-  return (markdown) => {
-    if (markdown === previousMarkdown) {
-      return previousBlocks;
-    }
-
-    let sharedPrefixLength = 0;
-    const maximumSharedLength = Math.min(previousMarkdown.length, markdown.length);
-    while (
-      sharedPrefixLength < maximumSharedLength &&
-      previousMarkdown.charCodeAt(sharedPrefixLength) === markdown.charCodeAt(sharedPrefixLength)
-    ) {
-      sharedPrefixLength += 1;
-    }
-
-    let stableBlockCount = 0;
-    let stableLength = 0;
-    while (
-      stableBlockCount < previousBlocks.length &&
-      stableLength + (previousBlocks[stableBlockCount]?.length ?? 0) <= sharedPrefixLength
-    ) {
-      stableLength += previousBlocks[stableBlockCount]?.length ?? 0;
-      stableBlockCount += 1;
-    }
-    // Markdown 的新后缀可能改变紧邻 Block（如 Setext 标题或列表），始终回退一块重解析。
-    if (stableBlockCount > 0) {
-      stableBlockCount -= 1;
-      stableLength -= previousBlocks[stableBlockCount]?.length ?? 0;
-    }
-
-    const tail = markdown.slice(stableLength);
-    previousBlocks =
-      FOOTNOTE_REFERENCE_PATTERN.test(tail) || FOOTNOTE_DEFINITION_PATTERN.test(tail)
-        ? [markdown]
-        : [...previousBlocks.slice(0, stableBlockCount), ...parseBlocks(tail)];
-    previousMarkdown = markdown;
-    return previousBlocks;
-  };
 }

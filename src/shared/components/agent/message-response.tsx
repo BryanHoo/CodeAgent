@@ -27,11 +27,13 @@ import { useTranslation } from "../../../i18n/i18n.js";
 import { CodeComments } from "./code-comments.js";
 import type { MessageFileReference, MessageFileReferenceOpenMode } from "./message.js";
 import {
-  createIncrementalMarkdownBlockParser,
   IncrementalMessageResponseProcessor,
   RELATIVE_FILE_REFERENCE_PREFIX,
   UNC_FILE_REFERENCE_PREFIX,
 } from "./message-response-processing.js";
+import { createIncrementalMarkdownBlockParser } from "./incremental-markdown-blocks.js";
+import type { TextSnapshot } from "../../lib/append-only-text.js";
+import { StreamingMarkdown } from "./streaming-markdown.js";
 import { openMarkdownLink } from "./markdown-link-navigation.js";
 import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
 
@@ -338,6 +340,7 @@ function MarkdownLink({
 }
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
+  textSource?: TextSnapshot;
   onOpenFileReference?: (
     reference: MessageFileReference,
     mode?: MessageFileReferenceOpenMode,
@@ -368,11 +371,13 @@ function MessageResponseContent({
   parseMarkdownIntoBlocksFn,
   promptFileReferences = false,
   remarkPlugins,
+  textSource,
   ...props
 }: MessageResponseProps) {
   const responseProcessor = useMemo(() => new IncrementalMessageResponseProcessor(), []);
   const incrementalBlockParser = useMemo(() => createIncrementalMarkdownBlockParser(), []);
-  const parsedResponse = responseProcessor.process(children ?? "");
+  const parsedResponse = responseProcessor.process(textSource ?? children ?? "");
+  const blockTree = useMemo(() => incrementalBlockParser(parsedResponse), [incrementalBlockParser, parsedResponse]);
   const markdownComponents: Components = useMemo(
     () => ({ ...components, a: MarkdownLink }),
     [components],
@@ -390,17 +395,20 @@ function MessageResponseContent({
 
   return (
     <MessageFileReferenceContext.Provider value={onOpenFileReference ?? null}>
-      <Streamdown
+      <StreamingMarkdown
+        enabled={textSource !== undefined && props.mode !== "static" && parseMarkdownIntoBlocksFn === undefined}
+        tree={blockTree}
+        fast={components === undefined && remarkPlugins === undefined && props.rehypePlugins === undefined && props.plugins === undefined && !promptFileReferences}
         className={`size-full break-words [&_blockquote]:border-l-2 [&_blockquote]:border-separator [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-body-small [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:object-contain [&_pre]:overflow-x-auto [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${className}`}
         controls={MESSAGE_RESPONSE_CONTROLS}
         {...props}
         BlockComponent={InteractiveMessageBlock}
         components={markdownComponents}
-        parseMarkdownIntoBlocksFn={parseMarkdownIntoBlocksFn ?? incrementalBlockParser}
+        {...(parseMarkdownIntoBlocksFn === undefined ? {} : { parseMarkdownIntoBlocksFn })}
         remarkPlugins={resolvedRemarkPlugins}
       >
         {parsedResponse.markdown}
-      </Streamdown>
+      </StreamingMarkdown>
       <CodeComments comments={parsedResponse.comments} />
     </MessageFileReferenceContext.Provider>
   );
@@ -409,6 +417,7 @@ function MessageResponseContent({
 export const MessageResponse = memo(
   MessageResponseContent,
   (previousProps, nextProps) =>
+    previousProps.textSource === nextProps.textSource &&
     previousProps.children === nextProps.children &&
     previousProps.isAnimating === nextProps.isAnimating &&
     previousProps.mode === nextProps.mode &&

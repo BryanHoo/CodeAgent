@@ -6,6 +6,7 @@ import { useState } from "react";
 import { i18n } from "../../../i18n/i18n.js";
 import { Attachments } from "../../../shared/components/agent/attachments.js";
 import { cn } from "../../../shared/lib/utils.js";
+import type { TextSnapshot } from "../../../shared/lib/append-only-text.js";
 import { Button } from "../../../shared/components/core/button.js";
 
 import { LazyMessageResponse } from "../../../shared/components/agent/lazy-message-response.js";
@@ -82,6 +83,7 @@ export function TimelineItemContent({
   projectId: _projectId,
   taskId: _taskId,
   turnStatus,
+  textSource,
 }: Readonly<{
   commandOutput?: CommandOutputView;
   isLastTurnItem: boolean;
@@ -92,6 +94,7 @@ export function TimelineItemContent({
   projectId: string;
   taskId: string;
   turnStatus: AgentTurn["status"];
+  textSource?: TextSnapshot;
 }>) {
   switch (item.type) {
     case "message": {
@@ -131,6 +134,7 @@ export function TimelineItemContent({
                 item.role === "user" && preservedUserMessageClassName,
               )}
               {...responseRendering}
+              {...(textSource === undefined ? {} : { textSource })}
               onOpenFileReference={onOpenSourceFile}
               promptFileReferences={item.role === "user"}
             >
@@ -208,7 +212,10 @@ export function TimelineItemContent({
           />
           <ReasoningContent>
             {/* 仅渲染 Provider 明确提供的摘要，原始 content 永不进入展示组件。 */}
-            <LazyMessageResponse mode={turnStatus === "running" ? "streaming" : "static"}>
+            <LazyMessageResponse
+              {...(textSource === undefined ? {} : { textSource })}
+              mode={turnStatus === "running" ? "streaming" : "static"}
+            >
               {item.summary}
             </LazyMessageResponse>
           </ReasoningContent>
@@ -340,7 +347,10 @@ export function TimelineItemContent({
             <PlanTrigger />
           </PlanHeader>
           <PlanContent>
-            <LazyMessageResponse mode={isStreamingPlan ? "streaming" : "static"}>
+            <LazyMessageResponse
+              {...(textSource === undefined ? {} : { textSource })}
+              mode={isStreamingPlan ? "streaming" : "static"}
+            >
               {item.text}
             </LazyMessageResponse>
           </PlanContent>

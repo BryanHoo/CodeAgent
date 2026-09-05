@@ -93,9 +93,11 @@ export function StoredTimelineItemContentValue({
   const baseItem = itemStore.peek();
   const item = baseItem.type === "command" ? baseItem : itemStore.read();
   const commandOutput = baseItem.type === "command" ? itemStore.readCommandOutput() : undefined;
+  const textSource = itemStore.readText();
   return (
     <TimelineItemContent
       {...(commandOutput === undefined ? {} : { commandOutput })}
+      {...(textSource === undefined ? {} : { textSource })}
       isLastTurnItem={isLastTurnItem}
       item={item}
       {...(onBuildPlan === undefined ? {} : { onBuildPlan })}

@@ -17,6 +17,9 @@
 - 对话滚动容器必须以 `conversationId` 提供稳定且唯一的 `data-scroll-restoration-id`，防止 TanStack Router 在任务切换时按结构选择器迁移其他任务的滚动位置；原生 WebView 测试必须覆盖离开并重新打开巨型任务后仍置底
 - 时间线右侧轻量导航必须使用自然文档流完整挂载，不得使用虚拟 sizer、尺寸测量或绝对位移；固定行高虚拟化仅用于可达万级数据的源码行和项目文件树
 - 分页源码预览必须按页保留 token 状态并使用固定行高虚拟化，仅在复制或完整 Markdown 预览时物化全文；源码总量超过 `128 KiB` 时默认展示纯文本，禁止翻页后重新拼接并高亮全部前缀
+- 流式消息、推理摘要和计划必须向 Markdown 组件传递带固定读取边界的追加快照；Item 全文读取必须复用已物化结果，预处理只消费新增 Chunk，分块依据明确的变更偏移重解析尾部，禁止重新拼接全部历史 Chunk 或逐字符比较稳定前缀
+- 稳定 Markdown 块必须通过不可变共享树独立更新，禁止每次追加复制完整分块目录或重挂历史节点；安全的纯文本按有界文本页追加，顶层未闭合代码围栏按增量状态识别关闭标记，代码长行也必须分页，短行不得分配深层文本索引；复杂语法、完整替换和完成态必须回到完整解析以保证语义
+- 流式文本验证必须覆盖跳过更新、旧快照重放、完整替换、跨 Chunk 文件链接与评论指令、CRLF 偏移、代理对分页、代码复制和脚注；通过处理字符数断言限制历史重读，并使用 `pnpm exec vitest bench --run benchmarks/streaming-text.bench.ts` 分别测量大量短段落、长纯文本段落、开放代码围栏及代码长行，不将复杂语法回退或 DOM 布局成本宣称为线性
 - 工具型独立窗口必须由受限 Tauri 命令创建，使用专用轻量启动面和最小 capability；不得使用 WebView `window.open()`，也不得挂载完整工作台 Provider 树
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航
 - Provider 官方认证仅允许打开 `https` URL，并必须通过 `src/platform/tauri/` 调用系统 URL opener；不得使用 WebView `window.open()`
