@@ -104,7 +104,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install supported Codex runtime
-        run: npm install --global @openai/codex@0.152.1
+        run: npm install --global @openai/codex@0.153.4
 
       - name: Verify supported Codex runtime
         run: codex --version

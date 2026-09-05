@@ -278,8 +278,8 @@ mod tests {
     fn codex_runtime_availability_should_expose_recovery_details() {
         let availability = CodexRuntimeAvailability {
             detected_version: Some("0.150.0".to_owned()),
-            global_install_command: "npm install -g @openai/codex@0.152.1",
-            required_version: "0.152.1",
+            global_install_command: "npm install -g @openai/codex@0.153.4",
+            required_version: "0.153.4",
             status: CodexRuntimeAvailabilityStatus::Incompatible,
         };
 
@@ -287,8 +287,8 @@ mod tests {
             serde_json::to_value(availability).unwrap(),
             json!({
                 "detectedVersion": "0.150.0",
-                "globalInstallCommand": "npm install -g @openai/codex@0.152.1",
-                "requiredVersion": "0.152.1",
+                "globalInstallCommand": "npm install -g @openai/codex@0.153.4",
+                "requiredVersion": "0.153.4",
                 "status": "incompatible"
             })
         );
@@ -301,7 +301,7 @@ mod tests {
             downloaded_bytes: 42,
             phase: CodexRuntimeInstallPhase::Downloading,
             sequence: 3,
-            target_version: "0.152.1",
+            target_version: "0.153.4",
             total_bytes: Some(100),
         };
 
@@ -312,7 +312,7 @@ mod tests {
                 "downloadedBytes": 42,
                 "phase": "downloading",
                 "sequence": 3,
-                "targetVersion": "0.152.1",
+                "targetVersion": "0.153.4",
                 "totalBytes": 100
             })
         );

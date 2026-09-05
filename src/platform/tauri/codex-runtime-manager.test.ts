@@ -22,14 +22,14 @@ describe("Codex runtime manager", () => {
     invoke
       .mockResolvedValueOnce({
         detectedVersion: null,
-        globalInstallCommand: "npm install -g @openai/codex@0.152.1",
-        requiredVersion: "0.152.1",
+        globalInstallCommand: "npm install -g @openai/codex@0.153.4",
+        requiredVersion: "0.153.4",
         status: "compatible",
       })
       .mockResolvedValueOnce({
-        detectedVersion: "0.152.1",
-        globalInstallCommand: "npm install -g @openai/codex@0.152.1",
-        requiredVersion: "0.152.1",
+        detectedVersion: "0.153.4",
+        globalInstallCommand: "npm install -g @openai/codex@0.153.4",
+        requiredVersion: "0.153.4",
         status: "compatible",
       });
     const { downloadAndInspectCodexRuntime } = await import("./codex-runtime-manager.js");
@@ -76,7 +76,7 @@ describe("Codex runtime manager", () => {
         downloadedBytes: 42,
         phase: "downloading",
         sequence: 2,
-        targetVersion: "0.152.1",
+        targetVersion: "0.153.4",
         totalBytes: 100,
       });
       channelHandler?.({
@@ -84,7 +84,7 @@ describe("Codex runtime manager", () => {
         downloadedBytes: 10,
         phase: "downloading",
         sequence: 1,
-        targetVersion: "0.152.1",
+        targetVersion: "0.153.4",
         totalBytes: 100,
       });
       return { status: "compatible" };

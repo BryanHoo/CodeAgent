@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const REQUIRED_CODEX_VERSION = "0.152.1";
+export const REQUIRED_CODEX_VERSION = "0.153.4";
 export const SCHEMA_BUNDLES = [
   "codex_app_server_protocol.schemas.json",
   "codex_app_server_protocol.v2.schemas.json",
@@ -76,7 +76,7 @@ async function generateSchemaBundles(codexBinary, outputDirectory) {
   });
   assertCodexVersion(versionOutput);
 
-  // The project enables experimentalApi, so snapshots must include its schema.
+  // 项目启用了 experimentalApi，快照必须包含当前版本的实验协议。
   execCodexFileSync(
     codexBinary,
     [
@@ -116,7 +116,7 @@ async function main() {
     if (differences.length > 0) {
       throw new Error(
         `Codex protocol schema drift detected: ${differences.join(", ")}. ` +
-          "Run pnpm codex:protocol:update with codex-cli 0.152.1 and review the diff.",
+          `Run pnpm codex:protocol:update with codex-cli ${REQUIRED_CODEX_VERSION} and review the diff.`,
       );
     }
     process.stdout.write(`Codex ${REQUIRED_CODEX_VERSION} protocol schema is unchanged\n`);

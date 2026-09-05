@@ -22,10 +22,10 @@ const qualityWorkflow = await readFile(
 );
 
 void test("requires the exact verified Codex version", () => {
-  assert.equal(assertCodexVersion("codex-cli 0.152.1\n"), REQUIRED_CODEX_VERSION);
+  assert.equal(assertCodexVersion("codex-cli 0.153.4\n"), REQUIRED_CODEX_VERSION);
   assert.throws(
     () => assertCodexVersion("codex-cli 0.152.3\n"),
-    /expected codex-cli 0\.152\.1/u,
+    /expected codex-cli 0\.153\.4/u,
   );
 });
 
@@ -56,7 +56,7 @@ void test("resolves the npm Codex shim on Windows", () => {
 });
 
 void test("runs the pinned protocol contract check in CI", () => {
-  assert.match(qualityWorkflow, /npm install --global @openai\/codex@0\.152\.1/u);
+  assert.match(qualityWorkflow, /npm install --global @openai\/codex@0\.153\.4/u);
   assert.match(qualityWorkflow, /pnpm codex:protocol:check/u);
 });
 

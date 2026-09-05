@@ -62,7 +62,7 @@ describe("CodexRuntimeGate", () => {
       downloadedBytes: 0,
       phase: "preparing",
       sequence: 1,
-      targetVersion: "0.152.1",
+      targetVersion: "0.153.4",
       totalBytes: null,
     });
 
@@ -77,12 +77,12 @@ describe("CodexRuntimeGate", () => {
       downloadedBytes: 42,
       phase: "downloading",
       sequence: 2,
-      targetVersion: "0.152.1",
+      targetVersion: "0.153.4",
       totalBytes: 100,
     });
 
     await expect.element(screen.getByText("0.150.0")).toBeVisible();
-    await expect.element(screen.getByText("0.152.1")).toBeVisible();
+    await expect.element(screen.getByText("0.153.4")).toBeVisible();
     await expect
       .element(progressbar)
       .toHaveAttribute("aria-valuenow", "42");
@@ -107,21 +107,21 @@ describe("CodexRuntimeGate", () => {
             downloadedBytes: 24,
             phase: "failed",
             sequence: 3,
-            targetVersion: "0.152.1",
+            targetVersion: "0.153.4",
             totalBytes: 100,
           });
           return {
             detectedVersion: "0.150.0",
-            globalInstallCommand: "npm install -g @openai/codex@0.152.1",
-            requiredVersion: "0.152.1",
+            globalInstallCommand: "npm install -g @openai/codex@0.153.4",
+            requiredVersion: "0.153.4",
             status: "compatible",
           };
         },
       )
       .mockResolvedValue({
-        detectedVersion: "0.152.1",
-        globalInstallCommand: "npm install -g @openai/codex@0.152.1",
-        requiredVersion: "0.152.1",
+        detectedVersion: "0.153.4",
+        globalInstallCommand: "npm install -g @openai/codex@0.153.4",
+        requiredVersion: "0.153.4",
         status: "compatible",
       });
     const queryClient = new QueryClient({
@@ -154,8 +154,8 @@ describe("CodexRuntimeGate", () => {
     await i18n.changeLanguage("en");
     runtimeMocks.inspect.mockResolvedValue({
       detectedVersion: null,
-      globalInstallCommand: "npm install -g @openai/codex@0.152.1",
-      requiredVersion: "0.152.1",
+      globalInstallCommand: "npm install -g @openai/codex@0.153.4",
+      requiredVersion: "0.153.4",
       status: "missing",
     });
     let reportProgress:
@@ -205,7 +205,7 @@ describe("CodexRuntimeGate", () => {
       downloadedBytes: 42,
       phase: "downloading",
       sequence: 1,
-      targetVersion: "0.152.1",
+      targetVersion: "0.153.4",
       totalBytes: 100,
     });
 

@@ -6,7 +6,6 @@ use std::{
     time::Duration,
 };
 
-use semver::Version;
 use thiserror::Error;
 use tokio::{
     io::{self, AsyncRead, AsyncReadExt},
@@ -19,7 +18,7 @@ use super::connection::{AppServerConnection, ConnectionError};
 use super::runtime_manager::{RuntimeDiscoveryError, find_compatible_codex_binary};
 use super::stderr::spawn_codex_stderr_tasks;
 
-pub const SUPPORTED_CODEX_VERSION: &str = "0.152.1";
+pub const SUPPORTED_CODEX_VERSION: &str = "0.153.4";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const VERSION_OUTPUT_LIMIT: usize = 4 * 1024;
@@ -36,7 +35,7 @@ pub enum ProcessError {
     VersionProbeTimeout,
     #[error("Codex version output exceeded the limit")]
     VersionOutputTooLarge,
-    #[error("unsupported Codex version; expected 0.152.1")]
+    #[error("unsupported Codex version; expected 0.153.4")]
     UnsupportedVersion,
     #[error(transparent)]
     RuntimeDiscovery(#[from] RuntimeDiscoveryError),
@@ -196,11 +195,8 @@ fn parse_codex_version(output: &str) -> Option<&str> {
 }
 
 pub(super) fn is_compatible_codex_version(version: &str) -> bool {
-    let Ok(version) = Version::parse(version) else {
-        return false;
-    };
-    // experimentalApi 使用手写协议适配，只允许经过 schema 契约验证的精确版本。
-    version == Version::new(0, 152, 1)
+    // 实验协议只接受已验证的精确版本；复用唯一常量，避免重复版本源和解析开销。
+    version == SUPPORTED_CODEX_VERSION
 }
 
 fn parse_codex_cli_version(output: &str) -> Option<&str> {
@@ -330,20 +326,24 @@ mod tests {
     #[test]
     fn codex_version_should_require_the_verified_protocol_version() {
         assert_eq!(
-            parse_codex_version("codex-cli 0.152.1\n"),
+            parse_codex_version("codex-cli 0.153.4\n"),
             Some(SUPPORTED_CODEX_VERSION)
         );
         assert_eq!(parse_codex_version("codex-cli 0.152.3\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.152.1\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.153.5\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.153.4-beta.1\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.153.4+build\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.151.0\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.152.0\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.153.0\n"), None);
         assert_eq!(parse_codex_version("codex-cli 1.0.0\n"), None);
         assert_eq!(parse_codex_version("codex-cli 0.152.0-beta.1\n"), None);
-        assert_eq!(parse_codex_version("codex-cli 0.152.1 unexpected\n"), None);
+        assert_eq!(parse_codex_version("codex-cli 0.153.4 unexpected\n"), None);
     }
 
     #[tokio::test]
-    #[ignore = "requires the installed codex-cli 0.152.1 binary"]
+    #[ignore = "requires the installed codex-cli 0.153.4 binary"]
     async fn installed_codex_should_complete_real_app_server_lifecycle() {
         let process = CodexProcess::start(&std::env::temp_dir())
             .await
@@ -393,6 +393,8 @@ mod tests {
             .await
             .expect("ephemeral thread should be readable");
         assert_eq!(read["thread"]["id"], thread_id);
+        assert!(read["thread"]["model"].is_string());
+        assert!(read["thread"].get("reasoningEffort").is_some());
 
         let mapped_models = catalogs::list_models(&connection)
             .await

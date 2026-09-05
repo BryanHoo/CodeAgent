@@ -42,7 +42,7 @@
 
 ## Codex 工作台
 
-- 工作台协议基线使用 `codex-cli 0.151.0` 的 `codex app-server`，外部稳定运行时接受 `0.151.0` 及以上版本并完成初始化握手；应用私有回退包固定版本和完整性摘要
+- 工作台协议基线与精确版本门禁遵循 [Codex 运行时契约](./codex-runtime-contract.md)，外部运行时必须完成初始化握手；应用私有回退包固定版本和完整性摘要
 - React 到 Codex 的运行链路必须保持 `Tauri invoke/Channel -> Rust -> stdio JSONL`，不得重新引入 HTTP、WebSocket 或 mock 运行时
 - app-server 只维持一个长生命周期 Channel；事件序号、通知队列、历史页、命令输出和附件必须保持有界
 - 分页历史使用 `thread/turns/list(itemsView: "notLoaded")`，再并发调用 `thread/items/list` 补全同页 Turn；必须拒绝空游标、重复游标和错误 `turnId`

@@ -44,6 +44,9 @@ mod catalogs_tests;
 #[cfg(test)]
 #[path = "codex_152_contract_tests.rs"]
 mod codex_152_contract_tests;
+
+#[cfg(test)]
+mod codex_153_contract_tests;
 #[cfg(test)]
 #[path = "connection_message_tests.rs"]
 mod connection_message_tests;

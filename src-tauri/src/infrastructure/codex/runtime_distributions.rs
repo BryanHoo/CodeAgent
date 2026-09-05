@@ -2,26 +2,26 @@ use super::runtime_manager::Distribution;
 
 pub(super) const DARWIN_ARM64: Distribution = Distribution {
     target: "aarch64-apple-darwin",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.152.1-darwin-arm64.tgz",
-    integrity: "H8i0uZHILM0Z2Ep+MryCF5rGXmXjmXTzXf5ZK6bobKtZc2yfomi42ZrQWuYQ5P02H0oLG7B5jLaSWZQ+VFgjbA==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-darwin-arm64.tgz",
+    integrity: "B1qhN3fa1ay0R0wGziXqgwSkB5icpYChNKHhtBHff/0UtSTC7z+l8aTtvMlGjH3E8HEvY3+njIJelM9CAAoVWg==",
 };
 pub(super) const LINUX_ARM64: Distribution = Distribution {
     target: "aarch64-unknown-linux-musl",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.152.1-linux-arm64.tgz",
-    integrity: "qZXqf7fxn/SCmaJW6tYrzWqwcDo0gMDJjj1Pm4OtrWXR7Oc0Y2e8ngAh/Mep9iFhVbsqntY1eGLaQaXssGvFgA==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-linux-arm64.tgz",
+    integrity: "QKdjYLYV4hXIuUQDP3P6F4NXuWFoKo9WUoV4nAREIx55kiUyi8UsYdsVobkeXir5n/maEQgYMCKLHVma4rNPiw==",
 };
 pub(super) const LINUX_X64: Distribution = Distribution {
     target: "x86_64-unknown-linux-musl",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.152.1-linux-x64.tgz",
-    integrity: "ar59rr3CX5j4MLMnRcHqcE0eHZPsZlmXlz37ZS2yP3BsV5pNhO+wFXTOzXFdaYmg2cALX7a3Eqv+vB2jQlXnjQ==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-linux-x64.tgz",
+    integrity: "x1EcwBlY3AObM1VTUHNM2AzAJQsyreGdagpF+qFiYi/Oa30VBktvvG0C6tLtCzqW6hjZNWkGZQWmeVk7MuJKWg==",
 };
 pub(super) const WINDOWS_ARM64: Distribution = Distribution {
     target: "aarch64-pc-windows-msvc",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.152.1-win32-arm64.tgz",
-    integrity: "YZjWCcArfSLlqG/4r2Ox5ZZhz1FAFQBZisz8U8r5JLxeLk0tXwZHleu8RjNjly++0S5zsgPtAuF0viSIj7NyRA==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-win32-arm64.tgz",
+    integrity: "/FBh42976ltF1kxDoPQBg1Q6+hwChRU5/sm5dfeC8kFVQMvOCGoGeY5d8rRZGVJE8XojlXo74VQb0sHowcfgBw==",
 };
 pub(super) const WINDOWS_X64: Distribution = Distribution {
     target: "x86_64-pc-windows-msvc",
-    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.152.1-win32-x64.tgz",
-    integrity: "B8h0/2Kt+rKQv2+vqBhlhWkMEdhf4dsn46FNKMEBTXj3YC5hwSioOcTX2hMgJxMEMtKIMH6Ire1eNrQPvaL9og==",
+    url: "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-win32-x64.tgz",
+    integrity: "lMkB43kJZH0VFr+hoXc11qqR7QtQIbkr07ALgj4urKL1osNyUyuy1iXd3Vzz2iCYvBUCSw7I0l/W1cEPGx9euQ==",
 };
