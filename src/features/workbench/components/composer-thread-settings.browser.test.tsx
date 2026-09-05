@@ -28,9 +28,9 @@ function runtime(model: string | null, reasoningEffort: string | null): TaskRunt
     itemStructureRevision: 0, loadOlderHistory: async () => undefined,
     olderHistoryError: null, readSnapshot: () => undefined, store: undefined,
     metadata: {
-      id: "task-a", projectId: "project-a", settings, threadConfiguration: { model, reasoningEffort },
-      contextUsage: null, goal: null, plan: null, pinned: false, status: "idle",
-      title: "任务", updatedAt: "2026-09-05T00:00:00Z",
+      id: "task-a", settings, threadConfiguration: { model, reasoningEffort },
+      contextUsage: null, goal: null, status: "idle",
+      title: "任务",
     },
   };
 }

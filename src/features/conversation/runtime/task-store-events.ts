@@ -360,6 +360,7 @@ export function applyAcceptedEvent(
         changedItemStores.add(previousItemStore);
         return {
           checkpoint,
+          itemStructureRevision: state.itemStructureRevision + 1,
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
         };
       }

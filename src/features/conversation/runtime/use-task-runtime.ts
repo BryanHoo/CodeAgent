@@ -2,6 +2,8 @@ import type { AgentTaskSnapshotResponse } from "@/protocol/index.js";
 import { type QueryClient, type QueryKey, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
+import { useShallow } from "zustand/react/shallow";
+import { selectTaskRuntimeMetadata } from "./task-view-selectors.js";
 
 import { taskSnapshotQueryOptions } from "../../projects/project-queries.js";
 import type { ProjectRuntimeManager } from "./project-runtime.js";
@@ -10,7 +12,6 @@ import {
   createTaskStoreRegistry,
   type ReconstructedTaskSnapshot,
   type TaskStore,
-  type TaskSnapshotMetadata,
 } from "./task-store.js";
 
 const taskStoreRegistry = createTaskStoreRegistry({ maxRetainedStores: 20 });
@@ -25,7 +26,7 @@ export type TaskRuntimeView = Readonly<{
   isPending: boolean;
   itemStructureRevision: number;
   loadOlderHistory: () => Promise<void>;
-  metadata: TaskSnapshotMetadata | undefined;
+  metadata: ReturnType<typeof selectTaskRuntimeMetadata>;
   olderHistoryError: Error | null;
   readSnapshot: () => ReconstructedTaskSnapshot | undefined;
   store: TaskStore | undefined;
@@ -52,7 +53,7 @@ export function useTaskRuntime(
   );
   const connectionState = useStore(subscribedStore, (state) => state.connectionState);
   const runtimeError = useStore(subscribedStore, (state) => state.error);
-  const metadata = useStore(subscribedStore, (state) => state.snapshotMetadata ?? undefined);
+  const metadata = useStore(subscribedStore, useShallow(selectTaskRuntimeMetadata));
   const itemStructureRevision = useStore(subscribedStore, (state) => state.itemStructureRevision);
   const turnsNextCursor = useStore(subscribedStore, (state) => state.turnsNextCursor);
 

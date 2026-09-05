@@ -18,6 +18,7 @@ import {
   type RuntimeTaskSnapshot,
 } from "../../conversation/runtime/task-runtime.js";
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
+import { useInspectorTask } from "./use-inspector-task.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { providerConnectionQueryOptions } from "../../provider-connection/provider-connection-queries.js";
 import { notifyActionError } from "../../notifications/action-notifications.js";
@@ -370,12 +371,7 @@ export function useWorkbenchShellRuntime({
     inspectorFileSelection?.projectId === projectId ? inspectorFileSelection : null;
   const selectedFileReview =
     fileReviewSelection?.projectId === projectId ? fileReviewSelection.changes : null;
-  const inspectorTask = useMemo(() => {
-    // Inspector 是低频完整视图；关闭时不保留兼容 Snapshot。
-    void runtime.itemStructureRevision;
-    void runtime.metadata;
-    return inspectorOpen ? (runtime.readSnapshot() ?? startingSnapshot) : startingSnapshot;
-  }, [inspectorOpen, runtime, startingSnapshot]);
+  const inspectorTask = useInspectorTask(runtime.store, inspectorOpen, startingSnapshot);
   const hasInspectorGoal = inspectorTask?.goal !== null && inspectorTask?.goal !== undefined;
   const hasInspectorPlan = inspectorTask?.plan !== null && inspectorTask?.plan !== undefined;
   const previousInspectorContextArtifactState = useRef<WorkbenchInspectorContextArtifactState>({
@@ -398,7 +394,11 @@ export function useWorkbenchShellRuntime({
       setInspectorTab("context");
     }
   }, [hasInspectorGoal, hasInspectorPlan, inspectorScopeKey, setInspectorTab]);
-  const subagents = useMemo(() => collectSubagents(inspectorTask), [inspectorTask]);
+  const inspectorTurns = inspectorTask?.turns;
+  const subagents = useMemo(
+    () => collectSubagents(inspectorTurns === undefined ? undefined : { turns: inspectorTurns }),
+    [inspectorTurns],
+  );
   const selectedSubagent =
     subagentDialogSelection?.projectId === projectId &&
     subagentDialogSelection.parentTaskId === taskId
