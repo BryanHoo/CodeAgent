@@ -25,6 +25,7 @@ where
     }
 
     pub(super) fn start_download(&mut self, total_bytes: Option<u64>) {
+        self.downloaded_bytes = 0;
         self.total_bytes = total_bytes;
         self.report(CodexRuntimeInstallPhase::Downloading);
     }
@@ -98,6 +99,20 @@ mod tests {
     use std::sync::Mutex;
 
     use super::{CodexRuntimeInstallPhase, DownloadProgressLimiter, DownloadProgressReporter};
+
+    #[test]
+    fn switching_download_source_should_reset_bytes_but_preserve_sequence() {
+        let events = Mutex::new(Vec::new());
+        let on_progress = |progress| events.lock().unwrap().push(progress);
+        let mut reporter = DownloadProgressReporter::new(&on_progress, None);
+        reporter.start_download(Some(100));
+        reporter.report_download(80);
+        reporter.start_download(Some(200));
+        let events = events.lock().unwrap();
+        assert_eq!(events[2].downloaded_bytes, 0);
+        assert_eq!(events[2].total_bytes, Some(200));
+        assert_eq!(events[2].sequence, 3);
+    }
 
     #[test]
     fn reporter_should_assign_monotonic_sequence_numbers() {

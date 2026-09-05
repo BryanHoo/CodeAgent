@@ -5,18 +5,14 @@ use std::{
     io::{self, Write},
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
-    time::Duration,
 };
 
-use base64::{Engine, engine::general_purpose::STANDARD};
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
-use reqwest::{Client, redirect::Policy};
 use serde_json::json;
-use sha2::{Digest, Sha512};
 use tar::Archive;
 use thiserror::Error;
-use tokio::{fs, io::AsyncWriteExt, task};
+use tokio::{fs, task};
 
 use super::{
     process::{SUPPORTED_CODEX_VERSION, is_compatible_codex_version, probe_codex_version},
@@ -25,7 +21,8 @@ use super::{
         expanded_candidate_paths, initial_candidate_paths, private_codex_binary_path,
     },
     runtime_distributions::{DARWIN_ARM64, LINUX_ARM64, LINUX_X64, WINDOWS_ARM64, WINDOWS_X64},
-    runtime_download_progress::{DownloadProgressLimiter, DownloadProgressReporter},
+    runtime_download::download_verified,
+    runtime_download_progress::DownloadProgressReporter,
     runtime_path::resolve_runtime_path,
 };
 use crate::domain::runtime::{
@@ -35,7 +32,6 @@ use crate::domain::runtime::{
 
 const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.153.4";
 const MAX_CONCURRENT_PROBES: usize = 4;
-const MAX_DOWNLOAD_BYTES: u64 = 192 * 1024 * 1024;
 const MAX_UNPACKED_BYTES: u64 = 512 * 1024 * 1024;
 static INSTALL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -72,6 +68,7 @@ pub enum RuntimeInstallError {
 pub(super) struct Distribution {
     pub(super) target: &'static str,
     pub(super) url: &'static str,
+    pub(super) fallback_url: &'static str,
     pub(super) integrity: &'static str,
 }
 
@@ -313,64 +310,6 @@ where
     replace_runtime_directory(final_dir, staging_dir).await?;
     write_active_runtime(app_data, &private_codex_binary_path(app_data)).await?;
     progress.report_phase(CodexRuntimeInstallPhase::Ready);
-    Ok(())
-}
-
-async fn download_verified<OnProgress>(
-    distribution: &Distribution,
-    archive_path: &Path,
-    progress: &mut DownloadProgressReporter<'_, OnProgress>,
-) -> Result<(), RuntimeInstallError>
-where
-    OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
-{
-    // URL 与 SHA-512 均由应用固定，WebView 无法注入下载源或替换校验值。
-    let client = Client::builder()
-        .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(15 * 60))
-        .redirect(Policy::none())
-        .build()?;
-    let response = client
-        .get(distribution.url)
-        .send()
-        .await?
-        .error_for_status()?;
-    let content_length = response.content_length();
-    if content_length.is_some_and(|length| length > MAX_DOWNLOAD_BYTES) {
-        return Err(RuntimeInstallError::DownloadTooLarge);
-    }
-    let total_bytes = content_length.filter(|length| *length > 0);
-    progress.start_download(total_bytes);
-
-    let mut file = fs::File::create(archive_path).await?;
-    let mut stream = response.bytes_stream();
-    let mut digest = Sha512::new();
-    let mut downloaded = 0_u64;
-    let mut progress_limiter = DownloadProgressLimiter::new(total_bytes);
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        downloaded = downloaded.saturating_add(chunk.len() as u64);
-        if downloaded > MAX_DOWNLOAD_BYTES {
-            return Err(RuntimeInstallError::DownloadTooLarge);
-        }
-        digest.update(&chunk);
-        file.write_all(&chunk).await?;
-        // 百分比不变时不跨 IPC 上报，避免网络小分块造成 WebView 高频重复渲染。
-        if progress_limiter.advance(downloaded) {
-            progress.report_download(downloaded);
-        }
-    }
-    if progress_limiter.finish(downloaded) {
-        progress.report_download(downloaded);
-    }
-    file.flush().await?;
-
-    let expected = STANDARD
-        .decode(distribution.integrity)
-        .map_err(|_| RuntimeInstallError::Integrity)?;
-    if digest.finalize().as_slice() != expected {
-        return Err(RuntimeInstallError::Integrity);
-    }
     Ok(())
 }
 

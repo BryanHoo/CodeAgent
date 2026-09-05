@@ -10,6 +10,26 @@ use super::runtime_discovery::{
     private_codex_binary_path,
 };
 use super::runtime_manager::distribution_for;
+
+#[test]
+fn runtime_download_should_prefer_the_domestic_mirror_on_every_platform() {
+    for (os, arch) in [
+        ("macos", "aarch64"),
+        ("linux", "aarch64"),
+        ("linux", "x86_64"),
+        ("windows", "aarch64"),
+        ("windows", "x86_64"),
+    ] {
+        let distribution = distribution_for(os, arch).unwrap();
+        assert!(
+            distribution
+                .url
+                .starts_with("https://registry.npmmirror.com/"),
+            "unexpected primary download URL: {}",
+            distribution.url
+        );
+    }
+}
 #[cfg(unix)]
 use super::runtime_manager::inspect_codex_runtime;
 #[cfg(unix)]
@@ -159,7 +179,7 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
         let distribution = distribution_for(os, arch).unwrap();
         assert_eq!(distribution.target, target);
         assert_eq!(
-            distribution.url,
+            distribution.fallback_url,
             format!(
                 "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-{package_suffix}.tgz"
             )

@@ -27,6 +27,7 @@ mod protocol;
 mod runtime_active;
 mod runtime_discovery;
 mod runtime_distributions;
+mod runtime_download;
 mod runtime_download_progress;
 mod runtime_manager;
 mod runtime_path;
