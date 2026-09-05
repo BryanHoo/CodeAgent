@@ -13,8 +13,10 @@ import type {
   ProjectRoot,
 } from "@/protocol/index.js";
 import { useMutation } from "@tanstack/react-query";
-import { memo, useEffect, useState, type RefObject } from "react";
+import { memo, useCallback, useEffect, useState, type RefObject } from "react";
+import { toast } from "sonner";
 
+import { i18n } from "../../../i18n/i18n.js";
 import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import {
   mergeSubmittedPromptIntoSnapshot,
@@ -24,6 +26,8 @@ import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtim
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
 import { taskSettingsMutationOptions } from "../../projects/project-queries.js";
+import { AsyncQuestionProvider } from "./async-question-session.js";
+import { AsyncQuestionDock } from "./async-question-dock.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
@@ -99,6 +103,10 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
 }>) {
   const taskScope = `${projectId}:${taskId}`;
+  const answerQuestions = useCallback(
+    (text: string) => composerRef.current?.answerQuestions(text) ?? Promise.resolve(false),
+    [composerRef],
+  );
   const [timelineScrollToBottomSignal, setTimelineScrollToBottomSignal] = useState(0);
   const {
     beginSubmission,
@@ -141,8 +149,12 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   }, [runtime, submittedPrompt]);
   const settingsMutation = useMutation({
     ...taskSettingsMutationOptions(projectId, taskId, client),
-    onSuccess(response) {
-      runtime.store?.getState().setTaskSettings(response.settings);
+    onMutate: () => ({ store: runtime.store }),
+    onSuccess(response, _input, context) {
+      context?.store?.getState().setTaskSettings(response.settings);
+      if (response.reviewerUpdate != null) {
+        toast.info(i18n.t(`liveReviewer.${response.reviewerUpdate}`, { ns: "conversation" }));
+      }
     },
   });
   const resolvePendingRequest = (
@@ -158,27 +170,33 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
 
   return (
     <>
-      <TaskTimeline
-        onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
-        {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
-        // Timeline 已携带 Diff 或受控文件引用，普通与临时 Task 共用同一套查看入口。
-        onOpenFileDiff={onOpenFileDiff}
-        onOpenSourceFile={onOpenSourceFile}
-        onReviewFileChanges={onReviewFileChanges}
-        onResolvePendingRequest={resolvePendingRequest}
-        projectId={projectId}
+      <AsyncQuestionProvider
+        enabled={runtime.connectionState === "connected"}
         key={taskScope}
-        runtime={runtime}
-        scrollToBottomSignal={timelineScrollToBottomSignal}
-        {...(retainedSubmissionStartedAt === undefined
-          ? {}
-          : { submissionStartedAt: retainedSubmissionStartedAt })}
-        {...(retainedSubmissionTurnId === undefined
-          ? {}
-          : { submissionTurnId: retainedSubmissionTurnId })}
-        taskId={taskId}
-        {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
-      />
+        submit={answerQuestions}
+      >
+        <TaskTimeline
+          onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
+          {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
+          // Timeline 已携带 Diff 或受控文件引用，普通与临时 Task 共用同一套查看入口。
+          onOpenFileDiff={onOpenFileDiff}
+          onOpenSourceFile={onOpenSourceFile}
+          onReviewFileChanges={onReviewFileChanges}
+          onResolvePendingRequest={resolvePendingRequest}
+          projectId={projectId}
+          runtime={runtime}
+          scrollToBottomSignal={timelineScrollToBottomSignal}
+          {...(retainedSubmissionStartedAt === undefined
+            ? {}
+            : { submissionStartedAt: retainedSubmissionStartedAt })}
+          {...(retainedSubmissionTurnId === undefined
+            ? {}
+            : { submissionTurnId: retainedSubmissionTurnId })}
+          taskId={taskId}
+          {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
+        />
+        <AsyncQuestionDock taskStore={runtime.store} />
+      </AsyncQuestionProvider>
       <WorkbenchComposer
         composerRef={composerRef}
         capabilities={capabilities}
@@ -196,12 +214,15 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         onOpenProjectPath={onOpenProjectPath}
         onProjectRootChange={onProjectRootChange}
         onFastModeChange={(enabled, settings) => onProjectTaskDefaultsChange(settings, enabled)}
-        onSettingsChange={(settings, _field, fastMode) =>
-          Promise.all([
-            settingsMutation.mutateAsync(settings),
-            onProjectTaskDefaultsChange(settings, fastMode),
-          ]).then(() => undefined)
-        }
+        onSettingsChange={async (settings, field, fastMode) => {
+          // 点击时捕获精确回合；串行排队期间不得把旧操作重定向到新回合。
+          const turnId =
+            field === "approvalPolicy" || field === "approvalsReviewer"
+              ? runtime.activeTurnId
+              : undefined;
+          await settingsMutation.mutateAsync({ settings, turnId });
+          await onProjectTaskDefaultsChange(settings, fastMode);
+        }}
         onSubmissionStateChange={handleSubmissionStateChange}
         onTaskStarted={onTaskStarted}
         onTurnStarted={(turn, input, messageAttachments) => {

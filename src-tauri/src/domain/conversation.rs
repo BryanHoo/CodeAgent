@@ -166,11 +166,19 @@ pub struct AgentTaskSnapshot {
     pub plan: Option<Value>,
     pub project_id: String,
     pub settings: AgentTaskSettings,
+    pub thread_configuration: AgentThreadConfiguration,
     pub status: &'static str,
     pub title: String,
     pub turns: Vec<AgentTurn>,
     pub turns_next_cursor: Option<String>,
     pub updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadConfiguration {
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -206,6 +214,8 @@ pub enum AgentItem {
         id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         phase: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        questions: Option<Vec<AgentAsyncQuestion>>,
         role: &'static str,
         #[serde(skip_serializing_if = "Option::is_none")]
         skills: Option<Vec<Value>>,
@@ -261,6 +271,12 @@ pub enum AgentItem {
     },
     #[serde(rename = "review")]
     Review { id: String, target: Value },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AgentAsyncQuestion {
+    pub title: String,
+    pub options: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]

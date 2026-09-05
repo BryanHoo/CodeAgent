@@ -51,6 +51,7 @@ export function createComposerTurnOptions(
 
 export type WorkbenchComposerHandle = Readonly<{
   buildPlan: () => Promise<boolean>;
+  answerQuestions: (text: string) => Promise<boolean>;
   referenceProjectPath: (file: ProjectFileSearchEntry) => void;
   submitCurrent: () => Promise<boolean>;
 }>;

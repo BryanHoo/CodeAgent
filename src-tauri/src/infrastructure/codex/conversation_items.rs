@@ -4,6 +4,7 @@ use super::connection::ConnectionError;
 use super::conversation_collaboration::{collaboration_tool_name, map_collaboration_agents};
 use super::conversation_file_input::read_file_text_input;
 use super::conversation_media_input::{map_local_audio_attachment, map_local_image_attachment};
+use super::conversation_questions::map_questions;
 use super::generated_image_store::IMAGE_ATTACHMENT_FIELD;
 use crate::domain::conversation::{AgentCommandOutputOmission, AgentFileChange, AgentItem};
 
@@ -22,6 +23,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
                 attachments: (!attachments.is_empty()).then_some(attachments),
                 id,
                 phase: None,
+                questions: None,
                 role: "user",
                 skills: (!skills.is_empty()).then_some(skills),
                 text,
@@ -31,6 +33,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
             attachments: None,
             id,
             phase: optional_string(item, "phase")?.map(str::to_owned),
+            questions: map_questions(item)?,
             role: "assistant",
             skills: None,
             text: required_string(item, "text")?.to_owned(),
@@ -120,6 +123,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
                     attachments: Some(vec![attachment]),
                     id,
                     phase: None,
+                    questions: None,
                     role: "assistant",
                     skills: None,
                     text: String::new(),
@@ -189,6 +193,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
             attachments: None,
             id,
             phase: None,
+            questions: None,
             role: "assistant",
             skills: None,
             text: required_string(item, "review")?.to_owned(),

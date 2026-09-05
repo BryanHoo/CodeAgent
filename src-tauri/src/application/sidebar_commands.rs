@@ -205,6 +205,7 @@ pub async fn update_task_settings(
     project_id: String,
     task_id: String,
     settings: AgentTaskSettings,
+    turn_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     if !settings.is_valid() {
@@ -214,10 +215,30 @@ pub async fn update_task_settings(
     codex::read_task(&connection, project_id.clone(), task_id.clone())
         .await
         .map_err(AppError::from)?;
+    let reviewer_update = if let Some(turn_id) = turn_id
+        && effective_task_settings(&app, &project_id, &task_id)
+            .await?
+            .approvals_reviewer
+            != settings.approvals_reviewer
+    {
+        // 服务端拒绝时不落盘；回合已结束则只保存未来设置，明确返回未应用状态。
+        Some(
+            codex::update_live_reviewer(
+                &connection,
+                &task_id,
+                &turn_id,
+                &settings.approvals_reviewer,
+            )
+            .await
+            .map_err(AppError::from)?,
+        )
+    } else {
+        None
+    };
     write_task_settings(&app_data_dir(&app)?, &project_id, &task_id, &settings)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    Ok(json!({"settings": settings}))
+    Ok(json!({"settings": settings, "reviewerUpdate": reviewer_update}))
 }
 
 #[tauri::command(rename_all = "camelCase")]

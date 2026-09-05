@@ -9,7 +9,8 @@ pub(super) use super::conversation_items::map_item;
 use super::conversation_items::map_status;
 use super::{connection::ConnectionError, sidebar::unix_seconds_to_rfc3339};
 use crate::domain::conversation::{
-    AgentTaskSettings, AgentTaskSnapshot, AgentTaskSnapshotResponse, AgentTurn, EventCheckpoint,
+    AgentTaskSettings, AgentTaskSnapshot, AgentTaskSnapshotResponse, AgentThreadConfiguration,
+    AgentTurn, EventCheckpoint,
 };
 
 use super::AppServerConnection;
@@ -79,6 +80,8 @@ struct NativeThreadResponse {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NativeThread {
+    model: Option<String>,
+    reasoning_effort: Option<String>,
     history_mode: NativeThreadHistoryMode,
     id: String,
     name: Option<String>,
@@ -200,6 +203,10 @@ pub async fn read_task_snapshot(
             plan: None,
             project_id,
             settings: AgentTaskSettings::default(),
+            thread_configuration: AgentThreadConfiguration {
+                model: thread.model,
+                reasoning_effort: thread.reasoning_effort,
+            },
             status,
             title: normalized_title(thread.name.as_deref(), &thread.preview),
             turns,

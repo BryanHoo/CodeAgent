@@ -63,6 +63,18 @@ export function resolveReasoningEffort(
     : model.defaultReasoningEffort;
 }
 
+export function resolveThreadComposerSettings(
+  settings: AgentTaskSettings,
+  configuration: AgentTaskSnapshot["threadConfiguration"],
+): AgentTaskSettings {
+  // 续聊沿用线程已保存的模型配置，只补全模型与思考强度，不恢复历史权限。
+  const model = configuration?.model ?? settings.model;
+  const reasoningEffort = configuration?.reasoningEffort ?? settings.reasoningEffort;
+  return model === settings.model && reasoningEffort === settings.reasoningEffort
+    ? settings
+    : { ...settings, model, reasoningEffort };
+}
+
 export function deriveApprovalMode(
   settings: Pick<AgentTaskSettings, "approvalPolicy" | "approvalsReviewer">,
 ): ApprovalMode {

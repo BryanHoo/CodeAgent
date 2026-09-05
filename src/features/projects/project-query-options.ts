@@ -234,8 +234,8 @@ export function taskSettingsMutationOptions(
 ) {
   return mutationOptions({
     meta: { actionNotification: { successMessage: false } },
-    mutationFn: (settings: AgentTaskSettings) =>
-      client.updateTaskSettings(projectId, taskId, settings),
+    mutationFn: (input: Readonly<{ settings: AgentTaskSettings; turnId: string | undefined }>) =>
+      client.updateTaskSettings(projectId, taskId, input.settings, input.turnId),
     mutationKey: ["projects", projectId, "tasks", taskId, "settings", "update"] as const,
     scope: { id: `task-settings:${projectId}:${taskId}` },
   });

@@ -175,6 +175,19 @@ export const AgentMessagePhaseSchema = Type.Union([
 
 export type AgentMessagePhase = Readonly<Static<typeof AgentMessagePhaseSchema>>;
 
+export const AgentAsyncQuestionSchema = Type.Object(
+  {
+    title: Type.String({ minLength: 1, maxLength: 4096 }),
+    options: Type.Union([
+      Type.Array(Type.String({ minLength: 1, maxLength: 1024 }), { minItems: 1, maxItems: 32 }),
+      Type.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentAsyncQuestion = Readonly<Static<typeof AgentAsyncQuestionSchema>>;
+
 export const AgentMessageItemSchema = Type.Object(
   {
     attachments: Type.Optional(
@@ -182,6 +195,7 @@ export const AgentMessageItemSchema = Type.Object(
     ),
     id: Type.String({ minLength: 1 }),
     phase: Type.Optional(AgentMessagePhaseSchema),
+    questions: Type.Optional(Type.Array(AgentAsyncQuestionSchema, { minItems: 1, maxItems: 16 })),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
     skills: Type.Optional(Type.Array(AgentMessageSkillSchema)),
     text: Type.String(),

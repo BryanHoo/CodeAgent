@@ -52,6 +52,16 @@ export const AgentTaskSnapshotSchema = Type.Object(
     pinned: Type.Boolean(),
     projectId: Type.String({ minLength: 1 }),
     settings: AgentTaskSettingsSchema,
+    // 仅原生读取快照携带；新建任务的乐观快照没有权威线程配置。
+    threadConfiguration: Type.Optional(
+      Type.Object(
+        {
+          model: Type.Union([Type.String(), Type.Null()]),
+          reasoningEffort: Type.Union([Type.String(), Type.Null()]),
+        },
+        { additionalProperties: false },
+      ),
+    ),
     status: Type.Union([Type.Literal("idle"), Type.Literal("running"), Type.Literal("failed")]),
     title: Type.String({ minLength: 1 }),
     turns: Type.Array(AgentTurnSchema),

@@ -9,7 +9,7 @@ use super::{
 
 #[test]
 fn async_questions_should_preserve_official_text_in_history_and_live_items() {
-    // 官方 text 已按顺序包含问题和选项；沿用普通消息，避免重复传输问题树。
+    // 问题只随完整 Item 传输，历史恢复与实时通知必须得到相同结构。
     let text = "选择范围\n- 当前文件\n- 整个项目\n\n补充要求";
     let native = json!({
         "id": "question-a", "type": "agentMessage", "text": text,
@@ -23,7 +23,7 @@ fn async_questions_should_preserve_official_text_in_history_and_live_items() {
     assert_eq!(history["type"], "message");
     assert_eq!(history["role"], "assistant");
     assert_eq!(history["text"], text);
-    assert!(history.get("questions").is_none());
+    assert_eq!(history["questions"], native["questions"]);
 
     for (sequence, method) in ["item/started", "item/completed"].into_iter().enumerate() {
         let event = map_server_message(
@@ -67,4 +67,43 @@ fn nullable_thread_model_metadata_should_keep_task_projection_unchanged() {
             baseline = Some(task);
         }
     }
+}
+
+#[test]
+fn async_questions_should_fall_back_to_text_outside_interactive_budget() {
+    for questions in [
+        json!([]),
+        json!(vec![json!({"title": "范围", "options": null}); 17]),
+        json!([{"title": "x".repeat(4097), "options": null}]),
+        json!([{"title": "范围", "options": vec!["x"; 33]}]),
+        json!([{"title": "范围", "options": ["x".repeat(1025)]}]),
+        json!(vec![
+            json!({"title": "范围", "options": vec!["x".repeat(1024); 32]});
+            3
+        ]),
+    ] {
+        let mapped = serde_json::to_value(
+            map_item(json!({
+                "id": "question-a", "type": "agentMessage", "text": "fallback",
+                "delivery": "async", "questions": questions
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(mapped.get("questions").is_none());
+        assert_eq!(mapped["text"], "fallback");
+    }
+}
+
+#[test]
+fn synchronous_messages_must_not_create_async_question_forms() {
+    let mapped = serde_json::to_value(
+        map_item(json!({
+            "id": "message-a", "type": "agentMessage", "text": "text", "delivery": null,
+            "questions": [{"title": "范围", "options": null}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(mapped.get("questions").is_none());
 }

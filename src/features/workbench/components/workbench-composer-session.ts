@@ -22,6 +22,7 @@ import {
   deriveComposerInputAvailability,
   deriveComposerState,
   resolveReasoningEffort,
+  resolveThreadComposerSettings,
 } from "../composer-state.js";
 import { useWorkbenchComposerController } from "../hooks/use-workbench-composer-controller.js";
 import { useProjectFileSearch } from "../hooks/use-project-file-search.js";
@@ -173,8 +174,13 @@ export function useComposerSession({
     mutationFailed: mutationError !== null || runtime?.error !== null,
   });
   const promptSubmission = toPromptSkillSubmission(promptContent);
-  const activeSettings =
-    settingsOverride?.scope === routeScope ? settingsOverride.settings : settings;
+  const threadConfiguration = runtime?.metadata?.threadConfiguration;
+  const activeSettings = useMemo(
+    () => settingsOverride?.scope === routeScope
+      ? settingsOverride.settings
+      : resolveThreadComposerSettings(settings, threadConfiguration),
+    [routeScope, settings, settingsOverride, threadConfiguration],
+  );
   const composerMode = composerModeState?.scope === routeScope ? composerModeState.mode : undefined;
   const selectedModel =
     models.find((model) => model.id === activeSettings.model) ??

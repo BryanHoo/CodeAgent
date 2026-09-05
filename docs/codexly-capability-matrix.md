@@ -14,9 +14,10 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 
 ### 0.153.4 接入边界
 
-- `agentMessage.questions` 使用官方 `text` 展示完整问题和选项，用户通过普通消息回复；实时和历史共用映射，不增加阻塞请求或重复问题树 IPC，暂不提供结构化选择控件。
-- `Thread.model` / `reasoningEffort` 的空值与非空值均可解析；继续使用应用私有任务设置，不为读取元数据额外恢复线程或发起轮询。
-- `plugin/reconcile`、按 App 账户审批和运行中 reviewer 切换暂不新增产品入口；原始 usage metadata 不进入 WebView。
+- `agentMessage.questions` 在 Composer 上方固定显示单选及自由回答，支持折叠、多组切换、未回答数量与限高内部滚动；时间线只读留存。首项预选但不自动发送，复用 Composer 在运行中追加消息或结束后开启回合，不清空草稿、不继承计划/Goal 模式。实时和历史共用有界映射，超预算回退官方 `text`；发送成功移出固定区，恢复历史时识别完整格式化回答，Delta 不重建问题列表。
+- `Thread.model` / `reasoningEffort` 通过现有读取直接恢复到 Composer 的模型与思考强度，续聊发送沿用该配置；空值回退任务设置，用户手动选择优先，刷新不覆盖手动选择。沿用模型可用性与推理强度校验，不在 Inspector 重复展示，不增加读取、轮询或自动配置写回。
+- 现有审批模式选择可在运行中切换 reviewer；只更新后续步骤审核路由，沙箱与已有审批不变。精确目标已结束时仅保存未来设置并提示，被托管策略拒绝则保留原设置。
+- `plugin/reconcile` 和按 App 账户审批暂不新增入口；当前无插件管理流程，原始 usage metadata 不进入 WebView。
 - 保持单一 stdio 连接、RawValue Delta 映射、有界队列与分页历史；协议快照由本机 `codex-cli 0.153.4` 携带 `--experimental` 生成。
 
 ## 逐项矩阵

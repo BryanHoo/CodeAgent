@@ -18,6 +18,7 @@ import { createProjectDraftComposerActions } from "./project-draft-composer-acti
 import type { WorkbenchComposerProps } from "./workbench-composer-contracts.js";
 import { useComposerSession } from "./workbench-composer-session.js";
 import { createComposerSubmission } from "./workbench-composer-submission.js";
+import { createComposerHandle } from "./workbench-composer-handle.js";
 import { WorkbenchComposerView } from "./workbench-composer-view.js";
 export * from "./workbench-composer-contracts.js";
 export * from "../composer-state.js";
@@ -164,9 +165,11 @@ export function WorkbenchComposer({
     setSettingsOverride({ scope: requestScope, settings: nextSettings });
     setMutationError(null);
     // 设置写回由用户事件直接触发，避免 effect 重放或并发渲染造成重复请求。
-    void Promise.resolve(onSettingsChange(nextSettings, field, fastModeSelected)).catch(
-      () => undefined,
-    );
+    void Promise.resolve(onSettingsChange(nextSettings, field, fastModeSelected)).catch((error) => {
+      if (!isCurrentScope(requestScope)) return;
+      setSettingsOverride((current) => current?.settings === nextSettings ? undefined : current);
+      setMutationError(error instanceof Error ? error : new Error("Task settings update failed"));
+    });
   };
   const branchMutation = useWorkbenchBranchSwitch({
     client,
@@ -271,15 +274,12 @@ export function WorkbenchComposer({
     uploadAttempts,
     uploadedAttachments,
   });
-  useImperativeHandle(composerRef, () => ({
-    buildPlan: () => {
-      setComposerModeState(undefined); // 避免后续 Turn 再次请求生成计划。
-      return submitPrompt({ files: [], text: t("composer.buildPlanPrompt") }, [], {
-        composerMode: null,
-        forceAction: "start",
-      });
-    },
+  useImperativeHandle(composerRef, () => createComposerHandle({
+    activeTurnId,
+    buildPlanPrompt: t("composer.buildPlanPrompt"),
+    clearMode: () => setComposerModeState(undefined),
     referenceProjectPath,
+    submitPrompt,
     submitCurrent: () =>
       submitPrompt({
         files: attachments,

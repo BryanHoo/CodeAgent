@@ -51,6 +51,7 @@ import type { AgentFileChange } from "../../diff/file-change.js";
 import { MessageFileAttachment } from "./message-file-attachment.js";
 import { MessageImageAttachment } from "./message-image-attachment.js";
 import { SkillToken } from "./skill-token.js";
+import { AsyncQuestionHistory } from "./async-question-history.js";
 import { parseSubagentOperation } from "./subagent.js";
 
 import type { BuildPlanAction } from "./task-timeline-contracts.js";
@@ -94,6 +95,9 @@ export function TimelineItemContent({
 }>) {
   switch (item.type) {
     case "message": {
+      if (item.role === "assistant" && item.questions !== undefined) {
+        return <AsyncQuestionHistory item={item} />;
+      }
       const attachments = item.attachments ?? [];
       const skills = item.role === "user" ? (item.skills ?? []) : [];
       const responseRendering = resolveMessageResponseRendering({

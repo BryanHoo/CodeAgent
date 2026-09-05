@@ -24,9 +24,12 @@
 
 ## 新增通知与请求
 
-- `agentMessage.questions` 通过官方 `text` 展示完整问题与选项，沿用普通消息回复；异步提问的 `item/completed` 不得结束 Turn 或进入阻塞审批队列，暂不提供结构化选项控件
-- `Thread.model` 与 `Thread.reasoningEffort` 接受空值和实际值；它们是线程配置元数据，不是逐回合遥测。任务设置仍由应用私有配置管理，不为读取这些字段额外 resume 或轮询线程
-- `plugin/reconcile`、App 按账户审批配置及运行中 `approvalsReviewer` 更新暂不新增产品入口；使用官方运行时现有行为，不在事件热路径主动同步插件
+- 仅 `delivery: async` 的 `agentMessage.questions` 映射为结构化问题；实时与历史共用映射，问题树不进入 Delta 热路径。每个 Item 最多 16 题、每题最多 32 项，标题/选项分别不超过 4096/1024 字节，总文本不超过 64 KiB；超预算时保留官方 `text` 展示，不渲染巨大表单
+- 异步问题只沿用普通用户消息回复，不调用阻塞请求响应协议；`item/completed` 不得结束 Turn 或进入审批队列
+- `Thread.model` 与 `Thread.reasoningEffort` 通过现有 `thread/read` 投影到快照 `threadConfiguration`，接受空值；新任务的乐观快照不伪造该字段。它们用于 Composer 恢复续聊模型与推理强度，不是逐回合遥测；任务设置提供空值回退，用户手动选择具有更高优先级，不为恢复额外 resume、轮询或自动写回配置
+- `update_task_settings` 可携带点击时捕获的 `turnId`。仅审核方变化时发送 `turn/settings/update`，补丁只含 `threadId`、`turnId`、`approvalsReviewer`，不启用 `step_model_switching`，不改变沙箱、已捕获步骤或已有审批
+- 运行中审核方更新被拒绝时不保存任务设置；`targetUnavailable` 时仅保存未来设置并明确告知。UI 必须区分 `applied` 与 `targetUnavailable`，不得把已结束的目标自动改为新回合；项目默认值必须在任务更新成功后保存
+- `plugin/reconcile` 和 App 按账户审批配置暂不新增产品入口；项目未提供插件管理，不在事件热路径主动同步插件
 - `ResponseUsageMetadata.metadata` 不进入 WebView；上下文占用继续使用 `thread/tokenUsage/updated` 的有界摘要
 - `modelProvider/authRecoveryStarted` 和 `modelProvider/authRecoveryCompleted` 必须校验 `threadId`、`turnId`、`provider`、`message` 后显式消费；当前不投影到 UI
 - MCP elicitation 的 `openaiForm` 与旧 `openai/form` 均映射为 `unsupported`，不得按标准 `form` 渲染或提交
@@ -40,4 +43,5 @@
 - 覆盖 Provider 重连、端点隔离、旧模型目录迁移及 `desktop.codeagent.provider` 清理
 - 使用本机 `codex-cli 0.153.4` 运行真实 App Server 生命周期冒烟，并运行 `pnpm check`
 - 运行 `pnpm codex:protocol:check` 验证实验协议 schema 未发生漂移
-- 覆盖异步问题在历史与实时 Item 中的文本完整性，以及空值/非空线程模型元数据的轻量任务投影
+- 覆盖异步问题在历史与实时 Item 中的结构一致性、预算降级和同步消息隔离；覆盖空值/非空线程配置快照，断言读取请求数量不增加
+- 覆盖运行中审核方更新的精确目标、最小补丁、`applied`/`targetUnavailable` 和托管策略拒绝；覆盖问答预选不自动发送、自由回答、失败重试、断线禁用和虚拟卸载恢复

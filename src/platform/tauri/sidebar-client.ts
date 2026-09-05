@@ -393,8 +393,14 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     projectId: string,
     taskId: string,
     settings: AgentTaskSettings,
+    turnId?: string,
   ): Promise<AgentTaskSettingsResponse> {
-    return this.call("update_task_settings", { projectId, settings, taskId });
+    return this.call("update_task_settings", {
+      projectId,
+      settings,
+      taskId,
+      ...(turnId === undefined ? {} : { turnId }),
+    });
   }
 
   public async updateTaskGoal(

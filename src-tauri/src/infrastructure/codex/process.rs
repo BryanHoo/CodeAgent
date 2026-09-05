@@ -395,6 +395,15 @@ mod tests {
         assert_eq!(read["thread"]["id"], thread_id);
         assert!(read["thread"]["model"].is_string());
         assert!(read["thread"].get("reasoningEffort").is_some());
+        // 无运行回合时必须明确返回未应用，验证实验审核方接口而不产生模型请求。
+        let reviewer_update =
+            super::super::update_live_reviewer(&connection, thread_id, "no-active-turn", "user")
+                .await
+                .expect("reviewer-only updates should not require step_model_switching");
+        assert_eq!(
+            serde_json::to_value(reviewer_update).unwrap(),
+            "targetUnavailable"
+        );
 
         let mapped_models = catalogs::list_models(&connection)
             .await

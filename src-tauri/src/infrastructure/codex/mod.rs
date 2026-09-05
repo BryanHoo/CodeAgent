@@ -15,10 +15,12 @@ mod conversation_file_input;
 mod conversation_items;
 mod conversation_media_input;
 mod conversation_prompt;
+mod conversation_questions;
 mod conversation_queue;
 mod conversation_request_fields;
 mod conversation_requests;
 mod conversation_runtime_events;
+mod conversation_turn_settings;
 mod generated_image_store;
 mod process;
 mod protocol;
@@ -53,6 +55,8 @@ mod connection_message_tests;
 #[cfg(test)]
 #[path = "connection_retry_tests.rs"]
 mod connection_retry_tests;
+#[cfg(test)]
+mod conversation_153_settings_tests;
 #[cfg(test)]
 #[path = "conversation_advanced_tests.rs"]
 mod conversation_advanced_tests;
@@ -109,6 +113,7 @@ pub(crate) use conversation_requests::MappedServerRequest;
 pub use conversation_requests::{
     PendingServerRequest, map_server_request_now, resolved_request_id, response_for_resolution,
 };
+pub use conversation_turn_settings::update_live_reviewer;
 pub use process::CodexProcess;
 pub use runtime_active::update_managed_codex_runtime;
 pub use runtime_manager::{inspect_codex_runtime, install_codex_runtime};

@@ -1,4 +1,14 @@
 export const conversation = {
+  liveReviewer: {
+    applied: "Reviewer updated for future steps in this turn; existing approvals and sandbox permissions are unchanged",
+    targetUnavailable: "The target turn is no longer available; settings saved for future turns",
+  },
+  asyncQuestions: {
+    pending: "Pending questions", pendingCount: "Pending · {{count}} groups",
+    previous: "Previous questions", next: "Next questions", collapse: "Collapse questions", expand: "Expand questions",
+    other: "Other answer", answer: "Answer: {{question}}", send: "Send answers", sent: "Sent",
+    failed: "Answers were not sent. Please retry.",
+  },
   agentComponents: {
     addFile: "Add file",
     addImage: "Add image",

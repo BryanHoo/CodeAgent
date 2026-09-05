@@ -154,7 +154,12 @@ export type AgentProjectDefaultsResponse = Readonly<
 >;
 
 export const AgentTaskSettingsResponseSchema = Type.Object(
-  { settings: AgentTaskSettingsSchema },
+  {
+    settings: AgentTaskSettingsSchema,
+    reviewerUpdate: Type.Optional(
+      Type.Union([Type.Literal("applied"), Type.Literal("targetUnavailable"), Type.Null()]),
+    ),
+  },
   { additionalProperties: false },
 );
 
