@@ -6,9 +6,14 @@ import { I18nextProvider, i18n } from "../../../i18n/i18n.js";
 import { CodexRuntimeGate } from "./codex-runtime-gate.js";
 
 const runtimeMocks = vi.hoisted(() => ({
+  connect: vi.fn(),
   download: vi.fn(),
   inspect: vi.fn(),
   warning: vi.fn(),
+}));
+
+vi.mock("../../../platform/tauri/runtime.js", () => ({
+  connectCodexRuntime: runtimeMocks.connect,
 }));
 
 vi.mock("../../../platform/tauri/codex-runtime-manager.js", () => ({
@@ -20,9 +25,42 @@ vi.mock("sonner", () => ({ toast: { warning: runtimeMocks.warning } }));
 
 describe("CodexRuntimeGate", () => {
   beforeEach(() => {
+    runtimeMocks.connect.mockReset().mockResolvedValue({ status: "idle", lastSeq: 0, provider: null });
     runtimeMocks.download.mockReset();
     runtimeMocks.inspect.mockReset();
     runtimeMocks.warning.mockReset();
+  });
+
+  it("restores the workbench without inspecting a runtime that stayed ready in the background", async () => {
+    runtimeMocks.connect.mockResolvedValue({ status: "ready", lastSeq: 8, provider: "codex" });
+    runtimeMocks.inspect.mockResolvedValue({
+      detectedVersion: "0.153.4",
+      globalInstallCommand: "npm install -g @openai/codex@0.153.4",
+      requiredVersion: "0.153.4",
+      status: "compatible",
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <CodexRuntimeGate><p>Workbench</p></CodexRuntimeGate>
+      </QueryClientProvider>,
+    );
+
+    await expect.element(screen.getByText("Workbench")).toBeVisible();
+    expect(runtimeMocks.inspect).not.toHaveBeenCalled();
+  });
+
+  it("does not show version detection while reconnecting to the background", async () => {
+    runtimeMocks.connect.mockImplementation(() => new Promise(() => undefined));
+    runtimeMocks.inspect.mockImplementation(() => new Promise(() => undefined));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <CodexRuntimeGate><p>Workbench</p></CodexRuntimeGate>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("status").query()).toBeNull();
   });
 
   it("shows staged progress while updating a managed runtime on startup", async () => {
@@ -146,6 +184,7 @@ describe("CodexRuntimeGate", () => {
       description: "Codex 0.150.0 is still available. Retry when the connection is restored.",
     });
 
+    runtimeMocks.connect.mockResolvedValue({ status: "ready", lastSeq: 8, provider: "codex" });
     options.action.onClick();
     await vi.waitFor(() => expect(runtimeMocks.inspect).toHaveBeenCalledTimes(2));
   });

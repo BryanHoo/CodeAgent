@@ -19,7 +19,9 @@
 
 ## Provider 运行时
 
-- WebView 必须先通过 `connect_runtime` 建立模块级 Channel，再调用 `start_runtime`
+- WebView 必须先通过 `connect_runtime` 建立模块级 Channel，Runtime 未就绪时才调用 `start_runtime`
+- `connect_runtime` 返回 `ready` 时，恢复窗口直接复用后台进程，不重复调用 `start_runtime` 或 `inspect_codex_runtime`；冷启动与故障恢复仍走检测、启动流程
+- Codex 模型目录缓存属于后台连接，跨 WebView 重建复用，最多保留一份目录并在 5 分钟后按需刷新；账号通知、登录或配置写入须使缓存失效，变更期间的旧查询不得回填有效缓存，连接重建自然丢弃旧目录
 - Provider 状态与故障恢复不得依赖 WebView Channel 是否存在；Rust supervisor 对启动失败和异常退出使用 1–30 秒有界退避，稳定运行后重置退避
 - Provider 可执行文件不得作为 Tauri Sidecar 打包
 - `start_runtime` 只启动后端已发现并验证的绝对路径，不接收 WebView 传入的程序路径

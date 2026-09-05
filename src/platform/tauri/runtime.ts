@@ -41,6 +41,7 @@ export type AgentEventSubscription = Readonly<{
 }>;
 
 let runtimePromise: Promise<RuntimeSnapshot> | undefined;
+let connectionPromise: Promise<RuntimeSnapshot> | undefined;
 const runtimeListeners = new Set<(event: RuntimeStatusEvent) => void>();
 const agentEventSubscriptions = new Set<AgentEventSubscription>();
 const recentAgentEvents = new RuntimeEventHistory();
@@ -59,8 +60,27 @@ export function subscribeAgentEvents(options: AgentEventSubscription): () => voi
 
 export function ensureCodexRuntime(): Promise<RuntimeSnapshot> {
   runtimePromise ??= (async () => {
+    const snapshot = await connectCodexRuntime();
+    // WebView 重建只需恢复事件通道；后台进程就绪时不再执行启动命令。
+    return snapshot.status === "ready" ? snapshot : invoke<RuntimeSnapshot>("start_runtime");
+  })().catch((error: unknown) => {
+    runtimePromise = undefined;
+    throw error;
+  });
+  return runtimePromise;
+}
+
+export function connectCodexRuntime(): Promise<RuntimeSnapshot> {
+  connectionPromise ??= (async () => {
     const channel = new Channel<RuntimeEvent>((event) => {
       if (event.type === "runtimeStatus") {
+        connectionPromise = event.data.status === "failed"
+          ? undefined
+          : Promise.resolve({
+              lastSeq: event.data.seq,
+              provider: event.data.provider,
+              status: event.data.status,
+            });
         for (const listener of runtimeListeners) listener(event);
         // 后端进程已失效时清除已兑现 Promise，让下一次命令重新握手。
         if (event.data.status === "failed") runtimePromise = undefined;
@@ -78,11 +98,10 @@ export function ensureCodexRuntime(): Promise<RuntimeSnapshot> {
       }
       for (const subscription of agentEventSubscriptions) subscription.onEvent(event.data.event);
     });
-    await invoke<RuntimeSnapshot>("connect_runtime", { onEvent: channel });
-    return invoke<RuntimeSnapshot>("start_runtime");
+    return invoke<RuntimeSnapshot>("connect_runtime", { onEvent: channel });
   })().catch((error: unknown) => {
-    runtimePromise = undefined;
+    connectionPromise = undefined;
     throw error;
   });
-  return runtimePromise;
+  return connectionPromise;
 }

@@ -57,6 +57,13 @@ struct ConfigValueWriteParams {
 }
 
 pub async fn list_models(connection: &AppServerConnection) -> Result<Value, ConnectionError> {
+    connection
+        .model_catalog
+        .get_or_load(|| load_models(connection))
+        .await
+}
+
+async fn load_models(connection: &AppServerConnection) -> Result<Value, ConnectionError> {
     let data = collect_pages(connection, "model/list", |cursor| PageParams {
         cursor: cursor.map(str::to_owned),
         limit: PAGE_LIMIT,

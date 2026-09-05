@@ -1,5 +1,4 @@
 import {
-  type QueryFunctionContext,
   useMutation,
   useQuery,
   useQueryClient,
@@ -16,31 +15,23 @@ import {
   ShieldCheck,
   Terminal,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import {
   downloadAndInspectCodexRuntime,
-  inspectCodexRuntime,
 } from "../../../platform/tauri/codex-runtime-manager.js";
 import type {
   CodexRuntimeAvailability,
   CodexRuntimeInstallProgress,
 } from "../../../protocol/index.js";
 import { Button } from "../../../shared/components/core/button.js";
-
-const CODEX_RUNTIME_QUERY_KEY = ["codex-runtime-availability"] as const;
-type RuntimeProgressListener = (progress: CodexRuntimeInstallProgress) => void;
-
-function isRuntimeProgressListener(value: unknown): value is RuntimeProgressListener {
-  return typeof value === "function";
-}
-
-function inspectRuntimeQuery({ meta }: QueryFunctionContext) {
-  const onProgress = meta?.["onProgress"];
-  return inspectCodexRuntime(isRuntimeProgressListener(onProgress) ? onProgress : undefined);
-}
+import {
+  CODEX_RUNTIME_QUERY_KEY,
+  inspectRuntimeDirectQuery,
+  inspectRuntimeQuery,
+} from "../codex-runtime-queries.js";
 
 type CodexRuntimeGateProps = Readonly<{ children: ReactNode }>;
 
@@ -49,12 +40,13 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
   const queryClient = useQueryClient();
   const [downloadProgress, setDownloadProgress] = useState<CodexRuntimeInstallProgress | null>(null);
   const [startupProgress, setStartupProgress] = useState<CodexRuntimeInstallProgress | null>(null);
+  const [isInspecting, setIsInspecting] = useState(false);
   const availabilityQuery = useQuery({
-    meta: { onProgress: setStartupProgress },
+    meta: { onProgress: setStartupProgress, onInspect: () => setIsInspecting(true) },
     queryFn: inspectRuntimeQuery,
     queryKey: CODEX_RUNTIME_QUERY_KEY,
     retry: false,
-    staleTime: 0,
+    staleTime: Infinity,
   });
   const installMutation = useMutation({
     mutationFn: () => downloadAndInspectCodexRuntime(setDownloadProgress),
@@ -66,7 +58,13 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
     },
   });
   const availability = availabilityQuery.data;
-  const refetchAvailability = availabilityQuery.refetch;
+  // 用户明确重试时强制检测，不复用后台就绪状态；错误由 Query 状态展示。
+  const refetchAvailability = useCallback(() => queryClient.fetchQuery({
+    meta: { onProgress: setStartupProgress },
+    queryFn: inspectRuntimeDirectQuery,
+    queryKey: CODEX_RUNTIME_QUERY_KEY,
+    staleTime: 0,
+  }).catch(() => undefined), [queryClient]);
 
   useEffect(() => {
     if (
@@ -94,15 +92,15 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
   if (startupProgress !== null && (availabilityQuery.isPending || availabilityQuery.isFetching)) {
     return <RuntimeUpdating progress={startupProgress} />;
   }
-  if (availability?.status === "compatible") {
+  if (availability === null || availability?.status === "compatible") {
     return children;
   }
   if (availabilityQuery.isPending) {
-    return <RuntimeChecking />;
+    return isInspecting ? <RuntimeChecking /> : null;
   }
   return (
     <RuntimeSetup
-      availability={availability}
+      availability={availability ?? undefined}
       detectionFailed={availabilityQuery.isError}
       downloadProgress={downloadProgress}
       installFailed={installMutation.isError || startupProgress?.phase === "failed"}
@@ -117,7 +115,7 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
         setDownloadProgress(null);
         setStartupProgress(null);
         installMutation.reset();
-        void availabilityQuery.refetch();
+        void refetchAvailability();
       }}
     />
   );

@@ -19,6 +19,17 @@ vi.mock("@tauri-apps/api/core", () => ({
 describe("Tauri runtime recovery", () => {
   beforeEach(() => {
     invoke.mockClear();
+    vi.resetModules();
+  });
+
+  it("reconnects a recreated WebView without starting an already ready runtime", async () => {
+    invoke.mockResolvedValueOnce({ lastSeq: 8, provider: "codex", status: "ready" });
+    const runtime = await import("./runtime.js");
+
+    expect(await runtime.ensureCodexRuntime()).toEqual({
+      lastSeq: 8, provider: "codex", status: "ready",
+    });
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual(["connect_runtime"]);
   });
 
   it("starts a fresh runtime after the backend reports failure", async () => {

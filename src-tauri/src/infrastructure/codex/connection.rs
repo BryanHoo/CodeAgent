@@ -23,6 +23,7 @@ use crate::infrastructure::diagnostics;
 
 use super::connection_event_buffer::NotificationBuffer;
 use super::generated_image_store::GeneratedImageStore;
+use super::model_cache::ModelCatalogCache;
 use super::protocol::{
     ClientInfo, IGNORED_NOTIFICATION_METHODS, IncomingMessage, InitializeCapabilities,
     InitializeParams, InitializeResponse, RpcError, encode_notification, encode_request,
@@ -65,6 +66,7 @@ pub enum ConnectionError {
 }
 
 pub struct AppServerConnection {
+    pub(super) model_catalog: Arc<ModelCatalogCache>,
     writer: AsyncMutex<AsyncWriter>,
     pending: PendingRequests,
     server_messages: AsyncMutex<Option<mpsc::Receiver<ServerMessage>>>,
@@ -105,14 +107,17 @@ impl AppServerConnection {
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let reader_pending = Arc::clone(&pending);
         let (message_sender, message_receiver) = mpsc::channel(256);
+        let model_catalog = Arc::new(ModelCatalogCache::default());
         let reader_task = tokio::spawn(read_responses(
             reader,
             reader_pending,
             message_sender,
             image_store,
+            Arc::clone(&model_catalog),
         ));
 
         Self {
+            model_catalog,
             writer: AsyncMutex::new(Box::pin(writer)),
             pending,
             server_messages: AsyncMutex::new(Some(message_receiver)),
@@ -185,6 +190,7 @@ impl AppServerConnection {
         P: Serialize,
         R: DeserializeOwned,
     {
+        let _catalog_change = self.model_catalog.changing_for_request(method);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let message = encode_request(id, method, params)?;
         let (sender, receiver) = oneshot::channel();
@@ -324,6 +330,7 @@ async fn read_responses<R>(
     pending: PendingRequests,
     server_messages: mpsc::Sender<ServerMessage>,
     image_store: Option<GeneratedImageStore>,
+    model_catalog: Arc<ModelCatalogCache>,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -411,6 +418,12 @@ async fn read_responses<R>(
             }
         };
         if let Some(method) = message.method.take() {
+            if matches!(
+                method.as_str(),
+                "account/updated" | "account/login/completed"
+            ) {
+                model_catalog.invalidate();
+            }
             let Some(params) = message.params else {
                 fail_pending(&pending, PendingError::InvalidMessage);
                 return;
