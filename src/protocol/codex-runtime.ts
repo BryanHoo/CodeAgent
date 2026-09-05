@@ -6,7 +6,6 @@ export type CodexRuntimeAvailabilityStatus =
 
 export type CodexRuntimeAvailability = Readonly<{
   detectedVersion: string | null;
-  globalInstallCommand: string;
   requiredVersion: string;
   status: CodexRuntimeAvailabilityStatus;
 }>;

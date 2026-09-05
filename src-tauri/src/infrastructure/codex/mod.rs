@@ -116,7 +116,6 @@ pub use conversation_requests::{
 };
 pub use conversation_turn_settings::update_live_reviewer;
 pub use process::CodexProcess;
-pub use runtime_active::update_managed_codex_runtime;
 pub use runtime_manager::{inspect_codex_runtime, install_codex_runtime};
 pub use sidebar::{
     add_project, list_projects, read_project, remove_project, rename_project, reorder_projects,

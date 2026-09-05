@@ -110,7 +110,7 @@ void test("Windows should verify Codex through the app instead of the Tauri test
   );
 });
 
-void test("native WebView CI should install the supported Codex runtime", async () => {
+void test("native WebView CI should exercise private installation without global Codex", async () => {
   const [workflow, processSource] = await Promise.all([
     readFile(new URL("../.github/workflows/webview.yml", import.meta.url), "utf8"),
     readFile(
@@ -118,14 +118,14 @@ void test("native WebView CI should install the supported Codex runtime", async 
       "utf8",
     ),
   ]);
-  const installedVersion = workflow.match(/npm install --global @openai\/codex@(\d+\.\d+\.\d+)/)?.[1];
   const supportedVersion = processSource.match(
     /SUPPORTED_CODEX_VERSION: &str = "(\d+\.\d+\.\d+)"/,
   )?.[1];
 
-  assert.ok(installedVersion, "native WebView CI must pin a Codex runtime version");
   assert.ok(supportedVersion, "Rust must declare a supported Codex runtime version");
-  assert.equal(installedVersion, supportedVersion);
+  assert.doesNotMatch(workflow, /npm install --global @openai\/codex/);
+  assert.doesNotMatch(workflow, /run: codex --version/);
+  assert.match(workflow, /private_codex_should_install_and_complete_real_app_server_lifecycle/);
 });
 
 void test("non-macOS commands should remain unchanged", () => {

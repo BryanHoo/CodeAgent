@@ -33,7 +33,6 @@ pub struct CodexRuntimeAvailability {
     pub status: CodexRuntimeAvailabilityStatus,
     pub required_version: &'static str,
     pub detected_version: Option<String>,
-    pub global_install_command: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -278,7 +277,6 @@ mod tests {
     fn codex_runtime_availability_should_expose_recovery_details() {
         let availability = CodexRuntimeAvailability {
             detected_version: Some("0.150.0".to_owned()),
-            global_install_command: "npm install -g @openai/codex@0.153.4",
             required_version: "0.153.4",
             status: CodexRuntimeAvailabilityStatus::Incompatible,
         };
@@ -287,7 +285,6 @@ mod tests {
             serde_json::to_value(availability).unwrap(),
             json!({
                 "detectedVersion": "0.150.0",
-                "globalInstallCommand": "npm install -g @openai/codex@0.153.4",
                 "requiredVersion": "0.153.4",
                 "status": "incompatible"
             })

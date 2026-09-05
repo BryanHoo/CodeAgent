@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     env,
     ffi::OsString,
     io::{self, Write},
@@ -8,7 +7,6 @@ use std::{
 };
 
 use flate2::read::GzDecoder;
-use futures_util::StreamExt;
 use serde_json::json;
 use tar::Archive;
 use thiserror::Error;
@@ -17,9 +15,7 @@ use tokio::{fs, task};
 use super::{
     process::{SUPPORTED_CODEX_VERSION, is_compatible_codex_version, probe_codex_version},
     runtime_active::read_active_codex_runtime,
-    runtime_discovery::{
-        expanded_candidate_paths, initial_candidate_paths, private_codex_binary_path,
-    },
+    runtime_discovery::private_codex_binary_path,
     runtime_distributions::{DARWIN_ARM64, LINUX_ARM64, LINUX_X64, WINDOWS_ARM64, WINDOWS_X64},
     runtime_download::download_verified,
     runtime_download_progress::DownloadProgressReporter,
@@ -30,8 +26,6 @@ use crate::domain::runtime::{
     CodexRuntimeInstallPhase, CodexRuntimeInstallProgress,
 };
 
-const GLOBAL_INSTALL_COMMAND: &str = "npm install -g @openai/codex@0.153.4";
-const MAX_CONCURRENT_PROBES: usize = 4;
 const MAX_UNPACKED_BYTES: u64 = 512 * 1024 * 1024;
 static INSTALL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -77,14 +71,6 @@ struct Inspection {
     binary_path: Option<PathBuf>,
 }
 
-#[derive(Default)]
-struct ProbeSummary {
-    compatible: Option<(PathBuf, String)>,
-    detected_version: Option<String>,
-    had_probe_failure: bool,
-    had_candidate: bool,
-}
-
 pub async fn inspect_codex_runtime(app_data: &Path) -> CodexRuntimeAvailability {
     inspect(app_data).await.availability
 }
@@ -92,14 +78,14 @@ pub async fn inspect_codex_runtime(app_data: &Path) -> CodexRuntimeAvailability 
 pub async fn find_compatible_codex_binary(
     app_data: &Path,
 ) -> Result<(PathBuf, String, Option<OsString>), RuntimeDiscoveryError> {
-    let runtime_path = resolve_runtime_path().await;
-    let inspection = inspect_with_runtime_path(app_data, runtime_path.as_deref()).await;
+    let inspection = inspect(app_data).await;
     if let Some(binary_path) = inspection.binary_path {
         let version = inspection
             .availability
             .detected_version
             .ok_or(RuntimeDiscoveryError::ProbeFailed)?;
-        return Ok((binary_path, version, runtime_path));
+        // 仅在真正启动时恢复工具执行所需的 PATH，版本检查无需启动登录 shell。
+        return Ok((binary_path, version, resolve_runtime_path().await));
     }
     match inspection.availability.status {
         AvailabilityStatus::Incompatible => Err(RuntimeDiscoveryError::Incompatible),
@@ -117,7 +103,12 @@ pub async fn install_codex_runtime<OnProgress>(
 where
     OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
 {
-    let current_version = read_active_codex_runtime(app_data).map(|active| active.version);
+    let current = inspect_codex_runtime(app_data).await;
+    // 安装入口仅探测一次固定文件；版本正确时不联网、不写清单、不触发下载界面。
+    if current.status == AvailabilityStatus::Compatible {
+        return Ok(current);
+    }
+    let current_version = current.detected_version;
     let mut progress = DownloadProgressReporter::new(&on_progress, current_version);
     progress.report_phase(CodexRuntimeInstallPhase::Preparing);
     let result = install_codex_runtime_inner(app_data, &mut progress).await;
@@ -134,18 +125,6 @@ async fn install_codex_runtime_inner<OnProgress>(
 where
     OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
 {
-    // 仅复用应用固定的私有版本；系统中的兼容版本不能替代用户已选择的私有安装。
-    let private_binary = private_codex_binary_path(app_data);
-    if probe_codex_version(&private_binary, None)
-        .await
-        .ok()
-        .as_deref()
-        == Some(SUPPORTED_CODEX_VERSION)
-    {
-        write_active_runtime(app_data, &private_binary).await?;
-        progress.report_phase(CodexRuntimeInstallPhase::Ready);
-        return Ok(inspect_codex_runtime(app_data).await);
-    }
     let distribution = distribution_for(env::consts::OS, env::consts::ARCH)
         .ok_or(RuntimeInstallError::UnsupportedPlatform)?;
     let bin_root = app_data.join("providers/codex/bin");
@@ -169,87 +148,34 @@ where
     let _ = fs::remove_dir_all(&staging_dir).await;
     result?;
 
-    Ok(inspect_codex_runtime(app_data).await)
+    // 暂存文件已通过版本探测，原子切换后复用验证结果，避免再次启动探测进程。
+    Ok(availability(
+        AvailabilityStatus::Compatible,
+        Some(SUPPORTED_CODEX_VERSION.to_owned()),
+    ))
 }
 
 async fn inspect(app_data: &Path) -> Inspection {
-    let runtime_path = resolve_runtime_path().await;
-    inspect_with_runtime_path(app_data, runtime_path.as_deref()).await
-}
-
-async fn inspect_with_runtime_path(
-    app_data: &Path,
-    runtime_path: Option<&std::ffi::OsStr>,
-) -> Inspection {
-    let initial = initial_candidate_paths(app_data, runtime_path);
-    let mut seen = initial.paths.iter().cloned().collect::<HashSet<_>>();
-    let mut summary = probe_candidates(initial.paths, runtime_path).await;
-    summary.had_probe_failure |= initial.had_invalid_explicit_path;
-    if let Some(inspection) = compatible_inspection(summary.compatible.take()) {
-        return inspection;
-    }
-
-    // 首轮未命中后才查询包管理器与版本管理器，避免正常启动产生额外进程和目录遍历。
-    let mut expanded = expanded_candidate_paths(runtime_path).await;
-    expanded.retain(|candidate| seen.insert(candidate.clone()));
-    let expanded_summary = probe_candidates(expanded, runtime_path).await;
-    if let Some(inspection) = compatible_inspection(expanded_summary.compatible) {
-        return inspection;
-    }
-    summary.detected_version = summary
-        .detected_version
-        .or(expanded_summary.detected_version);
-    summary.had_probe_failure |= expanded_summary.had_probe_failure;
-    summary.had_candidate |= expanded_summary.had_candidate;
-
-    let status = if summary.detected_version.is_some() {
-        AvailabilityStatus::Incompatible
-    } else if summary.had_probe_failure || summary.had_candidate {
-        AvailabilityStatus::Failed
-    } else {
-        AvailabilityStatus::Missing
+    let binary = private_codex_binary_path(app_data);
+    // 固定路径是唯一执行入口；不扫描 PATH、包管理器或 active.json 中的旧路径。
+    let (status, version) = match fs::symlink_metadata(&binary).await {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => (
+            AvailabilityStatus::Missing,
+            read_active_codex_runtime(app_data).map(|active| active.version),
+        ),
+        Err(_) => (AvailabilityStatus::Failed, None),
+        Ok(_) => match probe_codex_version(&binary, None).await {
+            Ok(version) if is_compatible_codex_version(&version) => {
+                (AvailabilityStatus::Compatible, Some(version))
+            }
+            Ok(version) => (AvailabilityStatus::Incompatible, Some(version)),
+            Err(_) => (AvailabilityStatus::Failed, None),
+        },
     };
     Inspection {
-        availability: availability(status, summary.detected_version),
-        binary_path: None,
+        binary_path: (status == AvailabilityStatus::Compatible).then_some(binary),
+        availability: availability(status, version),
     }
-}
-
-async fn probe_candidates(
-    candidates: Vec<PathBuf>,
-    runtime_path: Option<&std::ffi::OsStr>,
-) -> ProbeSummary {
-    let had_candidate = !candidates.is_empty();
-    let mut probes = futures_util::stream::iter(candidates)
-        .map(|candidate| async move {
-            let result = probe_codex_version(&candidate, runtime_path).await;
-            (candidate, result)
-        })
-        .buffered(MAX_CONCURRENT_PROBES);
-    let mut summary = ProbeSummary {
-        had_candidate,
-        ..ProbeSummary::default()
-    };
-    while let Some((candidate, result)) = probes.next().await {
-        match result {
-            Ok(version) if is_compatible_codex_version(&version) => {
-                summary.compatible = Some((candidate, version));
-                return summary;
-            }
-            Ok(version) => {
-                summary.detected_version.get_or_insert(version);
-            }
-            Err(_) => summary.had_probe_failure = true,
-        }
-    }
-    summary
-}
-
-fn compatible_inspection(compatible: Option<(PathBuf, String)>) -> Option<Inspection> {
-    compatible.map(|(binary_path, version)| Inspection {
-        availability: availability(AvailabilityStatus::Compatible, Some(version)),
-        binary_path: Some(binary_path),
-    })
 }
 
 fn availability(
@@ -258,7 +184,6 @@ fn availability(
 ) -> CodexRuntimeAvailability {
     CodexRuntimeAvailability {
         detected_version,
-        global_install_command: GLOBAL_INSTALL_COMMAND,
         required_version: SUPPORTED_CODEX_VERSION,
         status,
     }

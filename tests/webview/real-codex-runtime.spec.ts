@@ -88,7 +88,9 @@ describeRealRuntime("三平台真实 Codex 原生链路", () => {
   let projectId: string | undefined;
   let workspaceRoot: string | undefined;
 
-  before(async () => {
+  before(async function () {
+    // 冷启动包含私有运行时下载，等待上限覆盖镜像与官方源的受控超时。
+    this.timeout(20 * 60_000);
     const temporaryRoot = await mkdtemp(join(tmpdir(), "codeagent-real-runtime-"));
     workspaceRoot = await realpath(temporaryRoot);
     await writeFile(join(workspaceRoot, "README.md"), "初始文件\n", "utf8");
@@ -116,7 +118,7 @@ describeRealRuntime("三平台真实 Codex 原生链路", () => {
           () =>
             (window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__?.calls.start_runtime?.length ?? 0) > 0,
         ),
-      { timeoutMsg: "应用未完成真实 connect_runtime → start_runtime 链路" },
+      { timeout: 19 * 60_000, timeoutMsg: "应用未完成私有 Codex 自动安装及启动链路" },
     );
   });
 

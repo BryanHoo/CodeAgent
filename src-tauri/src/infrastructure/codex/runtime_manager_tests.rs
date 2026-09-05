@@ -1,15 +1,6 @@
-use std::path::Path;
-
-#[cfg(unix)]
-use super::process::probe_codex_version;
-use super::runtime_active::managed_private_runtime_needs_update;
-#[cfg(unix)]
-use super::runtime_discovery::initial_candidate_paths;
-use super::runtime_discovery::{
-    active_codex_binary_path, codex_executable_names, official_binary_directories,
-    private_codex_binary_path,
-};
+use super::runtime_discovery::private_codex_binary_path;
 use super::runtime_manager::distribution_for;
+use std::path::Path;
 
 #[test]
 fn runtime_download_should_prefer_the_domestic_mirror_on_every_platform() {
@@ -30,13 +21,6 @@ fn runtime_download_should_prefer_the_domestic_mirror_on_every_platform() {
         );
     }
 }
-#[cfg(unix)]
-use super::runtime_manager::inspect_codex_runtime;
-#[cfg(unix)]
-use crate::domain::runtime::CodexRuntimeAvailabilityStatus;
-#[cfg(unix)]
-use std::ffi::OsStr;
-
 #[test]
 fn private_runtime_should_use_the_provider_version_directory() {
     assert_eq!(
@@ -44,95 +28,6 @@ fn private_runtime_should_use_the_provider_version_directory() {
         Path::new("/application-data/providers/codex/bin/0.153.4/bin")
             .join(format!("codex{}", std::env::consts::EXE_SUFFIX))
     );
-}
-
-#[test]
-fn private_runtime_update_should_require_an_existing_managed_install() {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let app_data = std::env::temp_dir().join(format!("codeagent-managed-runtime-{unique}"));
-
-    assert!(!managed_private_runtime_needs_update(&app_data));
-
-    let provider_root = app_data.join("providers/codex");
-    let old_binary = provider_root
-        .join("bin/0.150.0/bin")
-        .join(format!("codex{}", std::env::consts::EXE_SUFFIX));
-    std::fs::create_dir_all(old_binary.parent().unwrap()).unwrap();
-    std::fs::write(&old_binary, []).unwrap();
-    std::fs::write(
-        provider_root.join("active.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "path": old_binary,
-            "version": "0.150.0",
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-
-    assert!(managed_private_runtime_needs_update(&app_data));
-    std::fs::remove_dir_all(app_data).unwrap();
-}
-
-#[test]
-fn current_managed_private_runtime_should_not_update_again() {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let app_data = std::env::temp_dir().join(format!("codeagent-current-runtime-{unique}"));
-    let binary = private_codex_binary_path(&app_data);
-    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, []).unwrap();
-    std::fs::write(
-        app_data.join("providers/codex/active.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "path": binary,
-            "version": "0.153.4",
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-
-    assert!(!managed_private_runtime_needs_update(&app_data));
-    std::fs::remove_dir_all(app_data).unwrap();
-}
-
-#[test]
-fn active_runtime_path_should_stay_inside_the_private_provider_directory() {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let app_data = std::env::temp_dir().join(format!("codeagent-active-runtime-{unique}"));
-    let binary = app_data.join("providers/codex/bin/0.150.0/bin/codex");
-    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, []).unwrap();
-    std::fs::write(
-        app_data.join("providers/codex/active.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "path": binary,
-            "version": "0.150.0",
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-
-    assert_eq!(active_codex_binary_path(&app_data), Some(binary));
-
-    std::fs::write(
-        app_data.join("providers/codex/active.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "path": app_data.join("../outside/codex"),
-            "version": "0.150.0",
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(active_codex_binary_path(&app_data), None);
-    std::fs::remove_dir_all(app_data).unwrap();
 }
 
 #[test]
@@ -193,107 +88,86 @@ fn macos_intel_runtime_should_not_be_supported() {
     assert!(distribution_for("macos", "x86_64").is_none());
 }
 
-#[test]
-fn windows_runtime_should_include_the_npm_cmd_shim() {
-    assert_eq!(
-        codex_executable_names("windows"),
-        &["codex.exe", "codex.cmd"]
-    );
-    assert_eq!(codex_executable_names("macos"), &["codex"]);
-    assert_eq!(codex_executable_names("linux"), &["codex"]);
-}
+#[cfg(unix)]
+mod private_runtime {
+    use super::super::runtime_manager::{inspect_codex_runtime, install_codex_runtime};
+    use super::*;
+    use crate::domain::runtime::CodexRuntimeAvailabilityStatus as Status;
+    use std::os::unix::fs::PermissionsExt;
 
-#[test]
-fn official_install_locations_should_cover_all_platform_layouts() {
-    #[cfg(unix)]
-    {
-        let unix = official_binary_directories(
-            "linux",
-            Some(Path::new("/home/user")),
-            Some(Path::new("/custom/codex-home")),
-            Some(Path::new("/custom/bin")),
-            None,
-        );
-        assert!(unix.contains(&Path::new("/custom/bin").to_path_buf()));
-        assert!(unix.contains(
-            &Path::new("/custom/codex-home/packages/standalone/current/bin").to_path_buf()
-        ));
-        assert!(
-            unix.contains(
-                &Path::new("/custom/codex-home/packages/standalone/current").to_path_buf()
-            )
-        );
-        assert!(unix.contains(&Path::new("/home/user/.local/bin").to_path_buf()));
+    fn fixture() -> std::path::PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("codeagent-private-runtime-{unique}"))
     }
 
-    let windows = official_binary_directories(
-        "windows",
-        Some(Path::new("C:/Users/user")),
-        None,
-        None,
-        Some(Path::new("C:/Users/user/AppData/Local")),
-    );
-    assert!(windows.contains(
-        &Path::new("C:/Users/user/.codex/packages/standalone/current/bin").to_path_buf()
-    ));
-    assert!(windows.contains(
-        &Path::new("C:/Users/user/AppData/Local/Programs/OpenAI/Codex/bin").to_path_buf()
-    ));
-}
+    fn binary(path: &Path, version: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, format!("#!/bin/sh\necho 'codex-cli {version}'\n")).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn inspection_should_find_the_compatible_private_runtime() {
-    use std::os::unix::fs::PermissionsExt;
+    #[tokio::test]
+    async fn startup_should_attempt_private_install_and_report_filesystem_failure() {
+        let root = fixture();
+        std::fs::write(&root, "blocks application data directory").unwrap();
+        let events = std::sync::Mutex::new(Vec::new());
+        let state = crate::application::state::AppState::default();
+        let result = state
+            .inspect_codex(&root, |event| events.lock().unwrap().push(event))
+            .await;
+        assert_eq!(result.status, Status::Failed);
+        let events = events.lock().unwrap();
+        assert_eq!(
+            events.first().map(|event| event.phase),
+            Some(crate::domain::runtime::CodexRuntimeInstallPhase::Preparing)
+        );
+        assert_eq!(
+            events.last().map(|event| event.phase),
+            Some(crate::domain::runtime::CodexRuntimeInstallPhase::Failed)
+        );
+        std::fs::remove_file(root).unwrap();
+    }
 
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let app_data = std::env::temp_dir().join(format!("codeagent-runtime-{unique}"));
-    let binary = private_codex_binary_path(&app_data);
-    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, "#!/bin/sh\necho 'codex-cli 0.153.4'\n").unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+    #[tokio::test]
+    async fn inspection_should_ignore_active_manifest_redirects() {
+        let root = fixture();
+        let alternate = root.join("providers/codex/bin/alternate/bin/codex");
+        binary(&alternate, "0.153.4");
+        std::fs::write(
+            root.join("providers/codex/active.json"),
+            serde_json::to_vec(&serde_json::json!({"path": alternate, "version": "0.153.4"}))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(inspect_codex_runtime(&root).await.status, Status::Missing);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
-    let availability = inspect_codex_runtime(&app_data).await;
-
-    assert_eq!(
-        availability.status,
-        CodexRuntimeAvailabilityStatus::Compatible
-    );
-    assert_eq!(availability.detected_version.as_deref(), Some("0.153.4"));
-    std::fs::remove_dir_all(app_data).unwrap();
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn discovery_and_probe_should_use_the_login_shell_path() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("codeagent-shell-path-{unique}"));
-    let bin_dir = root.join("bin");
-    let binary = bin_dir.join("codex");
-    let interpreter = bin_dir.join("codeagent-test-node");
-    std::fs::create_dir_all(&bin_dir).unwrap();
-    std::fs::write(&binary, "#!/usr/bin/env codeagent-test-node\n").unwrap();
-    std::fs::write(&interpreter, "#!/bin/sh\necho 'codex-cli 0.153.4'\n").unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
-    std::fs::set_permissions(&interpreter, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-    let candidates =
-        initial_candidate_paths(&root.join("app-data"), Some(OsStr::new(&bin_dir))).paths;
-
-    assert!(candidates.contains(&binary.canonicalize().unwrap()));
-    assert_eq!(
-        probe_codex_version(&binary, Some(OsStr::new(&bin_dir)))
+    #[tokio::test]
+    async fn installation_should_reuse_valid_private_binary_without_progress_or_manifest_writes() {
+        let root = fixture();
+        binary(&private_codex_binary_path(&root), "0.153.4");
+        let result = install_codex_runtime(&root, |_| panic!("healthy runtime must not install"))
             .await
-            .unwrap(),
-        "0.153.4"
-    );
-    std::fs::remove_dir_all(root).unwrap();
+            .unwrap();
+        assert_eq!(result.status, Status::Compatible);
+        assert!(!root.join("providers/codex/active.json").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn inspection_should_reject_wrong_version_and_corrupt_private_binary() {
+        let root = fixture();
+        let path = private_codex_binary_path(&root);
+        binary(&path, "0.150.0");
+        let result = inspect_codex_runtime(&root).await;
+        assert_eq!(result.status, Status::Incompatible);
+        assert_eq!(result.detected_version.as_deref(), Some("0.150.0"));
+        std::fs::write(&path, "corrupt").unwrap();
+        assert_eq!(inspect_codex_runtime(&root).await.status, Status::Failed);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

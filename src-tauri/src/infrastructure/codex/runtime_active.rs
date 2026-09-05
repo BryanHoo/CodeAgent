@@ -2,13 +2,6 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Deserialize;
 
-use super::{
-    process::SUPPORTED_CODEX_VERSION,
-    runtime_discovery::private_codex_binary_path,
-    runtime_manager::{RuntimeInstallError, install_codex_runtime},
-};
-use crate::domain::runtime::CodexRuntimeInstallProgress;
-
 const ACTIVE_MANIFEST_LIMIT: u64 = 16 * 1024;
 
 #[derive(Deserialize)]
@@ -30,26 +23,6 @@ pub(super) fn read_active_codex_runtime(app_data: &Path) -> Option<ActiveCodexRu
         return None;
     }
     Some(manifest)
-}
-
-pub async fn update_managed_codex_runtime<OnProgress>(
-    app_data: &Path,
-    on_progress: OnProgress,
-) -> Result<(), RuntimeInstallError>
-where
-    OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
-{
-    if managed_private_runtime_needs_update(app_data) {
-        install_codex_runtime(app_data, on_progress).await?;
-    }
-    Ok(())
-}
-
-pub(super) fn managed_private_runtime_needs_update(app_data: &Path) -> bool {
-    let Some(active) = read_active_codex_runtime(app_data) else {
-        return false;
-    };
-    active.version != SUPPORTED_CODEX_VERSION || !private_codex_binary_path(app_data).is_file()
 }
 
 fn private_runtime_path_is_valid(app_data: &Path, binary_path: &Path) -> bool {

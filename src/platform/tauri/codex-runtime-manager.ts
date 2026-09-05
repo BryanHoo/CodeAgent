@@ -25,12 +25,10 @@ export function inspectCodexRuntime(
   });
 }
 
-export async function downloadAndInspectCodexRuntime(
+export function downloadAndInspectCodexRuntime(
   onProgress: (progress: CodexRuntimeInstallProgress) => void = () => undefined,
 ): Promise<CodexRuntimeAvailability> {
-  await invoke<CodexRuntimeAvailability>("install_codex_runtime", {
+  return invoke<CodexRuntimeAvailability>("install_codex_runtime", {
     onProgress: createProgressChannel(onProgress),
   });
-  // 安装完成后重新走统一发现逻辑，保证进入工作台前使用的是已验证路径。
-  return inspectCodexRuntime();
 }

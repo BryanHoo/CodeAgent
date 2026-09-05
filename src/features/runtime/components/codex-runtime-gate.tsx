@@ -7,16 +7,13 @@ import {
   ArrowRight,
   Check,
   CircleAlert,
-  Copy,
   Download,
   LoaderCircle,
   PackageCheck,
   RefreshCw,
   ShieldCheck,
-  Terminal,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { type ReactNode, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import {
@@ -29,14 +26,12 @@ import type {
 import { Button } from "../../../shared/components/core/button.js";
 import {
   CODEX_RUNTIME_QUERY_KEY,
-  inspectRuntimeDirectQuery,
   inspectRuntimeQuery,
 } from "../codex-runtime-queries.js";
 
 type CodexRuntimeGateProps = Readonly<{ children: ReactNode }>;
 
 export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
-  const { t } = useTranslation("common");
   const queryClient = useQueryClient();
   const [downloadProgress, setDownloadProgress] = useState<CodexRuntimeInstallProgress | null>(null);
   const [startupProgress, setStartupProgress] = useState<CodexRuntimeInstallProgress | null>(null);
@@ -58,37 +53,6 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
     },
   });
   const availability = availabilityQuery.data;
-  // 用户明确重试时强制检测，不复用后台就绪状态；错误由 Query 状态展示。
-  const refetchAvailability = useCallback(() => queryClient.fetchQuery({
-    meta: { onProgress: setStartupProgress },
-    queryFn: inspectRuntimeDirectQuery,
-    queryKey: CODEX_RUNTIME_QUERY_KEY,
-    staleTime: 0,
-  }).catch(() => undefined), [queryClient]);
-
-  useEffect(() => {
-    if (
-      startupProgress?.phase !== "failed" ||
-      availability?.status !== "compatible"
-    ) {
-      return;
-    }
-    const currentVersion = startupProgress.currentVersion ?? availability.detectedVersion;
-    toast.warning(t("runtimeSetup.updateFailedTitle"), {
-      action: {
-        label: t("runtimeSetup.updateRetry"),
-        onClick() {
-          setStartupProgress(null);
-          void refetchAvailability();
-        },
-      },
-      description: t("runtimeSetup.updateFailedDescription", {
-        currentVersion: currentVersion ?? "-",
-      }),
-      id: "codex-runtime-update-failed",
-    });
-  }, [availability, refetchAvailability, startupProgress, t]);
-
   if (startupProgress !== null && (availabilityQuery.isPending || availabilityQuery.isFetching)) {
     return <RuntimeUpdating progress={startupProgress} />;
   }
@@ -105,17 +69,11 @@ export function CodexRuntimeGate({ children }: CodexRuntimeGateProps) {
       downloadProgress={downloadProgress}
       installFailed={installMutation.isError || startupProgress?.phase === "failed"}
       isInstalling={installMutation.isPending}
-      isRefreshing={availabilityQuery.isFetching}
       onDownload={() => {
         // 等待原生 Channel 返回真实总量，避免预置的不定进度跳回 0%。
         setDownloadProgress(null);
-        installMutation.mutate();
-      }}
-      onRefresh={() => {
-        setDownloadProgress(null);
         setStartupProgress(null);
-        installMutation.reset();
-        void refetchAvailability();
+        installMutation.mutate();
       }}
     />
   );
@@ -171,16 +129,18 @@ function RuntimeUpdating({ progress }: Readonly<{ progress: CodexRuntimeInstallP
           <h1 className="mt-1 text-2xl font-semibold">
             {progress.phase === "failed"
               ? t("runtimeSetup.updateFailedTitle")
-              : t("runtimeSetup.updateTitle")}
+              : progress.currentVersion === null
+                ? t("runtimeSetup.installTitle")
+                : t("runtimeSetup.updateTitle")}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             {progress.phase === "failed"
-              ? t("runtimeSetup.updateFailedDescription", {
-                  currentVersion: progress.currentVersion ?? "-",
-                })
+              ? t("runtimeSetup.installFailed")
               : progress.phase === "ready"
                 ? t("runtimeSetup.completingUpdate")
-                : t("runtimeSetup.updateDescription")}
+                : progress.currentVersion === null
+                  ? t("runtimeSetup.installDescription")
+                  : t("runtimeSetup.updateDescription")}
           </p>
 
           <div
@@ -231,7 +191,7 @@ function RuntimeUpdating({ progress }: Readonly<{ progress: CodexRuntimeInstallP
                 <span>{t("runtimeSetup.updateProgress")}</span>
                 <span className="shrink-0 font-mono tabular-nums">
                   {progress.phase === "failed"
-                    ? t("runtimeSetup.restoringVersion")
+                    ? t("runtimeSetup.updateFailedTitle")
                     : percentage === null
                       ? t("runtimeSetup.preparingUpdate")
                       : `${percentage}%`}
@@ -245,10 +205,12 @@ function RuntimeUpdating({ progress }: Readonly<{ progress: CodexRuntimeInstallP
                 className="h-1.5 overflow-hidden rounded-pill bg-control"
                 role="progressbar"
               >
-                <div
-                  className="h-full rounded-pill bg-brand transition-[width] duration-150"
-                  style={{ width: `${percentage ?? 0}%` }}
-                />
+                {percentage !== null && percentage > 0 ? (
+                  <div
+                    className="h-full rounded-pill bg-brand transition-[width] duration-150"
+                    style={{ width: `${percentage}%` }}
+                  />
+                ) : null}
               </div>
             </div>
           </div>
@@ -259,8 +221,8 @@ function RuntimeUpdating({ progress }: Readonly<{ progress: CodexRuntimeInstallP
 }
 
 function updatePercentage(progress: CodexRuntimeInstallProgress): number | null {
-  if (progress.phase === "installing" || progress.phase === "ready") return 100;
-  if (progress.phase !== "downloading") return null;
+  // 阶段切换不代表下载比例；总量未知时保持空条，只使用实际字节计算进度。
+  if (progress.phase === "preparing" || progress.phase === "failed") return null;
   return calculateDownloadPercentage(progress);
 }
 
@@ -270,9 +232,7 @@ type RuntimeSetupProps = Readonly<{
   downloadProgress: CodexRuntimeInstallProgress | null;
   installFailed: boolean;
   isInstalling: boolean;
-  isRefreshing: boolean;
   onDownload: () => void;
-  onRefresh: () => void;
 }>;
 
 function RuntimeSetup({
@@ -281,27 +241,11 @@ function RuntimeSetup({
   downloadProgress,
   installFailed,
   isInstalling,
-  isRefreshing,
   onDownload,
-  onRefresh,
 }: RuntimeSetupProps) {
   const { t } = useTranslation("common");
-  const [copied, setCopied] = useState(false);
-  const command =
-    availability?.globalInstallCommand ?? "npm install -g @openai/codex@0.153.4";
   const requiredVersion = availability?.requiredVersion ?? "0.153.4";
   const failed = detectionFailed || availability?.status === "failed";
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 1_500);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-
-  const copyCommand = async () => {
-    await navigator.clipboard.writeText(command);
-    setCopied(true);
-  };
 
   return (
     <main className="h-full overflow-y-auto bg-window text-foreground">
@@ -324,9 +268,11 @@ function RuntimeSetup({
                 {t("runtimeSetup.statusLabel")}
               </p>
               <h1 id="codex-runtime-title" className="mt-1 text-2xl font-semibold">
-                {failed
-                  ? t("runtimeSetup.detectionFailedTitle")
-                  : t("runtimeSetup.unsupportedTitle")}
+                {installFailed
+                  ? t("runtimeSetup.updateFailedTitle")
+                  : failed
+                    ? t("runtimeSetup.detectionFailedTitle")
+                    : t("runtimeSetup.unsupportedTitle")}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 {availability?.status === "incompatible" &&
@@ -343,42 +289,22 @@ function RuntimeSetup({
           </div>
 
           <div className="mt-8 border-y border-separator">
-            <RecoveryOption icon={<Terminal />} title={t("runtimeSetup.globalTitle")}>
-              <p className="text-sm leading-6 text-muted-foreground">
-                {t("runtimeSetup.globalDescription")}
-              </p>
-              <div className="mt-3 flex h-10 items-center gap-3 rounded-control border border-separator-strong bg-terminal px-3 text-terminal-foreground">
-                <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs">
-                  {command}
-                </code>
-                <button
-                  aria-label={copied ? t("runtimeSetup.copied") : t("runtimeSetup.copyCommand")}
-                  className="grid size-7 shrink-0 place-items-center rounded-control text-terminal-muted outline-none hover:bg-terminal-control-hover hover:text-terminal-foreground focus-visible:shadow-focus"
-                  onClick={() => void copyCommand()}
-                  title={copied ? t("runtimeSetup.copied") : t("runtimeSetup.copyCommand")}
-                  type="button"
-                >
-                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                </button>
-              </div>
-            </RecoveryOption>
-
             <RecoveryOption icon={<Download />} title={t("runtimeSetup.privateTitle")}>
               <p className="text-sm leading-6 text-muted-foreground">
-                {t("runtimeSetup.privateDescription")}
+                {t("runtimeSetup.privateDescription", { requiredVersion })}
               </p>
               <Button
                 className="mt-3"
-                disabled={isInstalling || isRefreshing}
+                disabled={isInstalling}
                 onClick={onDownload}
                 type="button"
               >
                 {isInstalling ? (
                   <LoaderCircle className="animate-spin" aria-hidden="true" />
                 ) : (
-                  <Download aria-hidden="true" />
+                  <RefreshCw aria-hidden="true" />
                 )}
-                {isInstalling ? t("runtimeSetup.downloading") : t("runtimeSetup.download")}
+                {isInstalling ? t("runtimeSetup.downloading") : t("runtimeSetup.retryInstall")}
               </Button>
               {isInstalling && downloadProgress !== null ? (
                 <RuntimeDownloadProgress progress={downloadProgress} />
@@ -391,21 +317,6 @@ function RuntimeSetup({
               {t("runtimeSetup.installFailed")}
             </p>
           ) : null}
-
-          <div className="mt-5 flex items-center justify-between gap-6">
-            <p className="text-xs leading-5 text-subtle-foreground">
-              {t("runtimeSetup.refreshDescription")}
-            </p>
-            <Button
-              disabled={isInstalling || isRefreshing}
-              onClick={onRefresh}
-              type="button"
-              variant="outline"
-            >
-              <RefreshCw className={isRefreshing ? "animate-spin" : undefined} aria-hidden="true" />
-              {isRefreshing ? t("runtimeSetup.refreshing") : t("runtimeSetup.refresh")}
-            </Button>
-          </div>
         </section>
       </div>
     </main>
@@ -444,10 +355,12 @@ function RuntimeDownloadProgress({
         className="h-1.5 overflow-hidden rounded-pill bg-control"
         role="progressbar"
       >
-        <div
-          className="h-full rounded-pill bg-brand transition-[width] duration-150"
-          style={{ width: `${percentage ?? 0}%` }}
-        />
+        {percentage !== null && percentage > 0 ? (
+          <div
+            className="h-full rounded-pill bg-brand transition-[width] duration-150"
+            style={{ width: `${percentage}%` }}
+          />
+        ) : null}
       </div>
     </div>
   );

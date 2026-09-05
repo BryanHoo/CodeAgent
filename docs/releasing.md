@@ -64,11 +64,11 @@ macOS 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。Tauri upd
 
 CodeAgent 发布包不得包含 Codex、Claude Code 等 Provider 可执行文件。正式发布前必须验证：
 
-- 每个平台都能发现系统安装和应用私有安装，并正确拒绝不兼容版本。
-- 按需安装只访问 Provider 官方分发源，不调用全局包管理器或修改系统 `PATH`。
-- 下载产物的平台、架构、版本、SHA-256 和 Provider 提供的官方签名全部通过校验。
+- 每个平台只使用应用私有 Codex，首次打开自动安装，正确版本直接复用，错误或损坏版本自动修复。
+- 自动安装使用固定官方包与允许的镜像源，不调用全局包管理器或修改系统 `PATH`。
+- 下载产物的平台、架构、版本及固定官方 SHA-512 integrity 全部通过校验。
 - 安装使用临时目录和原子切换，中断或失败不会破坏现有可用版本。
-- 应用升级后能够提示安装新的兼容版本，并能回退到上一个已验证版本。
+- 应用升级后自动安装要求的精确版本；失败时提供重试，不启动不兼容旧版本或全局 Codex。
 
 完整流程见 [Provider Runtime Manager](./provider-runtime-management.md)。
 

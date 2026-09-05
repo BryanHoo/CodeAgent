@@ -50,8 +50,7 @@ impl AppState {
         app: &AppHandle,
         app_data: &Path,
     ) -> Result<RuntimeSnapshot, AppError> {
-        self.update_managed_codex(app_data, &|_| {}).await;
-
+        // 安装由启动门禁负责，进程重启不得重复下载或触发无进度的自动更新。
         match CodexProcess::start(app_data).await {
             Ok(process) => {
                 let messages = match process.connection().take_server_messages().await {

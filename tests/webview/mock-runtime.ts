@@ -112,7 +112,6 @@ export async function installWebviewMocks(): Promise<WebviewMocks> {
         },
         inspect_codex_runtime: {
           detectedVersion: "0.153.4",
-          globalInstallCommand: "npm install -g @openai/codex@0.153.4",
           requiredVersion: "0.153.4",
           status: "compatible",
         },

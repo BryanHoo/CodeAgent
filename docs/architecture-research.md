@@ -78,23 +78,22 @@ codex app-server generate-ts --out ./schemas
 codex app-server generate-json-schema --out ./schemas
 ```
 
-生产环境由 Provider Runtime Manager 选择已验证的绝对路径。系统安装版本满足适配器要求时直接
-复用；缺失或不兼容时，经用户确认后将指定版本安装到应用私有目录。不得覆盖、降级或修改用户的
-全局安装。
+生产环境由 Provider Runtime Manager 仅运行应用私有目录中的精确版本。
+首次缺失、损坏或版本不符时自动安装，不依赖或修改全局安装。
 
 ### 3.2 Provider Runtime Manager
 
-Provider Runtime Manager 负责运行时发现、版本解析、能力探测、按需安装、升级和回退：
+Provider Runtime Manager 负责私有运行时检查、自动安装、更新和失败重试：
 
-- 按用户指定路径、应用私有目录、`PATH` 和平台常见目录的顺序发现候选项。
-- 使用短超时和输出上限执行官方版本命令，拒绝低于适配器协议基线或无法严格解析的版本。
+- 只检查应用数据目录中的固定版本路径，不扫描全局安装或包管理器。
+- 使用短超时和输出上限执行官方版本命令，拒绝任何不匹配适配器精确版本的结果。
 - 版本匹配后执行 Provider 专属能力探测，Codex 必须完成 `app-server` 初始化握手。
-- 未找到兼容版本时，由用户确认后从官方分发源下载到应用私有目录。
+- 私有版本缺失、损坏或不符时，自动将固定官方包下载到应用私有目录。
 - 校验版本、平台、架构、npm SHA-512 integrity 和官方签名，验证通过后原子切换。
-- 保留上一个可用版本；安装、校验或启动失败时不影响当前版本。
+- 原子替换失败时恢复原目录，界面提供重试，不运行不兼容版本。
 
-应用不得静默安装，不得执行全局 `npm install -g`、Homebrew、WinGet 或系统包管理器命令，也
-不得通过登录 shell 发现程序。详细约束见 [Provider Runtime Manager](./provider-runtime-management.md)。
+应用不执行全局包管理器命令，也不通过登录 shell 发现 Codex。
+详细约束见 [Provider Runtime Manager](./provider-runtime-management.md)。
 
 ### 3.3 协议处理
 

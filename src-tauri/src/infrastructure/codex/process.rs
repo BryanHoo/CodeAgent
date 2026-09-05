@@ -343,12 +343,34 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires the installed codex-cli 0.153.4 binary"]
-    async fn installed_codex_should_complete_real_app_server_lifecycle() {
-        let process = CodexProcess::start(&std::env::temp_dir())
+    #[ignore = "downloads the private codex-cli 0.153.4 binary"]
+    async fn private_codex_should_install_and_complete_real_app_server_lifecycle() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let app_data = std::env::temp_dir().join(format!("codeagent-real-install-{unique}"));
+        let state = crate::application::state::AppState::default();
+        let installed = state
+            .inspect_codex(&app_data, |progress| {
+                if progress.phase != crate::domain::runtime::CodexRuntimeInstallPhase::Downloading {
+                    eprintln!("private runtime phase: {:?}", progress.phase);
+                }
+            })
+            .await;
+        assert_eq!(
+            installed.status,
+            crate::domain::runtime::CodexRuntimeAvailabilityStatus::Compatible
+        );
+        // 第二次进入不产生安装事件，证明已安装版本可直接复用。
+        state
+            .inspect_codex(&app_data, |_| panic!("must reuse the private runtime"))
+            .await;
+        let process = CodexProcess::start(&app_data)
             .await
             .expect("installed Codex app-server should start");
         assert_eq!(process.version(), SUPPORTED_CODEX_VERSION);
+        assert!(process.binary_path().starts_with(&app_data));
         let connection = process.connection();
 
         let models: Value = connection
@@ -427,5 +449,7 @@ mod tests {
             .await
             .expect("CodeAgent temporary task should be removable");
         assert_eq!(deleted.response.status, "deleted");
+        drop(process);
+        std::fs::remove_dir_all(app_data).expect("remove the isolated runtime fixture");
     }
 }

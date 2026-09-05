@@ -18,17 +18,15 @@ describe("Codex runtime manager", () => {
     channelHandler = undefined;
   });
 
-  it("checks the runtime again after a private download completes", async () => {
+  it("reuses the validated installation result without a second native inspection", async () => {
     invoke
       .mockResolvedValueOnce({
         detectedVersion: null,
-        globalInstallCommand: "npm install -g @openai/codex@0.153.4",
         requiredVersion: "0.153.4",
         status: "compatible",
       })
       .mockResolvedValueOnce({
         detectedVersion: "0.153.4",
-        globalInstallCommand: "npm install -g @openai/codex@0.153.4",
         requiredVersion: "0.153.4",
         status: "compatible",
       });
@@ -39,7 +37,6 @@ describe("Codex runtime manager", () => {
     expect(availability.status).toBe("compatible");
     expect(invoke.mock.calls.map(([command]) => command)).toEqual([
       "install_codex_runtime",
-      "inspect_codex_runtime",
     ]);
   });
 

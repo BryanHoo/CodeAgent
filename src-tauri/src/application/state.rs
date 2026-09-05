@@ -39,7 +39,7 @@ use crate::{
     infrastructure::{
         codex::{
             AppServerConnection, CodexProcess, PendingServerRequest, inspect_codex_runtime,
-            install_codex_runtime, update_managed_codex_runtime,
+            install_codex_runtime,
         },
         workspace::ProjectFileSearch,
     },
@@ -119,21 +119,17 @@ impl AppState {
     where
         OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
     {
-        self.update_managed_codex(app_data, &on_progress).await;
-        inspect_codex_runtime(app_data).await
-    }
-
-    async fn update_managed_codex<OnProgress>(&self, app_data: &Path, on_progress: &OnProgress)
-    where
-        OnProgress: Fn(CodexRuntimeInstallProgress) + Send + Sync,
-    {
+        // 启动检测和手动重试共用安装锁；首次运行与版本变化都自动修复。
         let _install_guard = self.runtime_install.lock().await;
-        if let Err(error) = update_managed_codex_runtime(app_data, on_progress).await {
-            // 自动更新失败不能破坏旧版本启动；保留诊断并由下次启动继续重试。
-            crate::infrastructure::diagnostics::record_error(
-                "codex_runtime_automatic_update_failed",
-                error,
-            );
+        match install_codex_runtime(app_data, on_progress).await {
+            Ok(availability) => availability,
+            Err(error) => {
+                crate::infrastructure::diagnostics::record_error(
+                    "codex_runtime_automatic_install_failed",
+                    error,
+                );
+                inspect_codex_runtime(app_data).await
+            }
         }
     }
 

@@ -27,8 +27,8 @@
 - `start_runtime` 只启动后端已发现并验证的绝对路径，不接收 WebView 传入的程序路径
 - WebView 不得控制下载地址、安装目录、校验值或进程参数
 - Codex 私有包优先使用 `registry.npmmirror.com`，网络或完整性失败时回退一次 `registry.npmjs.org`；两个源必须使用同一固定官方 SHA-512。仅允许固定 registry 与 `cdn.npmmirror.com` 的标准 HTTPS 跳转，限制跳转次数、连接等待与读取停滞；切源重置字节进度和临时文件，但不得重置 Channel 序号
-- 未找到兼容版本时，必须由用户确认后安装到应用私有目录，禁止调用全局包管理器
-- `inspect_codex_runtime` 只返回后端发现的版本状态；`install_codex_runtime` 不接收 WebView 下载参数，必须使用应用内固定的镜像与官方包地址及官方完整性校验值，安装后由前端再次检测。全局安装命令仅供展示，不得由应用执行
+- 启动检测仅检查固定的应用私有 Codex；缺失、损坏或版本不符时自动安装，禁止调用或扫描全局包管理器
+- `inspect_codex_runtime` 自动准备私有运行时并返回版本状态；`install_codex_runtime` 用于重试，不接收 WebView 下载参数。两者共用安装锁及固定下载源和校验值，安装结果直接复用，不触发前端再次检测；响应不包含全局安装命令
 - `inspect_codex_runtime` 与 `install_codex_runtime` 通过专用 Channel 发送 `{ sequence, phase, currentVersion, targetVersion, downloadedBytes, totalBytes }`；`phase` 必须精确表达 `preparing`、`downloading`、`installing`、`ready` 或 `failed`。序号必须单调递增，WebView 必须忽略陈旧事件；已知总量时至多按每个整数百分比上报一次，未知总量时按有界字节间隔上报，避免高频 IPC 和重复渲染
 - 版本匹配后必须完成 Provider 专属能力探测，安装和升级必须支持原子切换与回退
 - Codex 进程不得覆盖 `CODEX_HOME`，应继承用户配置并由官方逻辑回退到默认 `~/.codex`
