@@ -5,6 +5,23 @@
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-09-06
+
+### Added
+
+- 添加 Codex `0.153.4` 协议支持、异步问题交互与线程模型和思考量恢复。
+- 添加流式 Markdown 增量渲染，降低长回复持续输出时的解析与渲染开销。
+- 添加应用私有 Codex 自动安装，支持镜像优先、官方源回退与 SHA-512 完整性校验。
+
+### Changed
+
+- 优化后台运行时连接、模型目录和任务视图复用，减少窗口恢复与流式更新开销。
+
+### Fixed
+
+- 修复运行时事件背压、回放缺口和并发启动导致的状态丢失。
+- 修复定时任务写入失败未回滚，以及 Git 重命名提交内容校验异常。
+
 ## [0.1.6] - 2026-09-04
 
 ### Added
@@ -99,7 +116,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.3...v0.1.4

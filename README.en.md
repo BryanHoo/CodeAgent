@@ -28,7 +28,9 @@ CodeAgent brings AI coding tasks, conversations, approvals, project files, and G
 - Keep follow-up work in a persistent task queue, then edit, reorder, or cancel messages before they run
 - Attach files and images, reference project files with `@`, and safely install or manage Skills from the Skills marketplace
 - Enable, disable, and hot-reload MCP services, and answer MCP input requests
+- Answer asynchronous questions in a pinned panel and restore thread model and reasoning settings
 - Create scheduled tasks with one-time or recurring schedules, then review their run history
+- Automatically install and verify an app-private Codex runtime without requiring a global Codex setup
 - Choose the model, reasoning effort, Fast mode, approval behavior, and file access for each task
 - Manage multiple project roots, temporary tasks, and archived tasks, and fork new tasks from existing conversations
 - Browse and manage project files, then review diffs, uncommitted changes, and commit history
@@ -39,7 +41,7 @@ CodeAgent brings AI coding tasks, conversations, approvals, project files, and G
 
 1. Download the release artifact for your platform from [Releases](https://github.com/BryanHoo/CodeAgent/releases).
 2. Follow the platform-specific steps below to install and launch CodeAgent.
-3. Follow the on-screen setup on first launch, then add a project and create a task.
+3. Wait for the app to install and verify its private Codex runtime, then add a project and create a task.
 
 Current packages are unsigned previews, so your system may display source or security warnings. Supported platforms are:
 
