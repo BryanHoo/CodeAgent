@@ -266,6 +266,23 @@ export const McpElicitationPendingRequestSchema = Type.Union([
   McpUnsupportedElicitationPendingRequestSchema,
 ]);
 
+export const PluginInstallSuggestionPendingRequestSchema = Type.Object(
+  {
+    ...PendingRequestIdentityProperties,
+    connectorCount: Type.Integer({ minimum: 0 }),
+    installUrl: Type.Union([Type.String(), Type.Null()]),
+    pluginName: Type.String({ minLength: 1 }),
+    remoteMarketplaceName: Type.String({ minLength: 1 }),
+    remotePluginId: Type.Union([Type.String(), Type.Null()]),
+    suggestReason: Type.String({ minLength: 1 }),
+    suggestionId: Type.Union([Type.String(), Type.Null()]),
+    toolId: Type.String({ minLength: 1 }),
+    toolType: Type.Union([Type.Literal("plugin"), Type.Literal("connector")]),
+    type: Type.Literal("plugin_install_suggestion"),
+  },
+  { additionalProperties: false },
+);
+
 export const PendingRequestSchema = Type.Union([
   CommandApprovalPendingRequestSchema,
   TerminalInputApprovalPendingRequestSchema,
@@ -273,6 +290,7 @@ export const PendingRequestSchema = Type.Union([
   PermissionApprovalPendingRequestSchema,
   UserInputPendingRequestSchema,
   McpElicitationPendingRequestSchema,
+  PluginInstallSuggestionPendingRequestSchema,
 ]);
 
 function createPendingRequestStatusSchema<TStatus extends "expired" | "pending" | "resolved">(
@@ -309,6 +327,13 @@ function createPendingRequestStatusSchema<TStatus extends "expired" | "pending" 
     ),
     Type.Object(
       { ...McpUnsupportedElicitationPendingRequestSchema.properties, status: Type.Literal(status) },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      {
+        ...PluginInstallSuggestionPendingRequestSchema.properties,
+        status: Type.Literal(status),
+      },
       { additionalProperties: false },
     ),
   ]);
@@ -391,6 +416,24 @@ export const ResolvePendingRequestRequestSchema = Type.Union([
       ...PendingRequestResolutionIdentityProperties,
       resolution: McpElicitationResolutionSchema,
       type: Type.Literal("mcp_elicitation"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingRequestResolutionIdentityProperties,
+      resolution: Type.Object(
+        {
+          action: Type.Union([
+            Type.Literal("accept"),
+            Type.Literal("decline"),
+            Type.Literal("cancel"),
+          ]),
+          suppressFuture: Type.Optional(Type.Boolean()),
+        },
+        { additionalProperties: false },
+      ),
+      type: Type.Literal("plugin_install_suggestion"),
     },
     { additionalProperties: false },
   ),

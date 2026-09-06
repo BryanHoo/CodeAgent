@@ -143,11 +143,15 @@ pub async fn list_configured_mcp_servers(
         .into_iter()
         .flatten()
         .filter_map(|(name, config)| {
-            config.as_object().map(|config| {
-                json!({
+            config.as_object().and_then(|config| {
+                // 插件自带 MCP 由官方插件页统一管理，避免与用户配置重复展示和切换。
+                if config.get("pluginId").is_some_and(|value| !value.is_null()) {
+                    return None;
+                }
+                Some(json!({
                     "enabled": config.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                     "name": name,
-                })
+                }))
             })
         })
         .collect::<Vec<_>>();
@@ -336,6 +340,10 @@ fn map_skill(skill: &Value) -> Option<Value> {
 }
 
 fn map_installed_skill(skill: &Value) -> Option<Value> {
+    // 官方插件资产只在插件详情中只读展示，不进入独立 Skills 管理生命周期。
+    if skill.get("pluginId").is_some_and(|value| !value.is_null()) {
+        return None;
+    }
     let path = skill.get("path")?.as_str()?;
     let name = skill.get("name")?.as_str()?;
     let display_name = skill

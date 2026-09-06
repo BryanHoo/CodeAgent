@@ -30,9 +30,9 @@ export function WorkbenchShellLayout({
   board,
   context,
   draftId,
+  extensionSection,
   projectId,
   scheduledTasks,
-  skillsMarket,
   taskId,
   temporary,
 }: Readonly<{
@@ -41,7 +41,7 @@ export function WorkbenchShellLayout({
   draftId?: string;
   projectId: string;
   scheduledTasks: boolean;
-  skillsMarket: boolean;
+  extensionSection?: string;
   taskId?: string;
   temporary: boolean;
 }>) {
@@ -75,6 +75,7 @@ export function WorkbenchShellLayout({
     mcpServersReloadMutation,
     models,
     modelsQuery,
+    navigate,
     newChatSubmissionStartedAt,
     openFileDiff,
     openProjectFileDiff,
@@ -123,8 +124,9 @@ export function WorkbenchShellLayout({
     workbenchShellRef,
     t,
   } = context;
-  const utilityView = board || skillsMarket || scheduledTasks;
-  const viewTitle = scheduledTasks ? t("scheduledTasks.title") : skillsMarket ? t("skillsMarket.title") : board ? t("taskBoard.title") : title;
+  const extensions = extensionSection !== undefined;
+  const utilityView = board || extensions || scheduledTasks;
+  const viewTitle = scheduledTasks ? t("scheduledTasks.title") : extensions ? t("skillsMarket.title") : board ? t("taskBoard.title") : title;
   const inspectorVisible = resolveInspectorVisibility(utilityView, inspectorOpen);
   return (
     <div
@@ -244,8 +246,16 @@ export function WorkbenchShellLayout({
           <Suspense fallback={<div aria-busy="true" style={{ flex: 1 }} />}>
             <ScheduledTasksContainer context={context} projectId={projectId} temporary={temporary} />
           </Suspense>
-        ) : skillsMarket ? (
+        ) : extensions ? (
           <SkillsMarketContainer
+            section={extensionSection}
+            onSectionChange={(nextSection) => {
+              void navigate(
+                temporary
+                  ? { params: { section: nextSection }, to: "/temporary/extensions/$section" }
+                  : { params: { projectId, section: nextSection }, to: "/p/$projectId/extensions/$section" },
+              );
+            }}
             {...(temporary ? {} : { projectId })}
             {...(selectedRootPath === undefined ? {} : { rootPath: selectedRootPath })}
           />

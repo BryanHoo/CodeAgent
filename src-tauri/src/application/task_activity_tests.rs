@@ -130,6 +130,7 @@ fn every_supported_approval_request_enters_the_approval_state() {
         "file_change_approval",
         "permissions_approval",
         "mcp_elicitation",
+        "plugin_install_suggestion",
     ] {
         assert!(is_approval_request_type(request_type));
     }

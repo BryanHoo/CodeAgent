@@ -44,16 +44,22 @@
 - 正式 release 必须生成 updater artifact、`.sig` 与 `latest.json`，使用仓库 Secret 中的长期签名私钥；Windows 必须同时发布无 Authenticode 签名的 portable EXE 与可更新的 NSIS 安装包，portable 不得作为更新目标
 - 每个发布版本必须在 `CHANGELOG.md` 中包含 `## [版本] - YYYY-MM-DD` 条目，GitHub release 正文必须由该条目生成
 
-## Skills & MCP 契约
+## 扩展中心契约
 
-- 扩展管理入口统一显示为 `Skills & MCP`；MCP 标签只展示全局 Codex 配置中的服务名称与启用状态，不得向 WebView 传输命令、URL、请求头或环境变量
+- 左侧扩展管理入口统一显示为“扩展中心”，固定提供“Skills 管理”“MCP 管理”“官方插件”“三方市场”四个独立路由分区；各分区必须使用独立查询键与安装生命周期，不得把官方插件安装并入 ClawHub Skill 安装
+- 官方插件必须通过启用 `plugins` 的 Codex app-server 执行 `plugin/list`、`plugin/read`、`plugin/install` 和 `plugin/uninstall`；目录列表不指定 `marketplaceKinds`，由 app-server 按认证模式选择官方本地或远程目录；本地目录使用 `marketplacePath`，远程目录使用 `remoteMarketplaceName`，两者不得同时传递，也不得将插件下载或展开逻辑复制到 WebView
+- 官方插件内置的 Skills、MCP 与 Apps 只在插件详情中只读展示；带 `pluginId` 的 Skill 与 MCP 不得进入独立 Skills/MCP 管理列表
+- 官方插件列表必须先展示已安装分组、再展示未安装分组，并使用适合桌面目录扫描的紧凑卡片；官方插件与三方市场详情统一使用右侧 Sheet，不得回退为居中 Dialog
+- 会话内 `request_plugin_install` 只信任 `codex_apps` 的官方 suggestion 元数据；时间线内联卡承担安装确认，右侧详情面板只补充来源与资产信息。插件安装必须在向 app-server 回复 `accept` 前成功完成，失败时保留待处理请求；永久拒绝必须回传 `_meta.persist: always`
+- 官方插件安装完成后必须提示用户新建会话加载能力；需要授权的 App 使用 `appsNeedingAuth` 提供的 HTTP(S) 地址，不得自动授权或接受其他 URL scheme
+- MCP 管理只展示全局 Codex 配置中的服务名称与启用状态，不得向 WebView 传输命令、URL、请求头或环境变量
 - MCP 启停必须通过 `config/value/write` 写入 `mcp_servers.<name>.enabled`，服务名必须作为带引号的单一 keyPath 段处理；写入成功后调用 `config/mcpServer/reload`，确保停用立即结束连接、启用立即加载配置
 - 已安装 Skill 必须以 Codex `skills/list` 为发现来源，一次传入全部左栏 Project roots，按绝对路径去重并保留 `path`、`scope`、`enabled` 与 Project 归属；启停必须使用 `skills/config/write` 的绝对路径选择器，文件管理器打开前必须再次匹配已发现路径
 - 已安装 Skill 必须依次按“系统”“全局”和左栏 Project 顺序分组展示，各分组默认展开；Project Skill 必须显示在所属 Project 分组中，不得合并为通用“项目”分组
 - ClawHub 包必须以 `ownerHandle/slug` 作为完整身份；列表与搜索只能读取目录中的名称、简介与统计信息，不得下载 `SKILL.md`；详情与安装阶段必须排除声明 OpenClaw 专属 `config`、`envVars`、`primaryEnv`、`install`、`nix`、`skillKey`、`requires.env`、`requires.bins`、`requires.anyBins` 或 `requires.config` 的 Skill
 - 安装前必须重新读取详情与安全扫描，仅允许 `clean` 包；托管 ZIP 与 `public-github` handoff 均限制响应大小、文件数和解压体积，拒绝路径穿越与符号链接，GitHub handoff 还必须限制 HTTPS host、提取指定子目录并验证 `contentHash`
 - 全局 Skill 安装到 `~/.agents/skills/<slug>`，项目 Skill 必须从左栏 Project 中显式选择，并安装到其已校验 root 下 `.agents/skills/<slug>`；安装使用同目录 staging 与原子替换，并写入 `.clawhub/origin.json`，更新前必须验证发布者身份和已安装内容指纹，存在本地修改时不得覆盖
-- 安装请求期间仅实际触发的目标按钮显示 loading，其他安装入口保持禁用；安装成功后关闭详情弹窗，安装失败时保留弹窗以便重试
+- 安装请求期间仅实际触发的目标按钮显示 loading，其他安装入口保持禁用；ClawHub 安装成功后关闭详情 Sheet，官方插件安装成功后保留详情 Sheet 以展示新会话提示和 App 授权入口，安装失败时保留 Sheet 以便重试
 
 ## 定时任务契约
 
@@ -79,6 +85,6 @@
 - 覆盖状态栏计数清零、Provider 终态归约、左键菜单、前后台系统通知、运行态恢复、菜单目标解析和普通/`temporary` 任务跳转
 - 覆盖全屏主窗口关闭后从状态栏或通知恢复为非全屏普通窗口，以及未关闭时通知聚焦保持全屏状态
 - 覆盖 Rust 任务活动的运行、等待、完成、失败、运行时崩溃和 WebView 重建恢复
-- 覆盖五类审批请求、普通用户输入排除、运行开始时间恢复及看板运行时长投影
-- 覆盖 Skills & MCP 兼容性过滤、Codex 路径启停、MCP 配置摘要与热重载启停、ZIP 路径穿越、GitHub 子目录提取、内容指纹冲突以及安装/更新浏览器交互
+- 覆盖六类审批请求、普通用户输入排除、运行开始时间恢复及看板运行时长投影
+- 覆盖扩展中心四分区路由与查询隔离、官方插件已安装/未安装分组、官方与三方详情 Sheet、安装按钮局部 loading、官方插件远程目录协议、插件资产过滤、会话建议先安装后确认、Codex 路径启停、MCP 配置摘要与热重载启停、ZIP 路径穿越、GitHub 子目录提取、内容指纹冲突以及安装/更新浏览器交互
 - 覆盖 RRULE 时区与夏令时、漏跑合并、并发跳过、崩溃恢复、原子持久化、前端输入从创建落盘到认领完成、嵌套调度字段 camelCase、Tauri 命令注册与窗口授权、IPC CRUD 映射、内容区列表操作、紧凑主色图标创建按钮、日期时间选择器语言切换、任意分钟输入、弹层布局稳定性与选中日期悬停状态、提示词区域无底部分割线、表单不完整时保存禁用、运行与删除操作分区、删除危险色与可取消确认、保存失败仅显示一个具体错误 Toast，以及 Composer 捕获不启动即时 Turn

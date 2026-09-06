@@ -478,6 +478,7 @@ pub(super) fn is_approval_request_type(request_type: &str) -> bool {
             | "file_change_approval"
             | "permissions_approval"
             | "mcp_elicitation"
+            | "plugin_install_suggestion"
     )
 }
 

@@ -6,9 +6,9 @@ import { projectFileRoute } from "./routes/project-file-route.js";
 import { projectDraftRoute } from "./routes/project-draft-route.js";
 import { rootRoute } from "./routes/root-route.js";
 import {
-  projectSkillsMarketRoute,
-  temporarySkillsMarketRoute,
-} from "./routes/skills-market-route.js";
+  projectExtensionsRoute,
+  temporaryExtensionsRoute,
+} from "./routes/extensions-route.js";
 import {
   projectTaskBoardRoute,
   temporaryTaskBoardRoute,
@@ -30,12 +30,12 @@ const routeTree = rootRoute.addChildren([
     projectDraftRoute,
     projectTaskBoardRoute,
     projectScheduledTasksRoute,
-    projectSkillsMarketRoute,
+    projectExtensionsRoute,
     taskRoute,
     temporaryRoute,
     temporaryTaskBoardRoute,
     temporaryScheduledTasksRoute,
-    temporarySkillsMarketRoute,
+    temporaryExtensionsRoute,
     temporaryTaskRoute,
   ]),
 ]);

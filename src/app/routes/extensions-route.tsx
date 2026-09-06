@@ -2,12 +2,12 @@ import { createRoute } from "@tanstack/react-router";
 
 import { workbenchLayoutRoute } from "./workbench-route.js";
 
-export const projectSkillsMarketRoute = createRoute({
+export const projectExtensionsRoute = createRoute({
   getParentRoute: () => workbenchLayoutRoute,
-  path: "p/$projectId/skills",
+  path: "p/$projectId/extensions/$section",
 });
 
-export const temporarySkillsMarketRoute = createRoute({
+export const temporaryExtensionsRoute = createRoute({
   getParentRoute: () => workbenchLayoutRoute,
-  path: "temporary/skills",
+  path: "temporary/extensions/$section",
 });

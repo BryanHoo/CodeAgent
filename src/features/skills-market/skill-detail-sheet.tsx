@@ -9,27 +9,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Download, ExternalLink, LoaderCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
 import { openExternalUrl } from "../../platform/tauri/external-url.js";
 import { Button } from "../../shared/components/core/button.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../shared/components/core/dialog.js";
-import { useTranslation } from "../../i18n/i18n.js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../shared/components/core/select.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shared/components/core/select.js";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "../../shared/components/core/sheet.js";
 import type { NativeSkillsClient } from "../projects/project-query-contracts.js";
 
-type SkillDetailDialogProps = Readonly<{
+type SkillDetailSheetProps = Readonly<{
   client: NativeSkillsClient;
   currentProjectId: string | undefined;
   currentRootPath: string | undefined;
@@ -45,7 +32,7 @@ type SkillDetailDialogProps = Readonly<{
   skill: ClawhubSkillSummary;
 }>;
 
-export function SkillDetailDialog({
+export function SkillDetailSheet({
   client,
   currentProjectId,
   currentRootPath,
@@ -55,7 +42,7 @@ export function SkillDetailDialog({
   onInstall,
   projects,
   skill,
-}: SkillDetailDialogProps) {
+}: SkillDetailSheetProps) {
   const { t } = useTranslation("workbench");
   const initialProjectId = projects.some((project) => project.id === currentProjectId)
     ? currentProjectId
@@ -75,12 +62,12 @@ export function SkillDetailDialog({
   });
   const data: ClawhubSkillDetail | undefined = detail.data;
   const installedVersion = (scope: SkillInstallScope) => installedSkills.find((installed) =>
-      installed.marketplace?.owner === skill.owner
+    installed.marketplace?.owner === skill.owner
       && installed.marketplace.slug === skill.slug
       && (scope === "user"
         ? installed.scope === "user"
         : installed.scope === "repo" && installed.projectId === selectedProjectId),
-    )?.marketplace?.installedVersion;
+  )?.marketplace?.installedVersion;
   const actionLabel = (scope: SkillInstallScope) => {
     const version = installedVersion(scope);
     if (version === skill.latestVersion) return t("skillsMarket.current");
@@ -91,21 +78,24 @@ export function SkillDetailDialog({
   const detailUnavailable = data === undefined || data.scanStatus !== "clean";
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="skills-market-detail max-w-3xl gap-0 p-0">
-        <DialogHeader className="skills-market-detail__header">
-          <div className="skills-market-detail__mark" aria-hidden="true">
-            <Sparkles />
-          </div>
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        className="skills-market-detail third-party-skill-sheet"
+        closeLabel={t("skillsMarket.closeSkillDetails")}
+      >
+        <SheetHeader className="skills-market-detail__header">
+          <div className="skills-market-detail__mark" aria-hidden="true"><Sparkles /></div>
           <div className="min-w-0 flex-1">
-            <DialogTitle className="truncate text-title">{skill.displayName}</DialogTitle>
-            <DialogDescription>@{skill.owner} / {skill.slug}</DialogDescription>
+            <SheetTitle className="truncate text-title">{skill.displayName}</SheetTitle>
+            <SheetDescription>@{skill.owner} / {skill.slug}</SheetDescription>
           </div>
-          {data === undefined ? null : <span className="skills-market-scan">
-            <ShieldCheck aria-hidden="true" />
-            {t("skillsMarket.codexCompatible")}
-          </span>}
-        </DialogHeader>
+          {data === undefined ? null : (
+            <span className="skills-market-scan">
+              <ShieldCheck aria-hidden="true" />
+              {t("skillsMarket.codexCompatible")}
+            </span>
+          )}
+        </SheetHeader>
 
         <div className="skills-market-detail__facts">
           <span>{t("skillsMarket.version", { version: skill.latestVersion })}</span>
@@ -114,7 +104,7 @@ export function SkillDetailDialog({
           {data === undefined ? null : <span>{t("skillsMarket.scan", { status: data.scanStatus })}</span>}
         </div>
 
-        <div className="skills-market-detail__body">
+        <div className="skills-market-detail__body third-party-skill-sheet__body">
           {detail.isPending ? (
             <div className="skills-market-state" role="status">{t("skillsMarket.loadingDetail")}</div>
           ) : detail.error !== null ? (
@@ -124,8 +114,9 @@ export function SkillDetailDialog({
           )}
         </div>
 
-        <DialogFooter className="skills-market-detail__footer">
+        <SheetFooter className="skills-market-detail__footer third-party-skill-sheet__footer">
           <Button
+            className="third-party-skill-sheet__market-link"
             onClick={() => void openExternalUrl(skill.canonicalUrl)}
             type="button"
             variant="ghost"
@@ -133,43 +124,45 @@ export function SkillDetailDialog({
             <ExternalLink aria-hidden="true" />
             {t("skillsMarket.openMarketplace")}
           </Button>
-          <div className="flex-1" />
-          {selectedProject === undefined || selectedRootPath === undefined ? null : (
-            <div className="skills-market-project-target">
-              <Select onValueChange={setSelectedProjectId} value={selectedProject.id}>
-                <SelectTrigger aria-label={t("skillsMarket.projectTarget")} size="sm" title={selectedProject.name}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="end" position="popper">
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                disabled={detailUnavailable || installing || installedVersion("project") === skill.latestVersion}
-                onClick={() => onInstall(skill, "project", {
-                  projectId: selectedProject.id,
-                  rootPath: selectedRootPath,
-                })}
-                type="button"
-                variant="outline"
-              >
-                {installingScope === "project"
-                  ? <LoaderCircle aria-hidden="true" className="animate-spin" data-icon="loading" />
-                  : <Download aria-hidden="true" />}
-                {actionLabel("project")}
-              </Button>
-            </div>
-          )}
-          <Button disabled={detailUnavailable || installing || installedVersion("user") === skill.latestVersion} onClick={() => onInstall(skill, "user", {})} type="button">
-            {installingScope === "user"
-              ? <LoaderCircle aria-hidden="true" className="animate-spin" data-icon="loading" />
-              : <Download aria-hidden="true" />}
-            {actionLabel("user")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className="third-party-skill-sheet__actions">
+            {selectedProject === undefined || selectedRootPath === undefined ? null : (
+              <div className="skills-market-project-target">
+                <Select onValueChange={setSelectedProjectId} value={selectedProject.id}>
+                  <SelectTrigger aria-label={t("skillsMarket.projectTarget")} size="sm" title={selectedProject.name}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end" position="popper">
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  disabled={detailUnavailable || installing || installedVersion("project") === skill.latestVersion}
+                  onClick={() => onInstall(skill, "project", { projectId: selectedProject.id, rootPath: selectedRootPath })}
+                  type="button"
+                  variant="outline"
+                >
+                  {installingScope === "project"
+                    ? <LoaderCircle aria-hidden="true" className="animate-spin" data-icon="loading" />
+                    : <Download aria-hidden="true" />}
+                  {actionLabel("project")}
+                </Button>
+              </div>
+            )}
+            <Button
+              disabled={detailUnavailable || installing || installedVersion("user") === skill.latestVersion}
+              onClick={() => onInstall(skill, "user", {})}
+              type="button"
+            >
+              {installingScope === "user"
+                ? <LoaderCircle aria-hidden="true" className="animate-spin" data-icon="loading" />
+                : <Download aria-hidden="true" />}
+              {actionLabel("user")}
+            </Button>
+          </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

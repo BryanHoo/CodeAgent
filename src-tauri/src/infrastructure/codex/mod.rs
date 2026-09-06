@@ -14,6 +14,7 @@ mod conversation_events;
 mod conversation_file_input;
 mod conversation_items;
 mod conversation_media_input;
+mod conversation_plugin_install;
 mod conversation_prompt;
 mod conversation_questions;
 mod conversation_queue;
@@ -22,6 +23,7 @@ mod conversation_requests;
 mod conversation_runtime_events;
 mod conversation_turn_settings;
 mod generated_image_store;
+mod plugins;
 mod process;
 mod protocol;
 mod runtime_active;
@@ -74,6 +76,9 @@ mod conversation_error_tests;
 #[path = "conversation_item_tests.rs"]
 mod conversation_item_tests;
 #[cfg(test)]
+#[path = "conversation_plugin_install_tests.rs"]
+mod conversation_plugin_install_tests;
+#[cfg(test)]
 #[path = "conversation_tests.rs"]
 mod conversation_tests;
 #[cfg(test)]
@@ -115,6 +120,9 @@ pub use conversation_requests::{
     PendingServerRequest, map_server_request_now, resolved_request_id, response_for_resolution,
 };
 pub use conversation_turn_settings::update_live_reviewer;
+pub use plugins::{
+    get_official_plugin, install_official_plugin, list_official_plugins, uninstall_official_plugin,
+};
 pub use process::CodexProcess;
 pub use runtime_manager::{inspect_codex_runtime, install_codex_runtime};
 pub use sidebar::{

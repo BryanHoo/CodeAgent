@@ -4,7 +4,7 @@ import { Blocks } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 
-export function SidebarSkillsMarketLink({
+export function SidebarExtensionCenterLink({
   className,
   iconClassName,
   projectId,
@@ -19,11 +19,22 @@ export function SidebarSkillsMarketLink({
   const activeProps = { className: `${className} bg-control-active` };
 
   return projectId !== undefined && projectId !== TEMPORARY_TASK_SCOPE_ID ? (
-    <Link activeProps={activeProps} className={className} params={{ projectId }} to="/p/$projectId/skills">
+    <Link
+      activeOptions={{ includeSearch: false }}
+      activeProps={activeProps}
+      className={className}
+      params={{ projectId, section: "skills" }}
+      to="/p/$projectId/extensions/$section"
+    >
       {content}
     </Link>
   ) : (
-    <Link activeProps={activeProps} className={className} to="/temporary/skills">
+    <Link
+      activeProps={activeProps}
+      className={className}
+      params={{ section: "skills" }}
+      to="/temporary/extensions/$section"
+    >
       {content}
     </Link>
   );

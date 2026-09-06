@@ -20,7 +20,8 @@ function WorkbenchLayout() {
       return {
         board: state.location.pathname.endsWith("/board"),
         scheduledTasks: state.location.pathname.endsWith("/scheduled"),
-        skillsMarket: state.location.pathname.endsWith("/skills"),
+        extensionSection:
+          params !== undefined && "section" in params ? params.section : undefined,
         draftId: params !== undefined && "draftId" in params ? params.draftId : undefined,
         projectId: params !== undefined && "projectId" in params ? params.projectId : undefined,
         taskId: params !== undefined && "taskId" in params ? params.taskId : undefined,
@@ -36,7 +37,9 @@ function WorkbenchLayout() {
       <WorkbenchRoute
         board={routeParams.board}
         scheduledTasks={routeParams.scheduledTasks}
-        skillsMarket={routeParams.skillsMarket}
+        {...(routeParams.extensionSection === undefined
+          ? {}
+          : { extensionSection: routeParams.extensionSection })}
         {...(routeParams.draftId === undefined ? {} : { draftId: routeParams.draftId })}
         projectId={projectId}
         temporary={temporary}

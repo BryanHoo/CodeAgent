@@ -5,9 +5,9 @@ import { useWorkbenchShellRuntime, type WorkbenchShellProps } from "./workbench-
 export function WorkbenchShell({
   board = false,
   draftId,
+  extensionSection,
   projectId,
   scheduledTasks = false,
-  skillsMarket = false,
   taskId,
   temporary = false,
 }: WorkbenchShellProps) {
@@ -18,7 +18,7 @@ export function WorkbenchShell({
     <WorkbenchShellLayout
       board={board}
       scheduledTasks={scheduledTasks}
-      skillsMarket={skillsMarket}
+      {...(extensionSection === undefined ? {} : { extensionSection })}
       context={context}
       {...(draftId === undefined ? {} : { draftId })}
       {...taskScope}

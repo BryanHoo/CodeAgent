@@ -285,6 +285,37 @@ pub async fn resolve_pending_request(
         .take_pending_request(&request_id)
         .await
         .ok_or(AppError::CodexRequestFailed)?;
+    if pending.request.get("type").and_then(Value::as_str) == Some("plugin_install_suggestion")
+        && resolution.get("action").and_then(Value::as_str) == Some("accept")
+        && pending.request.get("toolType").and_then(Value::as_str) == Some("plugin")
+    {
+        let marketplace_name = pending
+            .request
+            .get("remoteMarketplaceName")
+            .and_then(Value::as_str);
+        let remote_plugin_id = pending
+            .request
+            .get("remotePluginId")
+            .and_then(Value::as_str);
+        let suggestion_id = pending.request.get("suggestionId").and_then(Value::as_str);
+        let install_result = match (marketplace_name, remote_plugin_id) {
+            (Some(marketplace_name), Some(remote_plugin_id)) => {
+                codex::install_official_plugin(
+                    &connection,
+                    marketplace_name,
+                    None,
+                    remote_plugin_id,
+                    suggestion_id,
+                )
+                .await
+            }
+            _ => Err(codex::ConnectionError::InvalidMessage),
+        };
+        if let Err(error) = install_result {
+            state.restore_pending_request(pending).await;
+            return Err(AppError::from(error));
+        }
+    }
     let result = match codex::response_for_resolution(&pending, &resolution) {
         Ok(result) => result,
         Err(_) => {

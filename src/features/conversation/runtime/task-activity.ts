@@ -49,7 +49,8 @@ function isApprovalRequest(request: PendingRequest): boolean {
     request.type === "terminal_input_approval" ||
     request.type === "file_change_approval" ||
     request.type === "permissions_approval" ||
-    request.type === "mcp_elicitation"
+    request.type === "mcp_elicitation" ||
+    request.type === "plugin_install_suggestion"
   );
 }
 

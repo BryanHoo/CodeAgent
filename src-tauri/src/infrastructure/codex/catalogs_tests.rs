@@ -45,7 +45,9 @@ async fn catalogs_should_map_codex_protocol_without_losing_order() {
                 json!({"data": [{"cwd": "/work", "skills": [
                     {"name": "review", "description": "Review code", "path": "/skills/review/SKILL.md", "scope": "repo", "enabled": true,
                      "interface": {"displayName": "Code Review", "iconSmallUrl": null, "iconLargeUrl": null}},
-                    {"name": "disabled", "description": "Hidden", "path": "/skills/disabled/SKILL.md", "scope": "user", "enabled": false}
+                    {"name": "disabled", "description": "Hidden", "path": "/skills/disabled/SKILL.md", "scope": "user", "enabled": false},
+                    {"name": "plugin-owned", "description": "Bundled asset", "path": "/plugins/github/skills/search/SKILL.md", "scope": "user", "enabled": true,
+                     "pluginId": "github@openai-curated-remote"}
                 ], "errors": []}, {"cwd": "/other", "skills": [
                     {"name": "lint", "description": "Lint code", "path": "/other/.agents/skills/lint/SKILL.md", "scope": "repo", "enabled": true}
                 ], "errors": []}]}),
@@ -232,7 +234,8 @@ async fn configured_mcp_servers_should_only_expose_name_and_enabled_state() {
                         "result": {
                             "config": {"mcp_servers": {
                                 "docs": {"command": "secret-command"},
-                                "linear": {"enabled": false, "url": "https://example.test"}
+                                "linear": {"enabled": false, "url": "https://example.test"},
+                                "plugin-github": {"enabled": true, "pluginId": "github@openai-curated-remote"}
                             }},
                             "origins": {}
                         }

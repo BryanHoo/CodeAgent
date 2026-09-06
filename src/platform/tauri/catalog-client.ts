@@ -16,6 +16,9 @@ import type {
   ClawhubSkillPage,
   ConfiguredMcpServerPage,
   InstalledSkillPage,
+  OfficialPluginDetail,
+  OfficialPluginInstallResult,
+  OfficialPluginPage,
   SkillInstallResult,
   SkillInstallScope,
 } from "@/protocol/index.js";
@@ -155,6 +158,44 @@ export class TauriCatalogClient extends TauriWorkspaceClient {
     _options: MutationOptions = {},
   ): Promise<SkillInstallResult> {
     return this.call("install_clawhub_skill", { owner, projectId, rootPath, scope, slug });
+  }
+
+  public async listOfficialPlugins(
+    forceRefetch: boolean,
+    _options: ReadOptions = {},
+  ): Promise<OfficialPluginPage> {
+    return this.call("list_official_plugins", { forceRefetch });
+  }
+
+  public async getOfficialPlugin(
+    marketplaceName: string,
+    marketplacePath: string | null,
+    pluginName: string,
+    _options: ReadOptions = {},
+  ): Promise<OfficialPluginDetail> {
+    return this.call("get_official_plugin", { marketplaceName, marketplacePath, pluginName });
+  }
+
+  public async installOfficialPlugin(
+    marketplaceName: string,
+    marketplacePath: string | null,
+    pluginName: string,
+    installAttemptId: string,
+    _options: MutationOptions = {},
+  ): Promise<OfficialPluginInstallResult> {
+    return this.call("install_official_plugin", {
+      installAttemptId,
+      marketplaceName,
+      marketplacePath,
+      pluginName,
+    });
+  }
+
+  public async uninstallOfficialPlugin(
+    pluginId: string,
+    _options: MutationOptions = {},
+  ): Promise<Readonly<Record<string, never>>> {
+    return this.call("uninstall_official_plugin", { pluginId });
   }
 
   public async listMcpServers(

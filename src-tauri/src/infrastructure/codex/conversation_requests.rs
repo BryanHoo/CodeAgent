@@ -5,6 +5,7 @@ use serde_json::{Map, Value, json};
 use super::{
     connection::{ConnectionError, ServerMessage},
     conversation::RUNTIME_SESSION_ID,
+    conversation_plugin_install::{map_plugin_install_suggestion, response_for_plugin_suggestion},
     conversation_request_fields::{map_mcp_fields, map_permission_profile},
     sidebar::unix_seconds_to_rfc3339,
 };
@@ -150,7 +151,11 @@ pub fn response_for_resolution(
             "_meta": null,
             "action": required_string(resolution, "action")?,
             "content": resolution.get("content").cloned().unwrap_or(Value::Null),
-        })),
+        }))
+        .and_then(|fallback| {
+            response_for_plugin_suggestion(&pending.request, resolution)
+                .map(|suggestion| suggestion.unwrap_or(fallback))
+        }),
         _ => Err(ConnectionError::InvalidMessage),
     }
 }
@@ -287,6 +292,11 @@ fn map_mcp_request(
         .and_then(Value::as_str)
         .map(str::to_owned)
         .unwrap_or_else(|| format!("mcp-elicitation:{request_id}"));
+    if let Some(request) =
+        map_plugin_install_suggestion(params, request_id, task_id, &turn_id, timestamp)?
+    {
+        return Ok(request);
+    }
     let mut request = json!({
         "createdAt": timestamp, "expiresAt": null, "itemId": format!("mcp-elicitation:{request_id}"),
         "message": required_string(params, "message")?, "projectId": "", "requestId": request_id,

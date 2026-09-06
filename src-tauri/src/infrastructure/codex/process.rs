@@ -218,7 +218,7 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
     let mut command = background_process_command(program);
     // 不设置 CODEX_HOME，让官方逻辑继承用户配置或回退到默认 ~/.codex。
     command
-        .args(["app-server", "--listen", "stdio://"])
+        .args(["app-server", "--enable", "plugins", "--listen", "stdio://"])
         .env("LOG_FORMAT", "json")
         .env("RUST_LOG", "codex_app_server=info,codex_core=warn")
         .stdin(Stdio::piped())
@@ -296,7 +296,7 @@ mod tests {
         assert_eq!(command.get_program(), "codex-test");
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
-            ["app-server", "--listen", "stdio://"]
+            ["app-server", "--enable", "plugins", "--listen", "stdio://"]
         );
         assert!(command.get_envs().all(|(key, _)| key != "CODEX_HOME"));
         assert_eq!(

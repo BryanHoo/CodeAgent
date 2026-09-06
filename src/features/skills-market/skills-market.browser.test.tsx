@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 
 import "../../shared/styles/globals.css";
 import "../../shared/styles/skills-market.css";
+import "../../shared/styles/official-plugins.css";
 
 import { I18nextProvider, i18n } from "../../i18n/i18n.js";
 import { createActionMutationCache } from "../notifications/action-notifications.js";
@@ -15,6 +17,10 @@ const mocks = vi.hoisted(() => ({
   listClawhubSkills: vi.fn(),
   listConfiguredMcpServers: vi.fn(),
   listInstalledSkills: vi.fn(),
+  listOfficialPlugins: vi.fn(),
+  getOfficialPlugin: vi.fn(),
+  installOfficialPlugin: vi.fn(),
+  uninstallOfficialPlugin: vi.fn(),
   openSkillDirectory: vi.fn(),
   setMcpServerEnabled: vi.fn(),
   setSkillEnabled: vi.fn(),
@@ -49,6 +55,36 @@ const summary = {
   topics: ["review"],
   updatedAt: 1_788_000_000_000,
   versionCount: 3,
+} as const;
+
+const officialPlugin = {
+  authPolicy: "ON_INSTALL",
+  availability: "AVAILABLE",
+  description: "Connect Codex to GitHub repositories.",
+  developerName: "OpenAI",
+  disabledReason: null,
+  displayName: "GitHub",
+  enabled: false,
+  id: "github@openai-api-curated",
+  installPolicy: "AVAILABLE",
+  installed: false,
+  localVersion: null,
+  logoUrl: null,
+  marketplaceName: "openai-api-curated",
+  marketplacePath: "/cache/api_marketplace.json",
+  name: "github",
+  pluginName: "github",
+  version: "1.0.0",
+} as const;
+
+const installedOfficialPlugin = {
+  ...officialPlugin,
+  displayName: "Figma",
+  enabled: true,
+  id: "figma@openai-api-curated",
+  installed: true,
+  name: "figma",
+  pluginName: "figma",
 } as const;
 
 function renderMarket() {
@@ -129,6 +165,31 @@ describe("SkillsMarketContainer", () => {
       ],
     });
     mocks.setMcpServerEnabled.mockResolvedValue({ enabled: false });
+    mocks.listOfficialPlugins.mockResolvedValue({
+      data: [officialPlugin, installedOfficialPlugin],
+    });
+    mocks.getOfficialPlugin.mockResolvedValue({
+      ...officialPlugin,
+      apps: [{
+        description: "Access GitHub repositories.",
+        id: "connector_github",
+        installUrl: "https://example.test/install",
+        name: "GitHub",
+      }],
+      hooks: [],
+      mcpServers: ["github"],
+      skills: [{ description: "Search repositories.", name: "github-search" }],
+      websiteUrl: "https://github.com",
+    });
+    mocks.installOfficialPlugin.mockResolvedValue({
+      appsNeedingAuth: [{
+        description: "Access GitHub repositories.",
+        id: "connector_github",
+        installUrl: "https://example.test/install",
+        name: "GitHub",
+      }],
+      authPolicy: "ON_INSTALL",
+    });
     mocks.openSkillDirectory.mockResolvedValue({ status: "opened" });
     mocks.listClawhubSkills.mockResolvedValue({ items: [summary], nextCursor: null });
     mocks.getClawhubSkill.mockResolvedValue({
@@ -148,13 +209,14 @@ describe("SkillsMarketContainer", () => {
 
   it("opens installed skills and installs into a selected sidebar project", async () => {
     const screen = await renderMarket();
-    await expect.element(screen.getByRole("heading", { name: "Skills & MCP" })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { name: "扩展中心" })).toBeVisible();
+    expect(screen.container.querySelector(".extension-center__mark")).toBeNull();
     await expect.element(screen.getByText("Local Review")).toBeVisible();
     await expect.element(screen.getByText("Project Lint")).toBeVisible();
     const groupHeadings = [...screen.container.querySelectorAll(".skills-installed-group h3")]
       .map((heading) => heading.textContent);
     expect(groupHeadings).toEqual(["系统", "全局", "Project A", "Project B"]);
-    expect(getComputedStyle(screen.container.querySelector(".skills-market-hero")!).position)
+    expect(getComputedStyle(screen.container.querySelector(".extension-center__header")!).position)
       .toBe("sticky");
     await screen.getByRole("button", { name: /Local Review/ }).click();
     expect(mocks.openSkillDirectory).toHaveBeenCalledWith(
@@ -167,9 +229,13 @@ describe("SkillsMarketContainer", () => {
     );
     mocks.toastSuccess.mockClear();
 
-    await screen.getByRole("tab", { name: "市场" }).click();
+    await screen.getByRole("tab", { name: "三方市场" }).click();
     await screen.getByRole("button", { name: /Code Review/ }).click();
     await expect.element(screen.getByRole("dialog")).toBeVisible();
+    expect(document.querySelector("[data-slot='sheet-content'].third-party-skill-sheet"))
+      .not.toBeNull();
+    expect(document.querySelector("[data-slot='dialog-content']")).toBeNull();
+    await page.screenshot({ path: "../../../test-results/extension-center-third-party-sheet.png" });
     const projectSelect = screen.getByRole("combobox", { name: "安装项目" });
     const projectSelectElement = projectSelect.element();
     await projectSelect.click();
@@ -228,7 +294,7 @@ describe("SkillsMarketContainer", () => {
   it("lists configured MCP servers and stops the selected server", async () => {
     const screen = await renderMarket();
 
-    await screen.getByRole("tab", { name: "MCP" }).click();
+    await screen.getByRole("tab", { name: "MCP 管理" }).click();
     await expect.element(screen.getByText("docs", { exact: true })).toBeVisible();
     await expect.element(screen.getByText("linear", { exact: true })).toBeVisible();
     await expect.element(screen.getByText("2 个 MCP 服务")).toBeVisible();
@@ -239,5 +305,55 @@ describe("SkillsMarketContainer", () => {
 
     await screen.getByRole("switch", { name: "启用或停止 linear" }).click();
     expect(mocks.setMcpServerEnabled).toHaveBeenCalledWith("linear", true);
+  });
+
+  it("installs an official plugin and keeps bundled assets read-only", async () => {
+    const screen = await renderMarket();
+
+    await screen.getByRole("tab", { name: "官方插件" }).click();
+    await expect.element(screen.getByRole("heading", { name: "已安装" })).toBeVisible();
+    const groupHeadings = [...screen.container.querySelectorAll(".official-plugin-group h3")]
+      .map((heading) => heading.textContent);
+    expect(groupHeadings).toEqual(["已安装", "未安装"]);
+    const cards = [...screen.container.querySelectorAll(".official-plugin-card")];
+    expect(cards.map((card) => card.textContent)).toEqual([
+      expect.stringContaining("Figma"),
+      expect.stringContaining("GitHub"),
+    ]);
+    expect(cards.every((card) => card.getBoundingClientRect().height <= 120)).toBe(true);
+    await screen.getByText("GitHub", { exact: true }).click();
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    await expect.element(screen.getByText("github-search")).toBeVisible();
+    await expect.element(screen.getByText("github", { exact: true })).toBeVisible();
+    expect(screen.container.querySelectorAll(".official-plugin-asset [role='switch']")).toHaveLength(0);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+      document.documentElement.clientWidth,
+    );
+    const sheet = document.querySelector(".official-plugin-sheet");
+    expect(sheet).not.toBeNull();
+    expect(sheet!.scrollWidth).toBeLessThanOrEqual(sheet!.clientWidth);
+    await page.screenshot({ path: "../../../test-results/extension-center-official-plugin.png" });
+
+    let finishInstall: (() => void) | undefined;
+    mocks.installOfficialPlugin.mockImplementationOnce(() => new Promise((resolve) => {
+      finishInstall = () => resolve({ appsNeedingAuth: [], authPolicy: "ON_INSTALL" });
+    }));
+    const installButton = screen.getByRole("button", { name: "安装插件" });
+    await installButton.click();
+    await vi.waitFor(() => {
+      expect(mocks.installOfficialPlugin).toHaveBeenCalledWith(
+        "openai-api-curated",
+        "/cache/api_marketplace.json",
+        "github",
+        expect.any(String),
+      );
+      expect((installButton.element() as HTMLButtonElement).disabled).toBe(true);
+      expect(installButton.element().querySelector('[data-icon="loading"]')).not.toBeNull();
+    });
+    finishInstall?.();
+    await expect.element(
+      screen.getByText("插件已安装。请新建会话以加载插件能力。"),
+    ).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "卸载插件" })).toBeVisible();
   });
 });

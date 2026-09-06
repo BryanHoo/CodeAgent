@@ -322,7 +322,7 @@ export function StorePendingRequestList({
   const pendingRequestsById = useStore(store, (state) => state.pendingRequestsById);
   const visiblePendingRequests = pendingRequestIds.flatMap((requestId) => {
     const request = pendingRequestsById[requestId];
-    return request === undefined || request.status === "resolved" ? [] : [request];
+    return request === undefined || (request.status === "resolved" && request.type !== "plugin_install_suggestion") ? [] : [request];
   });
   const firstPendingIndex = visiblePendingRequests.findIndex(
     (request) => request.status === "pending",

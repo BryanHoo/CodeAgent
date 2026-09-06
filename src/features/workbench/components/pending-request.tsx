@@ -23,6 +23,7 @@ import {
   PermissionApprovalRequestCard,
 } from "./permission-approval-request.js";
 import { McpElicitationRequestCard } from "./mcp-elicitation-request.js";
+import { PluginInstallSuggestionCard } from "./plugin-install-suggestion-card.js";
 import {
   resolvePendingRequestAttempt,
   type PendingRequestResolutionAttempt,
@@ -355,7 +356,7 @@ function UserInputRequestCard({
 
 export function PendingRequestCard(props: PendingRequestCardProps) {
   // 已处理请求只保留在运行时快照中用于状态对账，不继续占用会话界面。
-  if (props.request.status === "resolved") {
+  if (props.request.status === "resolved" && props.request.type !== "plugin_install_suggestion") {
     return null;
   }
   if (props.request.type === "user_input") {
@@ -379,6 +380,15 @@ export function PendingRequestCard(props: PendingRequestCardProps) {
   if (props.request.type === "mcp_elicitation") {
     return (
       <McpElicitationRequestCard
+        interactive={props.interactive}
+        onResolve={props.onResolve}
+        request={props.request}
+      />
+    );
+  }
+  if (props.request.type === "plugin_install_suggestion") {
+    return (
+      <PluginInstallSuggestionCard
         interactive={props.interactive}
         onResolve={props.onResolve}
         request={props.request}

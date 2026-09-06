@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import "../router.js";
 import {
-  projectSkillsMarketRoute,
-  temporarySkillsMarketRoute,
-} from "./skills-market-route.js";
+  projectExtensionsRoute,
+  temporaryExtensionsRoute,
+} from "./extensions-route.js";
 
-describe("skills market routes", () => {
-  it("keeps project and global market paths stable", () => {
-    expect(projectSkillsMarketRoute.fullPath).toBe("/p/$projectId/skills");
-    expect(temporarySkillsMarketRoute.fullPath).toBe("/temporary/skills");
+describe("extension center routes", () => {
+  it("keeps project and temporary section paths stable", () => {
+    expect(projectExtensionsRoute.fullPath).toBe("/p/$projectId/extensions/$section");
+    expect(temporaryExtensionsRoute.fullPath).toBe("/temporary/extensions/$section");
   });
 });
