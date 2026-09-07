@@ -7,7 +7,7 @@ export const conversation = {
     pending: "Pending questions", pendingCount: "Pending · {{count}} groups",
     previous: "Previous questions", next: "Next questions", collapse: "Collapse questions", expand: "Expand questions",
     other: "Other answer", answer: "Answer: {{question}}", send: "Send answers", sent: "Sent",
-    failed: "Answers were not sent. Please retry.",
+    failed: "Answers were not sent. Please retry.", dismiss: "Dismiss questions",
   },
   agentComponents: {
     addFile: "Add file",

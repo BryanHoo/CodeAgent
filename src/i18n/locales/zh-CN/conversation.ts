@@ -7,7 +7,7 @@ export const conversation = {
     pending: "待回答问题", pendingCount: "待回答 · {{count}} 组",
     previous: "上一组问题", next: "下一组问题", collapse: "收起问题", expand: "展开问题",
     other: "其他回答", answer: "回答：{{question}}", send: "发送回答", sent: "已发送",
-    failed: "回答未发送，请重试",
+    failed: "回答未发送，请重试", dismiss: "关闭问题",
   },
   agentComponents: {
     addFile: "添加文件",

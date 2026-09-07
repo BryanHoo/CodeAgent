@@ -4,7 +4,7 @@ import { createStore } from "zustand/vanilla";
 export type QuestionAnswer = Readonly<{ choice: number | null; text: string }>;
 export type QuestionDraft = Readonly<{
   answers: readonly QuestionAnswer[];
-  status: "editing" | "sending" | "sent";
+  status: "editing" | "sending" | "sent" | "dismissed";
   error: boolean;
 }>;
 
@@ -30,6 +30,12 @@ export function AsyncQuestionProvider({ children, enabled, submit }: Readonly<{
 }
 
 export const useAsyncQuestionSession = () => useContext(AsyncQuestionContext);
+
+export function dismissQuestion(store: ReturnType<typeof createQuestionDraftStore>, id: string) {
+  const draft = store.getState().drafts.get(id);
+  // 关闭仅更新当前任务的会话状态，保留草稿且不触发消息提交。
+  saveQuestionDraft(store, id, { answers: [], ...draft, status: "dismissed", error: false });
+}
 
 export function saveQuestionDraft(
   store: ReturnType<typeof createQuestionDraftStore>, id: string, draft: QuestionDraft,

@@ -1,7 +1,16 @@
 import { expect, test } from "vitest";
-import { createQuestionDraftStore, saveQuestionDraft, type QuestionDraft } from "./async-question-session.js";
+import { createQuestionDraftStore, dismissQuestion, saveQuestionDraft, type QuestionDraft } from "./async-question-session.js";
 
 const draft: QuestionDraft = { answers: [{ choice: null, text: "answer" }], status: "editing", error: false };
+
+test("dismisses untouched questions and preserves existing drafts without marking them sent", () => {
+  const store = createQuestionDraftStore();
+  dismissQuestion(store, "untouched");
+  expect(store.getState().drafts.get("untouched")?.status).toBe("dismissed");
+  saveQuestionDraft(store, "draft", draft);
+  dismissQuestion(store, "draft");
+  expect(store.getState().drafts.get("draft")).toEqual({ ...draft, status: "dismissed" });
+});
 
 test("bounds session drafts while retaining sending and recently edited questions", () => {
   const store = createQuestionDraftStore();
