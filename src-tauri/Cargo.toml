@@ -1,6 +1,6 @@
 [package]
 name = "codeagent"
-version = "0.1.7"
+version = "0.1.8"
 description = "CodeAgent desktop runtime"
 edition = "2024"
 rust-version = "1.97"

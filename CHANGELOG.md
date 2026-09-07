@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-09-07
+
+### Added
+
+- 添加扩展中心，统一管理 Skills、MCP、官方插件与第三方市场，并支持官方插件安装、卸载和会话内安装建议。
+- 添加可折叠任务搜索，优化项目侧栏布局与搜索焦点恢复。
+- 添加临时任务文件打开与文件引用绝对路径复制。
+
+### Fixed
+
+- 修复项目侧栏主操作顺序，使其与任务工作流一致。
+
 ## [0.1.7] - 2026-09-06
 
 ### Added
@@ -116,7 +128,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.4...v0.1.5

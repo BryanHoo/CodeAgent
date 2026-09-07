@@ -26,13 +26,14 @@ CodeAgent brings AI coding tasks, conversations, approvals, project files, and G
 
 - Run project or temporary tasks and follow responses, commands, plans, approvals, and file changes in real time
 - Keep follow-up work in a persistent task queue, then edit, reorder, or cancel messages before they run
-- Attach files and images, reference project files with `@`, and safely install or manage Skills from the Skills marketplace
-- Enable, disable, and hot-reload MCP services, and answer MCP input requests
+- Attach files and images, reference project files with `@`, open temporary-task files, and copy absolute file paths
+- Install and manage Skills, official plugins, and third-party markets in the extension center, including MCP service controls and hot reload
 - Answer asynchronous questions in a pinned panel and restore thread model and reasoning settings
 - Create scheduled tasks with one-time or recurring schedules, then review their run history
 - Automatically install and verify an app-private Codex runtime without requiring a global Codex setup
 - Choose the model, reasoning effort, Fast mode, approval behavior, and file access for each task
 - Manage multiple project roots, temporary tasks, and archived tasks, and fork new tasks from existing conversations
+- Filter tasks in the current project with collapsible search
 - Browse and manage project files, then review diffs, uncommitted changes, and commit history
 - Create or switch Git branches and worktrees, then select files to commit or push
 - Use Simplified Chinese or English, system notifications, tray controls, and workspace pets
