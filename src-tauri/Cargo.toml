@@ -25,6 +25,7 @@ futures-util = "0.3.32"
 flate2 = "1.1.9"
 ignore = "0.4"
 log = "0.4.34"
+portable-pty = "=0.9.0"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "stream"] }
 rrule = "0.14.0"
 semver = "1.0.28"
@@ -52,6 +53,10 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 mac-notification-sys = "=0.6.15"
 macos-panel-activation = { path = "native/macos-panel-activation", version = "=0.1.0" }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "c9ec2130422200f0863b23dfdad02b133a529b07", version = "=2.1.0" }
+
+[target.'cfg(unix)'.dependencies]
+filedescriptor = "=0.8.3"
+nix = { version = "=0.28.0", features = ["signal", "process"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 desktop-pet-platform = { path = "native/desktop-pet-platform", version = "=0.1.0" }

@@ -4,6 +4,13 @@
 identifier = "main-window-commands"
 description = "Allows the main window to call the application commands used by the workbench."
 permissions = [
+  "allow-connect-project-terminals",
+  "allow-create-project-terminal",
+  "allow-write-project-terminal",
+  "allow-resize-project-terminal",
+  "allow-ack-project-terminal",
+  "allow-close-project-terminal",
+  "allow-remove-project-terminal",
   "allow-initialize-app-storage",
   "allow-update-app-preferences",
   "allow-list-custom-backgrounds",

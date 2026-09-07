@@ -43,6 +43,11 @@ pub mod task_subscription_commands;
 #[cfg(test)]
 mod task_subscription_tests;
 mod task_workspace;
+pub mod terminal_commands;
+pub(crate) mod terminal_lifecycle;
+#[cfg(feature = "webview-tests")]
+pub mod terminal_probe;
+mod terminal_project;
 pub mod tray_commands;
 #[cfg(test)]
 mod tray_commands_tests;

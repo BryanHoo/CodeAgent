@@ -7,6 +7,8 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error(transparent)]
+    Terminal(#[from] crate::domain::project_terminal::TerminalError),
     #[error("failed to start Codex runtime")]
     CodexRuntimeStartFailed,
     #[error("failed to install Codex runtime")]
@@ -68,6 +70,7 @@ impl Serialize for AppError {
             return payload.end();
         }
         let structured_error = match self {
+            Self::Terminal(error) => Some((error.code(), error.to_string())),
             Self::CodexThreadBusy => Some(("CODEX_THREAD_BUSY", self.to_string())),
             Self::RequestCancelled => Some(("REQUEST_CANCELLED", self.to_string())),
             Self::ScheduledTaskInvalid => Some(("SCHEDULED_TASK_INVALID", self.to_string())),
@@ -113,6 +116,15 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn terminal_errors_preserve_stable_native_codes() {
+        let error = AppError::from(crate::domain::project_terminal::TerminalError::ScopeMismatch);
+        assert_eq!(
+            serde_json::to_value(error).unwrap()["code"],
+            "TERMINAL_SCOPE_MISMATCH"
+        );
+    }
 
     #[test]
     fn workspace_error_should_preserve_code_and_message() {

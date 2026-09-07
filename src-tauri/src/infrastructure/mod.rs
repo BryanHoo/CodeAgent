@@ -29,3 +29,4 @@ mod provider_models_tests;
 #[cfg(test)]
 #[path = "scheduled_tasks_tests.rs"]
 mod scheduled_tasks_tests;
+pub mod terminal;

@@ -106,15 +106,43 @@ pub fn run() {
         .manage(NotificationRuntime::default())
         .manage(ScheduledTaskRuntime::default())
         .manage(MainWindowLifecycle::default())
+        .manage(application::terminal_lifecycle::TerminalLifecycle::default())
         .setup(|app| {
             diagnostics::initialize(app.handle())?;
             setup_tray(app.handle())?;
+            if let Some(window) = app.get_webview_window("main") {
+                application::terminal_lifecycle::bind_window(app.handle(), &window);
+            }
             app.state::<ScheduledTaskRuntime>()
                 .start(app.handle().clone());
             Ok(())
         })
         .on_window_event(handle_window_event)
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                let manager = webview.state::<AppState>().terminals.clone();
+                let generation = manager.generation();
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Err(error) = manager.close_generation(&generation) {
+                        diagnostics::record_error("terminal_reload_cleanup_failed", error);
+                    }
+                });
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            #[cfg(feature = "webview-tests")]
+            application::terminal_probe::probe_terminal_protocol,
+            #[cfg(feature = "webview-tests")]
+            application::terminal_probe::inspect_project_terminal_test,
+            application::terminal_commands::connect_project_terminals,
+            application::terminal_commands::create_project_terminal,
+            application::terminal_commands::write_project_terminal,
+            application::terminal_commands::resize_project_terminal,
+            application::terminal_commands::ack_project_terminal,
+            application::terminal_commands::close_project_terminal,
+            application::terminal_commands::remove_project_terminal,
             initialize_app_storage,
             update_app_preferences,
             list_custom_backgrounds,
@@ -252,6 +280,6 @@ pub fn run() {
         if matches!(event, tauri::RunEvent::Exit) {
             diagnostics::mark_clean_shutdown(app);
         }
-        handle_run_event(event);
+        handle_run_event(app, event);
     });
 }

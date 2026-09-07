@@ -11,6 +11,11 @@
           "description": "Test-only WebdriverIO access for native WebView tests",
           "windows": ["main", "desktop-pet"],
           "permissions": ["wdio:default", "wdio-webdriver:default"]
+        },
+        {
+          "identifier": "terminal-protocol-tests",
+          "windows": ["main"],
+          "permissions": ["allow-probe-terminal-protocol", "allow-inspect-project-terminal-test"]
         }
       ]
     }

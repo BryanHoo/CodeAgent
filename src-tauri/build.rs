@@ -20,6 +20,15 @@ fn main() {
 
     // 所有应用命令先进入 ACL 清单；窗口仍需在 capability 中显式授权。
     let app_manifest = tauri_build::AppManifest::new().commands(&[
+        "probe_terminal_protocol",
+        "inspect_project_terminal_test",
+        "connect_project_terminals",
+        "create_project_terminal",
+        "write_project_terminal",
+        "resize_project_terminal",
+        "ack_project_terminal",
+        "close_project_terminal",
+        "remove_project_terminal",
         "initialize_app_storage",
         "update_app_preferences",
         "list_custom_backgrounds",

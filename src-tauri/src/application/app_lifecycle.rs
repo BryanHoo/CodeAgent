@@ -113,8 +113,15 @@ pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
         return;
     };
 
-    // 先隐藏以即时响应关闭操作，延迟到期后只销毁主 WebView。
     api.prevent_close();
+    if super::terminal_lifecycle::request_close(window) {
+        return;
+    }
+    hide_main_window(window);
+}
+
+pub(super) fn hide_main_window(window: &Window) {
+    // 本地终端确认和清理完成后，再进入原有隐藏及延迟销毁流程。
     let _ = window.hide();
     #[cfg(target_os = "macos")]
     let _ = window.app_handle().set_dock_visibility(false);
@@ -136,12 +143,16 @@ pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
     });
 }
 
-pub(crate) fn handle_run_event(event: RunEvent) {
+pub(crate) fn handle_run_event(app: &AppHandle, event: RunEvent) {
     let RunEvent::ExitRequested { code, api, .. } = event else {
         return;
     };
     // 销毁最后一个隐藏窗口只释放 WebView 资源，后台运行时和托盘必须继续存活。
     if should_keep_background_runtime_alive(code) {
+        api.prevent_exit();
+    } else if let Some(code) = code
+        && super::terminal_lifecycle::request_exit(app, code)
+    {
         api.prevent_exit();
     }
 }
@@ -234,6 +245,7 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
+    super::terminal_lifecycle::resume_owner(app);
 
     let active_route =
         requested_route.or_else(|| window.url().ok().map(|url| app_route_from_url(&url)));
@@ -257,7 +269,9 @@ fn create_main_window(app: &AppHandle, route: Option<String>) -> tauri::Result<W
     if let Some(route) = route {
         config.url = WebviewUrl::App(route.into());
     }
-    WebviewWindowBuilder::from_config(app, &config)?.build()
+    let window = WebviewWindowBuilder::from_config(app, &config)?.build()?;
+    super::terminal_lifecycle::bind_window(app, &window);
+    Ok(window)
 }
 
 fn destroy_main_window_if_current(app: &AppHandle, generation: u64) {

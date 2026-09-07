@@ -8,4 +8,8 @@ publish = false
 windows = { version = "0.61.3", features = [
   "Win32_System_Environment",
   "Win32_System_LibraryLoader",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
 ] }

@@ -1,4 +1,9 @@
 #[cfg(windows)]
+mod terminal_job;
+#[cfg(windows)]
+pub use terminal_job::TerminalJob;
+
+#[cfg(windows)]
 mod platform {
     use std::{
         ffi::{OsStr, OsString},

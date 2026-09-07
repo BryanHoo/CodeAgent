@@ -11,7 +11,6 @@ import {
 import { ArrowDown, ArrowUp, Folder, LoaderCircle, Pencil, Save, SendHorizontal, X } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Context, ContextTrigger } from "../../../shared/components/agent/context.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -32,7 +31,7 @@ import {
   resolveComposerPlaceholder,
 } from "../composer-state.js";
 import { movePromptCommandSelection } from "./prompt-command.js";
-import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
+import { WorkbenchComposerFooter } from "./workbench-composer-footer.js";
 import { ComposerModelSelector } from "./composer-model-selector.js";
 import { ComposerApprovalControls } from "./workbench-composer-approval-controls.js";
 import { shouldNavigatePromptHistory } from "./prompt-history.js";
@@ -41,7 +40,7 @@ import { ProjectRootSelector } from "./project-root-selector.js";
 import { selectionOffset } from "./prompt-skill-editor-dom.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
-import { ComposerDraftSaveButton, ProjectDraftList } from "./project-draft-controls.js";
+import { ComposerDraftSaveButton } from "./project-draft-controls.js";
 import {
   ComposerAttachments,
   ComposerFastModeButton,
@@ -443,54 +442,10 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           {t("composer.modelListFailed")}
         </p>
       )}
-      {props.footerVisible ? (
-        <div className="mx-auto mt-1.5 flex h-9 w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
-        {props.projectToolsEnabled ? (
-          <>
-            <div className="flex min-w-0 shrink items-center gap-0.5">
-              <ComposerBranchSwitcher
-                creatingBranch={props.creatingBranch}
-                creatingWorktree={props.creatingWorktree}
-                gitStatus={props.gitStatus}
-                onBranchChange={props.onBranchChange}
-                onBranchCreate={props.onBranchCreate}
-                onWorktreeChange={props.onWorktreeChange}
-                onWorktreeCreate={props.onWorktreeCreate}
-                switchingBranch={props.switchingBranch}
-                switchingWorktree={props.switchingWorktree}
-                worktrees={props.worktrees}
-              />
-            </div>
-            {/* 主目录选择与路径保持同一操作区，切换后所有项目视图共享该 rootId。 */}
-            <ComposerProjectRootControls
-              onOpen={props.onOpenProjectPath}
-              onRootChange={props.onProjectRootChange}
-              projectPath={props.projectPath}
-              projectPathOpenDisabled={props.projectPathOpenDisabled}
-              roots={props.projectRoots}
-              selectedRootId={props.selectedProjectRootId}
-            />
-          </>
-        ) : null}
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          {props.captureMode ? null : (
-            <ProjectDraftList
-              composerHasInput={props.hasComposerInput}
-              drafts={props.projectDrafts}
-              onDelete={props.onProjectDraftDelete}
-              onRestore={props.onProjectDraftRestore}
-              projectName={props.projectName}
-            />
-          )}
-          <Context
-            maxTokens={props.contextUsage?.contextWindow}
-            usedTokens={props.contextUsage?.usedTokens}
-          >
-            <ContextTrigger />
-          </Context>
-        </div>
-        </div>
-      ) : null}
+      <WorkbenchComposerFooter props={props} rootControls={<ComposerProjectRootControls
+        onOpen={props.onOpenProjectPath} onRootChange={props.onProjectRootChange} projectPath={props.projectPath}
+        projectPathOpenDisabled={props.projectPathOpenDisabled} roots={props.projectRoots} selectedRootId={props.selectedProjectRootId}
+      />} />
     </section>
   );
 }

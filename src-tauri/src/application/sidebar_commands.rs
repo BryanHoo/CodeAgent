@@ -67,6 +67,14 @@ pub async fn remove_project(
     let response = codex::remove_project(&connection, project_id.clone())
         .await
         .map_err(AppError::from)?;
+    // 项目删除已成功，必须先使终端失效并回收；后续 settings 失败不能留下运行中的 PTY。
+    state.terminals.invalidate_project(&project_id);
+    let terminals = state.terminals.clone();
+    let terminal_project = project_id.clone();
+    tauri::async_runtime::spawn_blocking(move || terminals.close_project(&terminal_project))
+        .await
+        .map_err(|_| crate::domain::project_terminal::TerminalError::CleanupFailed)??;
+    super::terminal_project::remove_preferences(&app, &project_id).await?;
     delete_project_task_settings(&app_data_dir(&app)?, &project_id)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)?;

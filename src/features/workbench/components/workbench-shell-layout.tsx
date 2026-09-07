@@ -1,4 +1,5 @@
 import { PanelLeft, Pencil } from "lucide-react";
+import { TerminalWorkbench } from "../../terminal/components/terminal-workbench.js";
 import { lazy, Suspense, useRef, type CSSProperties } from "react";
 import { Button } from "../../../shared/components/core/button.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
@@ -163,7 +164,7 @@ export function WorkbenchShellLayout({
         shellRef={workbenchShellRef}
         width={sidebarWidth}
       />
-      <main aria-label={t("shell.timeline")} className="flex min-h-0 min-w-0 flex-col bg-content">
+      <TerminalWorkbench label={t("shell.timeline")} enabled={!utilityView && !temporary && projectRoots.length > 0} projectId={projectId} rootId={selectedRootId}>
         <header className="flex h-workbench-header shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <Tooltip key={sidebarOpen ? "sidebar-open" : "sidebar-closed"}>
@@ -359,7 +360,7 @@ export function WorkbenchShellLayout({
             onReviewFileChanges={openFileReview}
           />
         )}
-      </main>
+      </TerminalWorkbench>
       {inspectorVisible ? (
         <Button
           variant="ghost"

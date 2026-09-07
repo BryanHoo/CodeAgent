@@ -55,6 +55,7 @@ const EVENT_QUEUE_CAPACITY: usize = 256;
 
 #[derive(Default)]
 pub struct AppState {
+    pub terminals: crate::infrastructure::terminal::TerminalManager,
     file_search: ProjectFileSearch,
     request_cancellations: RequestCancellationRegistry,
     runtime: Arc<Mutex<RuntimeSession>>,
