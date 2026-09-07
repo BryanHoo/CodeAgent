@@ -363,17 +363,17 @@ export function ProjectSidebar({
           <Send className={primaryActionIconClassName} aria-hidden="true" />
           {t("sidebar.newTask")}
         </Link>
-        <SidebarExtensionCenterLink
-          className={primaryActionClassName}
-          iconClassName={primaryActionIconClassName}
-          {...(projectId === undefined ? {} : { projectId })}
-        />
         <SidebarScheduledTasksLink
           className={primaryActionClassName}
           iconClassName={primaryActionIconClassName}
           {...(projectId === undefined ? {} : { projectId })}
         />
         <SidebarTaskBoardLink
+          className={primaryActionClassName}
+          iconClassName={primaryActionIconClassName}
+          {...(projectId === undefined ? {} : { projectId })}
+        />
+        <SidebarExtensionCenterLink
           className={primaryActionClassName}
           iconClassName={primaryActionIconClassName}
           {...(projectId === undefined ? {} : { projectId })}
