@@ -9,11 +9,11 @@ import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 import {
   clearTaskAttention,
   getTaskActivity,
-  recordNativeTaskActivity,
   recordRunningTaskActivity,
   recordTaskActivitySnapshot,
   reduceTaskActivityEvent,
   removeTaskActivity,
+  restoreNativeTaskActivity,
   type TaskActivityMap,
 } from "./task-activity.js";
 import type { TaskStore } from "./task-store.js";
@@ -172,23 +172,27 @@ export class ProjectRuntimeManager {
 
   public async restoreTaskActivities(tasks: readonly TaskActivitySnapshot[]): Promise<void> {
     let nextActivity = this.#taskActivity;
+    const restoredActiveTasks: TaskActivitySnapshot[] = [];
     for (const task of tasks) {
+      const restored = restoreNativeTaskActivity(nextActivity, task);
+      if (restored === nextActivity) continue;
       this.#rememberTaskTitle({ id: task.taskId, projectId: task.projectId, title: task.taskName });
-      nextActivity = recordNativeTaskActivity(nextActivity, task);
+      if (task.status === "running" || task.status === "waiting") {
+        restoredActiveTasks.push(task);
+      }
+      nextActivity = restored;
     }
     this.#updateTaskActivity(nextActivity);
 
-    // 每个 Task 都需经 readTask 登记归属；同 Project 的 Snapshot 仍只会复用一条事件连接。
+    // 仅校准本次新增的活动 Task，已有实时状态比启动恢复快照更新。
     await Promise.all(
-      tasks
-        .filter(({ status }) => status === "running" || status === "waiting")
-        .map(async ({ projectId, taskId }) => {
-          try {
-            this.observeSnapshot(await this.client.readTask(projectId, taskId));
-          } catch (error) {
-            recordInternalWarning("task_activity_restore_failed", error, { projectId, taskId });
-          }
-        }),
+      restoredActiveTasks.map(async ({ projectId, taskId }) => {
+        try {
+          this.observeSnapshot(await this.client.readTask(projectId, taskId));
+        } catch (error) {
+          recordInternalWarning("task_activity_restore_failed", error, { projectId, taskId });
+        }
+      }),
     );
   }
 

@@ -115,6 +115,61 @@ describe("ProjectRuntimeManager task activity restoration", () => {
     runtime.dispose();
   });
 
+  it("does not let stale startup activity overwrite an unviewed completion event", async () => {
+    let onEvent: SubscribeAgentEventsOptions["onEvent"] = () => undefined;
+    const readTask = vi.fn(async (projectId: string, taskId: string) =>
+      createSnapshot(projectId, taskId),
+    );
+    const client = {
+      readTask,
+      subscribeEvents: vi.fn((options: SubscribeAgentEventsOptions) => {
+        onEvent = options.onEvent;
+        return () => undefined;
+      }),
+    } as unknown as NativeRuntimeClient;
+    const runtime = createProjectRuntimeManager(client);
+    runtime.observeSnapshot(createSnapshot("project-1", "task-1"));
+    onEvent({
+      payload: {
+        turn: {
+          completedAt: "2026-09-02T08:01:00.000Z",
+          error: null,
+          id: "turn-1",
+          items: [],
+          startedAt: "2026-09-02T08:00:00.000Z",
+          status: "completed",
+        },
+      },
+      provider: "codex",
+      sequence: 5,
+      sessionId: "session-1",
+      taskId: "task-1",
+      timestamp: "2026-09-02T08:01:00.000Z",
+      turnId: "turn-1",
+      type: "turn.completed",
+      version: 2,
+    });
+
+    await runtime.restoreTaskActivities([
+      {
+        projectId: "project-1",
+        requiresApproval: false,
+        startedAt: "2026-09-02T08:00:00.000Z",
+        status: "running",
+        taskId: "task-1",
+        taskName: "任务一",
+      },
+    ]);
+
+    expect(runtime.getTaskActivity().values().next().value).toMatchObject({
+      attention: "completed",
+      isRunning: false,
+      taskName: "task-1",
+    });
+    expect(readTask).not.toHaveBeenCalled();
+    runtime.dispose();
+  });
+
   it("reports task recency as soon as a turn starts", () => {
     let onEvent: SubscribeAgentEventsOptions["onEvent"] = () => undefined;
     const onTaskMetadataChanged = vi.fn();

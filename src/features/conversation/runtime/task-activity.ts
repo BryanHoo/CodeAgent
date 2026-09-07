@@ -139,6 +139,16 @@ export function recordNativeTaskActivity(
   });
 }
 
+export function restoreNativeTaskActivity(
+  activity: TaskActivityMap,
+  snapshot: TaskActivitySnapshot,
+): TaskActivityMap {
+  // 恢复请求发出后可能已收到实时事件；内存记录存在时必须保留更新的事件状态。
+  return activity.has(createTaskActivityKey(snapshot.projectId, snapshot.taskId))
+    ? activity
+    : recordNativeTaskActivity(activity, snapshot);
+}
+
 export function getTaskActivity(
   activity: TaskActivityMap,
   projectId: string,
