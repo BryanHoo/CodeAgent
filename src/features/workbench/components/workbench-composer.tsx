@@ -125,6 +125,7 @@ export function WorkbenchComposer({
     handleAttachmentsChange,
     handlePromptChange,
     isSubmitting,
+    isCurrentSubmissionTarget,
     menuItemCount,
     navigatePromptHistory,
     pendingTask,
@@ -221,11 +222,10 @@ export function WorkbenchComposer({
     editingQueuedSubmission: composerQueue.editingId !== undefined,
     followUpBehavior,
     fastMode: fastModeEnabled,
+    isCurrentSubmissionTarget,
     onDirectSubmission,
     onCaptureSubmission,
-    onGoalStarted: () => {
-      setComposerModeState(undefined);
-    },
+    onGoalStarted: () => setComposerModeState(undefined),
     onSteerAccepted: composerQueue.onSteerAccepted,
     onTaskCreated,
     onTaskStarted,

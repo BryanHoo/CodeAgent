@@ -25,6 +25,7 @@ import {
   resolveThreadComposerSettings,
 } from "../composer-state.js";
 import { useWorkbenchComposerController } from "../hooks/use-workbench-composer-controller.js";
+import { useCurrentSubmissionTarget } from "../hooks/use-current-submission-target.js";
 import { useProjectFileSearch } from "../hooks/use-project-file-search.js";
 import {
   filterPromptCommandItems,
@@ -162,6 +163,7 @@ export function useComposerSession({
       ? submittedTurnId
       : undefined);
   const activeTaskId = taskId ?? pendingTask?.id;
+  const isCurrentSubmissionTarget = useCurrentSubmissionTarget({ projectId, taskId: activeTaskId });
   const { canInterrupt, canSubmit, canSteer } = deriveComposerActions(
     capabilities,
     activeTaskId !== undefined,
@@ -458,6 +460,7 @@ export function useComposerSession({
     handleAttachmentsChange,
     handlePromptChange,
     isSubmitting,
+    isCurrentSubmissionTarget,
     menuItemCount,
     mutationError,
     navigatePromptHistory,

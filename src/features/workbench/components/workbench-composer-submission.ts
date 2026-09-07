@@ -47,6 +47,7 @@ type ComposerSubmissionOptions = Readonly<{
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   editingQueuedSubmission: boolean;
   fastMode: boolean;
+  isCurrentSubmissionTarget: (projectId: string, taskId: string) => boolean;
   onDirectSubmission: WorkbenchComposerProps["onDirectSubmission"];
   onCaptureSubmission: WorkbenchComposerProps["onCaptureSubmission"];
   onTaskCreated: WorkbenchComposerProps["onTaskCreated"];
@@ -117,6 +118,7 @@ export function createComposerSubmission({
   followUpBehavior,
   editingQueuedSubmission,
   fastMode,
+  isCurrentSubmissionTarget,
   onDirectSubmission,
   onCaptureSubmission,
   onTaskCreated,
@@ -347,7 +349,9 @@ export function createComposerSubmission({
           input,
           steerAttempt.key,
         );
-        if (isCurrentScope(requestScope)) {
+        const isCurrentScopeAfterSteer = isCurrentScope(requestScope);
+        const isCurrentTargetAfterSteer = isCurrentSubmissionTarget(projectId, activeTaskId);
+        if (isCurrentScopeAfterSteer) {
           onSteerAccepted({
             files: message.files,
             ...(options.queuedPromptId === undefined ? {} : { id: options.queuedPromptId }),
@@ -356,9 +360,12 @@ export function createComposerSubmission({
             turnId: activeTurnId,
             userMessageIds: activeUserMessageIds,
           });
-          if (options.clearInputOnSuccess !== false) {
-            clearComposerInput();
-          }
+        }
+        // pendingTask 切换为真实 taskId 会改变 routeScope，但仍应清空同一 Task 的已发送输入。
+        if (isCurrentTargetAfterSteer && options.clearInputOnSuccess !== false) {
+          clearComposerInput();
+        }
+        if (isCurrentScopeAfterSteer) {
           steerTurnAttempt.current = undefined;
           uploadedAttachments.current.clear();
           uploadAttempts.current.clear();

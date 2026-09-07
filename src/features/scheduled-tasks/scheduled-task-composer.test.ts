@@ -52,6 +52,7 @@ describe("scheduled task composer capture", () => {
       editingQueuedSubmission: false,
       fastMode: true,
       followUpBehavior: "queue",
+      isCurrentSubmissionTarget: () => true,
       onCaptureSubmission: capture,
       onDirectSubmission: vi.fn(),
       onGoalStarted: vi.fn(),
