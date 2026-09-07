@@ -11,6 +11,7 @@ use tokio::sync::watch;
 
 type ExitResult = Result<u32, TerminalError>;
 pub(super) struct ChildExit {
+    #[cfg(any(unix, feature = "webview-tests"))]
     pub pid: u32,
     #[cfg(windows)]
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
@@ -21,6 +22,7 @@ pub(super) struct ChildExit {
 
 impl ChildExit {
     pub fn start(mut child: Box<dyn Child + Send + Sync>) -> Result<Self, TerminalError> {
+        #[cfg(any(unix, feature = "webview-tests"))]
         let pid = child.process_id().ok_or(TerminalError::SpawnFailed)?;
         let killer = child.clone_killer();
         let completion = Arc::new((Mutex::new(None), Condvar::new()));
@@ -46,6 +48,7 @@ impl ChildExit {
                 TerminalError::SpawnFailed
             })?;
         Ok(Self {
+            #[cfg(any(unix, feature = "webview-tests"))]
             pid,
             #[cfg(windows)]
             killer: Mutex::new(killer),

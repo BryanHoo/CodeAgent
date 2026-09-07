@@ -2,6 +2,8 @@
 
 本文供开发者复测项目终端，记录实际测量及其边界，不代表发布就绪或跨平台验收完成。测量日期：2026-09-07。
 
+2026-09-08 的 Windows Release 全量复测、修复和性能边界见 [Windows 终端验证记录](./windows-terminal-verification.md)。下文 macOS 历史测量保持原始口径，`artifacts/terminal/release-render-latency.json` 与原生截图可能已由最近一次 Windows 复测更新。
+
 ## 环境与测量口径
 
 | 项目 | 本次环境 |
@@ -40,7 +42,7 @@ pnpm exec cross-env CODEAGENT_WEBVIEW_RELEASE=1 wdio run wdio.conf.ts --spec tes
 - `release-render-latency.json`：200 次 UI 输入和 200 次标签切换的原始毫秒样本。
 - `release-system-key-latency.json`：200 次可信系统按键样本及输入到输出、输出到绘制的分段耗时。
 - `release-render-latency-raf.json`、`release-system-key-latency-raf.json`：保留修正观测时刻前、包含额外 rAF 等待的历史数据，不能与事件时间戳口径直接混用。
-- `native-terminal.png`：真实可见 WKWebView 截图，已检查终端、Composer 和底栏布局。
+- `native-terminal.png`：最近一次真实可见 WebView 截图（当前为 Windows WebView2），已检查终端、Composer 和底栏布局。
 - `native-terminal-failure.png`：历史失败诊断，不是通过证据。
 
 这些测试由 runner 管理应用生命周期，不需要留下开发服务器。复测会覆盖同名测量文件；比较不同版本前应保留相应样本。
@@ -100,17 +102,17 @@ Release WKWebView 已验证：首次点击才创建真实 PTY、UI 粘贴可执�
 
 `pnpm check:web` 最终复核通过：262 项单元测试、28 项约束测试、2 项预算测试、类型检查、lint 和生产构建预算。初始依赖 419267 B，工作台依赖闭包 1449884 B，最大异步块 501239 B；未放宽预算。
 
-`pnpm check:rust` 通过：格式检查、all-targets/all-features clippy、321 项库测试（另 6 项忽略）、3 项协议集成测试、3 项真实 PTY 测试与 3 项显式性能基线测试。
+`pnpm check:rust` 在最新 `main` 上通过：格式检查、all-targets/all-features clippy、292 项库测试（另 5 项按设计忽略）、3 项协议集成测试、2 项 Windows 真实 PTY 测试与 2 项显式性能基线测试。
 
 `pnpm test:browser` 最终复核通过：52 个测试文件、174 项测试，覆盖 Chromium/WebKit、四种桌面尺寸、StrictMode、快捷键、隐藏解析、WebGL fallback 与底栏分支/工作树懒加载回归。Release 工作台原有 7 项原生关键流程、终端 7 项原生 UI 测试、真实二进制协议探针均通过。关闭提示父窗口修复后，Rust 格式检查与 all-targets/all-features clippy 通过，并新增父窗口约束测试。
 
 ## 未验证项与限制
 
-- Windows WebView2、Linux WebKitGTK 未实机验证。Windows 启动到 Job Object 归属之间的竞态和 ConPTY 阻塞 I/O 取消仍是未解决项，不宣称 Windows 已就绪。
+- Windows 11 26100 / WebView2 152 Debug 实机已覆盖 PowerShell 与 `cmd.exe` 的 ConPTY 输入、回显和退出、原生二进制 Channel、97×31 resize、xterm 输入回显、隐藏恢复、退出码 7、移除标签及可见布局。Windows Release CPU/RSS、可信物理键盘和原生关闭提示未验证；启动到 Job Object 归属之间的竞态和 ConPTY 阻塞 I/O 取消仍是未解决项，不能据此宣称 Windows Release 已就绪。Linux WebKitGTK 仍未实机验证。
 - 原生关闭提示确认/取消已验证；意外窗口销毁和重建仍缺完整实机交互证据。
 - 最终 200 次 onRender 事件时间戳观测达到 30/50ms 目标，但不是 GPU 完成或显示器实际呈现时间；无驱动对照尚未完成，历史 rAF 观测失败样本仍保留。
 - 未覆盖完整的多会话同时高流量、输出中断 P95、压测期间 Composer 响应、实际 1 MiB 粘贴端到端、vim/top 与极端组合字符矩阵。
 - xterm scrollback 行数和传输字节预算不等同于整个终端的严格 RSS 上限；极端 Unicode 组合字符仍需要单独验证。
 - Unix 受管进程组之外自行 daemonize/脱离会话的进程不承诺通用追踪。
 
-综上：macOS 主要交互及部分资源预算已有真实证据，完整计划验收尚未完成，不能标记发布就绪。
+综上：macOS 主要交互及部分资源预算已有真实证据，Windows Debug 核心终端流程已有真实 WebView2/ConPTY 证据；完整跨平台与 Release 性能验收尚未完成，不能标记发布就绪。

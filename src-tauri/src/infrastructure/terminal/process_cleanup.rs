@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use crate::domain::project_terminal::TerminalError;
 
 #[cfg(unix)]

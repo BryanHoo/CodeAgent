@@ -132,7 +132,7 @@ impl Transport {
     pub fn final_offset(&self) -> u64 {
         self.flow.final_offset()
     }
-    #[cfg(any(test, feature = "webview-tests"))]
+    #[cfg(any(all(test, unix), feature = "webview-tests"))]
     pub fn outstanding_bytes(&self) -> u64 {
         self.flow.outstanding()
     }

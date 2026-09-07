@@ -20,7 +20,7 @@ mod shell;
 #[cfg(feature = "webview-tests")]
 mod test_metrics;
 mod transport;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod transport_tests;
 #[cfg(unix)]
 mod unix_io;
@@ -99,6 +99,33 @@ mod tests {
         let session = Session::spawn(command, 80, 24).unwrap();
         assert_eq!(session.wait_exit().await.unwrap(), 7);
         session.close().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn natural_windows_exit_can_be_cleaned_up_idempotently() {
+        use std::{io::Read, io::Write, sync::mpsc, time::Duration};
+        let mut command = portable_pty::CommandBuilder::new("cmd.exe");
+        command.args(["/D", "/Q", "/C", "exit 7"]);
+        let session = Session::spawn(command, 80, 24).unwrap();
+        let (mut reader, mut writer) = session.take_io().unwrap();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let reader_worker = std::thread::spawn(move || {
+            let mut bytes = [0; 64];
+            let count = reader.read(&mut bytes).unwrap();
+            sender.send(bytes[..count].to_vec()).unwrap();
+        });
+        let startup = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
+        assert!(startup.windows(4).any(|window| window == b"\x1b[6n"));
+        writer.write_all(b"\x1b[1;1R").unwrap();
+        writer.flush().unwrap();
+        reader_worker.join().unwrap();
+        assert_eq!(session.wait_exit().await.unwrap(), 7);
+        drop(writer);
+        session.close().unwrap();
+        session.close().unwrap();
+        assert!(session.is_finished());
+        assert_eq!(session.exit_code(), Some(7));
     }
 
     #[cfg(unix)]

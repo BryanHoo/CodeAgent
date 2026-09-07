@@ -199,7 +199,7 @@ impl TerminalManager {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub fn session(&self, scope: &TerminalScope) -> Result<Arc<Session>, TerminalError> {
         let registry = self.lock();
         if registry.generation != scope.generation {
@@ -245,7 +245,7 @@ impl Reservation {
         Ok(())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub fn commit(
         self,
         session: Arc<Session>,

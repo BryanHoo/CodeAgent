@@ -2,7 +2,7 @@ use crate::domain::project_terminal::encode_frame;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::{
     io::{Read, Write},
-    sync::mpsc,
+    sync::{Arc, Mutex, mpsc},
     time::Duration,
 };
 use tauri::ipc::{Channel, Response};
@@ -71,59 +71,160 @@ fn probe(output: Channel<Response>) -> Result<(u16, u16), String> {
     #[cfg(windows)]
     let mut command = CommandBuilder::new("cmd.exe");
     #[cfg(windows)]
-    command.args(["/D", "/Q", "/C", "set /p probe=& echo CODEAGENT_PTY_OK"]);
+    command.args(["/D", "/Q"]);
     command.cwd(std::env::temp_dir());
     let mut child = pair
         .slave
         .spawn_command(command)
         .map_err(|e| e.to_string())?;
     drop(pair.slave);
-    let mut killer = child.clone_killer();
-    let (finished, wait) = mpsc::channel();
-    let watchdog = std::thread::spawn(move || {
-        if wait.recv_timeout(Duration::from_secs(3)).is_err() {
-            let _ = killer.kill();
+    let setup = (|| {
+        let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+        let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+        let size = pair.master.get_size().map_err(|e| e.to_string())?;
+        Ok::<_, String>((writer, reader, size))
+    })();
+    let (writer, mut reader, size) = match setup {
+        Ok(setup) => setup,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
         }
+    };
+    let mut killer = child.clone_killer();
+    let (child_sender, child_receiver) = mpsc::sync_channel(1);
+    let child_worker = std::thread::spawn(move || {
+        let _ = child_sender.send(child.wait().map_err(|error| error.to_string()));
     });
-    let result = (|| {
-        let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let writer = Arc::new(Mutex::new(writer));
+    #[cfg(windows)]
+    let response_writer = writer.clone();
+    #[cfg(windows)]
+    let (startup_sender, startup_receiver) = mpsc::sync_channel(1);
+    let (reader_sender, reader_receiver) = mpsc::sync_channel(1);
+    let reader_worker = std::thread::spawn(move || {
+        let result = (|| {
+            let mut buffer = [0u8; 16384];
+            let marker = b"CODEAGENT_PTY_OK";
+            let mut marker_tail = Vec::with_capacity(marker.len() * 2);
+            #[cfg(windows)]
+            let mut dsr_tail = Vec::with_capacity(8);
+            #[cfg(windows)]
+            let mut startup_reported = false;
+            let mut sequence = 0;
+            let mut offset = 0;
+            loop {
+                let count = match reader.read(&mut buffer) {
+                    Ok(count) => count,
+                    #[cfg(unix)]
+                    Err(error) if error.raw_os_error() == Some(5) => 0,
+                    Err(error) => return Err(error.to_string()),
+                };
+                if count == 0 {
+                    break;
+                }
+                sequence += 1;
+                offset += count as u64;
+                let frame =
+                    encode_frame(sequence, offset, &buffer[..count]).map_err(|e| e.to_string())?;
+                output
+                    .send(Response::new(frame))
+                    .map_err(|e| e.to_string())?;
+                marker_tail.extend_from_slice(&buffer[..count]);
+                #[cfg(windows)]
+                {
+                    dsr_tail.extend_from_slice(&buffer[..count]);
+                    let responses = dsr_tail
+                        .windows(4)
+                        .filter(|window| *window == b"\x1b[6n")
+                        .count();
+                    if responses > 0 {
+                        let mut writer = response_writer
+                            .lock()
+                            .map_err(|_| "probe writer lock failed".to_owned())?;
+                        for _ in 0..responses {
+                            writer.write_all(b"\x1b[1;1R").map_err(|e| e.to_string())?;
+                        }
+                        writer.flush().map_err(|e| e.to_string())?;
+                        if !startup_reported {
+                            startup_sender
+                                .send(())
+                                .map_err(|_| "probe startup receiver closed".to_owned())?;
+                            startup_reported = true;
+                        }
+                    }
+                    if dsr_tail.len() >= 4 {
+                        dsr_tail.drain(..dsr_tail.len() - 3);
+                    }
+                }
+                if marker_tail
+                    .windows(marker.len())
+                    .any(|window| window == marker)
+                {
+                    return Ok(());
+                }
+                if marker_tail.len() >= marker.len() {
+                    marker_tail.drain(..marker_tail.len() - (marker.len() - 1));
+                }
+            }
+            Err("probe output ended before marker".to_owned())
+        })();
+        let _ = reader_sender.send(result);
+    });
+    #[cfg(windows)]
+    let startup_result = startup_receiver
+        .recv_timeout(Duration::from_secs(3))
+        .map_err(|_| "probe startup timed out".to_owned());
+    #[cfg(unix)]
+    let startup_result = Ok(());
+    let write_result = startup_result.and_then(|()| {
+        let mut writer = writer
+            .lock()
+            .map_err(|_| "probe writer lock failed".to_owned())?;
+        #[cfg(unix)]
         writer
             .write_all(b"CODEAGENT_PTY_OK\n")
             .map_err(|e| e.to_string())?;
-        let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-        let mut buffer = [0u8; 16384];
-        let mut sequence = 0;
-        let mut offset = 0;
-        loop {
-            let count = match reader.read(&mut buffer) {
-                Ok(count) => count,
-                #[cfg(unix)]
-                Err(error) if error.raw_os_error() == Some(5) => 0,
-                Err(error) => return Err(error.to_string()),
-            };
-            if count == 0 {
-                break;
-            }
-            sequence += 1;
-            offset += count as u64;
-            let frame =
-                encode_frame(sequence, offset, &buffer[..count]).map_err(|e| e.to_string())?;
-            output
-                .send(Response::new(frame))
-                .map_err(|e| e.to_string())?;
-        }
-        let status = child.wait().map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err("probe shell failed".into());
-        }
-        let size = pair.master.get_size().map_err(|e| e.to_string())?;
-        Ok((size.rows, size.cols))
-    })();
-    if result.is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
+        #[cfg(windows)]
+        writer
+            .write_all(b"echo CODEAGENT_PTY_OK\r\nexit\r\n")
+            .map_err(|e| e.to_string())?;
+        writer.flush().map_err(|e| e.to_string())
+    });
+    drop(writer);
+    let reader_result = match write_result {
+        Ok(()) => reader_receiver
+            .recv_timeout(Duration::from_secs(3))
+            .map_err(|_| "probe output timed out".to_owned())
+            .and_then(std::convert::identity),
+        Err(error) => Err(error),
+    };
+    if reader_result.is_err() {
+        let _ = killer.kill();
     }
-    let _ = finished.send(());
-    let _ = watchdog.join();
-    result
+    let mut child_result = child_receiver
+        .recv_timeout(Duration::from_secs(3))
+        .map_err(|_| "probe shell timed out".to_owned())
+        .and_then(std::convert::identity);
+    if child_result.is_err() {
+        let _ = killer.kill();
+    }
+    drop(pair.master);
+    if child_result.is_err()
+        && let Ok(result) = child_receiver.recv_timeout(Duration::from_secs(1))
+    {
+        child_result = result;
+    }
+    reader_worker
+        .join()
+        .map_err(|_| "probe reader failed".to_owned())?;
+    child_worker
+        .join()
+        .map_err(|_| "probe child worker failed".to_owned())?;
+    reader_result?;
+    if !child_result?.success() {
+        return Err("probe shell failed".into());
+    }
+    Ok((size.rows, size.cols))
 }

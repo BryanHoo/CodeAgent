@@ -10,14 +10,14 @@
 
 - 已接入 Rust PTY、二进制 Channel、解析后 ACK、有界输入/输出、项目隔离、主窗口生命周期，以及懒加载 xterm、项目面板、数量和快捷键。
 - `pnpm check:web` 最终复核通过：262 项单元测试、28 项约束、2 项性能检查及构建预算通过；首包 419267 B，工作台 1449884 B，最大异步块 501239 B，未放宽预算。
-- `pnpm check:rust` 最终复核通过：321 项库测试通过、6 项忽略；协议与真实 PTY 各 3 项通过，性能基线 3 项通过。100 次 PTY 创建/关闭的句柄检查改为独立测试子进程，避免并行测试干扰 FD 基线。
+- `pnpm check:rust` 在最新 `main` 上复核通过：292 项库测试通过、5 项按设计忽略；协议集成测试 3 项、Windows 真实 PTY 测试 2 项、性能基线 2 项通过。100 次 PTY 创建/关闭的句柄检查改为独立测试子进程，避免并行测试干扰 FD 基线。
 - `pnpm test:browser` 最终整套通过 52 个文件、174 项测试，包含面板 StrictMode/快捷键/四种桌面尺寸、真实 xterm 隐藏解析、WebGL fallback 和底栏分支/工作树懒加载回归。
 - Release WKWebView 605.1.15：真实 PTY UI 粘贴、隐藏恢复不重复创建、可见终端布局与截图、退出码 7 和移除已退出标签通过。直接启动的二进制须用精确路径匹配后激活前台；不是修改 `document.hidden`。
 - `artifacts/terminal/native-terminal.png` 已人工检查，终端、Composer、底栏无覆盖。用户授予辅助功能权限后，定向 `CGEvent.postToPid` 的真实系统按键输入已通过；嵌入式 WebDriver 的 textarea 模拟输入存在重复字符，不能代替系统按键验收。
 - Release CPU/RSS 专项 `pnpm performance:terminal` 通过：无终端 CPU 0.283%，12 空闲会话三轮 CPU 0.217%–0.450%，周期终端 IPC 为 0；12 会话约 94.63ms 回收且 native 配额归零。采样末尾窗口隐藏，且未包含 WebContent/GPU RSS，不能用其证明完整可见渲染占用。报告见 `docs/project-terminal-performance.md`，原始数据见 `artifacts/terminal/release-native-measurements.json`。
 - 已完成 200 次 UI 输入/标签切换和 200 次可信系统按键采样。历史 rAF 观测含额外一帧等待，已保存为 `*-raf.json`；通过 TDD 添加 onRender 事件时间戳后重新构建实测，UI 输入 P95 18ms、系统输入 P95 28ms、标签切换 P95 31ms，达到 30/50ms 目标。该口径不等同于显示器实际呈现时间，未下调预算。
 - 原生关闭提示未设置父窗口的问题已由真实测试发现并修复为 `.parent(window)`；实际取消/确认、提示期间拒绝新建、取消后恢复创建、确认后清空会话再隐藏均通过。当前 Release 终端 UI 7 项测试通过，无跳过；原有工作台关键流程 7 项、原生二进制协议探针 1 项通过。
-- Windows 启动到 Job Object 归属之间的竞态、ConPTY 阻塞 I/O 取消仍未解决；Windows/Linux 未实机验证。异常窗口销毁与重建、完整 Unicode 压力矩阵、完整 WebContent/GPU 内存归属仍未完成，因此 Task 2–7 保持 pending。
+- Windows 11 26100 / WebView2 152 Debug 实机验证已通过：PowerShell 与 `cmd.exe` 均可通过 ConPTY 输入、回显和退出；原生二进制 Channel 返回 `ArrayBuffer` 并确认 97×31 resize；xterm UI 的输入回显、隐藏恢复、退出码 7、移除标签及可见布局均通过。为适配 ConPTY 启动时的 DSR 查询，原生探针现在回送 CPR，并将输出读取与子进程等待解耦且全部设置超时边界。Windows Release CPU/RSS、可信物理键盘、原生关闭提示、启动到 Job Object 归属之间的竞态及 ConPTY 阻塞 I/O 取消仍未验证或未解决；Linux 仍未实机验证。异常窗口销毁与重建、完整 Unicode 压力矩阵、完整 WebContent/GPU 内存归属仍未完成，因此 Task 2–7 保持 pending。
 
 ## 1. 执行约定
 
@@ -224,6 +224,8 @@ type TerminalMetadata = TerminalScope & {
 - [x] **Task Status:** completed
 
 **实施证据（2026-09-07，macOS）：** 固定 `@xterm/xterm 6.0.0`、`@xterm/addon-fit 0.11.0`、`@xterm/addon-webgl 0.19.0`、`portable-pty 0.9.0`，均为 MIT。`pnpm exec vitest run src/protocol/project-terminal.test.ts` 15 项通过；`cargo test --manifest-path src-tauri/Cargo.toml --test project_terminal_protocol --locked` 3 项通过；`cargo test --manifest-path src-tauri/Cargo.toml --test project_terminal_pty --locked` 默认 shell、bash、zsh 共 3 项通过。`pnpm test:webview:build` 后执行 `pnpm exec wdio run wdio.conf.ts --spec tests/webview/terminal-protocol.spec.ts`，真实 WKWebView 605.1.15 确認 `ArrayBuffer`、PTY 输入输出和 97×31 resize；专用探针仅在测试 feature 中注册且仅 main 测试 capability 授权。`pnpm typecheck`、定向 oxlint、`pnpm supply-chain:policy:test` 通过。Windows/PowerShell 与 Linux 尚未执行，不构成跨平台验收。
+
+**Windows 补充证据（2026-09-07）：** 上述“Windows/PowerShell 尚未执行”仅描述当时的 macOS 验收轮次，现已被后续验证取代。Windows 11 / WebView2 152 Debug 实机确认 PowerShell、`cmd.exe`、二进制 Channel、PTY 输入输出和 97×31 resize；Linux 仍未执行，不构成跨平台验收。
 
 **依赖限制：** xterm 6.0.0 `BufferLine.addCodepointToCell` 对组合字符串直接追加，scrollback 不能形成严格 RSS 上界；Task 5/7 必须验证极端组合字符并记录处理策略。
 

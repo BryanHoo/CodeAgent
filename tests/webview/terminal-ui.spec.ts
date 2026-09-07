@@ -41,9 +41,9 @@ describe("project terminal native UI", () => {
     await passthroughNativeCommands(["connect_project_terminals", "create_project_terminal", "write_project_terminal", "resize_project_terminal", "ack_project_terminal", "close_project_terminal", "remove_project_terminal"]);
     await browser.execute(() => {
       const target = window as unknown as {
-        __terminalProof: { marker: boolean; keyboard: boolean; frames: number };
+        __terminalProof: { marker: boolean; keyboard: boolean; frames: number; windowsOutput: boolean; windowsInterrupt: boolean };
       };
-      target.__terminalProof = { marker: false, keyboard: false, frames: 0 };
+      target.__terminalProof = { marker: false, keyboard: false, frames: 0, windowsOutput: false, windowsInterrupt: false };
       const original = window.__CODEAGENT_WEBVIEW_TEST_INVOKE__!;
       let tail = "";
       window.__CODEAGENT_WEBVIEW_TEST_INVOKE__ = (command, args, options) => {
@@ -58,6 +58,8 @@ describe("project terminal native UI", () => {
               const text = tail + new TextDecoder().decode(new Uint8Array(message, 16));
               target.__terminalProof.marker ||= text.includes("NATIVE_PTY_READY");
               target.__terminalProof.keyboard ||= text.includes("NATIVE_KEYBOARD_READY");
+              target.__terminalProof.windowsOutput ||= text.includes("WINDOWS_OUTPUT_完成");
+              target.__terminalProof.windowsInterrupt ||= text.includes("WINDOWS_INTERRUPT_READY");
               tail = text.slice(-1024);
             }
             receive(message);
@@ -78,7 +80,7 @@ describe("project terminal native UI", () => {
     expect(await browser.execute(() => window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__?.calls.create_project_terminal?.length ?? 0)).toBe(0);
     await $("aria/终端 0").click();
     await $(".xterm-helper-textarea").waitForExist();
-    await enterCommand("printf 'NATIVE_%s\\n' 'PTY_READY'");
+    await enterCommand("echo NATIVE_PTY_READY");
     await browser.waitUntil(async () => browser.execute(() => (window as unknown as { __terminalProof: { marker: boolean } }).__terminalProof.marker));
     await $("aria/终端 1").waitForDisplayed();
     await $("aria/隐藏终端").click();
@@ -125,13 +127,15 @@ describe("project terminal native UI", () => {
     const switched = await measureTerminalLatency("switch");
     await mkdir("artifacts/terminal", { recursive: true });
     await writeFile("artifacts/terminal/release-render-latency.json", JSON.stringify({
-      measuredAt: new Date().toISOString(), build: "Release + webview-tests", webview: browser.capabilities.browserVersion,
+      measuredAt: new Date().toISOString(), platform: process.platform, build: "Release + webview-tests", webview: browser.capabilities.browserVersion,
       method: "Synthetic single-character UI paste -> real PTY echo -> timestamp captured inside xterm onRender; retained-tab click -> onRender timestamp. requestAnimationFrame only polls completion and is excluded from the duration. Not physical keyboard or display presentation timestamps; test-driver scheduling remains included.",
-      input: { ...input, summary: summarizeLatency(input.samplesMs), targetP95Ms: 30 },
+      input: { ...input, summary: summarizeLatency(input.samplesMs), inputToOutput: summarizeLatency(input.inputToOutputMs), outputToRender: summarizeLatency(input.outputToRenderMs), outputToParsed: summarizeLatency(input.outputToParsedMs), animationFrame: summarizeLatency(input.animationFrameMs), targetP95Ms: 30 },
       switched: { ...switched, summary: summarizeLatency(switched.samplesMs), targetP95Ms: 50 },
     }, null, 2));
     expect(switched.error).toBeUndefined();
     expect(input.samplesMs).toHaveLength(200);
+    expect(input.inputToOutputMs).toHaveLength(200);
+    expect(input.outputToRenderMs).toHaveLength(200);
     expect(switched.samplesMs).toHaveLength(200);
     expect([...input.samplesMs, ...switched.samplesMs].every((value) => Number.isFinite(value) && value >= 0)).toBe(true);
     expect(await browser.execute(() => window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__?.calls.create_project_terminal?.length)).toBe(2);
@@ -172,6 +176,18 @@ describe("project terminal native UI", () => {
     expect(result.inputToOutputMs).toHaveLength(200);
     expect(result.outputToRenderMs).toHaveLength(200);
     expect([...result.samplesMs, ...result.inputToOutputMs, ...result.outputToRenderMs].every((value) => Number.isFinite(value) && value >= 0)).toBe(true);
+  });
+
+  it("runs PowerShell output beyond the transport budget and accepts Ctrl+C", async function () {
+    if (process.platform !== "win32") { this.skip(); return; }
+    await enterCommand("1..8192 | ForEach-Object { 'terminal-output-' + $_ + ('x' * 128) }; Write-Output ('WINDOWS_OUTPUT_' + '完成')");
+    await browser.waitUntil(async () => browser.execute(() => (window as unknown as { __terminalProof: { windowsOutput: boolean } }).__terminalProof.windowsOutput), { timeout: 30000 });
+    await enterCommand("Start-Sleep -Seconds 30");
+    await browser.pause(300);
+    await browser.execute(() => document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, ctrlKey: true, bubbles: true, cancelable: true })));
+    await enterCommand("Write-Output ('WINDOWS_INTERRUPT_' + 'READY')");
+    await browser.waitUntil(async () => browser.execute(() => (window as unknown as { __terminalProof: { windowsInterrupt: boolean } }).__terminalProof.windowsInterrupt), { timeout: 5000 });
+    expect(await browser.execute(() => (window as unknown as { __terminalProof: { windowsOutput: boolean; windowsInterrupt: boolean } }).__terminalProof)).toEqual(expect.objectContaining({ windowsOutput: true, windowsInterrupt: true }));
   });
 
   it("retains the real exit code and removes the exited tab", async () => {

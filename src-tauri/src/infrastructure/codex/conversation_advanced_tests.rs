@@ -381,6 +381,10 @@ async fn temporary_task_should_start_without_project_context() {
     let (client_reader, client_writer) = split(client);
     let (server_reader, mut server_writer) = split(server);
     let connection = AppServerConnection::new(client_reader, client_writer);
+    let temporary_cwd = std::env::temp_dir()
+        .join("codeagent-temporary-workspaces")
+        .join("task-1");
+    let expected_cwd = temporary_cwd.to_str().unwrap().to_owned();
     let server_task = tokio::spawn(async move {
         let mut lines = BufReader::new(server_reader).lines();
         let request: Value =
@@ -392,10 +396,7 @@ async fn temporary_task_should_start_without_project_context() {
             true
         );
         assert!(request["params"]["projectId"].is_null());
-        assert_eq!(
-            request["params"]["cwd"],
-            "/app-data/temporary-workspaces/task-1"
-        );
+        assert_eq!(request["params"]["cwd"], expected_cwd);
         assert!(request["params"]["runtimeWorkspaceRoots"].is_null());
         server_writer
             .write_all(
@@ -412,8 +413,7 @@ async fn temporary_task_should_start_without_project_context() {
             .unwrap();
     });
 
-    let temporary_cwd = std::path::Path::new("/app-data/temporary-workspaces/task-1");
-    let response = start_task(&connection, "temporary".to_owned(), Some(temporary_cwd))
+    let response = start_task(&connection, "temporary".to_owned(), Some(&temporary_cwd))
         .await
         .expect("temporary task should start");
     assert_eq!(response.task.project_id, "temporary");

@@ -2,16 +2,29 @@ import { browser } from "@wdio/globals";
 import { postTerminalSystemText } from "./terminal-system-keyboard.js";
 
 type Metric = { renders: number; parsedBytes: number; renderedAt: number; parsedAt: number };
-type Measurement = { samplesMs: number[]; error?: string };
+type Measurement = { samplesMs: number[]; inputToOutputMs: number[]; outputToRenderMs: number[]; outputToParsedMs: number[]; animationFrameMs: number[]; error?: string };
 
 export async function measureTerminalLatency(mode: "input" | "switch"): Promise<Measurement> {
   return browser.executeAsync((kind, done: (value: Measurement) => void) => {
     const metrics = () => (window as unknown as { __CODEAGENT_TERMINAL_METRICS__: () => Metric[] }).__CODEAGENT_TERMINAL_METRICS__();
     const totals = () => metrics().reduce((total, value) => ({ renders: total.renders + value.renders, bytes: total.bytes + value.parsedBytes, renderedAt: Math.max(total.renderedAt, value.renderedAt), parsedAt: Math.max(total.parsedAt, value.parsedAt) }), { renders: 0, bytes: 0, renderedAt: 0, parsedAt: 0 });
     const samplesMs: number[] = [];
+    const inputToOutputMs: number[] = [];
+    const outputToRenderMs: number[] = [];
+    const outputToParsedMs: number[] = [];
+    const animationFrameMs: number[] = [];
+    const target = window as unknown as { __terminalSystemProbe?: { nativeOutput: () => void } };
+    const previousProbe = target.__terminalSystemProbe;
+    let outputAt: number | undefined;
+    if (kind === "input") target.__terminalSystemProbe = { nativeOutput: () => { outputAt ??= performance.now(); } };
+    const finish = (error?: string) => {
+      if (kind === "input") target.__terminalSystemProbe = previousProbe;
+      done({ samplesMs, inputToOutputMs, outputToRenderMs, outputToParsedMs, animationFrameMs, ...(error === undefined ? {} : { error }) });
+    };
     const next = () => {
-      if (document.hidden) { done({ samplesMs, error: "WEBVIEW_HIDDEN" }); return; }
+      if (document.hidden) { finish("WEBVIEW_HIDDEN"); return; }
       const before = totals();
+      outputAt = undefined;
       const started = performance.now();
       if (kind === "input") {
         const textarea = document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!;
@@ -21,16 +34,24 @@ export async function measureTerminalLatency(mode: "input" | "switch"): Promise<
       } else {
         const tabs = document.querySelectorAll<HTMLButtonElement>('[data-project-terminal] [role="tab"]');
         const target = [...tabs].find((tab) => tab.getAttribute("aria-selected") !== "true");
-        if (target === undefined) { done({ samplesMs, error: "SECOND_TERMINAL_REQUIRED" }); return; }
+        if (target === undefined) { finish("SECOND_TERMINAL_REQUIRED"); return; }
         target.click();
       }
       // rAF 仅轮询完成状态；耗时使用 onRender 内保存的时刻，不包含轮询延迟。
-      const inspect = () => {
-        if (performance.now() - started > 2000) { done({ samplesMs, error: "RENDER_TIMEOUT" }); return; }
+      let lastFrame: number | undefined;
+      const inspect = (frameTime: number) => {
+        if (lastFrame !== undefined && animationFrameMs.length < 200) animationFrameMs.push(frameTime - lastFrame);
+        lastFrame = frameTime;
+        if (performance.now() - started > 2000) { finish("RENDER_TIMEOUT"); return; }
         const current = totals();
         if (current.renders > before.renders && current.renderedAt >= current.parsedAt && (kind === "switch" || current.bytes > before.bytes)) {
           samplesMs.push(current.renderedAt - started);
-          if (samplesMs.length === 200) done({ samplesMs });
+          if (outputAt !== undefined) {
+            inputToOutputMs.push(outputAt - started);
+            outputToRenderMs.push(current.renderedAt - outputAt);
+            outputToParsedMs.push(current.parsedAt - outputAt);
+          }
+          if (samplesMs.length === 200) finish();
           else requestAnimationFrame(next);
         } else requestAnimationFrame(inspect);
       };

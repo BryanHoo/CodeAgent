@@ -54,6 +54,19 @@ export async function installWebviewMocks(): Promise<WebviewMocks> {
     if (!ready) throw new Error("WebView test bridge is unavailable");
   });
 
+  // Embedded runners reuse the application across spec files. Reload a started
+  // WebView so its stores and startup queries consume this spec's fresh fixtures.
+  if (await browser.execute(() => window.__CODEAGENT_WEBVIEW_TEST_READY__ === true)) {
+    await browser.refresh();
+    await waitForWebviewBridge(async () => {
+      const ready = await browser.execute(
+        () => window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__ !== undefined
+          && window.__CODEAGENT_WEBVIEW_TEST_READY__ !== true,
+      );
+      if (!ready) throw new Error("Fresh WebView test bridge is unavailable");
+    });
+  }
+
   await browser.execute(
     (fixtures) => {
       const bridge = window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__;

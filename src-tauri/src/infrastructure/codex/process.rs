@@ -122,6 +122,7 @@ impl Drop for CodexProcess {
     }
 }
 
+#[cfg(unix)]
 pub(super) fn executable_path(path: &Path) -> Option<PathBuf> {
     let canonical = path.canonicalize().ok()?;
     let metadata = canonical.metadata().ok()?;
