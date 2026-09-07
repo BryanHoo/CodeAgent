@@ -143,14 +143,13 @@ export function globalSettingsMutationOptions(client: NativeSettingsClient = nat
 }
 
 export function projectOpenCapabilitiesQueryOptions(
-  projectId: string,
   client: NativeProjectOpenClient = nativeClient,
   enabled = true,
 ) {
   return queryOptions({
     enabled,
-    queryFn: ({ signal }) => client.getProjectOpenCapabilities(projectId, { signal }),
-    queryKey: ["projects", projectId, "open-capabilities"] as const,
+    queryFn: ({ signal }) => client.getProjectOpenCapabilities({ signal }),
+    queryKey: ["project-open-capabilities"] as const,
     staleTime: 60_000,
   });
 }

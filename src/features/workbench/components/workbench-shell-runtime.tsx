@@ -6,7 +6,6 @@ import type {
   AgentTaskSettings,
   AgentTurn,
   EventCheckpoint,
-  ProjectOpenAppId,
 } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -64,6 +63,10 @@ import {
 import { shouldEnableWorkbenchSkills } from "../workbench-query-availability.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 import { useSubmissionStartedAt } from "./use-submission-started-at.js";
+import {
+  createProjectOpenRequest,
+  type ProjectPathOpenInput,
+} from "../project-file-reference.js";
 export { useSubmissionStartedAt } from "./use-submission-started-at.js";
 const emptyExpandedFileTreePaths = new Set<string>();
 
@@ -202,19 +205,16 @@ export function useWorkbenchShellRuntime({
   });
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
   const projectOpenCapabilitiesQuery = useQuery(
-    projectOpenCapabilitiesQueryOptions(projectId, client, !temporary),
+    projectOpenCapabilitiesQueryOptions(client),
   );
   const projectPathOpenMutation = useMutation({
     // 外部应用已经提供明确的成功反馈，仅保留失败 toast。
     meta: { actionNotification: { successMessage: false } },
-    mutationFn: ({
-      appId,
-      path,
-    }: Readonly<{ appId: ProjectOpenAppId; path: string | undefined }>) =>
+    mutationFn: (input: ProjectPathOpenInput) =>
       client.openProject(
         projectId,
         selectedRootPath,
-        path === undefined ? { appId } : { appId, path },
+        createProjectOpenRequest(input, taskId),
       ),
   });
   const taskAttachmentOpenMutation = useMutation({

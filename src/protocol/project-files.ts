@@ -274,7 +274,9 @@ export type ProjectOpenCapabilitiesResponse = Readonly<
 export const OpenProjectRequestSchema = Type.Object(
   {
     appId: ProjectOpenAppIdSchema,
+    fallbackToExistingAncestor: Type.Optional(Type.Boolean()),
     path: Type.Optional(ProjectFileReferencePathSchema),
+    taskId: Type.Optional(Type.String({ minLength: 1 })),
   },
   { additionalProperties: false },
 );

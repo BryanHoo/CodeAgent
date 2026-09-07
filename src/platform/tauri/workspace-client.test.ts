@@ -4,6 +4,39 @@ import { NativeCommandError, type InvokeImplementation } from "./native-client.j
 import { TauriWorkspaceClient } from "./workspace-client.js";
 
 describe("TauriWorkspaceClient", () => {
+  it("opens temporary task paths with task-scoped workspace validation", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const client = new TauriWorkspaceClient({
+      ensureRuntime: vi.fn(async () => undefined),
+      invoke: invoke as InvokeImplementation,
+    });
+
+    await client.getProjectOpenCapabilities();
+    await client.openProject("temporary", undefined, {
+      appId: "explorer",
+      fallbackToExistingAncestor: true,
+      path: "C:\\CodeAgent\\temporary-workspaces\\task-a",
+      taskId: "task-a",
+    });
+
+    expect(invoke.mock.calls).toEqual([
+      ["get_project_open_capabilities"],
+      [
+        "open_project",
+        {
+          input: {
+            appId: "explorer",
+            fallbackToExistingAncestor: true,
+            path: "C:\\CodeAgent\\temporary-workspaces\\task-a",
+            taskId: "task-a",
+          },
+          projectId: "temporary",
+          rootPath: null,
+        },
+      ],
+    ]);
+  });
+
   it("uploads browser attachments through the raw Tauri IPC body", async () => {
     const invoke = vi.fn(async () => ({
       attachment: {

@@ -115,10 +115,9 @@ export class TauriWorkspaceClient extends TauriNativeClient {
   }
 
   public async getProjectOpenCapabilities(
-    projectId: string,
     _options: ReadOptions = {},
   ): Promise<ProjectOpenCapabilitiesResponse> {
-    return this.call("get_project_open_capabilities", { projectId });
+    return this.call("get_project_open_capabilities");
   }
 
   public async openProject(
@@ -128,8 +127,12 @@ export class TauriWorkspaceClient extends TauriNativeClient {
     _options: MutationOptions = {},
   ): Promise<OpenProjectResponse> {
     return this.call("open_project", {
-      appId: input.appId,
-      path: input.path ?? null,
+      input: {
+        appId: input.appId,
+        fallbackToExistingAncestor: input.fallbackToExistingAncestor ?? null,
+        path: input.path ?? null,
+        taskId: input.taskId ?? null,
+      },
       projectId,
       rootPath: rootPath ?? null,
     });

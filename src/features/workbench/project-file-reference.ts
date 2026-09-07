@@ -1,8 +1,19 @@
-import type { AgentMessageAttachment, ProjectOpenPlatform } from "@/protocol/index.js";
+import type {
+  AgentMessageAttachment,
+  OpenProjectRequest,
+  ProjectOpenAppId,
+  ProjectOpenPlatform,
+} from "@/protocol/index.js";
 
 export type ProjectFileReferenceKind = "image" | "source" | "system";
 
 export const MAX_MESSAGE_SOURCE_ATTACHMENT_BYTES = 1024 * 1024;
+
+export type ProjectPathOpenInput = Readonly<{
+  appId: ProjectOpenAppId;
+  fallbackToExistingAncestor?: boolean;
+  path: string | undefined;
+}>;
 
 const IMAGE_PREVIEW_EXTENSIONS = new Set(["gif", "jpeg", "jpg", "png", "webp"]);
 
@@ -57,6 +68,20 @@ export function getProjectFileManagerOpenPath(
 ): string | undefined {
   // Finder 使用 `open -R <file>` 定位文件，其他平台直接打开父目录。
   return platform === "darwin" ? path : getProjectFileContainingFolderPath(path);
+}
+
+export function createProjectOpenRequest(
+  input: ProjectPathOpenInput,
+  taskId: string | undefined,
+): OpenProjectRequest {
+  return {
+    appId: input.appId,
+    ...(input.fallbackToExistingAncestor === undefined
+      ? {}
+      : { fallbackToExistingAncestor: input.fallbackToExistingAncestor }),
+    ...(input.path === undefined ? {} : { path: input.path }),
+    ...(taskId === undefined ? {} : { taskId }),
+  };
 }
 
 export function classifyProjectFileReference(path: string): ProjectFileReferenceKind {

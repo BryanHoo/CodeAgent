@@ -135,11 +135,23 @@ export function useWorkbenchShellController(
   );
   const openMessageFileReference = useCallback(
     (reference: MessageFileReference, mode?: MessageFileReferenceOpenMode) => {
-      const openExternalPath = (appId: ProjectOpenAppId, path: string | undefined) => {
+      const openExternalPath = (
+        appId: ProjectOpenAppId,
+        path: string | undefined,
+        fallbackToExistingAncestor?: boolean,
+      ) => {
         const mutation = projectPathOpenMutationRef.current;
         mutation.reset();
         void projectPathOpenLockRef.current
-          .run(() => mutation.mutateAsync({ appId, path }))
+          .run(() =>
+            mutation.mutateAsync({
+              appId,
+              ...(fallbackToExistingAncestor === undefined
+                ? {}
+                : { fallbackToExistingAncestor }),
+              path,
+            }),
+          )
           .catch(() => undefined);
       };
       if (mode === "containing-folder") {
@@ -149,6 +161,7 @@ export function useWorkbenchShellController(
           openExternalPath(
             fileManager.id,
             getProjectFileManagerOpenPath(reference.path, openCapabilities.platform),
+            true,
           );
         }
         return;

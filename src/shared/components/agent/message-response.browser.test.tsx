@@ -102,4 +102,28 @@ describe("MessageResponse file reference menu", () => {
       "containing-folder",
     );
   });
+
+  it("copies the absolute path from a file reference", async () => {
+    const onOpenFileReference = vi.fn();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    try {
+      const screen = await render(
+        <MessageResponse mode="streaming" onOpenFileReference={onOpenFileReference}>
+          {"[main.ts](C:\\workspace\\src\\main.ts:12)"}
+        </MessageResponse>,
+      );
+      screen.container
+        .querySelector<HTMLElement>("[data-file-reference]")
+        ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+
+      const action = screen.getByText(i18n.t("openMenu.copyAbsolutePath", { ns: "workbench" }));
+      await expect.element(action).toBeVisible();
+      await action.click();
+
+      expect(writeText).toHaveBeenCalledWith("C:/workspace/src/main.ts");
+      expect(onOpenFileReference).not.toHaveBeenCalled();
+    } finally {
+      writeText.mockRestore();
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { ExternalLink, File, FolderOpen } from "lucide-react";
+import { Copy, ExternalLink, File, FolderOpen } from "lucide-react";
 import {
   createContext,
   memo,
@@ -73,6 +73,15 @@ function FileReferenceContextMenu({
     <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent aria-label={t("openMenu.targetLabel", { path: reference.path })}>
+        <ContextMenuItem
+          onSelect={() => {
+            // 菜单关闭不等待系统剪贴板，权限失败也不改变当前文件引用状态。
+            void navigator.clipboard.writeText(reference.path).catch(() => undefined);
+          }}
+        >
+          <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.copyAbsolutePath")}</span>
+        </ContextMenuItem>
         <ContextMenuItem
           onSelect={() => {
             onOpen(reference, "containing-folder");

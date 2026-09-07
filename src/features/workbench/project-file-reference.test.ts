@@ -1,11 +1,30 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createProjectOpenRequest,
   getProjectFileContainingFolderPath,
   getProjectFileManagerOpenPath,
 } from "./project-file-reference.js";
 
 describe("project file containing folder", () => {
+  it("keeps temporary task identity in containing-folder requests", () => {
+    expect(
+      createProjectOpenRequest(
+        {
+          appId: "explorer",
+          fallbackToExistingAncestor: true,
+          path: "C:\\workspace\\missing",
+        },
+        "task-a",
+      ),
+    ).toEqual({
+      appId: "explorer",
+      fallbackToExistingAncestor: true,
+      path: "C:\\workspace\\missing",
+      taskId: "task-a",
+    });
+  });
+
   it.each([
     ["/workspace/src/main.ts", "/workspace/src"],
     ["/main.ts", "/"],

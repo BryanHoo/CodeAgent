@@ -30,6 +30,11 @@
 - `get_runtime_performance_metrics` 按项目返回 Provider 接收数、IPC 发布数、最近 1 秒 events/s、合并率与有界事件队列高水位
 - App-server 背压缓冲只允许淘汰可由快照恢复的 Delta；`turn/*`、`item/*` 生命周期、服务端请求与终态通知不得丢弃。发生淘汰时必须按 Project 发送 `resync.required`，原因固定为 `event_retention_exceeded`
 
+## 文件打开契约
+
+- 系统应用与文件管理器能力按桌面环境全局探测，不依赖真实 Project；临时任务生成路径必须通过 `taskId` 读取 `thread/read.cwd`，并验证为受控临时工作区
+- “打开所在文件夹”遇到未生成的文件或目录时，只能回退到受控根内最近存在的祖先；普通文件打开不得启用该回退，任何越界路径必须拒绝
+
 ## MCP Elicitation 契约
 
 - form 模式仅在 `accept` 时携带结构化 `content`；URL 模式的 `accept` 只发送 `action`，`decline` 与 `cancel` 均不发送 `content`
