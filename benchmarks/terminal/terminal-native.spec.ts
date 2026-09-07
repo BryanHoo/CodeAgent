@@ -7,11 +7,13 @@ import { resolve } from "node:path";
 import { installWebviewMocks, passthroughNativeCommands, releaseApplicationStartup } from "../../tests/webview/mock-runtime.js";
 import { sampleResources, summarizeResources, type ResourceSample } from "./resources.js";
 import type { TerminalMetadata } from "../../src/protocol/project-terminal.js";
+import { windowsTerminalNative } from "../../tests/webview/windows-terminal-native.js";
 
 type NativeMetrics = { appPid: number; liveCount: number; sessions: { pid: number | null; outstandingBytes: number; queuedInputBytes: number }[] };
 type EmulatorMetric = { parsedBytes: number; pendingBytes: number; peakPendingBytes: number; renders: number; lines: number; cols: number; rows: number; parseSamplesMs: number[] };
 type TestWindow = Window & {
-  __TAURI__: { core: { invoke: <T>(command: string) => Promise<T> } };
+  __TAURI__: { core: { invoke: <T>(command: string, args?: unknown, options?: { headers: Record<string, string> }) => Promise<T> } };
+  __terminalInputSequences: Record<string, number>;
   __CODEAGENT_TERMINAL_TEST__: { create: (projectId: string, rootId: string) => Promise<void>; scopes: () => TerminalMetadata[]; close: (scope: TerminalMetadata) => Promise<void>; remove: (scope: TerminalMetadata) => Promise<void> };
   __CODEAGENT_TERMINAL_METRICS__: () => EmulatorMetric[];
 };
@@ -25,11 +27,14 @@ async function nativeMetrics(): Promise<NativeMetrics> {
 }
 
 async function observe(label: string, native: NativeMetrics, durationMs: number) {
-  const samples: ResourceSample[] = [];
+  const samples: (ResourceSample & { visible: boolean; maxOutstandingBytes: number; maxQueuedInputBytes: number })[] = [];
   const started = performance.now();
   const pids = native.sessions.flatMap((session) => session.pid === null ? [] : [session.pid]);
   do {
-    samples.push(await sampleResources(native.appPid, pids, started));
+    const sample = await sampleResources(native.appPid, pids, started);
+    const current = await nativeMetrics();
+    const visible = await browser.execute(() => !document.hidden);
+    samples.push({ ...sample, visible, maxOutstandingBytes: Math.max(0, ...current.sessions.map((session) => session.outstandingBytes)), maxQueuedInputBytes: Math.max(0, ...current.sessions.map((session) => session.queuedInputBytes)) });
     if (performance.now() - started >= durationMs) break;
     await new Promise((resolve) => setTimeout(resolve, Math.min(5000, durationMs - (performance.now() - started))));
   } while (performance.now() - started <= durationMs + 5000);
@@ -39,18 +44,43 @@ async function observe(label: string, native: NativeMetrics, durationMs: number)
 
 describe("Release native terminal measurements", () => {
   before(async function () {
-    if (process.platform !== "darwin" || process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
+    if (!["darwin", "win32"].includes(process.platform) || process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
     await installWebviewMocks();
     await passthroughNativeCommands(["connect_project_terminals", "create_project_terminal", "write_project_terminal", "resize_project_terminal", "ack_project_terminal", "close_project_terminal", "remove_project_terminal"]);
+    await browser.execute(() => {
+      const target = window as TestWindow;
+      target.__terminalInputSequences = {};
+      const original = window.__CODEAGENT_WEBVIEW_TEST_INVOKE__!;
+      window.__CODEAGENT_WEBVIEW_TEST_INVOKE__ = (command, args, options) => {
+        if (command === "write_project_terminal") {
+          const headers = options?.headers as Record<string, string>;
+          target.__terminalInputSequences[decodeURIComponent(headers["x-codeagent-terminal-id"]!)] = Number(headers["x-codeagent-input-sequence"]);
+        }
+        return original(command, args, options);
+      };
+    });
     await releaseApplicationStartup();
     await $("aria/自定义 API").click();
     await $("aria/API Base URL").setValue("https://gateway.test/v1");
     await $("aria/API Key（可选）").setValue("sk-webview-test");
     await $("aria/连接").click();
     await $("aria/终端 0").waitForExist();
-    const executable = resolve("src-tauri/target/aarch64-apple-darwin/release/codeagent");
-    await promisify(execFile)("swift", ["-e", "import AppKit; let path = CommandLine.arguments[1]; for app in NSWorkspace.shared.runningApplications where app.executableURL?.path == path { print(app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])) }", executable]);
+    if (process.platform === "win32") await windowsTerminalNative("activate");
+    else {
+      const executable = resolve("src-tauri/target/aarch64-apple-darwin/release/codeagent");
+      await promisify(execFile)("swift", ["-e", "import AppKit; let path = CommandLine.arguments[1]; for app in NSWorkspace.shared.runningApplications where app.executableURL?.path == path { print(app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])) }", executable]);
+    }
     await browser.waitUntil(async () => browser.execute(() => !document.hidden));
+    if (process.platform === "win32") {
+      const window = await windowsTerminalNative("inspect");
+      const native = await nativeMetrics();
+      const resources = await sampleResources(native.appPid, [], performance.now());
+      const pids = new Set(resources.processes?.map((row) => row.pid));
+      const children = window.children as string[];
+      expect(children.some((child) => child.startsWith("Chrome_RenderWidgetHostHWND:"))).toBe(true);
+      expect(children.every((child) => pids.has(Number(child.split(":").at(-1))))).toBe(true);
+      expect(window.mainVisible).toBe(true);
+    }
   });
 
   it("records baseline, 1/12 idle sessions, bounded output and cleanup", async () => {
@@ -85,23 +115,42 @@ describe("Release native terminal measurements", () => {
       for (let round = 1; round <= 3; round += 1) phases.push(await observe(`twelve-idle-${round}`, twelve, 60000));
       idleTerminalCalls = (await countCalls()) - before;
       expect(idleTerminalCalls).toBe(0);
-      await browser.execute(() => {
+      await browser.execute((windows) => {
         const textarea = document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!;
-        const command = "python3 -u -c 'import os,time; [(os.write(1,b\"0123456789abcdef\"*512+b\"\\r\\n\"),time.sleep(.1)) for _ in range(600)]'";
+        const command = windows ? "1..600 | ForEach-Object { [Console]::Write(('0123456789abcdef' * 512) + \"`r`n\"); Start-Sleep -Milliseconds 100 }" : "python3 -u -c 'import os,time; [(os.write(1,b\"0123456789abcdef\"*512+b\"\\r\\n\"),time.sleep(.1)) for _ in range(600)]'";
         const paste = new Event("paste", { bubbles: true, cancelable: true });
         Object.defineProperty(paste, "clipboardData", { value: { getData: () => command } });
         textarea.dispatchEvent(paste);
         textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
-      });
+      }, process.platform === "win32");
       phases.push(await observe("sixty-second-output", twelve, 65000));
       outputMetrics = await nativeMetrics();
       renderer = await browser.execute(() => (window as TestWindow).__CODEAGENT_TERMINAL_METRICS__());
       expect(renderer.reduce((total, value) => total + value.parsedBytes, 0)).toBeGreaterThan(4 * 1024 * 1024);
       expect(renderer.every((value) => value.peakPendingBytes <= 272 * 1024 && value.lines <= 3200)).toBe(true);
       expect(outputMetrics.sessions.every((value) => value.outstandingBytes <= 256 * 1024 && value.queuedInputBytes <= 64 * 1024)).toBe(true);
+      if (process.platform === "win32") {
+        const beforeOutput = renderer.reduce((total, value) => total + value.parsedBytes, 0);
+        const written = await browser.executeAsync((done) => {
+          const target = window as TestWindow;
+          // Startup replies already use the real frontend input sequence. These
+          // controlled producers are the final writes before closing all sessions.
+          Promise.all(target.__CODEAGENT_TERMINAL_TEST__.scopes().map(async (scope) => {
+            const sequence = (target.__terminalInputSequences[scope.terminalId] ?? 0) + 1;
+            const headers = { "x-codeagent-project-id": encodeURIComponent(scope.projectId), "x-codeagent-terminal-id": encodeURIComponent(scope.terminalId), "x-codeagent-generation": encodeURIComponent(scope.generation), "x-codeagent-input-sequence": String(sequence) };
+            const command = "1..300 | ForEach-Object { [Console]::Write(('0123456789abcdef' * 512) + \"`r`n\"); Start-Sleep -Milliseconds 100 }\r";
+            await target.__TAURI__.core.invoke("write_project_terminal", new TextEncoder().encode(command), { headers });
+          })).then(() => done("written"), (error: unknown) => done(String(error)));
+        });
+        expect(written).toBe("written");
+        phases.push(await observe("twelve-output", twelve, 35000));
+        renderer = await browser.execute(() => (window as TestWindow).__CODEAGENT_TERMINAL_METRICS__());
+        expect(renderer.reduce((total, value) => total + value.parsedBytes, 0) - beforeOutput).toBeGreaterThan(24 * 1024 * 1024);
+        phases.push(await observe("recovered-idle", twelve, 30000));
+      }
     } finally {
       const started = performance.now();
-      await browser.executeAsync((done) => {
+      const cleanup = await browser.executeAsync((done) => {
         const api = (window as TestWindow).__CODEAGENT_TERMINAL_TEST__;
         if (api === undefined) { done("empty"); return; }
         Promise.all(api.scopes().map(async (scope) => { await api.close(scope); await api.remove(scope); })).then(() => done("closed"), (error: unknown) => done(String(error)));
@@ -111,14 +160,18 @@ describe("Release native terminal measurements", () => {
       const visibility = await browser.execute(() => document.visibilityState);
       const report = {
         measuredAt: new Date().toISOString(), build: "Release + webview-tests", platform: platform(), osRelease: release(), cpu: cpus()[0]?.model, logicalCpus: cpus().length, memoryBytes: totalmem(), webview: browser.capabilities.browserVersion, visibility,
-        scope: "App PID and its direct shell PIDs only; WebContent/GPU RSS not attributed. Test driver has a 50ms main-runloop pump. Fixture roots use a temporary directory; shells use user login profiles.",
+        scope: process.platform === "win32" ? "App PID, direct shells and app descendants including WebView2/GPU. RSS is the sum of Windows working sets (shared pages may be counted more than once); private bytes are also recorded. CPU is process time / wall time (100% = one logical core). Exited process CPU after its last sample is not captured. Fixture roots use a temporary directory; shells use user profiles." : "App PID and its direct shell PIDs only; WebContent/GPU RSS not attributed. macOS test driver has a 50ms main-runloop pump. Fixture roots use a temporary directory; shells use user login profiles.",
         phases, idleTerminalCalls, renderer, outputMetrics, cleanupMs, remainingNativeSessions: closed.liveCount,
-        unverified: ["WebContent/GPU memory", "native dialog confirmation", "Windows", "Linux", "input-to-paint latency", "switch-to-paint latency", ...(visibility === "hidden" ? ["native visible render"] : [])],
+        unverified: [...(process.platform === "win32" ? [] : ["WebContent/GPU memory"]), "physical display presentation latency", ...(visibility === "hidden" ? ["native visible render"] : [])],
       };
       await mkdir("artifacts/terminal", { recursive: true });
-      await writeFile("artifacts/terminal/release-native-measurements.json", JSON.stringify(report, null, 2));
+      await writeFile(`artifacts/terminal/release-native-measurements${process.platform === "win32" ? "-windows" : ""}.json`, JSON.stringify(report, null, 2));
+      expect(cleanup).toBe("closed");
       expect(closed.liveCount).toBe(0);
       expect(cleanupMs).toBeLessThan(3000);
     }
+    expect(phases.every((phase) => phase.samples.every((sample) => sample.visible && sample.maxOutstandingBytes <= 256 * 1024 && sample.maxQueuedInputBytes <= 64 * 1024))).toBe(true);
+    const baselineCpu = phases[0]!.summary.appCpuPercent;
+    expect(phases.filter((phase) => phase.label.startsWith("twelve-idle")).every((phase) => phase.summary.appCpuPercent - baselineCpu < 1)).toBe(true);
   });
 });

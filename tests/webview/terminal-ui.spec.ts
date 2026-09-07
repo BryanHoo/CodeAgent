@@ -7,6 +7,7 @@ import { installWebviewMocks, passthroughNativeCommands, releaseApplicationStart
 import { measureSystemInputLatency, measureTerminalLatency, summarizeLatency } from "./terminal-latency.js";
 import { postTerminalSystemText } from "./terminal-system-keyboard.js";
 import { terminalNativeDialog } from "./terminal-native-dialog.js";
+import { windowsTerminalNative } from "./windows-terminal-native.js";
 
 async function enterCommand(command: string): Promise<void> {
   await browser.execute((text) => {
@@ -80,7 +81,7 @@ describe("project terminal native UI", () => {
     expect(await browser.execute(() => window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__?.calls.create_project_terminal?.length ?? 0)).toBe(0);
     await $("aria/终端 0").click();
     await $(".xterm-helper-textarea").waitForExist();
-    await enterCommand("echo NATIVE_PTY_READY");
+    await enterCommand(process.platform === "win32" ? "Write-Output ('NATIVE_' + 'PTY_READY')" : "printf 'NATIVE_%s\\n' 'PTY_READY'");
     await browser.waitUntil(async () => browser.execute(() => (window as unknown as { __terminalProof: { marker: boolean } }).__terminalProof.marker));
     await $("aria/终端 1").waitForDisplayed();
     await $("aria/隐藏终端").click();
@@ -119,7 +120,7 @@ describe("project terminal native UI", () => {
     if (process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
     const input = await measureTerminalLatency("input");
     // 丢弃采样输入，不把其作为命令执行。
-    await browser.execute(() => document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "u", code: "KeyU", keyCode: 85, ctrlKey: true, bubbles: true, cancelable: true })));
+    await browser.execute((windows) => document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: windows ? "c" : "u", code: windows ? "KeyC" : "KeyU", keyCode: windows ? 67 : 85, ctrlKey: true, bubbles: true, cancelable: true })), process.platform === "win32");
     expect(input.error).toBeUndefined();
     await $("aria/新建终端").click();
     await $("aria/终端 2").waitForExist();
@@ -145,9 +146,9 @@ describe("project terminal native UI", () => {
     await $("aria/终端 1").waitForExist();
   });
 
-  it("accepts macOS system keyboard input", async function () {
-    if (process.platform !== "darwin") { this.skip(); return; }
-    const permission = await promisify(execFile)("swift", ["-e", "import CoreGraphics; print(CGPreflightPostEventAccess())"]);
+  it("accepts trusted system keyboard input", async function () {
+    if (process.platform !== "darwin" && process.platform !== "win32") { this.skip(); return; }
+    const permission = process.platform === "darwin" ? await promisify(execFile)("swift", ["-e", "import CoreGraphics; print(CGPreflightPostEventAccess())"]) : { stdout: "true" };
     if (permission.stdout.trim() !== "true") {
       console.warn("System keyboard proof unavailable: macOS event posting permission is not granted.");
       this.skip();
@@ -155,19 +156,23 @@ describe("project terminal native UI", () => {
     }
     expect(await browser.execute(() => document.hidden)).toBe(false);
     await browser.execute(() => document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.focus());
-    await postTerminalSystemText("printf 'NATIVE_%s\\n' 'KEYBOARD_READY'");
+    if (process.platform === "win32") {
+      await browser.execute(() => document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", keyCode: 67, ctrlKey: true, bubbles: true, cancelable: true })));
+      await browser.pause(300);
+    }
+    await postTerminalSystemText(process.platform === "win32" ? "Write-Output ('NATIVE_' + 'KEYBOARD_READY')" : "printf 'NATIVE_%s\\n' 'KEYBOARD_READY'");
     await browser.waitUntil(async () => browser.execute(() => (window as unknown as { __terminalProof: { keyboard: boolean } }).__terminalProof.keyboard));
   });
 
   it("records 200 trusted system-key echo render observations", async function () {
     this.timeout(90000);
-    if (process.platform !== "darwin" || process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
-    const permission = await promisify(execFile)("swift", ["-e", "import CoreGraphics; print(CGPreflightPostEventAccess())"]);
+    if (!["darwin", "win32"].includes(process.platform) || process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
+    const permission = process.platform === "darwin" ? await promisify(execFile)("swift", ["-e", "import CoreGraphics; print(CGPreflightPostEventAccess())"]) : { stdout: "true" };
     if (permission.stdout.trim() !== "true") { this.skip(); return; }
     const result = await measureSystemInputLatency();
-    await writeFile("artifacts/terminal/release-system-key-latency.json", JSON.stringify({
-      measuredAt: new Date().toISOString(), build: "Release + webview-tests", webview: browser.capabilities.browserVersion,
-      method: "CGEvent.postToPid -> trusted keydown capture -> real PTY echo -> timestamp captured inside xterm onRender. requestAnimationFrame only polls completion and is excluded from duration. Not a display presentation timestamp.",
+    await writeFile(`artifacts/terminal/release-system-key-latency${process.platform === "win32" ? "-windows" : ""}.json`, JSON.stringify({
+      measuredAt: new Date().toISOString(), platform: process.platform, build: "Release + webview-tests", webview: browser.capabilities.browserVersion,
+      method: `${process.platform === "win32" ? "Win32 SendInput (foreground PID checked per key)" : "CGEvent.postToPid"} -> trusted keydown capture -> real PTY echo -> timestamp captured inside xterm onRender. requestAnimationFrame only polls completion and is excluded from duration. Not a display presentation timestamp.`,
       ...result, summary: summarizeLatency(result.samplesMs), inputToOutput: summarizeLatency(result.inputToOutputMs), outputToRender: summarizeLatency(result.outputToRenderMs), targetP95Ms: 30,
     }, null, 2));
     expect(result.failure).toBeNull();
@@ -200,11 +205,12 @@ describe("project terminal native UI", () => {
   });
 
   it("cancels and confirms the actual native window-close dialog", async function () {
-    if (process.platform !== "darwin" || process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
-    const permission = await promisify(execFile)("swift", ["-e", "import ApplicationServices; print(AXIsProcessTrusted())"]);
+    if (!["darwin", "win32"].includes(process.platform) || process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
+    const permission = process.platform === "darwin" ? await promisify(execFile)("swift", ["-e", "import ApplicationServices; print(AXIsProcessTrusted())"]) : { stdout: "true" };
     if (permission.stdout.trim() !== "true") { this.skip(); return; }
     await clearNativeTerminals();
-    await $("aria/新建终端").click();
+    if (await $("aria/新建终端").isExisting()) await $("aria/新建终端").click();
+    else await $("aria/终端 0").click();
     await $("aria/终端 1").waitForExist();
     await terminalNativeDialog("request");
     const blocked = await browser.executeAsync((done: (value: string) => void) => {
@@ -212,13 +218,26 @@ describe("project terminal native UI", () => {
       api.create("codeagent", "root-codeagent").then(() => done("UNEXPECTED_CREATION"), (error: unknown) => done(error !== null && typeof error === "object" && "code" in error ? String(error.code) : String(error)));
     });
     expect(blocked).toContain("TERMINAL_OWNER_CLOSING");
+    // ConPTY/xterm protocol replies may arrive while the native modal is open.
+    // Exercise the existing session's real input path before choosing Cancel.
+    await browser.execute(() => { (window as unknown as { __terminalProof: { marker: boolean } }).__terminalProof.marker = false; });
+    await enterCommand(process.platform === "win32" ? "Write-Output ('NATIVE_' + 'PTY_READY')" : "printf 'NATIVE_%s\\n' 'PTY_READY'");
+    await browser.waitUntil(async () => browser.execute(() => (window as unknown as { __terminalProof: { marker: boolean } }).__terminalProof.marker));
     await terminalNativeDialog("cancel");
     expect(await browser.execute(() => document.hidden)).toBe(false);
+    await $("aria/终端 1").waitForExist();
+    await browser.execute(() => { (window as unknown as { __terminalProof: { marker: boolean } }).__terminalProof.marker = false; });
+    await enterCommand(process.platform === "win32" ? "Write-Output ('NATIVE_' + 'PTY_READY')" : "printf 'NATIVE_%s\\n' 'PTY_READY'");
+    await browser.waitUntil(async () => browser.execute(() => (window as unknown as { __terminalProof: { marker: boolean } }).__terminalProof.marker));
     await $("aria/新建终端").click();
     await $("aria/终端 2").waitForExist();
     await terminalNativeDialog("request");
     await terminalNativeDialog("confirm");
-    await browser.waitUntil(async () => browser.execute(() => document.hidden));
+    if (process.platform === "win32") {
+      const nativeWindow = await windowsTerminalNative("inspect");
+      expect(nativeWindow.mainVisible).toBe(false);
+      await writeFile("artifacts/terminal/windows-closed-window.json", JSON.stringify(nativeWindow, null, 2));
+    } else await browser.waitUntil(async () => browser.execute(() => document.hidden));
     const live = await browser.executeAsync((done: (value: number | string) => void) => {
       const invoke = (window as unknown as { __TAURI__: { core: { invoke: (command: string) => Promise<{ liveCount: number }> } } }).__TAURI__.core.invoke;
       invoke("inspect_project_terminal_test").then((value) => done(value.liveCount), (error: unknown) => done(String(error)));

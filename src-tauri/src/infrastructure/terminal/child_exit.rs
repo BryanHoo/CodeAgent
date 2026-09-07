@@ -1,7 +1,5 @@
 use crate::domain::project_terminal::TerminalError;
 use portable_pty::Child;
-#[cfg(windows)]
-use portable_pty::ChildKiller;
 use std::{
     sync::{Arc, Condvar, Mutex},
     thread::JoinHandle,
@@ -13,8 +11,6 @@ type ExitResult = Result<u32, TerminalError>;
 pub(super) struct ChildExit {
     #[cfg(any(unix, feature = "webview-tests"))]
     pub pid: u32,
-    #[cfg(windows)]
-    pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     completion: Arc<(Mutex<Option<ExitResult>>, Condvar)>,
     receiver: watch::Receiver<Option<ExitResult>>,
     worker: Mutex<Option<JoinHandle<()>>>,
@@ -50,8 +46,6 @@ impl ChildExit {
         Ok(Self {
             #[cfg(any(unix, feature = "webview-tests"))]
             pid,
-            #[cfg(windows)]
-            killer: Mutex::new(killer),
             completion,
             receiver,
             worker: Mutex::new(Some(worker)),

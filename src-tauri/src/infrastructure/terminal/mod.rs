@@ -102,6 +102,20 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[test]
+    fn active_windows_session_closes_successfully_on_first_attempt() {
+        let mut command = portable_pty::CommandBuilder::new("cmd.exe");
+        command.args(["/D", "/Q"]);
+        let session = Session::spawn(command, 80, 24).unwrap();
+        let result = session.close();
+        // Always retry cleanup before asserting so a RED run retains no child.
+        if result.is_err() {
+            let _ = session.close();
+        }
+        assert_eq!(result, Ok(()));
+    }
+
+    #[cfg(windows)]
     #[tokio::test]
     async fn natural_windows_exit_can_be_cleaned_up_idempotently() {
         use std::{io::Read, io::Write, sync::mpsc, time::Duration};

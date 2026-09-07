@@ -18,7 +18,53 @@
 4. 新增真实 Windows 终端 UI 验证：PowerShell 输出 8192 行、每行超过 128 个字符，再输出拼接生成的中文完成标记；随后中断 30 秒 `Start-Sleep`，在 5 秒内确认下一条命令执行。标记使用字符串拼接，避免将命令输入回显误判为执行成功。
 5. 终端延迟记录增加平台、输入到首个原生输出、输出到解析/渲染、动画帧间隔等分段信息，不采集终端文本。
 
-## 检查结果
+## Windows 专项补充：2026-09-08
+
+以 `a0f2a98` 为基线补齐系统事件、原生对话框和进程资源采样。测试工具使用 Win32 `SendInput`，逐键验证前台 PID 与测试二进制一致；原生对话框必须为测试主窗口拥有的 `#32770` 模态窗口，并按原生按钮文字执行取消/确认。
+
+本次实机测试发现并修复两个产品问题：
+
+- 活动终端首次关闭误报 `CleanupFailed`。本地 `portable-pty 0.9.0` 的克隆 killer 对 `TerminateProcess` 返回值的成功判断反转；改为使用已有 Windows Job 结束整个受管进程树，再等待退出、释放 PTY 和线程。真实活动 cmd 回归在修复前失败，修复后通过。
+- 用户尚未确认关闭时，管理器就拒绝已有终端的写入，导致 ConPTY 启动协议应答失败，取消对话框后终端已经退出。现在等待确认由窗口 owner 阻止创建和重连；已有会话继续处理输入输出，确认后才执行 generation 清理。
+
+测试本身也修正了 macOS 专用 Swift/`ps` 调用，以及 Windows PowerShell 下 Ctrl+U 不清除采样字符的问题。系统输入采样使用平台对应的清理键；Windows 资源采样记录应用、shell 和包含 WebView2/GPU 的后代进程数值，不采集命令行或环境变量。
+
+Windows runner 使用独立临时 `WEBVIEW2_USER_DATA_FOLDER`，避免测试窗口与已安装应用共享浏览器进程。压测启动时将原生窗口的浏览器/GPU 子窗口 PID 与资源采样树交叉验证；归属不完整直接失败。WebView2 的环境变量覆盖机制见 [Microsoft 文档](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/webview2-idl?view=webview2-1.0.4022.49)。原生关闭后的可见性使用 Win32 `IsWindowVisible`，不依赖本机未同步变化的 `document.hidden`。
+
+### 系统按键与原生交互结果
+
+最终组合运行（2026-09-08 07:33–07:35）共 3 个原生测试文件、16 项通过：工作台 7 项、终端二进制协议 1 项、终端 UI 8 项，零跳过。终端 UI 包含 SendInput 命令执行、200 次 `isTrusted=true` 按键及回显、200 次 UI paste、200 次标签切换、PowerShell 大量输出和中断、退出码、原生关闭取消和确认。
+
+原生提示期间新建返回 `TERMINAL_OWNER_CLOSING`，已有终端仍可执行命令；取消后保留原会话并可继续新建，确认后 native 存活会话归零且主窗口 Win32 可见性为 false。该回归不依赖 mock 对话框结果。
+
+最终 200 次可信按键观测：keydown → xterm onRender P50 31.1ms、P95 39.3ms、最大 40.6ms；keydown → 首个 native 输出 P95 1.7ms，输出 → onRender P95 37.9ms。UI paste P95 40.6ms，标签切换 P95 38.5ms，动画帧 P95 20.1ms。输入仍超过 30ms 目标，标签切换低于 50ms 目标；本次没有放宽目标或把 SendInput 当作实体键盘到显示器的端到端测量。
+
+原始可信键盘数据：[`release-system-key-latency-windows.json`](../artifacts/terminal/release-system-key-latency-windows.json)。当前修复后的 Rust all-features 回归为 294 项库测试、3 项协议测试和 3 项 ConPTY 测试通过；默认功能集及 all-features 严格 Clippy、Rust 格式检查、lint、类型检查、3 项终端工程约束和 Release 构建均通过。其余全量检查沿用下一节注明的前一轮记录，未把历史执行冒充为本轮重跑。
+
+### 多终端实机压测
+
+AMD Ryzen 5 5600，12 逻辑核，约 16GiB 内存。Release + WebView2 152，独立浏览器进程树。`pnpm.cmd performance:terminal` 通过，实测约 7 分 22 秒，共 88 个资源快照。
+
+CPU 为各阶段进程时间增量 / 墙钟时间，100% 代表一个逻辑核；RSS 为阶段末 Windows Working Set，单位 MiB。进程树包含主进程、12 个独立 PowerShell、ConPTY 控制台宿主和 WebView2/GPU；共享页面可能被重复计数，原始记录另含 private bytes。
+
+| 阶段 | 主进程 CPU | 进程树 CPU | 主进程 RSS | shell RSS 合计 | 进程树 RSS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 无终端，60 秒 | 0.08% | 0.76% | 42.3 | 0 | 441.1 |
+| 1 终端空闲，60 秒 | 0.05% | 0.57% | 43.0 | 70.4 | 542.9 |
+| 12 终端空闲，第 1 轮 60 秒 | 0.10% | 1.20% | 44.3 | 847.6 | 1418.2 |
+| 12 终端空闲，第 2 轮 60 秒 | 0.05% | 0.49% | 44.3 | 847.9 | 1418.9 |
+| 12 终端空闲，第 3 轮 60 秒 | 0.05% | 0.47% | 44.5 | 847.7 | 1420.5 |
+| 1 终端持续输出，其余空闲，65 秒 | 3.51% | 22.48% | 45.0 | 857.7 | 1525.4 |
+| 12 终端同时输出，35 秒 | 22.46% | 125.99% | 49.4 | 966.5 | 2378.0 |
+| 输出后保留全部终端，30 秒 | 0.10% | 3.12% | 49.5 | 968.4 | 1928.5 |
+
+三轮空闲期间终端 IPC 增量为 0，主进程 CPU 相对基线增量低于 1 个百分点。累计解析 38,835,732 B，约 37.0MiB；xterm 实际记录的待解析高水位为 9,316 B，最大保留行数 3,024。周期采样观察到 native 未确认输出最多 9,315 B、输入队列为 0，未越过 256KiB / 64KiB 预算；周期采样不是所有瞬时 native 峰值的证明。
+
+12 会话关闭并移除耗时 86.68ms，native 存活会话归零，低于 3 秒门槛。runner 结束后按 PID + 启动时间检查，采样进程树无遗留进程。负载后进程树 RSS 从约 2,378MiB 降到 1,928.5MiB，private bytes 从约 1,892MiB 降到 1,437.5MiB，未恢复至初始空闲值；此次覆盖证明空闲 CPU、背压和关闭回收满足测试门槛，不构成严格 RSS 上界或长期无泄漏证明。
+
+原始数据：[`release-native-measurements-windows.json`](../artifacts/terminal/release-native-measurements-windows.json)。原生按钮记录：[`windows-native-dialog.json`](../artifacts/terminal/windows-native-dialog.json)，关闭后 Win32 窗口状态：[`windows-closed-window.json`](../artifacts/terminal/windows-closed-window.json)。
+
+## 检查结果（前一轮全量检查）
 
 | 检查 | 结果 |
 | --- | --- |
@@ -65,7 +111,7 @@ MSVC 链接器将“正在创建库”的普通输出报告为 `linker_messages`
 
 原始终端数据：[`artifacts/terminal/release-render-latency.json`](../artifacts/terminal/release-render-latency.json)，每次复测会覆盖，查看 `measuredAt` 和 `platform` 确认所属运行。真实截图：[`artifacts/terminal/native-terminal.png`](../artifacts/terminal/native-terminal.png)。历史失败截图不作为通过证据。
 
-尚未覆盖 Windows 可信系统键盘事件、原生关闭对话框的确认/取消、Release 多终端 CPU/RSS 压测，以及文档已列出的启动到 Job Object 归属竞态和阻塞 I/O 取消边界。项目的相关系统按键、原生对话框和资源采样工具目前仅支持 macOS。终端核心功能通过不代表 Windows Release 性能验收全部完成。
+Windows 可信系统键盘事件、原生关闭确认/取消和 Release 多终端 CPU/RSS 已在上方专项补充中覆盖。启动到 Job Object 归属竞态、任意阻塞 I/O 取消、长期内存稳定性及物理显示器呈现延迟仍未由这些测试证明。
 
 ## 复现
 
@@ -78,10 +124,11 @@ pnpm.cmd check
 pnpm.cmd test:browser
 pnpm.cmd performance:browser
 pnpm.cmd performance:webview:build
+pnpm.cmd performance:terminal
 $env:CODEAGENT_WEBVIEW_RELEASE = '1'
 $env:CODEAGENT_REAL_RUNTIME_TEST = '1'
 pnpm.cmd exec wdio run wdio.conf.ts --spec tests/webview/critical-flows.spec.ts --spec tests/webview/terminal-protocol.spec.ts --spec tests/webview/terminal-ui.spec.ts --spec tests/webview/real-codex-runtime.spec.ts --spec tests/webview/performance.spec.ts
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-本次未改变协议或新增架构规则，规格分类结果为 `no-update`；简化审查为 `no-change`，修复保持在已复现问题范围内。
+专项补充明确了关闭确认等待期的跨层契约，已更新 `.superwork/spec/src-tauri/backend/ipc-contracts.md`，由后端索引可达。简化审查为 `no-change`，未在已复现修复之外扩大重构。

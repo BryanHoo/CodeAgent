@@ -1,4 +1,6 @@
 import { resolve } from "node:path";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import type { Options } from "@wdio/types";
 
 const executable = process.platform === "win32" ? "codeagent.exe" : "codeagent";
@@ -32,7 +34,12 @@ export const config: Options.Testrunner = {
         appBinaryPath,
         captureBackendLogs: true,
         driverProvider: "embedded",
-        env: { CODEAGENT_WEBVIEW_TEST: "1" },
+        env: {
+          CODEAGENT_WEBVIEW_TEST: "1",
+          // A shared WebView2 profile can reuse the installed app's browser/GPU
+          // processes, contaminating resource measurements and test isolation.
+          ...(process.platform === "win32" ? { WEBVIEW2_USER_DATA_FOLDER: mkdtempSync(resolve(tmpdir(), "codeagent-webview-")) } : {}),
+        },
       },
     ],
   ],
