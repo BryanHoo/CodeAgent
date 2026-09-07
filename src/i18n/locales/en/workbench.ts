@@ -418,6 +418,7 @@ export const workbench = {
     archive: "Archive",
     archived: "Archived",
     close: "Close project sidebar",
+    closeSearch: "Close task search",
     collapse: "Show less",
     copyTaskId: "Copy task ID",
     aboutStatus: "About, CodeAgent v{{version}}{{update}}",

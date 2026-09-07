@@ -415,6 +415,7 @@ export const workbench = {
     archive: "归档",
     archived: "已归档",
     close: "关闭项目侧栏",
+    closeSearch: "关闭任务搜索",
     collapse: "收起",
     copyTaskId: "复制任务 ID",
     aboutStatus: "关于，CodeAgent v{{version}}{{update}}",
