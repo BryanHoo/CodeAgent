@@ -63,8 +63,6 @@ jobs:
             startupBudgetMs: 4000
 
     runs-on: ${{ matrix.platform }}
-    env:
-      WEBKIT_DISABLE_COMPOSITING_MODE: ${{ matrix.platform == 'ubuntu-24.04' && '1' || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -105,13 +103,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build native WebView test application
-        run: pnpm test:webview:build
-
       # Windows 上的 Tauri 测试进程存在装载器问题，真实应用链路在后续步骤覆盖相同行为。
       - name: Run real Codex lifecycle test
         if: matrix.platform != 'windows-latest'
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-features --locked private_codex_should_install_and_complete_real_app_server_lifecycle -- --ignored --nocapture
+
+      # Linux Cargo 集成测试会写入同一个 debug 二进制，最后重建以保留 WebView 测试配置。
+      - name: Build native WebView test application
+        run: pnpm test:webview:build
 
       - name: Run native WebView tests
         if: matrix.platform != 'ubuntu-24.04'

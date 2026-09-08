@@ -36,12 +36,18 @@ void test("Native WebView workflow installs the Ubuntu WebKit driver", async () 
   assert.match(workflow, /\bwebkit2gtk-driver\b/u);
 });
 
-void test("Native WebView workflow disables compositing only for Ubuntu WebKitGTK", async () => {
+void test("Native WebView workflow builds the test application after Cargo lifecycle tests", async () => {
   const workflow = await readFile(new URL("../.github/workflows/webview.yml", import.meta.url), "utf8");
+  const lifecycleTestAt = workflow.indexOf("- name: Run real Codex lifecycle test");
+  const webviewBuildAt = workflow.indexOf("- name: Build native WebView test application");
+  const webviewTestAt = workflow.indexOf("- name: Run native WebView tests");
 
-  assert.match(
-    workflow,
-    /WEBKIT_DISABLE_COMPOSITING_MODE: \$\{\{ matrix\.platform == 'ubuntu-24\.04' && '1' \|\| '' \}\}/u,
+  assert.notEqual(lifecycleTestAt, -1);
+  assert.notEqual(webviewBuildAt, -1);
+  assert.notEqual(webviewTestAt, -1);
+  assert.ok(
+    lifecycleTestAt < webviewBuildAt && webviewBuildAt < webviewTestAt,
+    "Cargo tests must not overwrite the configured WebView test application",
   );
 });
 
