@@ -25,6 +25,7 @@ CodeAgent brings AI coding tasks, conversations, approvals, project files, and G
 ## Features
 
 - Run project or temporary tasks and follow responses, commands, plans, approvals, and file changes in real time
+- Follow task output in a separate transparent window without occupying the main workspace
 - Keep follow-up work in a persistent task queue, then edit, reorder, or cancel messages before they run
 - Attach files and images, reference project files with `@`, open temporary-task files, and copy absolute file paths
 - Install and manage Skills, official plugins, and third-party markets in the extension center, including MCP service controls and hot reload

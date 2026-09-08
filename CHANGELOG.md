@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-09-08
+
+### Added
+
+- 添加任务输出透明小窗，支持有界 Markdown 流式展示、自动滚动和独立窗口生命周期。
+
+### Fixed
+
+- 修复终端关闭后的 PTY、进程组与前端会话资源清理流程。
+- 调整异步问题区布局，并持久化任务级问题关闭状态。
+
 ## [0.1.9] - 2026-09-08
 
 ### Added
@@ -142,7 +153,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.6...v0.1.7
