@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TerminalRuntime } from "./terminal-runtime.js";
 import { TerminalStore } from "./terminal-store.js";
-import type { TerminalMetadata } from "../../protocol/project-terminal.js";
+import type { TerminalControlEvent, TerminalMetadata } from "../../protocol/project-terminal.js";
 
 const metadata: TerminalMetadata = { projectId: "p", rootId: "r", terminalId: "t", generation: "g", title: "sh", state: "running", cols: 80, rows: 24, exitCode: null };
 
@@ -15,6 +15,30 @@ function outputFrame(sequence: bigint): ArrayBuffer {
 
 describe("terminal runtime", () => {
   afterEach(() => vi.useRealTimers());
+  it.each(["exit", "stop", "early exit"])("removes the tab and releases resources after %s", async (mode) => {
+    let event: (value: TerminalControlEvent) => void = () => undefined;
+    const exited: TerminalControlEvent = { type: "exited", sequence: "1", data: { ...metadata, state: "exited", finalOffset: "10", truncatedReason: null } };
+    const release = vi.fn();
+    const client = {
+      connect: vi.fn(async (snapshot, receive) => { event = receive; snapshot({ generation: "g", sequence: "0", terminals: [] }); return vi.fn(); }),
+      create: vi.fn(async () => { if (mode === "early exit") event(exited); return { metadata, dispose: release }; }),
+      write: vi.fn(async () => undefined), ack: vi.fn(async () => undefined), resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => { event(exited); }), remove: vi.fn(async () => undefined),
+    };
+    const emulator = { write: vi.fn(), attach: vi.fn(), detach: vi.fn(), focus: vi.fn(), setExited: vi.fn(), dispose: vi.fn() };
+    const store = new TerminalStore();
+    store.update("p", { visible: true });
+    const runtime = new TerminalRuntime({ client, store, factory: async () => emulator });
+    await runtime.create("p", "r");
+    if (mode === "stop") await runtime.close(metadata);
+    else if (mode === "exit") event(exited);
+    expect(store.get("p")).toMatchObject({ terminals: [], selectedId: null, visible: false });
+    expect(client.remove).toHaveBeenCalledWith(exited.data);
+    expect(release).toHaveBeenCalledOnce();
+    expect(emulator.dispose).toHaveBeenCalledOnce();
+    runtime.dispose();
+    expect(emulator.dispose).toHaveBeenCalledOnce();
+  });
   it("closes a native creation that completes after disposal", async () => {
     let complete: (value: { metadata: TerminalMetadata; dispose: () => void }) => void = () => undefined;
     const release = vi.fn();

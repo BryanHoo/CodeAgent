@@ -14,7 +14,8 @@ export function removeTerminalMetadata(store: TerminalStore, scope: TerminalScop
   const current = store.get(scope.projectId);
   const terminals = current.terminals.filter((terminal) => terminal.terminalId !== scope.terminalId || terminal.generation !== scope.generation);
   if (terminals.length === current.terminals.length) return;
-  store.update(scope.projectId, { terminals, selectedId: terminals.some((terminal) => terminal.terminalId === current.selectedId) ? current.selectedId : terminals.at(-1)?.terminalId ?? null });
+  // 最后一个会话移除时同步收起区域，其他会话仍沿用当前显隐状态。
+  store.update(scope.projectId, { terminals, visible: terminals.length > 0 && current.visible, selectedId: terminals.some((terminal) => terminal.terminalId === current.selectedId) ? current.selectedId : terminals.at(-1)?.terminalId ?? null });
 }
 
 export function applyTerminalSnapshot(store: TerminalStore, snapshot: TerminalSnapshot): void {

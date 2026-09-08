@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ChevronDown, LoaderCircle, Plus, Square, TerminalSquare, Trash2 } from "lucide-react";
+import { ChevronDown, LoaderCircle, Plus, Square, TerminalSquare } from "lucide-react";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { terminalStore } from "../terminal-store.js";
-import { closeTerminal, createTerminal, loadTerminalRuntime, persistTerminalLayout, removeTerminal } from "../terminal-actions.js";
+import { closeTerminal, createTerminal, loadTerminalRuntime, persistTerminalLayout } from "../terminal-actions.js";
 import { terminalActionError } from "../terminal-layout.js";
 import { clampTerminalHeight } from "../terminal-panel-layout.js";
 import "./terminal.css";
@@ -55,9 +55,8 @@ export function TerminalPanel({ projectId, rootId }: { projectId: string; rootId
           <TerminalSquare aria-hidden="true" className="size-3 shrink-0" /><span className="truncate">{terminal.title}</span>
         </button>)}
       </div>
-      {selected !== undefined && !["running", "closing"].includes(selected.state) ? <span className="shrink-0 text-caption text-muted-foreground">{t("terminal.exited", { code: selected.exitCode ?? "-" })}</span> : null}
       <Tool label={t("terminal.new")} disabled={state.creating || rootId === undefined || terminalStore.liveCount(projectId) >= 4} onClick={() => void createTerminal(projectId, rootId)}>{state.creating ? <LoaderCircle className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}</Tool>
-      {selected?.state === "running" || selected?.state === "closing" ? <Tool label={t("terminal.stop")} disabled={selected.state === "closing"} onClick={() => void closeTerminal(selected)}><Square className="size-3" /></Tool> : <Tool label={t("terminal.remove")} disabled={selected === undefined} onClick={() => { if (selected !== undefined) void removeTerminal(selected); }}><Trash2 className="size-3.5" /></Tool>}
+      <Tool label={t("terminal.stop")} disabled={selected === undefined || selected.state === "closing"} onClick={() => { if (selected !== undefined) void closeTerminal(selected); }}><Square className="size-3" /></Tool>
       <Tool label={t("terminal.hide")} onClick={() => { terminalStore.update(projectId, { visible: false }); persistTerminalLayout(projectId); }}><ChevronDown className="size-3.5" /></Tool>
     </div>
     {state.error === null ? null : <p role="alert" className="max-h-20 shrink-0 overflow-auto break-all px-2 py-1 text-caption text-danger">{state.error}</p>}

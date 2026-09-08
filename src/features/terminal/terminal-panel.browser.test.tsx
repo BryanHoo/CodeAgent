@@ -8,13 +8,13 @@ import { TerminalWorkbench } from "./components/terminal-workbench.js";
 import { TerminalFooter } from "./components/terminal-context.js";
 import { TerminalStatusTrigger } from "./components/terminal-status-trigger.js";
 import { terminalStore } from "./terminal-store.js";
-import { upsertTerminal } from "./terminal-sessions.js";
+import { removeTerminalMetadata, upsertTerminal } from "./terminal-sessions.js";
 import { terminalRuntime } from "./terminal-runtime.js";
 import "../../shared/styles/globals.css";
 
 vi.mock("./terminal-runtime.js", () => ({ terminalRuntime: {
   create: vi.fn(async (projectId: string, rootId: string) => upsertTerminal(terminalStore, { projectId, rootId, terminalId: "browser-terminal", generation: "g", title: "zsh", state: "running", cols: 80, rows: 24, exitCode: null })),
-  attach: vi.fn(), detach: vi.fn(), focus: vi.fn(), close: vi.fn(), remove: vi.fn(),
+  attach: vi.fn(), detach: vi.fn(), focus: vi.fn(), close: vi.fn(async (scope) => removeTerminalMetadata(terminalStore, scope)), remove: vi.fn(),
 } }));
 
 describe("project terminal panel", () => {
@@ -61,7 +61,7 @@ describe("project terminal panel", () => {
     expect(terminalStore.liveCount("shortcut-b")).toBe(1);
   });
 
-  it.each([[1280, 800], [1440, 900], [1920, 1080], [900, 500]])("keeps desktop bands separate at %i x %i", async (width, height) => {
+  it.each([[1280, 720], [1440, 900], [1920, 1080], [900, 500]])("keeps desktop bands separate at %i x %i", async (width, height) => {
     await i18n.changeLanguage("zh-CN");
     await page.viewport(width, height);
     const screen = await render(<TooltipProvider><div style={{ height: height - 32, width: width - 32, display: "flex" }}>
@@ -71,7 +71,9 @@ describe("project terminal panel", () => {
         <TerminalFooter><TerminalStatusTrigger /></TerminalFooter>
       </TerminalWorkbench>
     </div></TooltipProvider>);
-    await screen.getByRole("button", { name: "终端 0", exact: true }).click();
+    const emptyTrigger = screen.getByRole("button", { name: "终端 0", exact: true });
+    await expect.element(emptyTrigger).toHaveTextContent("");
+    await emptyTrigger.click();
     await expect.element(screen.getByRole("tab", { name: "zsh" })).toBeVisible();
     const panel = screen.getByRole("region", { name: "项目终端" }).element().getBoundingClientRect();
     const composer = screen.getByRole("textbox", { name: "Composer" }).element().getBoundingClientRect();
@@ -104,5 +106,9 @@ describe("project terminal panel", () => {
     await expect.element(screen.getByRole("region", { name: "项目终端" })).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "终端 1", exact: true }).click();
     await expect.element(screen.getByRole("tab", { name: "zsh" })).toBeVisible();
+    await screen.getByRole("button", { name: "结束终端", exact: true }).click();
+    await expect.element(screen.getByRole("tab", { name: "zsh" })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("region", { name: "项目终端" })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "终端 0", exact: true })).toHaveTextContent("");
   });
 });

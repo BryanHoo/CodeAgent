@@ -32,8 +32,11 @@ describe("project terminal metadata", () => {
     const store = new TerminalStore();
     upsertTerminal(store, metadata("a", "1"));
     upsertTerminal(store, metadata("a", "2"));
-    store.update("a", { selectedId: "2" });
+    store.update("a", { selectedId: "2", visible: true });
     removeTerminalMetadata(store, { projectId: "a", terminalId: "2", generation: "g" });
     expect(store.get("a").selectedId).toBe("1");
+    expect(store.get("a").visible).toBe(true);
+    removeTerminalMetadata(store, { projectId: "a", terminalId: "1", generation: "g" });
+    expect(store.get("a")).toMatchObject({ selectedId: null, visible: false });
   });
 });

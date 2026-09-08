@@ -145,12 +145,19 @@ export class TerminalRuntime {
       removeTerminalMetadata(this.store, metadata);
       return;
     }
-    upsertTerminal(this.store, event.data);
-    if (record !== undefined) record.metadata = event.data;
     if (event.type === "exited") {
       if (record === undefined) { if (this.earlyExits.size >= 24) throw new Error("TERMINAL_LIMIT_REACHED"); this.earlyExits.set(metadata.terminalId, event); }
-      else { record.input.dispose(); record.emulator.setExited(); record.stream.finish(event.data.finalOffset, () => undefined); }
+      else {
+        // 退出即释放输入、输出订阅与渲染资源，不等待尾帧，也不保留待删除的 tab。
+        this.disposeRecord(record);
+        this.records.delete(metadata.terminalId);
+        removeTerminalMetadata(this.store, metadata);
+        void this.client.remove(metadata).catch((error: unknown) => this.store.update(metadata.projectId, { error: error instanceof Error ? error.message : "TERMINAL_CLEANUP_FAILED" }));
+      }
+      return;
     }
+    upsertTerminal(this.store, event.data);
+    if (record !== undefined) record.metadata = event.data;
   }
 
   private async flushResize(record: RecordState): Promise<void> {

@@ -16,10 +16,10 @@ export function WorkbenchComposerFooter({ props, rootControls }: { props: Workbe
         switchingBranch={props.switchingBranch} switchingWorktree={props.switchingWorktree} worktrees={props.worktrees}
       /></div>
       {rootControls}
+      <TerminalStatusTrigger />
     </> : null}
     <div className="ml-auto flex shrink-0 items-center gap-1">
       {props.captureMode ? null : <ProjectDraftList composerHasInput={props.hasComposerInput} drafts={props.projectDrafts} onDelete={props.onProjectDraftDelete} onRestore={props.onProjectDraftRestore} projectName={props.projectName} />}
-      {props.projectToolsEnabled ? <TerminalStatusTrigger /> : null}
       <Context maxTokens={props.contextUsage?.contextWindow} usedTokens={props.contextUsage?.usedTokens}><ContextTrigger /></Context>
     </div>
   </div></TerminalFooter>;
