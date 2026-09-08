@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-09-08
+
+### Added
+
+- 添加项目级原生集成终端，支持多会话、项目隔离、流量控制与跨平台进程清理。
+- 添加工作台全局快捷键及快捷键帮助，并支持关闭暂不回答的异步问题。
+- 添加按时间、星期和月份配置重复任务的表单控件。
+
+### Fixed
+
+- 修复终端会话退出、任务切换、面板布局及 Windows 和 Linux 原生终端兼容性问题。
+- 修复启动恢复覆盖实时任务状态，以及 steer 后提交输入清理时机错误。
+- 修复重复任务规则解析与时区保存逻辑。
+
 ## [0.1.8] - 2026-09-07
 
 ### Added
@@ -128,7 +142,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.5...v0.1.6
