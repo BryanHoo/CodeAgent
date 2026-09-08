@@ -53,6 +53,7 @@ function IndexPage() {
   const [globalSettingsSection, setGlobalSettingsSection] = useState<SidebarSettingsSection | null>(
     null,
   );
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [initialSavedExpandedProjectIds] = useState(() =>
     readExpandedProjectIds(getProjectSidebarPreferenceStorage()),
   );
@@ -93,13 +94,17 @@ function IndexPage() {
     <div
       className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
       data-inspector-open="false"
-      data-sidebar-open="true"
+      data-sidebar-open={sidebarOpen}
     >
       <ProjectSidebar
         {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
         onClose={() => undefined}
         onOpenSettings={(section) => {
           setGlobalSettingsSection(section);
+        }}
+        onPanelShortcut={(panel) => {
+          if (panel === "search") setSidebarOpen(true);
+          else if (panel === "sidebar") setSidebarOpen((open) => !open);
         }}
       />
       <main className="grid min-h-0 min-w-0 place-items-center bg-content text-sm text-muted-foreground">

@@ -1,6 +1,7 @@
 import type { AppInfoResponse, Project } from "@/protocol/index.js";
 import {
   CircleArrowUp,
+  CircleHelp,
   Archive,
   Ellipsis,
   Pencil,
@@ -150,11 +151,14 @@ export function ProjectActionMenu({
 export function SidebarSettingsButton({
   appInfo,
   onOpen,
+  onOpenShortcuts,
 }: Readonly<{
   appInfo?: AppInfoResponse;
   onOpen: (section: SidebarSettingsSection) => void;
+  onOpenShortcuts: () => void;
 }>) {
   const { t } = useTranslation("workbench");
+  const { t: shortcutsT } = useTranslation("shortcuts");
   const appVersion = appInfo?.appVersion ?? "…";
   const updateAvailable = appInfo?.updateAvailable === true;
   return (
@@ -178,7 +182,7 @@ export function SidebarSettingsButton({
           update: updateAvailable ? t("sidebar.updateAvailableLabel") : "",
           version: appVersion,
         })}
-        className="h-full gap-1 rounded-l-none px-2.5 text-caption"
+        className="h-full gap-1 rounded-none px-2.5 text-caption"
         id="global-settings-about-trigger"
         onClick={() => {
           onOpen("about");
@@ -206,6 +210,22 @@ export function SidebarSettingsButton({
           ) : null}
         </span>
       </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            aria-keyshortcuts="Meta+/ Control+/"
+            aria-label={shortcutsT("title")}
+            className="h-full rounded-l-none px-2"
+            id="keyboard-shortcuts-trigger"
+            onClick={onOpenShortcuts}
+            type="button"
+            variant="ghost"
+          >
+            <CircleHelp aria-hidden="true" className="size-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{shortcutsT("title")}</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

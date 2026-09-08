@@ -11,10 +11,19 @@ import { ProjectSidebarHeader } from "./project-sidebar-header.js";
 
 function ProjectSidebarHeaderHarness() {
   const [query, setQuery] = useState("");
+  const [searchRequest, setSearchRequest] = useState(0);
 
   return (
     <aside className="workbench-sidebar w-sidebar bg-sidebar">
-      <ProjectSidebarHeader onClose={vi.fn()} query={query} setQuery={setQuery} />
+      <button onClick={() => setSearchRequest((request) => request + 1)} type="button">
+        外部搜索
+      </button>
+      <ProjectSidebarHeader
+        onClose={vi.fn()}
+        query={query}
+        searchRequest={searchRequest}
+        setQuery={setQuery}
+      />
     </aside>
   );
 }
@@ -47,5 +56,7 @@ describe("ProjectSidebarHeader", () => {
 
     await searchButton.click();
     await expect.element(screen.getByRole("textbox", { name: "搜索任务" })).toHaveValue("");
+    await screen.getByRole("button", { name: "外部搜索" }).click();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "搜索任务" }).element());
   });
 });

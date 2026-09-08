@@ -1,6 +1,6 @@
 import { PanelLeft, Pencil } from "lucide-react";
 import { TerminalWorkbench } from "../../terminal/components/terminal-workbench.js";
-import { lazy, Suspense, useRef, type CSSProperties } from "react";
+import { Suspense, useRef, type CSSProperties } from "react";
 import { Button } from "../../../shared/components/core/button.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/components/core/tooltip.js";
@@ -20,12 +20,7 @@ import { WorkbenchInspector } from "./workbench-inspector.js";
 import { WorkbenchInspectorToggle } from "./workbench-inspector-toggle.js";
 import { WorkbenchPetLayer } from "../../pets/components/workbench-pet-layer.js";
 import { getWorkbenchInspectorMountKey } from "../workbench-inspector-activation.js";
-
-// 定时任务是低频独立视图，按需加载可保持常用工作区启动体积稳定。
-const ScheduledTasksContainer = lazy(async () => {
-  const module = await import("../../scheduled-tasks/scheduled-tasks-container.js");
-  return { default: module.ScheduledTasksContainer };
-});
+import { LazyScheduledTasksContainer } from "./scheduled-tasks-lazy.js";
 
 export function WorkbenchShellLayout({
   board,
@@ -148,6 +143,11 @@ export function WorkbenchShellLayout({
         onOpenSettings={(section) => {
           setGlobalSettingsSection(section);
         }}
+        onPanelShortcut={(panel) => {
+          if (panel === "search") setSidebarOpen(true);
+          else if (panel === "sidebar") setSidebarOpen((open) => !open);
+          else if (!utilityView) setInspectorOpen((open) => !open);
+        }}
         projectId={projectId}
         {...(taskId === undefined && pendingTaskSelection?.projectId === projectId
           ? { taskId: pendingTaskSelection.taskId }
@@ -245,7 +245,7 @@ export function WorkbenchShellLayout({
         </header>
         {scheduledTasks ? (
           <Suspense fallback={<div aria-busy="true" style={{ flex: 1 }} />}>
-            <ScheduledTasksContainer context={context} projectId={projectId} temporary={temporary} />
+            <LazyScheduledTasksContainer context={context} projectId={projectId} temporary={temporary} />
           </Suspense>
         ) : extensions ? (
           <SkillsMarketContainer

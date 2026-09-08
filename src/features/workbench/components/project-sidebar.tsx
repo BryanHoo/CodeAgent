@@ -46,6 +46,8 @@ import { TaskDeleteDialog } from "./task-delete-dialog.js";
 import { SidebarSettingsButton, type SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { groupTasksByProjectId } from "./project-sidebar-state.js";
 import { ProjectSidebarHeader } from "./project-sidebar-header.js";
+import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog.js";
+import { WorkbenchShortcuts } from "./workbench-shortcuts.js";
 export { ProductBrand } from "./project-sidebar-header.js";
 export * from "./project-sidebar-actions.js";
 export * from "./project-sidebar-state.js";
@@ -58,6 +60,7 @@ type ProjectSidebarProps = Readonly<{
   appInfo?: AppInfoResponse;
   onClose: () => void;
   onOpenSettings: (section: SidebarSettingsSection) => void;
+  onPanelShortcut: (panel: "inspector" | "search" | "sidebar") => void;
   projectId?: string;
   taskId?: string;
 }>;
@@ -66,6 +69,7 @@ export function ProjectSidebar({
   appInfo,
   onClose,
   onOpenSettings,
+  onPanelShortcut,
   projectId,
   taskId,
 }: ProjectSidebarProps) {
@@ -98,6 +102,8 @@ export function ProjectSidebar({
   );
   const expandedProjectsRef = useRef(expandedProjects);
   const [query, setQuery] = useState("");
+  const [searchRequest, setSearchRequest] = useState(0);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [expandedTaskProjects, setExpandedTaskProjects] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -318,7 +324,23 @@ export function ProjectSidebar({
       aria-label={t("sidebar.landmark")}
       className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider"
     >
-      <ProjectSidebarHeader onClose={onClose} query={query} setQuery={setQuery} />
+      <WorkbenchShortcuts
+        onNewTask={() => void navigate({ to: "/temporary" })}
+        onOpenSettings={() => onOpenSettings("appearance")}
+        onSearchTasks={() => {
+          onPanelShortcut("search");
+          setSearchRequest((request) => request + 1);
+        }}
+        onShowShortcuts={() => setShortcutsOpen(true)}
+        onToggleInspector={() => onPanelShortcut("inspector")}
+        onToggleSidebar={() => onPanelShortcut("sidebar")}
+      />
+      <ProjectSidebarHeader
+        onClose={onClose}
+        query={query}
+        searchRequest={searchRequest}
+        setQuery={setQuery}
+      />
 
       <nav className="space-y-0.5 px-2" aria-label={t("sidebar.agentNavigation")}>
         <Link className={primaryActionClassName} to="/temporary">
@@ -441,8 +463,10 @@ export function ProjectSidebar({
         <SidebarSettingsButton
           {...(appInfo === undefined ? {} : { appInfo })}
           onOpen={onOpenSettings}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
         />
       </div>
+      <KeyboardShortcutsDialog onOpenChange={setShortcutsOpen} open={shortcutsOpen} />
     </aside>
   );
 }

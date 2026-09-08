@@ -15,6 +15,7 @@
 - 组件通过 Query、功能域 Runtime 或 Context 获取状态，不直接发起原始网络请求
 - `src/protocol/` 不依赖 React 或具体传输实现，`src/client/` 仅消费公开协议
 - `src/shared/` 不反向依赖具体功能域；应用装配可以组合各层，但不承载领域逻辑
+- 路由级页面只负责把全局快捷键动作接入页面状态；快捷键定义、匹配和帮助界面归属 `src/features/workbench/`
 - 后端尚未接入时，客户端必须注入 `src/mock/` 的 fetch 与 WebSocket 工厂，禁止回退到真实网络
 - CodeAgent 偏好、自定义背景、编辑器输入缓存和待办统一通过 `src/platform/tauri/app-storage.ts` 提交；合并、重试和原子落盘由 Rust actor 负责，业务模块不得直接把应用数据写入 WebView `localStorage` 或 IndexedDB
 - 后台任务系统通知由 Rust Provider 事件归约直接触发；业务模块不得发送 Web Notification、调用通知 IPC 或保留桌面端无效的 Web 权限申请链

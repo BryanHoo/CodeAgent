@@ -13,10 +13,16 @@ import {
 type ProjectSidebarHeaderProps = Readonly<{
   onClose: () => void;
   query: string;
+  searchRequest: number;
   setQuery: (query: string) => void;
 }>;
 
-export function ProjectSidebarHeader({ onClose, query, setQuery }: ProjectSidebarHeaderProps) {
+export function ProjectSidebarHeader({
+  onClose,
+  query,
+  searchRequest,
+  setQuery,
+}: ProjectSidebarHeaderProps) {
   const { t } = useTranslation("workbench");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,7 +32,13 @@ export function ProjectSidebarHeader({ onClose, query, setQuery }: ProjectSideba
     if (isSearchOpen) {
       inputRef.current?.focus();
     }
-  }, [isSearchOpen]);
+  }, [isSearchOpen, searchRequest]);
+
+  useEffect(() => {
+    if (searchRequest > 0) {
+      setIsSearchOpen(true);
+    }
+  }, [searchRequest]);
 
   const closeSearch = () => {
     // 收起时同步取消筛选，并把焦点交还触发按钮，保证键盘操作连续。
@@ -56,6 +68,7 @@ export function ProjectSidebarHeader({ onClose, query, setQuery }: ProjectSideba
                 closeSearch();
               }
             }}
+            id="project-sidebar-search-input"
             placeholder={t("sidebar.search")}
             ref={inputRef}
             value={query}
@@ -85,6 +98,8 @@ export function ProjectSidebarHeader({ onClose, query, setQuery }: ProjectSideba
           <TooltipTrigger asChild>
             <Button
               aria-label={t("sidebar.search")}
+              aria-keyshortcuts="Meta+K Control+K"
+              id="project-sidebar-search-trigger"
               onClick={() => {
                 setIsSearchOpen(true);
               }}
