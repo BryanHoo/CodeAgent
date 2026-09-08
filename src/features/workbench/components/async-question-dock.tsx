@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircleQuestion, X, type LucideIcon } from "lucide-react";
-import { useId, useMemo, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useId, useMemo, useState, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 
@@ -8,8 +8,10 @@ import { Button } from "../../../shared/components/core/button.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import type { TaskStore } from "../../conversation/runtime/task-store-core.js";
 import { createAsyncQuestionProjection, type QuestionEntry } from "./async-question-projection.js";
-import { dismissQuestion, useAsyncQuestionSession } from "./async-question-session.js";
-import { AsyncQuestions } from "./async-questions.js";
+import { useAsyncQuestionSession } from "./async-question-session.js";
+
+// 无待回答问题时不加载表单代码，降低工作台初始加载量。
+const AsyncQuestions = lazy(() => import("./async-questions.js").then((module) => ({ default: module.AsyncQuestions })));
 
 export function AsyncQuestionDock({ taskStore }: Readonly<{ taskStore: TaskStore | undefined }>) {
   const session = useAsyncQuestionSession();
@@ -24,21 +26,17 @@ function QuestionDockContent({ entries, session }: Readonly<{
 }>) {
   const { t } = useTranslation("conversation");
   const pending = useStore(session.store, useShallow((state) =>
-    entries.filter((entry) => {
-      const status = state.drafts.get(entry.item.id)?.status;
-      return status !== "sent" && status !== "dismissed";
-    })));
+    entries.filter((entry) => state.drafts.get(entry.item.id)?.status !== "sent" && !state.dismissedIds.has(entry.item.id))));
   const [selectedKey, setSelectedKey] = useState<string>();
   const [collapsed, setCollapsed] = useState(false);
   const contentId = useId();
   const selectedIndex = Math.max(0, pending.findIndex((entry) => entry.key === selectedKey));
   const selected = pending[selectedIndex];
-  const sending = useStore(session.store, (state) =>
-    selected !== undefined && state.drafts.get(selected.item.id)?.status === "sending");
   if (selected === undefined) return null;
 
   return (
-    <section aria-label={t("asyncQuestions.pending")} className="w-full shrink-0 min-w-0 border-b border-separator bg-content px-5 pb-2">
+    <div className="shrink-0 min-w-0 bg-content px-1 pb-2 sm:px-5">
+    <section aria-label={t("asyncQuestions.pending")} className="mx-auto w-full max-w-content min-w-0 border-b border-separator">
       <div className="flex min-w-0 items-center gap-2 pt-2 pb-1">
         <MessageCircleQuestion aria-hidden="true" className="size-3.5 shrink-0 text-brand" />
         <span className="min-w-0 flex-1 truncate text-label font-medium">
@@ -55,14 +53,17 @@ function QuestionDockContent({ entries, session }: Readonly<{
         )}
         <DockButton icon={collapsed ? ChevronUp : ChevronDown} label={t(collapsed ? "asyncQuestions.expand" : "asyncQuestions.collapse")}
           controls={contentId} expanded={!collapsed} onClick={() => setCollapsed((value) => !value)} />
-        <DockButton icon={X} label={t("asyncQuestions.dismiss")} disabled={sending}
-          onClick={() => dismissQuestion(session.store, selected.item.id)} />
+        <DockButton icon={X} label={t("asyncQuestions.dismiss")}
+          onClick={() => session.store.getState().dismiss(selected.item.id)} />
       </div>
       {/* 问答区独立滚动且限制高度，不改变时间线的虚拟滚动容器。 */}
       <div id={contentId} hidden={collapsed} className="max-h-[min(32vh,20rem)] overflow-y-auto overscroll-contain py-2">
-        <AsyncQuestions key={selected.key} item={selected.item} />
+        <Suspense fallback={null}>
+          <AsyncQuestions key={selected.key} item={selected.item} />
+        </Suspense>
       </div>
     </section>
+    </div>
   );
 }
 

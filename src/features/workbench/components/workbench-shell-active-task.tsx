@@ -173,9 +173,9 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
       <AsyncQuestionProvider
         enabled={runtime.connectionState === "connected"}
         key={taskScope}
+        scope={JSON.stringify([projectId, taskId])}
         submit={answerQuestions}
       >
-        <AsyncQuestionDock taskStore={runtime.store} />
         <TaskTimeline
           onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
           {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
@@ -196,6 +196,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
           taskId={taskId}
           {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
         />
+        <AsyncQuestionDock taskStore={runtime.store} />
       </AsyncQuestionProvider>
       <WorkbenchComposer
         composerRef={composerRef}

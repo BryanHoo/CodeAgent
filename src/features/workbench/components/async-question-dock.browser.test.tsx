@@ -59,31 +59,68 @@ test("dismisses unanswered groups without submitting and keeps remaining questio
 });
 
 test.each([{ width: 1280, height: 720 }, { width: 1920, height: 1080 }])(
-  "stays at the central column top with matching width at $width x $height", async ({ width, height }) => {
+  "stays above the composer with matching width at $width x $height", async ({ width, height }) => {
   await page.viewport(width, height);
   const store = questionTask([{ ...questionItem("first"), questions: Array.from({ length: 16 }, (_, index) => ({
     title: `确认事项 ${index + 1}`, options: ["当前文件", "整个项目"],
   })) }]);
   const screen = await render(<TooltipProvider>
     <div data-testid="center" style={{ display: "flex", flexDirection: "column", width: width - 560, height: height - 100 }}>
-      <AsyncQuestionProvider enabled submit={async () => true}><AsyncQuestionDock taskStore={store} /></AsyncQuestionProvider>
       <div data-testid="timeline" style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
         <div style={{ height: 2400 }}>执行记录</div>
       </div>
-      <textarea aria-label="composer" style={{ height: 90, flexShrink: 0 }} defaultValue="未发送草稿" />
+      <AsyncQuestionProvider enabled submit={async () => true}><AsyncQuestionDock taskStore={store} /></AsyncQuestionProvider>
+      <section className="shrink-0 px-1 sm:px-5">
+        <textarea aria-label="composer" className="mx-auto block w-full max-w-content" style={{ height: 90 }} defaultValue="未发送草稿" />
+      </section>
     </div>
   </TooltipProvider>);
   const region = screen.getByRole("region", { name: /待回答问题|Pending questions/u }).element();
+  await expect.element(screen.getByText("确认事项 1", { exact: true })).toBeVisible();
   const before = region.getBoundingClientRect();
   const timeline = screen.getByTestId("timeline").element();
-  const center = screen.getByTestId("center").element().getBoundingClientRect();
-  expect(before.top).toBe(center.top);
-  expect(before.width).toBe(center.width);
-  expect(before.bottom).toBeLessThanOrEqual(timeline.getBoundingClientRect().top);
+  const composer = screen.getByRole("textbox", { name: "composer", exact: true }).element().getBoundingClientRect();
+  expect(before.width).toBe(composer.width);
+  expect(before.left).toBe(composer.left);
+  expect(before.top).toBeGreaterThanOrEqual(timeline.getBoundingClientRect().bottom);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   timeline.scrollTop = 1200;
   expect(region.getBoundingClientRect().top).toBe(before.top);
   expect(before.height).toBeLessThanOrEqual(Math.min(height * 0.32, 320) + 60);
   expect(screen.getByRole("textbox", { name: "composer", exact: true }).element().getBoundingClientRect().top).toBeGreaterThanOrEqual(before.bottom);
   await page.screenshot({ path: `../../../../test-results/question-dock-${width}.png` });
+});
+
+test("keeps dismissed questions hidden after leaving and reopening the task", async () => {
+  const scope = JSON.stringify(["project", crypto.randomUUID()]);
+  const submit = vi.fn(async () => true);
+  const view = (taskScope: string) => <TooltipProvider>
+    <AsyncQuestionProvider enabled scope={taskScope} submit={submit}>
+      <AsyncQuestionDock taskStore={questionTask([questionItem("same-id", "重新打开的问题")])} />
+    </AsyncQuestionProvider>
+  </TooltipProvider>;
+  const first = await render(view(scope));
+  await first.getByRole("button", { name: /关闭问题|Dismiss questions/u }).click();
+  await first.unmount();
+  const other = await render(view(`${scope}-other`));
+  await expect.element(other.getByText("重新打开的问题", { exact: true })).toBeVisible();
+  await other.unmount();
+  const reopened = await render(view(scope));
+  await expect.element(reopened.getByRole("region", { name: /待回答问题|Pending questions/u })).not.toBeInTheDocument();
+  expect(submit).not.toHaveBeenCalled();
+});
+
+test("keeps a question dismissed when an in-flight answer finishes", async () => {
+  let finish!: (accepted: boolean) => void;
+  const submit = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+  const screen = await render(<TooltipProvider>
+    <AsyncQuestionProvider enabled submit={submit}>
+      <AsyncQuestionDock taskStore={questionTask([questionItem("sending")])} />
+    </AsyncQuestionProvider>
+  </TooltipProvider>);
+  await screen.getByRole("button", { name: /发送回答|Send answers/u }).click();
+  await screen.getByRole("button", { name: /关闭问题|Dismiss questions/u }).click();
+  finish(false);
+  await expect.element(screen.getByRole("region", { name: /待回答问题|Pending questions/u })).not.toBeInTheDocument();
+  expect(submit).toHaveBeenCalledTimes(1);
 });
