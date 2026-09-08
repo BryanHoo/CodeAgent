@@ -118,6 +118,7 @@ describe("project terminal native UI", () => {
 
   it("records 200 input and 200 retained-tab render observations", async function () {
     if (process.env.CODEAGENT_WEBVIEW_RELEASE !== "1") { this.skip(); return; }
+    this.timeout(150_000);
     const input = await measureTerminalLatency("input");
     // 丢弃采样输入，不把其作为命令执行。
     await browser.execute((windows) => document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: windows ? "c" : "u", code: windows ? "KeyC" : "KeyU", keyCode: windows ? 67 : 85, ctrlKey: true, bubbles: true, cancelable: true })), process.platform === "win32");

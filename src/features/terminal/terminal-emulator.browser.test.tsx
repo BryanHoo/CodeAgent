@@ -25,6 +25,33 @@ async function setup(fallback = false) {
 }
 
 describe("terminal emulator rendering", () => {
+  it("shares the glyph atlas during a tab handoff and releases the detached renderer", async () => {
+    const activate = vi.spyOn(WebglAddon.prototype, "activate");
+    const dispose = vi.spyOn(WebglAddon.prototype, "dispose");
+    const { emulator, host } = await setup();
+    const previous = activate.mock.contexts[0] as WebglAddon;
+    await vi.waitFor(() => expect(previous.textureAtlas).toBeDefined());
+    const atlas = previous.textureAtlas;
+    const next = await createTerminalEmulator({ data: vi.fn(), resize: vi.fn() });
+    try {
+      emulator.detach();
+      next.attach(host);
+      const current = activate.mock.contexts[1] as WebglAddon;
+      expect(current.textureAtlas).toBe(atlas);
+      await vi.waitFor(() => expect(dispose.mock.contexts).toContain(previous));
+      expect(dispose.mock.contexts).not.toContain(current);
+      next.detach();
+      next.attach(host);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(dispose.mock.contexts).not.toContain(current);
+      next.detach();
+      next.dispose();
+      expect(dispose.mock.contexts).toContain(current);
+    } finally {
+      next.dispose();
+    }
+  });
+
   it("parses while detached without rendering and preserves the buffer on reattach", async () => {
     const { terminal, emulator, host } = await setup();
     await new Promise<void>((resolve) => emulator.write(new TextEncoder().encode("CodeAgent terminal\r\n\x1b[31mRED\x1b[0m UTF-8: 中文\r\n"), resolve));

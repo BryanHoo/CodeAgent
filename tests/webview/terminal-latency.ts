@@ -5,6 +5,17 @@ type Metric = { renders: number; parsedBytes: number; renderedAt: number; parsed
 type Measurement = { samplesMs: number[]; inputToOutputMs: number[]; outputToRenderMs: number[]; outputToParsedMs: number[]; animationFrameMs: number[]; error?: string };
 
 export async function measureTerminalLatency(mode: "input" | "switch"): Promise<Measurement> {
+  const { script } = await browser.getTimeouts();
+  // 200 observations include frame pacing; the batch can exceed WebDriver's 30s default.
+  await browser.setTimeout({ script: 60_000 });
+  try {
+    return await measureTerminalLatencyBatch(mode);
+  } finally {
+    await browser.setTimeout({ script });
+  }
+}
+
+async function measureTerminalLatencyBatch(mode: "input" | "switch"): Promise<Measurement> {
   return browser.executeAsync((kind, done: (value: Measurement) => void) => {
     const metrics = () => (window as unknown as { __CODEAGENT_TERMINAL_METRICS__: () => Metric[] }).__CODEAGENT_TERMINAL_METRICS__();
     const totals = () => metrics().reduce((total, value) => ({ renders: total.renders + value.renders, bytes: total.bytes + value.parsedBytes, renderedAt: Math.max(total.renderedAt, value.renderedAt), parsedAt: Math.max(total.parsedAt, value.parsedAt) }), { renders: 0, bytes: 0, renderedAt: 0, parsedAt: 0 });

@@ -31,6 +31,7 @@ class Emulator implements TerminalEmulator {
   private host: HTMLElement | undefined;
   private observer: ResizeObserver | undefined;
   private frame: number | undefined;
+  private webglRelease: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
   private releaseTestMetrics: (() => void) | undefined;
   private readonly visibility = () => {
@@ -70,6 +71,7 @@ class Emulator implements TerminalEmulator {
   attach(host: HTMLElement): void {
     if (this.disposed || this.host === host) return;
     this.detach();
+    this.cancelWebglRelease();
     this.host = host;
     if (this.terminal.element === undefined) this.terminal.open(host);
     else host.append(this.terminal.element);
@@ -82,7 +84,10 @@ class Emulator implements TerminalEmulator {
     this.observer?.disconnect(); this.observer = undefined;
     if (this.frame !== undefined) cancelAnimationFrame(this.frame);
     this.frame = undefined;
-    this.releaseWebgl();
+    // Let the next tab acquire xterm's shared glyph atlas before its last owner releases it.
+    if (this.webgl !== undefined && this.webglRelease === undefined) {
+      this.webglRelease = setTimeout(() => this.releaseWebgl(), 0);
+    }
     this.terminal.element?.remove();
     this.host = undefined;
   }
@@ -92,6 +97,7 @@ class Emulator implements TerminalEmulator {
     this.disposed = true;
     this.releaseTestMetrics?.();
     this.detach();
+    this.releaseWebgl();
     document.removeEventListener("visibilitychange", this.visibility);
     this.terminal.dispose();
   }
@@ -111,7 +117,14 @@ class Emulator implements TerminalEmulator {
     this.terminal.refresh(0, this.terminal.rows - 1);
   }
 
-  private releaseWebgl(): void { this.webgl?.dispose(); this.webgl = undefined; }
+  private cancelWebglRelease(): void {
+    if (this.webglRelease !== undefined) clearTimeout(this.webglRelease);
+    this.webglRelease = undefined;
+  }
+  private releaseWebgl(): void {
+    this.cancelWebglRelease();
+    this.webgl?.dispose(); this.webgl = undefined;
+  }
   private scheduleFit(): void {
     if (this.frame !== undefined || this.host === undefined || document.hidden) return;
     this.frame = requestAnimationFrame(() => {
