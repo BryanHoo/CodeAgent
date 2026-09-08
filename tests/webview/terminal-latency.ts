@@ -113,9 +113,9 @@ export async function measureSystemInputLatency() {
       return { samplesMs, inputToOutputMs, outputToRenderMs, trustedKeys, failure: error ?? null };
     });
   } finally {
-    await browser.execute(() => {
+    await browser.execute((windows) => {
       (window as ProbeWindow).__terminalSystemProbe.stop();
-      document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "u", code: "KeyU", keyCode: 85, ctrlKey: true, bubbles: true, cancelable: true }));
-    });
+      document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: windows ? "c" : "u", code: windows ? "KeyC" : "KeyU", keyCode: windows ? 67 : 85, ctrlKey: true, bubbles: true, cancelable: true }));
+    }, process.platform === "win32");
   }
 }

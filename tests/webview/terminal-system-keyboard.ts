@@ -1,8 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
+import { windowsTerminalNative } from "./windows-terminal-native.js";
 
 export async function postTerminalSystemText(text: string, delayMicroseconds = 10000, enter = true): Promise<void> {
+  if (process.platform === "win32") {
+    await windowsTerminalNative("keys", text, delayMicroseconds, enter);
+    return;
+  }
   const executable = resolve("src-tauri/target/aarch64-apple-darwin", process.env.CODEAGENT_WEBVIEW_RELEASE === "1" ? "release" : "debug", "codeagent");
   // 精确匹配测试二进制，系统事件只投递到该 PID；不触碰其他前台应用。
   await promisify(execFile)("swift", ["-e", `

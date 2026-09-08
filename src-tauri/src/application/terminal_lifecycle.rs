@@ -93,7 +93,8 @@ pub(crate) fn request_close(window: &Window) -> bool {
         return true;
     }
     let generation = manager.generation();
-    manager.set_closing(true);
+    // owner blocks creation/reconnect while the dialog is pending. Existing PTYs
+    // must still accept protocol replies; close_generation stops them on confirm.
     let app = app.clone();
     app.dialog()
         .message("关闭窗口将结束所有本地终端及其运行中的程序。")
@@ -107,14 +108,6 @@ pub(crate) fn request_close(window: &Window) -> bool {
         ))
         .show(move |confirmed| {
             if !confirmed {
-                if manager.generation() == generation
-                    && !app
-                        .state::<TerminalLifecycle>()
-                        .exiting
-                        .load(Ordering::Acquire)
-                {
-                    manager.set_closing(false);
-                }
                 owner.closing.store(false, Ordering::Release);
                 return;
             }

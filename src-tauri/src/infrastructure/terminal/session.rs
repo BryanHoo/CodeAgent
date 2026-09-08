@@ -167,19 +167,13 @@ impl Session {
         #[cfg(unix)]
         tree.terminate(false)?;
         #[cfg(windows)]
-        self.child
-            .killer
-            .lock()
-            .map_err(|_| TerminalError::CleanupFailed)?
-            .kill()
-            .map_err(|_| TerminalError::CleanupFailed)?;
-        self.child.wait_timeout(Duration::from_secs(2))?;
-        #[cfg(unix)]
-        tree.terminate(true)?;
-        #[cfg(windows)]
         self.job
             .terminate()
             .map_err(|_| TerminalError::CleanupFailed)?;
+        #[cfg(unix)]
+        self.child.wait_timeout(Duration::from_secs(2))?;
+        #[cfg(unix)]
+        tree.terminate(true)?;
         if !self.child.wait_timeout(Duration::from_millis(800))? {
             return Err(TerminalError::CleanupFailed);
         }

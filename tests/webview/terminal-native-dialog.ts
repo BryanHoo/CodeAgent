@@ -1,8 +1,19 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { windowsTerminalNative } from "./windows-terminal-native.js";
+
+const windowsActions: Record<string, unknown>[] = [];
 
 export async function terminalNativeDialog(action: "request" | "cancel" | "confirm"): Promise<void> {
+  if (process.platform === "win32") {
+    const result = await windowsTerminalNative(action, action === "cancel" ? "取消" : action === "confirm" ? "结束并关闭" : "");
+    windowsActions.push(result);
+    await mkdir("artifacts/terminal", { recursive: true });
+    await writeFile("artifacts/terminal/windows-native-dialog.json", JSON.stringify({ measuredAt: new Date().toISOString(), actions: windowsActions }, null, 2));
+    return;
+  }
   const executable = resolve("src-tauri/target/aarch64-apple-darwin", process.env.CODEAGENT_WEBVIEW_RELEASE === "1" ? "release" : "debug", "codeagent");
   // 只访问测试 PID 的原生窗口树，并跳过 WebView 内容，避免把网页按钮当作系统提示。
   await promisify(execFile)("swift", ["-e", `

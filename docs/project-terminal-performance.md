@@ -108,11 +108,11 @@ Release WKWebView 已验证：首次点击才创建真实 PTY、UI 粘贴可执�
 
 ## 未验证项与限制
 
-- Windows 11 26100 / WebView2 152 Debug 实机已覆盖 PowerShell 与 `cmd.exe` 的 ConPTY 输入、回显和退出、原生二进制 Channel、97×31 resize、xterm 输入回显、隐藏恢复、退出码 7、移除标签及可见布局。Windows Release CPU/RSS、可信物理键盘和原生关闭提示未验证；启动到 Job Object 归属之间的竞态和 ConPTY 阻塞 I/O 取消仍是未解决项，不能据此宣称 Windows Release 已就绪。Linux WebKitGTK 仍未实机验证。
+- Windows 11 26100 / WebView2 152 已补齐 Release 系统可信键盘事件、原生关闭确认/取消和 12 终端 CPU/RSS 实测，并修复首次关闭误报失败及取消后会话退出问题。资源观测使用独立 WebView2 进程树，涵盖 12 终端三轮空闲、同时输出和恢复，结果与限制见 [Windows 验证记录](./windows-terminal-verification.md)。系统事件由 SendInput 注入，不是实体键盘的硬件到显示器延迟；启动到 Job Object 归属竞态和任意 ConPTY 阻塞 I/O 取消仍未完整覆盖。Linux WebKitGTK 仍未实机验证。
 - 原生关闭提示确认/取消已验证；意外窗口销毁和重建仍缺完整实机交互证据。
 - 最终 200 次 onRender 事件时间戳观测达到 30/50ms 目标，但不是 GPU 完成或显示器实际呈现时间；无驱动对照尚未完成，历史 rAF 观测失败样本仍保留。
-- 未覆盖完整的多会话同时高流量、输出中断 P95、压测期间 Composer 响应、实际 1 MiB 粘贴端到端、vim/top 与极端组合字符矩阵。
+- Windows 已覆盖 12 会话同时输出及回收；输出中断 P95、压测期间 Composer 响应、实际 1 MiB 粘贴端到端、vim/top 与极端组合字符矩阵仍未完整覆盖。
 - xterm scrollback 行数和传输字节预算不等同于整个终端的严格 RSS 上限；极端 Unicode 组合字符仍需要单独验证。
 - Unix 受管进程组之外自行 daemonize/脱离会话的进程不承诺通用追踪。
 
-综上：macOS 主要交互及部分资源预算已有真实证据，Windows Debug 核心终端流程已有真实 WebView2/ConPTY 证据；完整跨平台与 Release 性能验收尚未完成，不能标记发布就绪。
+macOS 主要交互及部分资源预算已有真实证据，Windows 核心终端流程、Release 系统事件和多终端资源开销也已有真实 WebView2/ConPTY 证据；剩余性能与平台边界按上述列表保留。
