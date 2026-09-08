@@ -98,6 +98,8 @@ export class TerminalInput {
         if (!this.disposed) this.bytes -= chunk.bytes.byteLength;
       }
     } catch (error) {
+      // 关闭会话后，在途 IPC 的拒绝已不再代表有效输入失败。
+      if (this.disposed) return;
       this.dispose();
       this.fail(error instanceof Error ? error : new Error("TERMINAL_STREAM_INVALID"));
     } finally { this.sending = false; }

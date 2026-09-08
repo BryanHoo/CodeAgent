@@ -165,7 +165,16 @@ impl Session {
             super::process_cleanup::ProcessTree::capture(pid, foreground)?
         };
         #[cfg(unix)]
-        tree.terminate(false)?;
+        let hangup = tree.terminate(false);
+        #[cfg(unix)]
+        // 先保存前台进程组再释放 master；macOS 的 slave 退出可能等待未读输出排水。
+        // 若等 child 退出后才关闭 master，shell 与前台作业会卡在退出状态并使 killpg 失败。
+        self.master
+            .lock()
+            .map_err(|_| TerminalError::CleanupFailed)?
+            .take();
+        #[cfg(unix)]
+        hangup?;
         #[cfg(windows)]
         self.job
             .terminate()
@@ -178,6 +187,7 @@ impl Session {
             return Err(TerminalError::CleanupFailed);
         }
         self.child.join()?;
+        #[cfg(windows)]
         self.master
             .lock()
             .map_err(|_| TerminalError::CleanupFailed)?
@@ -196,3 +206,7 @@ fn size(cols: u16, rows: u16) -> PtySize {
         pixel_height: 0,
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "session_close_tests.rs"]
+mod tests;

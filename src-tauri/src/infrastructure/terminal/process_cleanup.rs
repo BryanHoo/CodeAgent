@@ -107,17 +107,25 @@ impl ProcessTree {
             sys::signal::{Signal, killpg},
             unistd::Pid,
         };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(200);
         for group in &self.groups {
-            match killpg(
-                Pid::from_raw(*group),
-                if force {
-                    Signal::SIGKILL
-                } else {
-                    Signal::SIGHUP
-                },
-            ) {
-                Ok(()) | Err(Errno::ESRCH) => {}
-                Err(_) => return Err(TerminalError::CleanupFailed),
+            loop {
+                match killpg(
+                    Pid::from_raw(*group),
+                    if force {
+                        Signal::SIGKILL
+                    } else {
+                        Signal::SIGHUP
+                    },
+                ) {
+                    Ok(()) | Err(Errno::ESRCH) => break,
+                    // macOS 对退出中的进程组短暂返回 EPERM；等待其消失，不吞掉真实权限错误。
+                    // 所有组共用关闭阶段的有界预算，不增加运行期间的轮询。
+                    Err(Errno::EPERM) if std::time::Instant::now() < deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(_) => return Err(TerminalError::CleanupFailed),
+                }
             }
         }
         Ok(())

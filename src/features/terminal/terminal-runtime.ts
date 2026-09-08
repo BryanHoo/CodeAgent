@@ -54,7 +54,18 @@ export class TerminalRuntime {
     if (this.visibleId === terminalId) { this.visibleId = undefined; this.visibleHost = undefined; }
   }
   focus(terminalId: string): void { this.records.get(terminalId)?.emulator.focus(); }
-  async close(scope: TerminalScope): Promise<void> { await this.client.close(scope); }
+  async close(scope: TerminalScope): Promise<void> {
+    const record = this.records.get(scope.terminalId);
+    if (record?.metadata.generation === scope.generation) this.stopRecord(record);
+    await this.client.close(scope);
+    // native 返回成功即确认进程已回收；控制通道断开时也必须清除残留计数。
+    const current = this.records.get(scope.terminalId);
+    if (current?.metadata.generation !== scope.generation) return;
+    this.disposeRecord(current);
+    this.records.delete(scope.terminalId);
+    removeTerminalMetadata(this.store, scope);
+    await this.client.remove(scope);
+  }
   async remove(scope: TerminalScope): Promise<void> { await this.client.remove(scope); }
 
   dispose(): void {
@@ -146,7 +157,12 @@ export class TerminalRuntime {
       return;
     }
     if (event.type === "exited") {
-      if (record === undefined) { if (this.earlyExits.size >= 24) throw new Error("TERMINAL_LIMIT_REACHED"); this.earlyExits.set(metadata.terminalId, event); }
+      if (record === undefined) {
+        if (this.creating.has(metadata.projectId)) {
+          if (this.earlyExits.size >= 24) throw new Error("TERMINAL_LIMIT_REACHED");
+          this.earlyExits.set(metadata.terminalId, event);
+        }
+      }
       else {
         // 退出即释放输入、输出订阅与渲染资源，不等待尾帧，也不保留待删除的 tab。
         this.disposeRecord(record);
@@ -156,6 +172,9 @@ export class TerminalRuntime {
       }
       return;
     }
+    // 关闭响应可能先于排队中的状态事件到达，迟到事件不能重新创建已移除的会话。
+    if (record === undefined && !this.creating.has(metadata.projectId)) return;
+    if (record !== undefined && event.data.state === "closing") this.stopRecord(record);
     upsertTerminal(this.store, event.data);
     if (record !== undefined) record.metadata = event.data;
   }
@@ -172,6 +191,10 @@ export class TerminalRuntime {
     finally { record.resizing = false; }
   }
 
+  private stopRecord(record: RecordState): void {
+    // 进入关闭阶段即停止输入和 ACK，避免回收期间的在途操作再次触发关闭。
+    record.stream.dispose(); record.input.dispose(); record.emulator.setExited();
+  }
   private disposeRecord(record: RecordState): void { record.stream.dispose(); record.input.dispose(); record.release(); record.emulator.dispose(); }
   private connectionFailed(error: Error): void {
     this.connecting = undefined;
