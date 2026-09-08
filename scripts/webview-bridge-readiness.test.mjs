@@ -35,3 +35,21 @@ void test("Native WebView workflow installs the Ubuntu WebKit driver", async () 
 
   assert.match(workflow, /\bwebkit2gtk-driver\b/u);
 });
+
+void test("WebView bridge is published before the WDIO plugin import settles", async () => {
+  const bootstrap = await readFile(
+    new URL("../src/webview-test-bootstrap.ts", import.meta.url),
+    "utf8",
+  );
+  const bridgePublishedAt = bootstrap.indexOf(
+    "window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__ = bridge;",
+  );
+  const pluginImportAt = bootstrap.indexOf('await import("@wdio/tauri-plugin");');
+
+  assert.notEqual(bridgePublishedAt, -1);
+  assert.notEqual(pluginImportAt, -1);
+  assert.ok(
+    bridgePublishedAt < pluginImportAt,
+    "WebKitGTK must observe the bridge without waiting for the WDIO module boundary",
+  );
+});

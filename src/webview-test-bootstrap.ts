@@ -21,8 +21,7 @@ declare global {
 export async function prepareWebviewTestBridge(): Promise<void> {
   if (import.meta.env.VITE_WEBVIEW_TEST !== "1") return;
 
-  // 测试先安装 IPC mock，再放行应用启动，避免首屏请求命中真实本地运行时。
-  await import("@wdio/tauri-plugin");
+  // 先同步发布桥接，让 WebKitGTK 驱动无需等待动态模块加载即可写入测试数据。
   const bridge: NonNullable<Window["__CODEAGENT_WEBVIEW_TEST_BRIDGE__"]> = {
     calls: {},
     defaults: {},
@@ -31,6 +30,9 @@ export async function prepareWebviewTestBridge(): Promise<void> {
     passthrough: new Set(),
   };
   window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__ = bridge;
+
+  // 测试先安装 IPC mock，再放行应用启动，避免首屏请求命中真实本地运行时。
+  await import("@wdio/tauri-plugin");
   window.__CODEAGENT_WEBVIEW_TEST_INVOKE__ = async <T>(
     command: string,
     args: InvokeArgs = {},
