@@ -1,7 +1,9 @@
 import { skillsMarket } from "./skills-market.js";
 import { scheduledTasks } from "./scheduled-tasks.js";
+import { taskWindow } from "./task-window-menu.js";
 
 export const workbench = {
+  taskWindow,
   pet: {
     activeTasks: "Active tasks",
     activitySummary: "{{count}} active tasks, {{waiting}} waiting for attention",
@@ -492,8 +494,5 @@ export const workbench = {
     runningFor: "Running for {{duration}}",
     title: "Task board",
   },
-  taskDialog: {
-    name: "Task name",
-    rename: "Rename task",
-  },
+  taskDialog: { name: "Task name", rename: "Rename task" },
 } as const;

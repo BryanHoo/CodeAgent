@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "../../../shared/components/core/dropdown-menu.js";
 import { TaskActionMenu, TaskLink } from "./project-sidebar-task-row.js";
+const { openTaskWindow } = vi.hoisted(() => ({ openTaskWindow: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../../../platform/tauri/task-window-client.js", () => ({ openTaskWindow }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, params: _params, to: _to, ...props }: ComponentProps<"a"> & {
@@ -29,6 +31,19 @@ const task: AgentTask = {
 };
 
 describe("TaskActionMenu", () => {
+  it("opens the selected task in a floating window", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <DropdownMenu defaultOpen>
+          <DropdownMenuTrigger>打开任务菜单</DropdownMenuTrigger>
+          <TaskActionMenu isPending={false} onArchive={vi.fn()} onDelete={vi.fn()} onPin={vi.fn()} onRename={vi.fn()} task={task} />
+        </DropdownMenu>
+      </I18nextProvider>,
+    );
+    await screen.getByRole("menuitem", { name: "小窗访问" }).click();
+    await vi.waitFor(() => expect(openTaskWindow).toHaveBeenCalledWith(task.projectId, task.id));
+  });
   it("copies the current task ID", async () => {
     await i18n.changeLanguage("zh-CN");
     const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();

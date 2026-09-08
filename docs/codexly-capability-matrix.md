@@ -39,6 +39,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 排队提交 | `list/add/update/delete/reorder/startQueuedSubmission` | 原生 `thread/queue/*`，保留顺序和编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；单调序号、缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
+| 小窗访问 | Task 只读输出 | 440×220 横向透明无外框置顶小窗，最多 3 个且同任务复用；工作台同源样式的 12px Markdown 与 160 字符操作标题；仅挂载可视块，支持滚动查看最近输出，置底时跟随新输出；独立入口与受限 Channel，单窗最多一个未确认包、12 项、每项 4 KiB；仅读取最近回合一页；双击恢复对应普通/临时任务路由后销毁，主窗口销毁不影响输出 | 已实现 |
 | 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
 | 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |
 | Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.152 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
@@ -114,6 +115,8 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - [Codex 官方更新日志](https://developers.openai.com/codex/changelog)
 - [Tauri Rust 到前端通信](https://v2.tauri.app/develop/calling-frontend/)
 - [Tauri 前端调用 Rust](https://v2.tauri.app/develop/calling-rust/)
+- [Tauri macOS 全屏置顶问题与社区实践](https://github.com/tauri-apps/tauri/issues/11488)
+- [tauri-nspanel 原生面板实现](https://github.com/ahkohd/tauri-nspanel)
 - [Tauri Notification 插件](https://v2.tauri.app/plugin/notification/)
 - [codex-webui](https://github.com/seo-rii/codex-webui)
 - [CodexHarbor](https://github.com/adondada/codexharbor)

@@ -8,7 +8,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
-    include: ["@tanstack/react-virtual", "radix-ui/popover", "zustand/react/shallow", "@xterm/xterm", "@xterm/addon-fit", "@xterm/addon-webgl"],
+    include: ["@tanstack/react-virtual", "radix-ui/popover", "zustand/react/shallow", "@xterm/xterm", "@xterm/addon-fit", "@xterm/addon-webgl", "marked", "remend"],
   },
   resolve: {
     alias: [{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) }],

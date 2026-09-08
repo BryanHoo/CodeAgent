@@ -7,6 +7,10 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("task window operation failed")]
+    TaskWindowFailed,
+    #[error("at most three task windows can be open")]
+    TaskWindowLimit,
     #[error(transparent)]
     Terminal(#[from] crate::domain::project_terminal::TerminalError),
     #[error("failed to start Codex runtime")]
@@ -70,6 +74,7 @@ impl Serialize for AppError {
             return payload.end();
         }
         let structured_error = match self {
+            Self::TaskWindowLimit => Some(("TASK_WINDOW_LIMIT", self.to_string())),
             Self::Terminal(error) => Some((error.code(), error.to_string())),
             Self::CodexThreadBusy => Some(("CODEX_THREAD_BUSY", self.to_string())),
             Self::RequestCancelled => Some(("REQUEST_CANCELLED", self.to_string())),

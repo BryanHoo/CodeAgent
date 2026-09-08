@@ -12,7 +12,6 @@ import { recordFrontendDiagnostic } from "./platform/tauri/diagnostics.js";
 import { installPerformanceMonitoring } from "./shared/performance/performance-monitoring.js";
 import { PerformanceProfiler } from "./shared/performance/performance-profiler.js";
 import "./shared/styles/globals.css";
-import "./shared/styles/desktop-pet.css";
 import "./shared/styles/task-board.css";
 import "./shared/styles/skills-market.css";
 import "./shared/styles/workbench.css";
@@ -26,7 +25,7 @@ if (!(rootElement instanceof HTMLElement)) {
 const applicationRoot = rootElement;
 const windowSurface = new URLSearchParams(window.location.search).get("window");
 const appSurface =
-  windowSurface === "desktop-pet" || windowSurface === "project-file" ? windowSurface : "main";
+  windowSurface === "desktop-pet" || windowSurface === "project-file" || windowSurface === "task-window" ? windowSurface : "main";
 document.documentElement.dataset.appSurface = appSurface;
 installPerformanceMonitoring();
 installGlobalDiagnostics();
@@ -49,17 +48,12 @@ async function initializeAppStorageSafely(): Promise<void> {
 
 async function startApplication(): Promise<void> {
   await prepareWebviewTestBridge();
-  if (appSurface === "project-file") {
-    const [{ ProjectFileWindowApplication }, { initializeThemePreference }] = await Promise.all([
-      import("./app/project-file-window-application.js"),
-      import("./features/settings/theme-preference.js"),
-    ]);
-    await initializeAppStorageSafely();
-    initializeThemePreference();
-    await synchronizeLanguagePreference();
+  if (appSurface === "project-file" || appSurface === "task-window") {
+    const { prepareAuxiliaryWindow } = await import("./app/auxiliary-window-application.js");
+    const WindowApplication = await prepareAuxiliaryWindow(appSurface, initializeAppStorageSafely);
     createRoot(applicationRoot, reactDiagnosticHandlers).render(
       <StrictMode>
-        <ProjectFileWindowApplication />
+        <I18nextProvider i18n={i18n}><WindowApplication /></I18nextProvider>
       </StrictMode>,
     );
     return;

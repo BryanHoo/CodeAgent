@@ -169,6 +169,13 @@ pub(crate) fn show_main_window_at_route(app: &AppHandle, route: String) {
     queue_main_window_restore(app, Some(route));
 }
 
+pub(super) fn restore_main_window_at_route(app: &AppHandle, route: String) -> tauri::Result<()> {
+    let generation = app
+        .state::<MainWindowLifecycle>()
+        .prepare_show(Some(route.clone()));
+    restore_main_window(app, generation, Some(route))
+}
+
 pub(super) fn visible_main_window_route(app: &AppHandle) -> Option<String> {
     let window = app.get_webview_window(MAIN_WINDOW_LABEL)?;
     // 隐藏或最小化窗口不算用户正在查看，后台完成仍应保留待查看气泡。
@@ -185,7 +192,9 @@ fn queue_main_window_restore(app: &AppHandle, route: Option<String>) {
     let app = app.clone();
     // Windows WebView2 不能在同步托盘回调中创建窗口，统一切到异步运行时重建。
     tauri::async_runtime::spawn(async move {
-        restore_main_window(&app, generation, route);
+        if let Err(error) = restore_main_window(&app, generation, route) {
+            crate::infrastructure::diagnostics::record_error("main_window_restore_failed", error);
+        }
     });
 }
 
@@ -203,48 +212,37 @@ fn reset_main_window_fullscreen(window: &impl MainWindowFullscreen) {
     window.set_fullscreen(false);
 }
 
-fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option<String>) {
+fn restore_main_window(
+    app: &AppHandle,
+    generation: u64,
+    requested_route: Option<String>,
+) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
     let _ = app.set_dock_visibility(true);
     let lifecycle = app.state::<MainWindowLifecycle>();
     let saved_route = {
         let state = lifecycle.lock();
         if state.destroy_generation != generation {
-            return;
+            return Err(tauri::Error::WindowNotFound);
         }
         state.route.clone()
     };
     let (window, should_navigate) = match app.get_webview_window(MAIN_WINDOW_LABEL) {
         Some(window) => (window, true),
-        None => match create_main_window(app, saved_route) {
-            Ok(window) => (window, false),
-            Err(error) => {
-                crate::infrastructure::diagnostics::record_error(
-                    "main_window_recreate_failed",
-                    error,
-                );
-                return;
-            }
-        },
+        None => (create_main_window(app, saved_route)?, false),
     };
 
-    if should_navigate
-        && let Some(route) = requested_route.as_deref()
-        && let Err(error) = window.emit(MAIN_WINDOW_NAVIGATE_EVENT, route)
-    {
-        crate::infrastructure::diagnostics::record_error(
-            "main_window_navigation_emit_failed",
-            error,
-        );
+    if should_navigate && let Some(route) = requested_route.as_deref() {
+        window.emit(MAIN_WINDOW_NAVIGATE_EVENT, route)?;
     }
 
     // 只有明确关闭后的首次唤醒才退出全屏；通知聚焦可见窗口时保留用户当前状态。
     if lifecycle.take_windowed_restore(generation) {
         reset_main_window_fullscreen(&window);
     }
-    let _ = window.unminimize();
-    let _ = window.show();
-    let _ = window.set_focus();
+    window.unminimize()?;
+    window.show()?;
+    window.set_focus()?;
     super::terminal_lifecycle::resume_owner(app);
 
     let active_route =
@@ -255,6 +253,7 @@ fn restore_main_window(app: &AppHandle, generation: u64, requested_route: Option
             acknowledge_completed_desktop_pet_route(&app, &route).await;
         });
     }
+    Ok(())
 }
 
 fn create_main_window(app: &AppHandle, route: Option<String>) -> tauri::Result<WebviewWindow> {

@@ -1,7 +1,9 @@
 import { skillsMarket } from "./skills-market.js";
 import { scheduledTasks } from "./scheduled-tasks.js";
+import { taskWindow } from "./task-window-menu.js";
 
 export const workbench = {
+  taskWindow,
   pet: {
     activeTasks: "活动任务",
     activitySummary: "{{count}} 个活动任务，其中 {{waiting}} 个等待处理",

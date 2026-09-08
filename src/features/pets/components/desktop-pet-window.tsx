@@ -2,6 +2,7 @@ import type {
   DesktopPetDragStrategy,
   DesktopPetState,
 } from "../../../protocol/desktop-pet.js";
+import "../../../shared/styles/desktop-pet.css";
 import type { WorkbenchPetDescriptor } from "../../../protocol/index.js";
 import {
   useCallback,

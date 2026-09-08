@@ -23,6 +23,9 @@
 - 稳定 Markdown 块必须通过不可变共享树独立更新，禁止每次追加复制完整分块目录或重挂历史节点；安全的纯文本按有界文本页追加，顶层未闭合代码围栏按增量状态识别关闭标记，代码长行也必须分页，短行不得分配深层文本索引；复杂语法、完整替换和完成态必须回到完整解析以保证语义
 - 流式文本验证必须覆盖跳过更新、旧快照重放、完整替换、跨 Chunk 文件链接与评论指令、CRLF 偏移、代理对分页、代码复制和脚注；通过处理字符数断言限制历史重读，并使用 `pnpm exec vitest bench --run benchmarks/streaming-text.bench.ts` 分别测量大量短段落、长纯文本段落、开放代码围栏及代码长行，不将复杂语法回退或 DOM 布局成本宣称为线性
 - 工具型独立窗口必须由受限 Tauri 命令创建，使用专用轻量启动面和最小 capability；不得使用 WebView `window.open()`，也不得挂载完整工作台 Provider 树
+- 任务小窗使用横向画中画布局和独立完整 chrome 样式，只显示有界最近输出；Markdown 按解析后的有界块虚拟化，overscan 为 0，长单段与代码长行也必须可卸载，禁止挂载工作台、终端或高亮器。内容区支持滚动，上滑后停止自动跟随，回到底部恢复；更新与缩放不得打断上滑阅读；仅标题栏和底栏参与拖窗；工具、终端、文件只显示图标和单行标题。拖动阈值前保留双击，双击与键盘按钮复用恢复命令。专用文案和客户端按需加载，保持既有首屏与工作台体积预算。
+- 辅助窗口动态 import 必须使用独立分支，避免构建器在条件表达式中错误合并 CSS preload；入口改动后运行 `pnpm build && pnpm test:task-window-production`，在 Chromium/WebKit 的生产页面验证实际 CSS、紧凑 chrome 与渲染输出，不能只依赖开发模式组件测试。
+- 任务小窗外框与标题栏分隔线必须为零；原生窗口、html、body、root 必须同时透明，避免圆角外留下矩形底色。小窗背景、字体与 Markdown 排版复用工作台 tokens 和共享规则，只缩放字号；“无边框”仅指窗口外框，不能移除工具、代码与引用等内容边框。
 - Markdown 外部 `http/https` 链接必须通过 `src/platform/tauri/` 调用系统 URL opener；页内锚点保留 WebView 内导航
 - Provider 官方认证仅允许打开 `https` URL，并必须通过 `src/platform/tauri/` 调用系统 URL opener；不得使用 WebView `window.open()`
 - MCP URL elicitation 必须使用 `new URL()` 严格解析并仅允许 `http/https`，在用户操作前展示完整 URL、突出 `hostname` 并明确征得同意；同意后必须先通过 `src/platform/tauri/` 在系统浏览器打开，成功后才能提交 `accept`，不得使用 WebView 链接导航

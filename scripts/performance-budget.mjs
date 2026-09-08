@@ -80,6 +80,7 @@ function resolveScenarioRoots(manifest) {
     ],
     markdown: [workspace, "src/shared/components/agent/message-response.tsx"],
     workspace: [workspace],
+    taskWindow: ["src/features/task-window/task-window.tsx"],
   };
 }
 

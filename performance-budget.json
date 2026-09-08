@@ -4,6 +4,7 @@
   "scenarioLoadBytes": {
     "cppHighlight": 2600000,
     "markdown": 1950000,
-    "workspace": 1456000
+    "workspace": 1456000,
+    "taskWindow": 530000
   }
 }

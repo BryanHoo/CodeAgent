@@ -1,5 +1,6 @@
 import { TEMPORARY_TASK_SCOPE_ID, type AgentTask } from "@/protocol/index.js";
-import { Archive, Copy, Ellipsis, Pencil, Pin, Trash2 } from "lucide-react";
+import { Archive, Copy, Ellipsis, Pencil, Pin, Trash2, ArrowUpRight } from "lucide-react";
+import { toast } from "sonner";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -209,6 +210,14 @@ export function TaskActionMenu({
       aria-labelledby={undefined}
       className="w-40"
     >
+      <DropdownMenuItem className={taskActionClassName} disabled={isPending} onSelect={() => {
+        void import("../../task-window/open-task-window.js")
+          .then(({ openTaskWindowFromMenu }) => openTaskWindowFromMenu(task.projectId, task.id))
+          .catch(() => toast.error(t("taskWindow.failed")));
+      }}>
+        <ArrowUpRight className="size-3.5" aria-hidden="true" />
+        {t("taskWindow.open")}
+      </DropdownMenuItem>
       <DropdownMenuItem className={taskActionClassName} disabled={isPending} onSelect={onPin}>
         <Pin className="size-3.5" aria-hidden="true" />
         {task.pinned ? t("sidebar.unpin") : t("sidebar.pin")}

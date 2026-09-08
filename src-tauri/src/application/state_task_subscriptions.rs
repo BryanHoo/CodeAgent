@@ -14,6 +14,9 @@ impl AppState {
         task_id: &str,
         generation: u64,
     ) -> bool {
+        if self.task_windows().await.contains_task(task_id) {
+            return false;
+        }
         self.runtime
             .lock()
             .await

@@ -42,6 +42,11 @@ mod task_subscription;
 pub mod task_subscription_commands;
 #[cfg(test)]
 mod task_subscription_tests;
+pub mod task_window_commands;
+mod task_window_runtime;
+mod task_window_stream;
+#[cfg(test)]
+mod task_window_tests;
 mod task_workspace;
 pub mod terminal_commands;
 pub(crate) mod terminal_lifecycle;

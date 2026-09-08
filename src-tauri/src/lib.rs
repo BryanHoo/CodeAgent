@@ -64,6 +64,10 @@ use application::{
     task_activity_commands::{acknowledge_task_activity, get_task_activities},
     task_board_commands::list_completed_tasks,
     task_subscription_commands::{release_task_subscription, retain_task_subscription},
+    task_window_commands::{
+        acknowledge_task_window, close_task_window, connect_task_window, drag_task_window,
+        open_task_window, restore_task_window,
+    },
     tray_commands::setup_tray,
     workflow_commands::{
         add_queued_submission, clear_task_goal, delete_queued_submission,
@@ -132,6 +136,12 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            open_task_window,
+            connect_task_window,
+            acknowledge_task_window,
+            close_task_window,
+            restore_task_window,
+            drag_task_window,
             #[cfg(feature = "webview-tests")]
             application::terminal_probe::probe_terminal_protocol,
             #[cfg(feature = "webview-tests")]
