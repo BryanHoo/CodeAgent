@@ -15,8 +15,13 @@ impl ProcessTree {
             process::{Command, Stdio},
         };
         let root = i32::try_from(pid).map_err(|_| TerminalError::CleanupFailed)?;
+        let columns = if cfg!(target_os = "linux") {
+            "pid=,ppid=,pgid=,sid="
+        } else {
+            "pid=,ppid=,pgid="
+        };
         let mut process = Command::new("/bin/ps")
-            .args(["-axo", "pid=,ppid=,pgid="])
+            .args(["-axo", columns])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
@@ -40,7 +45,7 @@ impl ProcessTree {
         {
             return Err(TerminalError::CleanupFailed);
         }
-        let entries: Vec<(i32, i32, i32)> = data
+        let entries: Vec<(i32, i32, i32, i32)> = data
             .lines()
             .filter_map(|line| {
                 let mut fields = line.split_whitespace();
@@ -48,13 +53,24 @@ impl ProcessTree {
                     fields.next()?.parse().ok()?,
                     fields.next()?.parse().ok()?,
                     fields.next()?.parse().ok()?,
+                    fields
+                        .next()
+                        .and_then(|field| field.parse().ok())
+                        .unwrap_or(0),
                 ))
             })
             .collect();
         let mut owned = HashSet::from([root]);
+        // Linux 重新收养退出 shell 的后台作业后，PPID 已改变，但 PTY 的 SID 仍保留。
+        owned.extend(
+            entries
+                .iter()
+                .filter(|entry| entry.3 == root)
+                .map(|entry| entry.0),
+        );
         loop {
             let before = owned.len();
-            for (id, parent, _) in &entries {
+            for (id, parent, _, _) in &entries {
                 if owned.contains(parent) {
                     owned.insert(*id);
                 }
@@ -68,7 +84,7 @@ impl ProcessTree {
         if let Some(group) = foreground {
             groups.insert(group);
         }
-        for (id, _, group) in entries {
+        for (id, _, group, _) in entries {
             if owned.contains(&id) {
                 groups.insert(group);
             }

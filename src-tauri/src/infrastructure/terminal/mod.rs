@@ -146,6 +146,9 @@ mod tests {
     #[tokio::test]
     async fn natural_shell_exit_still_reclaims_background_job_group() {
         use std::io::Read;
+        let mut unrelated_command = portable_pty::CommandBuilder::new("/bin/sh");
+        unrelated_command.args(["-c", "sleep 30"]);
+        let unrelated = Session::spawn(unrelated_command, 80, 24).unwrap();
         let mut command = portable_pty::CommandBuilder::new("/bin/bash");
         command.args([
             "--noprofile",
@@ -168,6 +171,10 @@ mod tests {
             .parse()
             .unwrap();
         session.wait_exit().await.unwrap();
+        let ownership = std::process::Command::new("/bin/ps")
+            .args(["-o", "pid=,ppid=,pgid=,sess=,stat=", "-p", &pid.to_string()])
+            .output()
+            .unwrap();
         session.close().unwrap();
         let status = std::process::Command::new("/bin/ps")
             .args(["-o", "stat=", "-p", &pid.to_string()])
@@ -184,7 +191,14 @@ mod tests {
                 nix::sys::signal::Signal::SIGKILL,
             );
         }
-        assert!(!remains, "background job survived terminal close");
+        let unrelated_exit = unrelated.exit_code();
+        unrelated.close().unwrap();
+        assert_eq!(unrelated_exit, None, "another terminal was terminated");
+        assert!(
+            !remains,
+            "background job survived terminal close; ownership before close: {}",
+            String::from_utf8_lossy(&ownership.stdout)
+        );
     }
 
     #[test]
