@@ -96,16 +96,16 @@ describe("project terminal panel", () => {
     const panel = screen.getByRole("region", { name: "项目终端" }).element().getBoundingClientRect();
     const composer = screen.getByRole("textbox", { name: "Composer" }).element().getBoundingClientRect();
     const footer = screen.getByRole("button", { name: "终端 1", exact: true }).element().getBoundingClientRect();
-    expect(composer.bottom).toBeLessThanOrEqual(panel.top);
-    expect(panel.bottom).toBeLessThanOrEqual(footer.top);
-    expect(footer.bottom).toBeLessThanOrEqual(height);
+    expect(composer.bottom).toBeLessThanOrEqual(footer.top);
+    expect(footer.bottom).toBeLessThanOrEqual(panel.top);
+    expect(panel.bottom).toBeLessThanOrEqual(height);
     const engine = navigator.userAgent.includes("Chrome") ? "chromium" : "webkit";
     await page.screenshot({ path: `../../../test-results/project-terminal-${engine}-${width}x${height}.png` });
     await page.viewport(1440, 900);
   });
-  it("keeps content, terminal and footer in separate bands and preserves tabs while hidden", async () => {
+  it("keeps composer controls together above the terminal and preserves tabs while hidden", async () => {
     await i18n.changeLanguage("zh-CN");
-    const screen = await render(<TooltipProvider><div style={{ height: 700, width: 1000, display: "flex" }}>
+    const screen = await render(<TooltipProvider><div className="bg-window" data-testid="workbench-background" style={{ height: 700, width: 1000, display: "flex" }}>
       <TerminalWorkbench enabled projectId="browser-project" rootId="r" label="工作区">
         <div className="min-h-0 flex-1">CodeAgent</div>
         <textarea aria-label="Composer" style={{ height: 80, flexShrink: 0 }} />
@@ -116,10 +116,18 @@ describe("project terminal panel", () => {
     await expect.element(screen.getByRole("region", { name: "项目终端" })).toBeVisible();
     await expect.element(screen.getByRole("tab", { name: "zsh" })).toBeVisible();
     const composer = screen.getByRole("textbox", { name: "Composer" }).element().getBoundingClientRect();
-    const panel = screen.getByRole("region", { name: "项目终端" }).element().getBoundingClientRect();
+    const panelElement = screen.getByRole("region", { name: "项目终端" }).element();
+    const panel = panelElement.getBoundingClientRect();
     const status = screen.getByRole("button", { name: "终端 1", exact: true }).element().getBoundingClientRect();
-    expect(composer.bottom).toBeLessThanOrEqual(panel.top);
-    expect(panel.bottom).toBeLessThanOrEqual(status.top);
+    const terminalContainer = panelElement.parentElement;
+    expect(terminalContainer).not.toBeNull();
+    expect(getComputedStyle(terminalContainer!).paddingBottom).toBe("8px");
+    expect(getComputedStyle(terminalContainer!).backgroundColor).toBe(
+      getComputedStyle(screen.getByTestId("workbench-background").element()).backgroundColor,
+    );
+    expect(terminalContainer!.getBoundingClientRect().bottom).toBe(700);
+    expect(composer.bottom).toBeLessThanOrEqual(status.top);
+    expect(status.bottom).toBeLessThanOrEqual(panel.top);
     await screen.getByRole("button", { name: "隐藏终端", exact: true }).click();
     await expect.element(screen.getByRole("region", { name: "项目终端" })).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "终端 1", exact: true }).click();
