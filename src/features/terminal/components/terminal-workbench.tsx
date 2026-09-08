@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { terminalStore } from "../terminal-store.js";
 import { initializeTerminalLayout, terminalActionError } from "../terminal-layout.js";
 import { isTerminalShortcut } from "../terminal-shortcut.js";
@@ -6,7 +6,7 @@ import { TerminalContext } from "./terminal-context.js";
 
 const TerminalPanel = lazy(() => import("./terminal-panel.js").then((module) => ({ default: module.TerminalPanel })));
 
-export function TerminalWorkbench({ children, enabled, projectId, rootId, label }: { children: ReactNode; enabled: boolean; projectId: string; rootId: string | undefined; label: string }) {
+export function TerminalWorkbench({ children, enabled, projectId, rootId, taskId, label }: { children: ReactNode; enabled: boolean; projectId: string; rootId: string | undefined; taskId?: string | undefined; label: string }) {
   const state = useSyncExternalStore(useCallback((listener) => enabled ? terminalStore.subscribe(projectId, listener) : () => undefined, [enabled, projectId]), useCallback(() => terminalStore.get(projectId), [projectId]));
   const previousFocus = useRef<HTMLElement | null>(null);
   const wasVisible = useRef(false);
@@ -20,7 +20,21 @@ export function TerminalWorkbench({ children, enabled, projectId, rootId, label 
     void import("../terminal-actions.js").then(({ toggleTerminal }) => toggleTerminal(projectId, rootId)).catch((error: unknown) => terminalActionError(projectId, error));
   }, [captureFocus, projectId, rootId]);
 
-  useEffect(() => { if (enabled) void initializeTerminalLayout(projectId).catch((error: unknown) => terminalActionError(projectId, error)); }, [enabled, projectId]);
+  useLayoutEffect(() => {
+    // 任务作用域变化时只收起面板，保留项目终端会话供用户再次打开。
+    terminalStore.update(projectId, { visible: false });
+  }, [projectId, taskId]);
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    void initializeTerminalLayout(projectId)
+      .then(() => {
+        // 布局恢复可能晚于任务切换完成，恢复后再次确保终端不会自动展开。
+        if (active) terminalStore.update(projectId, { visible: false });
+      })
+      .catch((error: unknown) => terminalActionError(projectId, error));
+    return () => { active = false; };
+  }, [enabled, projectId, taskId]);
   useEffect(() => {
     if (wasVisible.current && !state.visible) { if (previousFocus.current?.isConnected) previousFocus.current.focus(); previousFocus.current = null; }
     wasVisible.current = enabled && state.visible;

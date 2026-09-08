@@ -18,6 +18,24 @@ vi.mock("./terminal-runtime.js", () => ({ terminalRuntime: {
 } }));
 
 describe("project terminal panel", () => {
+  it("hides the terminal panel when switching tasks without closing the session", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const workbench = (taskId: string) => <TooltipProvider><div style={{ height: 700, width: 1000, display: "flex" }}>
+      <TerminalWorkbench enabled projectId="task-switch-project" rootId="r" taskId={taskId} label="工作区">
+        <div style={{ flex: 1, minHeight: 0 }}>CodeAgent</div>
+        <TerminalFooter><TerminalStatusTrigger /></TerminalFooter>
+      </TerminalWorkbench>
+    </div></TooltipProvider>;
+    const screen = await render(workbench("task-a"));
+    await screen.getByRole("button", { name: "终端 0", exact: true }).click();
+    await expect.element(screen.getByRole("region", { name: "项目终端" })).toBeVisible();
+
+    await screen.rerender(workbench("task-b"));
+
+    await expect.element(screen.getByRole("region", { name: "项目终端" })).not.toBeInTheDocument();
+    expect(terminalStore.liveCount("task-switch-project")).toBe(1);
+  });
+
   it("deduplicates StrictMode creation, preserves project state and consumes repeated shortcuts", async () => {
     await i18n.changeLanguage("zh-CN");
     const workbench = (projectId: string) => <StrictMode><TooltipProvider><div style={{ height: 700, width: 1000, display: "flex" }}>
