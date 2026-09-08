@@ -36,6 +36,15 @@ void test("Native WebView workflow installs the Ubuntu WebKit driver", async () 
   assert.match(workflow, /\bwebkit2gtk-driver\b/u);
 });
 
+void test("Native WebView workflow disables compositing only for Ubuntu WebKitGTK", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/webview.yml", import.meta.url), "utf8");
+
+  assert.match(
+    workflow,
+    /WEBKIT_DISABLE_COMPOSITING_MODE: \$\{\{ matrix\.platform == 'ubuntu-24\.04' && '1' \|\| '' \}\}/u,
+  );
+});
+
 void test("WebView bridge is published before the WDIO plugin import settles", async () => {
   const bootstrap = await readFile(
     new URL("../src/webview-test-bootstrap.ts", import.meta.url),
