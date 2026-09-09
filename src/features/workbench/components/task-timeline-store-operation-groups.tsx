@@ -32,9 +32,11 @@ export function StoredAssistantTimelineItems({
   turnStatus: NormalizedAgentTurn["status"];
 }>) {
   const itemStoresByKey = store.getState().itemStoresByKey;
-  const visibleGroups = groupConsecutiveTimelineOperations(itemKeys, (itemKey) =>
-    itemStoresByKey.get(itemKey)?.peek(),
-  );
+  const visibleGroups = groupConsecutiveTimelineOperations(itemKeys, (itemKey) => {
+    const itemStore = itemStoresByKey.get(itemKey);
+    // peek 保留初始实体；推理可见性需要已追加的摘要，其他条目继续只读元数据。
+    return itemStore?.peek().type === "reasoning" ? itemStore.read() : itemStore?.peek();
+  });
 
   return visibleGroups.map((group) => {
     const groupItemKeys = group.type === "item" ? [group.itemKey] : group.itemKeys;

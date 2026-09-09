@@ -1,11 +1,7 @@
-import { BrainCircuit, ChevronRight, LoaderCircle } from "lucide-react";
-import { createContext, useContext, useMemo, type HTMLAttributes } from "react";
+import { BrainCircuit, ChevronRight } from "lucide-react";
+import { type HTMLAttributes } from "react";
 
 import { cn } from "../../lib/utils.js";
-
-type ReasoningContextValue = Readonly<{ isStreaming: boolean }>;
-
-const ReasoningContext = createContext<ReasoningContextValue | null>(null);
 
 export type ReasoningProps = HTMLAttributes<HTMLDetailsElement> & {
   defaultOpen?: boolean;
@@ -19,20 +15,17 @@ export function Reasoning({
   isStreaming = false,
   ...props
 }: ReasoningProps) {
-  const contextValue = useMemo(() => ({ isStreaming }), [isStreaming]);
-
+  // 流式更新不改变折叠状态，用户可通过原生 details 自主展开和收起。
   return (
-    <ReasoningContext.Provider value={contextValue}>
-      <details
-        className={cn("group/reasoning w-full text-muted-foreground", className)}
-        data-ai-reasoning=""
-        data-streaming={isStreaming}
-        open={isStreaming || defaultOpen}
-        {...props}
-      >
-        {children}
-      </details>
-    </ReasoningContext.Provider>
+    <details
+      className={cn("group/reasoning w-full text-muted-foreground", className)}
+      data-ai-reasoning=""
+      data-streaming={isStreaming}
+      open={defaultOpen}
+      {...props}
+    >
+      {children}
+    </details>
   );
 }
 
@@ -41,11 +34,6 @@ export type ReasoningTriggerProps = HTMLAttributes<HTMLElement> & {
 };
 
 export function ReasoningTrigger({ className, title, ...props }: ReasoningTriggerProps) {
-  const context = useContext(ReasoningContext);
-  if (context === null) {
-    throw new Error("ReasoningTrigger must be used within Reasoning");
-  }
-
   return (
     <summary
       className={cn(
@@ -54,11 +42,7 @@ export function ReasoningTrigger({ className, title, ...props }: ReasoningTrigge
       )}
       {...props}
     >
-      {context.isStreaming ? (
-        <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin" />
-      ) : (
-        <BrainCircuit aria-hidden="true" className="size-3.5 shrink-0" />
-      )}
+      <BrainCircuit aria-hidden="true" className="size-3.5 shrink-0" />
       <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
       <ChevronRight
         aria-hidden="true"

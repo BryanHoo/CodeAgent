@@ -59,7 +59,8 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
         "reasoning" => Ok(AgentItem::Reasoning {
             content: string_array(item, "content")?.join("\n"),
             id,
-            summary: string_array(item, "summary")?.join("\n"),
+            // 与流式 summaryIndex 边界一致，防止 Markdown 将不同摘要段落合为一行。
+            summary: string_array(item, "summary")?.join("\n\n"),
         }),
         "commandExecution" => {
             let (output, output_omitted) = optional_string(item, "aggregatedOutput")?

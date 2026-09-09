@@ -15,6 +15,7 @@
 - 工作台壁纸必须按视口尺寸与 `devicePixelRatio` 预缩放到物理像素画布，并在画布生成阶段完成模糊；窗口缩放应合并重绘，禁止对全屏原图使用实时 CSS `filter: blur()`
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
+- 推理仅展示 Provider 提供的完整 `summary`，流式和完成态均默认折叠，保留手动展开状态；摘要从空白首次变为可见时必须刷新所属 Turn 的分组，后续 Delta 只更新目标 Item，可见性不得扫描历史全文。`summaryIndex` 与完整 Item 的 `summary` 数组均以空行分隔段落；以 `item/completed` 的摘要为权威全文。Chromium/WebKit 回归覆盖空摘要转可见、多段追加和完成态替换，不将上游仅返回短标题误判为客户端截断
 - 完成态 Turn 必须保留首条用户入口，并将同一 Turn 内后续用户引导与执行过程统一折叠；折叠项必须先从可见序列移除再执行消息分组，确保最终答复与文件审核摘要归入末组
 - 运行中 Turn 的连续 `command`、`tool`（包括 MCP）与 `file_change` 必须按同一操作组处理，单个 `file_change` 内的多文件按多项操作计数；操作组在后续 Assistant 文本开始输出后收起为摘要，此前保留原始操作行；不可见的空摘要 `reasoning` 不得切断连续操作，也不得进入渲染与订阅；流式 `message.delta` 与完整 Item 到达时必须保持相同触发行为，Turn 终态继续使用整体执行过程折叠
 - 桌面文件系统选择器切换盘符或路径时必须保留最近一次成功发现的根列表，加载或失败状态不得卸载盘符选择器；Windows `\\?\` verbatim 路径必须先按普通盘符语义归一化再匹配当前根项

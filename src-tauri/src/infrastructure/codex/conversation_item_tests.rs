@@ -2,6 +2,20 @@ use serde_json::{Value, json, to_value};
 
 use super::conversation::map_item;
 
+#[test]
+fn reasoning_summary_should_preserve_markdown_section_boundaries() {
+    let item = map_item(json!({
+        "id": "reasoning-a", "type": "reasoning", "content": [],
+        "summary": ["**Checking files**", "**Checking tests**\n\nComplete details."]
+    }))
+    .unwrap();
+
+    assert_eq!(
+        to_value(item).unwrap()["summary"],
+        "**Checking files**\n\n**Checking tests**\n\nComplete details."
+    );
+}
+
 fn absolute_test_path(name: &str) -> String {
     std::env::temp_dir()
         .join(name)

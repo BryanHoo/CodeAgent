@@ -66,4 +66,18 @@ describe("streamed item reads", () => {
     expect(store.read()).toMatchObject({ text: "plan中文 next" });
     expect(store.getRetainedBytes() - bytes).toBe(11);
   });
+
+  it("tracks summary visibility across deltas and authoritative replacements", () => {
+    const initial = { id: "message", type: "reasoning", content: "", summary: "" } as const;
+    const store = createTaskItemStore(initial);
+    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "content", delta: "raw" } });
+    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "summary", delta: " \n", sectionIndex: 0 } });
+    expect(store.hasReasoningSummary()).toBe(false);
+    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "summary", delta: "Summary", sectionIndex: 0 } });
+    expect(store.hasReasoningSummary()).toBe(true);
+    store.replace(initial);
+    expect(store.hasReasoningSummary()).toBe(false);
+    store.replace({ ...initial, summary: "Final summary" });
+    expect(store.hasReasoningSummary()).toBe(true);
+  });
 });

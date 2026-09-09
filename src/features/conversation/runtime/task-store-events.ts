@@ -201,11 +201,21 @@ export function applyAcceptedEvent(
       const itemKey = createTaskItemKey(event.turnId, event.itemId);
       const currentItemStore = state.itemStoresByKey.get(itemKey);
       if (currentItemStore !== undefined) {
+        const hadSummary = currentItemStore.hasReasoningSummary();
         if (currentItemStore.appendDelta(event)) {
           changedItemStores.add(currentItemStore);
         }
+        const summaryBecameVisible = !hadSummary && currentItemStore.hasReasoningSummary();
         return {
           checkpoint,
+          // 空摘要原本没有挂载订阅；首次可见时仅刷新所属 Turn，后续 Delta 仍局部更新。
+          ...(summaryBecameVisible ? {
+            itemKeysByTurnId: {
+              ...state.itemKeysByTurnId,
+              [event.turnId]: [...(state.itemKeysByTurnId[event.turnId] ?? [])],
+            },
+            itemStructureRevision: state.itemStructureRevision + 1,
+          } : {}),
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
           turnsById,
         };
@@ -370,12 +380,16 @@ export function applyAcceptedEvent(
         event.payload.item.type === "message" &&
         event.payload.item.role === "user" &&
         currentItemIds.includes(submittedUserItemKey);
+      // 完成全文也可能首次提供摘要，或清空旧摘要；两种情况都需要重建可见分组。
+      const summaryVisibilityChanged = currentItemStore !== undefined &&
+        currentItemStore.hasReasoningSummary() !==
+          (event.payload.item.type === "reasoning" && event.payload.item.summary.trim().length > 0);
       const nextItemIds = replacesSubmittedUserItem
         ? currentItemIds
             .filter((candidateKey) => candidateKey !== submittedUserItemKey)
             .concat(itemAlreadyExists ? [] : itemKey)
         : itemAlreadyExists
-          ? currentItemIds
+          ? (summaryVisibilityChanged ? [...currentItemIds] : currentItemIds)
           : [...currentItemIds, itemKey];
       // Provider 用户项到达后原子移除提交占位，避免同一输入重复展示。
       if (replacesSubmittedUserItem) {
