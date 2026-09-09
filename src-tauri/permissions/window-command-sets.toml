@@ -32,6 +32,8 @@ permissions = [
   "allow-retain-task-subscription",
   "allow-configure-desktop-pet",
   "allow-get-workbench-background",
+  "allow-list-workbench-backgrounds",
+  "allow-download-workbench-background",
   "allow-list-workbench-pets",
   "allow-download-workbench-pet",
   "allow-list-models",

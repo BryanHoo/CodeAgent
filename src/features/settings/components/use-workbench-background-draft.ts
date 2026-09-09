@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { appPreferenceStorage } from "../../../platform/tauri/app-storage.js";
-
+import { notifyActionError } from "../../notifications/action-notifications.js";
 import {
+  applyCustomBackgroundMutation,
   createCustomBackgroundImage,
+  publishWorkbenchBackgroundPreference,
   readCustomBackgroundImages,
   readWorkbenchBackgroundPreference,
   removeCustomBackgroundFromDraft,
@@ -10,104 +12,88 @@ import {
   type WorkbenchBackgroundPreference,
 } from "../workbench-background-preference.js";
 
-function readInitialBackground(): WorkbenchBackgroundPreference {
-  return readWorkbenchBackgroundPreference(appPreferenceStorage);
-}
-
 export function useWorkbenchBackgroundDraft() {
-  const [background, setBackground] =
-    useState<WorkbenchBackgroundPreference>(readInitialBackground);
+  const [background, updateBackground] = useState(() => readWorkbenchBackgroundPreference(appPreferenceStorage));
+  const backgroundRef = useRef(background);
   const [customImages, setCustomImages] = useState<readonly CustomBackgroundImage[]>([]);
-  const [storedImageIds, setStoredImageIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [deletedImageIds, setDeletedImageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const imagesRef = useRef(customImages);
+  const [isLoading, setLoading] = useState(true);
+  const [isSavingImages, setSavingImages] = useState(false);
+  const savingRef = useRef(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadVersion, reload] = useState(0);
 
   useEffect(() => {
     let disposed = false;
-    void readCustomBackgroundImages()
-      .then((images) => {
-        if (disposed) return;
-        setCustomImages(images);
-        setStoredImageIds(new Set(images.map((image) => image.id)));
-      })
-      .catch(() => {
-        if (!disposed) {
-          setCustomImages([]);
-          setStoredImageIds(new Set());
-        }
-      });
-    return () => {
-      disposed = true;
-    };
+    setLoading(true);
+    setLoadError(false);
+    void readCustomBackgroundImages().then((images) => {
+      if (disposed) return;
+      imagesRef.current = images;
+      setCustomImages(images);
+    }).catch(() => {
+      if (!disposed) setLoadError(true);
+    }).finally(() => {
+      if (!disposed) setLoading(false);
+    });
+    return () => { disposed = true; };
+  }, [loadVersion]);
+
+  const setBackground = useCallback((next: WorkbenchBackgroundPreference) => {
+    backgroundRef.current = next;
+    updateBackground(next);
+    // 纯偏好同步发布，由 Rust 存储 actor 合并落盘；滑块不等待 IPC，也不会被保存状态禁用。
+    publishWorkbenchBackgroundPreference(next);
   }, []);
 
-  const backgroundMutation = useMemo(
-    () => ({
-      deletedImageIds: [...deletedImageIds],
-      imagesToSave: customImages.filter((image) => !storedImageIds.has(image.id)),
-    }),
-    [customImages, deletedImageIds, storedImageIds],
-  );
-
-  const acknowledgeBackgroundMutation = useCallback(
-    (mutation: typeof backgroundMutation) => {
-      const savedImageIds = new Set(mutation.imagesToSave.map((image) => image.id));
-      const removedImageIds = new Set(mutation.deletedImageIds);
-      setStoredImageIds((current) => {
-        const next = new Set([...current, ...savedImageIds]);
-        for (const imageId of removedImageIds) next.delete(imageId);
-        return next;
-      });
-      setDeletedImageIds(
-        (current) => new Set([...current].filter((imageId) => !removedImageIds.has(imageId))),
-      );
-    },
-    [],
-  );
+  const storeImages = (images: readonly CustomBackgroundImage[]) => {
+    imagesRef.current = images;
+    setCustomImages(images);
+  };
 
   return {
-    acknowledgeBackgroundMutation,
-    addCustomBackgroundFiles: (files: readonly File[]) => {
-      const addedImages = files.map((file) => createCustomBackgroundImage(file));
-      if (addedImages.length === 0) return;
-      setCustomImages((current) => [...current, ...addedImages]);
-      setBackground((current) => ({
-        ...current,
-        mode: "custom",
-        selectedCustomImageId: addedImages.at(-1)?.id ?? current.selectedCustomImageId,
-      }));
-    },
     background,
-    backgroundMutation,
-    customBackgroundMissing:
-      background.mode === "custom" &&
-      (background.selectedCustomImageId === null ||
-        !customImages.some((image) => image.id === background.selectedCustomImageId)),
     customImages,
+    isLoading,
+    isSavingImages,
+    loadError,
+    retryLoad: () => reload((version) => version + 1),
+    setBackground,
+    addCustomBackgroundFiles: (files: readonly File[]) => {
+      if (savingRef.current || isLoading || loadError || files.length === 0) return;
+      savingRef.current = true;
+      setSavingImages(true);
+      const added = files.map((file) => createCustomBackgroundImage(file));
+      void applyCustomBackgroundMutation({ imagesToSave: added, deletedImageIds: [] })
+        .then(async () => {
+          storeImages([...imagesRef.current, ...added]);
+          setBackground({ ...backgroundRef.current, mode: "custom", selectedCustomImageId: added[0]!.id });
+          // 已落盘的文件切换为 asset URL，释放导入时保留的 Blob。
+          await readCustomBackgroundImages().then(storeImages).catch(() => undefined);
+        })
+        .catch(notifyActionError)
+        .finally(() => { savingRef.current = false; setSavingImages(false); });
+    },
     removeCustomBackgroundImage: (imageId: string) => {
-      const result = removeCustomBackgroundFromDraft(
-        customImages,
-        imageId,
-        background.selectedCustomImageId,
-      );
-      setCustomImages(result.images);
-      setBackground((preference) => ({
-        ...preference,
-        selectedCustomImageId:
-          preference.selectedCustomImageId === imageId
-            ? result.selectedCustomImageId
-            : preference.selectedCustomImageId,
-      }));
-      if (storedImageIds.has(imageId)) {
-        setDeletedImageIds((current) => new Set(current).add(imageId));
-      }
+      if (savingRef.current || isLoading || loadError) return;
+      savingRef.current = true;
+      setSavingImages(true);
+      void applyCustomBackgroundMutation({ imagesToSave: [], deletedImageIds: [imageId] })
+        .then(() => {
+          const current = backgroundRef.current;
+          const next = removeCustomBackgroundFromDraft(imagesRef.current, imageId, current.selectedCustomImageId);
+          storeImages(next.images);
+          // 删除最后一张图时退出自定义模式，避免空选择阻止删除落盘。
+          setBackground({ ...current, selectedCustomImageId: next.selectedCustomImageId,
+            mode: current.mode === "custom" && next.selectedCustomImageId === null ? "none" : current.mode });
+        })
+        .catch(notifyActionError)
+        .finally(() => { savingRef.current = false; setSavingImages(false); });
     },
     selectCustomBackgroundImage: (imageId: string) => {
-      setBackground((current) => ({
-        ...current,
-        mode: "custom",
-        selectedCustomImageId: imageId,
-      }));
+      if (imagesRef.current.some((image) => image.id === imageId)) {
+        setBackground({ ...backgroundRef.current, mode: "custom", selectedCustomImageId: imageId });
+      }
     },
-    setBackground,
   } as const;
 }

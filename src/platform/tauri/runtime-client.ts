@@ -12,6 +12,7 @@ import type {
   WorkbenchPetDownloadResponse,
 } from "@/protocol/index.js";
 import { Channel } from "@tauri-apps/api/core";
+import type { BingWallpaper, DownloadWorkbenchBackgroundResponse, WorkbenchBackgroundResponse } from "@/protocol/workbench-background.js";
 
 import { TauriCatalogClient } from "./catalog-client.js";
 import {
@@ -20,7 +21,6 @@ import {
   type NativePetDownloadResponse,
 } from "./workbench-pet-catalog.js";
 
-export type NativeWorkbenchBackgroundResponse = Readonly<{ assetPath: string }>;
 export type AppUpdateInstallOptions = MutationOptions &
   Readonly<{ onProgress?: (progress: AppUpdateInstallProgress) => void }>;
 
@@ -77,8 +77,16 @@ export class TauriRuntimeClient extends TauriCatalogClient {
     await this.call<void>("install_app_update", { onProgress: progressChannel, version });
   }
 
-  public async getWorkbenchBackground(day: string): Promise<NativeWorkbenchBackgroundResponse> {
-    return this.call("get_workbench_background", { day });
+  public async getWorkbenchBackground(day?: string, thumbnail = false): Promise<WorkbenchBackgroundResponse> {
+    return this.invokeCommand("get_workbench_background", { day: day ?? null, thumbnail });
+  }
+
+  public async listWorkbenchBackgrounds(): Promise<readonly BingWallpaper[]> {
+    return this.invokeCommand("list_workbench_backgrounds");
+  }
+
+  public async downloadWorkbenchBackground(day: string): Promise<DownloadWorkbenchBackgroundResponse> {
+    return this.invokeCommand("download_workbench_background", { day });
   }
 
   public async listWorkbenchPets(_options: ReadOptions = {}): Promise<WorkbenchPetCatalogResponse> {

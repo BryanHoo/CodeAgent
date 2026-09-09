@@ -62,6 +62,8 @@ fn main() {
         "layout_desktop_pet",
         "open_desktop_pet_task",
         "get_workbench_background",
+        "list_workbench_backgrounds",
+        "download_workbench_background",
         "list_workbench_pets",
         "download_workbench_pet",
         "list_models",

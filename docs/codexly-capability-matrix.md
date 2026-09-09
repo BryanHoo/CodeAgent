@@ -61,7 +61,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 智能体配置 | 网页搜索、输出详细程度、推理摘要 | 应用全局配置经 thread/start、thread/resume 的 config 覆盖传入；搜索与详细程度用于新建/冷恢复会话，摘要另经 turn/start 与 thread/settings/update 的 summary 逐轮更新；普通、目标和计划任务共用，不修改 config.toml | 已实现 |
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
 | 宠物 | `listWorkbenchPets`, `downloadWorkbenchPet` | 内置 CDN 下载、WebP 校验、自定义 `pets`/旧 `avatars` 扫描、动态资产授权、全屏置顶桌面面板、拖动动画、Rust 任务活动投影与跨显示器位置恢复 | 已实现 |
-| Bing 每日壁纸 | `/v1/workbench-background/bing` | Rust 固定来源有界下载、JPEG 校验、原子缓存、Tauri asset protocol | 已实现 |
+| Bing 每日壁纸 | `/v1/workbench-background/bing` | 九日日期图库、固定日期或每日更新、原图预览、系统保存窗口下载；Rust 固定来源有界下载、JPEG 校验、原子缓存、Tauri asset protocol | 已实现 |
 | CodeAgent 本地偏好与自定义背景 | WebView `localStorage`、IndexedDB | `appData/app.json`、`appData/agent-settings.json`、`appData/backgrounds/custom/`；偏好与设置原子落盘，图片使用动态授权 asset URL，显式读取使用 raw IPC | 已实现 |
 | 本地访问模式 | 无 Web 访问接口 | 桌面端固定 `local`，无 HTTP 服务和 LAN 认证面 | 原生实现 |
 | 应用版本信息 | `getAppInfo` | 返回应用/Codex 真实版本；更新安装由外部分发渠道负责 | 已实现 |

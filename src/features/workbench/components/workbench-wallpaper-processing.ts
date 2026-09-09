@@ -51,34 +51,41 @@ export function getWallpaperCoverRect(
   };
 }
 
-export function drawPreprocessedWallpaper(
+export async function drawPreprocessedWallpaper(
   canvas: HTMLCanvasElement,
   image: HTMLImageElement,
   size: PhysicalWallpaperSize,
   logicalBlurRadius: number,
   pixelRatio: number,
-): boolean {
+  signal?: AbortSignal,
+): Promise<boolean> {
   if (image.naturalWidth <= 0 || image.naturalHeight <= 0) return false;
 
-  canvas.width = size.width;
-  canvas.height = size.height;
   const context = canvas.getContext("2d");
   if (context === null) return false;
 
   const physicalBlurRadius = Math.max(0, logicalBlurRadius * toPositiveFinite(pixelRatio, 1));
+  // 按需加载兼容算法；异步加载完成后先取消旧任务，避免快速调整时旧结果覆盖新参数。
+  const supportsFilter = "filter" in context;
+  const software = physicalBlurRadius > 0 && !supportsFilter
+    ? await import("./workbench-wallpaper-blur.js") : null;
+  if (signal?.aborted) return false;
+  canvas.width = size.width;
+  canvas.height = size.height;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  if (software !== null) return software.drawSoftwareBlur(context, image, size, physicalBlurRadius);
   // 扩大绘制范围，为模糊核提供边缘像素，避免画布四周出现透明暗边。
   const cover = getWallpaperCoverRect(
     image.naturalWidth,
     image.naturalHeight,
     size.width,
     size.height,
-    Math.ceil(physicalBlurRadius * 2),
+    Math.ceil(physicalBlurRadius * 3),
   );
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  context.filter = physicalBlurRadius > 0 ? `blur(${String(physicalBlurRadius)}px)` : "none";
+  if (supportsFilter) context.filter = physicalBlurRadius > 0 ? `blur(${String(physicalBlurRadius)}px)` : "none";
   context.drawImage(image, cover.x, cover.y, cover.width, cover.height);
-  context.filter = "none";
+  if (supportsFilter) context.filter = "none";
   return true;
 }
 
@@ -89,6 +96,7 @@ export function loadWallpaperImage(
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.decoding = "async";
+    image.crossOrigin = "anonymous";
 
     const release = () => {
       image.removeEventListener("load", handleLoad);

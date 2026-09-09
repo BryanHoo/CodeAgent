@@ -66,24 +66,16 @@ export function detectWorkbenchBackgroundTone(
   }
 }
 
-function formatDatePart(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-export function formatBingWallpaperDay(date: Date): string {
-  return `${String(date.getFullYear())}-${formatDatePart(date.getMonth() + 1)}-${formatDatePart(date.getDate())}`;
-}
-
 type WorkbenchBackgroundClient = Readonly<{
-  getWorkbenchBackground: (day: string) => Promise<Readonly<{ assetPath: string }>>;
+  getWorkbenchBackground: (day?: string) => Promise<Readonly<{ assetPath: string }>>;
 }>;
 
 export async function loadBingWallpaperSource(
-  date: Date,
+  day: string | null,
   client: WorkbenchBackgroundClient = nativeClient,
   toAssetUrl: (path: string) => string = buildNativeAssetUrl,
 ): Promise<string> {
-  const response = await client.getWorkbenchBackground(formatBingWallpaperDay(date));
+  const response = await client.getWorkbenchBackground(day ?? undefined);
   return toAssetUrl(response.assetPath);
 }
 
@@ -243,22 +235,24 @@ export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode
     const refresh = () => {
       const now = new Date();
       setBingImageUrl(null);
-      // 使用本地日期作为缓存键；下载失败时保留纯色背景，不让网络错误阻断工作台。
-      void loadBingWallpaperSource(now)
+      // 固定日期不参与每日刷新；自动模式由后端选取最新真实日期，避免本地时区错配。
+      void loadBingWallpaperSource(preference.selectedBingDay)
         .then((source) => {
           if (!disposed) setBingImageUrl(source);
         })
         .catch(() => {
           if (!disposed) setBingImageUrl(null);
         });
-      timeoutId = setTimeout(refresh, getMillisecondsUntilNextLocalDay(now));
+      if (preference.selectedBingDay === null) {
+        timeoutId = setTimeout(refresh, getMillisecondsUntilNextLocalDay(now));
+      }
     };
     refresh();
     return () => {
       disposed = true;
       if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
-  }, [preference.mode]);
+  }, [preference.mode, preference.selectedBingDay]);
 
   const imageSource =
     preference.mode === "custom"
@@ -288,20 +282,24 @@ export function WorkbenchBackground({ children }: Readonly<{ children: ReactNode
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null || decodedImage === null || decodedImage.source !== imageSource) return;
-    const rendered = drawPreprocessedWallpaper(
+    const controller = new AbortController();
+    void drawPreprocessedWallpaper(
       canvas,
       decodedImage.image,
       viewport,
       getWorkbenchBackgroundBlurRadius(preference.blurPercentage),
       viewport.pixelRatio,
-    );
-    if (!rendered) {
-      setImageLoaded(false);
+      controller.signal,
+    ).then((rendered) => {
+      if (controller.signal.aborted) return;
+      setBackgroundTone(rendered ? detectWorkbenchBackgroundTone(decodedImage.image) : null);
+      setImageLoaded(rendered);
+    }).catch(() => {
+      if (controller.signal.aborted) return;
       setBackgroundTone(null);
-      return;
-    }
-    setBackgroundTone(detectWorkbenchBackgroundTone(decodedImage.image));
-    setImageLoaded(true);
+      setImageLoaded(false);
+    });
+    return () => controller.abort();
   }, [decodedImage, imageSource, preference.blurPercentage, viewport]);
 
   return (

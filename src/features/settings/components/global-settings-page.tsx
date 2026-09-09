@@ -84,12 +84,13 @@ export function GlobalSettingsPage({
   );
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const {
-    acknowledgeBackgroundMutation,
     addCustomBackgroundFiles,
     background,
-    backgroundMutation,
-    customBackgroundMissing,
     customImages,
+    isLoading: isLoadingBackgrounds,
+    isSavingImages,
+    loadError: backgroundLoadError,
+    retryLoad: retryBackgroundLoad,
     removeCustomBackgroundImage,
     selectCustomBackgroundImage,
     setBackground,
@@ -106,8 +107,6 @@ export function GlobalSettingsPage({
     if (settings !== undefined) saveQueueRef.current.reset(settings);
   }
   const saveQueue = saveQueueRef.current;
-  const appliedBackgroundRef = useRef(background);
-  const [isApplyingBackground, setIsApplyingBackground] = useState(false);
   useEffect(() => {
     if (settings !== undefined && !hasLocalChangesRef.current) {
       draftRef.current = settings;
@@ -115,41 +114,6 @@ export function GlobalSettingsPage({
       saveQueue.reset(settings);
     }
   }, [saveQueue, settings]);
-
-  useEffect(() => {
-    const assetsChanged =
-      backgroundMutation.deletedImageIds.length > 0 ||
-      backgroundMutation.imagesToSave.length > 0;
-    const preferenceChanged =
-      JSON.stringify(appliedBackgroundRef.current) !== JSON.stringify(background);
-    if ((!assetsChanged && !preferenceChanged) || customBackgroundMissing) return;
-
-    setIsApplyingBackground(true);
-    const frame = requestAnimationFrame(() => {
-      void applyBrowserSettingsChanges({
-        background,
-        customBackgroundMutation: backgroundMutation,
-      })
-        .then(() => {
-          appliedBackgroundRef.current = background;
-          acknowledgeBackgroundMutation(backgroundMutation);
-        })
-        .catch(() => {
-          // 本地偏好写入失败时保留当前界面状态，后续更改会再次尝试。
-        })
-        .finally(() => {
-          setIsApplyingBackground(false);
-        });
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, [
-    acknowledgeBackgroundMutation,
-    background,
-    backgroundMutation,
-    customBackgroundMissing,
-  ]);
 
   const updateDraft = (
     update: (current: AgentGlobalSettings) => AgentGlobalSettings,
@@ -188,9 +152,10 @@ export function GlobalSettingsPage({
       />
 
       {activeSection === "provider" ? (
-        <SettingsPanel activeSection={activeSection} id="provider" title={t("sections.provider")}>
-          <div className="py-4"><ProviderConnectionPanel /></div>
-        </SettingsPanel>
+        <section id="settings-panel-provider">
+          <h1 className="mb-6 text-xl font-semibold">{t("sections.provider")}</h1>
+          <ProviderConnectionPanel />
+        </section>
       ) : activeSection === "about" ? null : error !== null ? (
         <div
           className="flex min-h-40 flex-col items-center justify-center gap-3"
@@ -247,7 +212,9 @@ export function GlobalSettingsPage({
           <GlobalSettingsBackground
             activeSection={activeSection}
             customImages={customImages}
-            disabled={isApplyingBackground}
+            disabled={isLoadingBackgrounds || isSavingImages || backgroundLoadError}
+            loadError={backgroundLoadError}
+            onRetry={retryBackgroundLoad}
             onCustomFilesAdd={addCustomBackgroundFiles}
             onCustomImageRemove={removeCustomBackgroundImage}
             onCustomImageSelect={selectCustomBackgroundImage}

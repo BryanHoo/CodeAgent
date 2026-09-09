@@ -18,9 +18,15 @@ vi.mock("../../platform/native-asset-url.js", () => ({ buildNativeAssetUrl }));
 import {
   readCustomBackgroundImages,
   readCustomBackgroundImageSource,
+  readWorkbenchBackgroundPreference,
+  DEFAULT_WORKBENCH_BACKGROUND,
 } from "./workbench-background-preference.js";
 
 describe("custom background assets", () => {
+  it("restores a pinned Bing day instead of switching back to today's wallpaper", () => {
+    const preference = { ...DEFAULT_WORKBENCH_BACKGROUND, mode: "bing", selectedBingDay: "2026-09-01" };
+    expect(readWorkbenchBackgroundPreference({ getItem: () => JSON.stringify({ ...preference, version: 3 }) })).toEqual(preference);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

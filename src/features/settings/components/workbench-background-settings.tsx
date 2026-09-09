@@ -1,286 +1,102 @@
-import { Check, Image, ImageOff, Sparkles, Trash2, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-
+import "../../../i18n/settings-background.js";
+import "./workbench-background-settings.css";
+import { Check, Image, ImageOff, Maximize2, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
+import { useRef, useState } from "react";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../shared/components/core/tooltip.js";
-import {
   isSupportedCustomBackgroundImage,
   type CustomBackgroundImage,
-  type WorkbenchBackgroundMode,
   type WorkbenchBackgroundPreference,
 } from "../workbench-background-preference.js";
+import { BingBackgroundSettings } from "./bing-background-settings.js";
+import { useCustomWallpaperSource, WallpaperAction, WallpaperAdjustments, WallpaperImageDialog } from "./wallpaper-controls.js";
 
 const backgroundModes = [
   { ariaKey: "background.noneAria", icon: ImageOff, labelKey: "background.none", value: "none" },
-  { ariaKey: "background.customAria", icon: Image, labelKey: "background.custom", value: "custom" },
   { ariaKey: "background.bingAria", icon: Sparkles, labelKey: "background.bing", value: "bing" },
+  { ariaKey: "background.customAria", icon: Image, labelKey: "background.custom", value: "custom" },
 ] as const;
 
-function BackgroundRangeField({
-  ariaLabel,
-  disabled,
-  id,
-  label,
-  onChange,
-  value,
-}: Readonly<{
-  ariaLabel: string;
-  disabled: boolean;
-  id: string;
-  label: string;
-  onChange: (value: number) => void;
-  value: number;
-}>) {
-  return (
-    <div className="space-y-1">
-      <label className="text-label font-medium text-foreground" htmlFor={id}>
-        {label}
-      </label>
-      <div className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-3">
-        <input
-          aria-label={ariaLabel}
-          className="h-11 w-full accent-brand sm:h-8"
-          disabled={disabled}
-          id={id}
-          max="95"
-          min="0"
-          onChange={(event) => {
-            onChange(Number(event.currentTarget.value));
-          }}
-          step="1"
-          type="range"
-          value={value}
-        />
-        <output
-          className="text-right text-body-small tabular-nums text-muted-foreground"
-          htmlFor={id}
-        >
-          {value}%
-        </output>
-      </div>
-    </div>
-  );
-}
-
-function CustomBackgroundThumbnail({
-  disabled,
-  image,
-  onRemove,
-  onSelect,
-  selected,
-}: Readonly<{
-  disabled: boolean;
-  image: CustomBackgroundImage;
-  onRemove: () => void;
-  onSelect: () => void;
-  selected: boolean;
-}>) {
-  const { t } = useTranslation("settings");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (image.blob === null) {
-      setPreviewUrl(image.assetUrl);
-      return;
-    }
-    const url = URL.createObjectURL(image.blob);
-    setPreviewUrl(url);
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [image.assetUrl, image.blob]);
-
-  return (
-    <div className="group relative aspect-square min-w-0">
-      <button
-        aria-label={t("background.selectImage", { name: image.name })}
-        aria-pressed={selected}
-        className={`size-full overflow-hidden rounded-control border-2 bg-control outline-none transition-colors focus-visible:shadow-focus ${selected ? "border-brand" : "border-transparent hover:border-separator-strong"}`}
-        disabled={disabled}
-        onClick={onSelect}
-        type="button"
-      >
-        {previewUrl === null ? null : (
-          <img
-            alt=""
-            aria-hidden="true"
-            className="size-full object-cover"
-            decoding="async"
-            src={previewUrl}
-          />
-        )}
-      </button>
-      {selected ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-1 left-1 grid size-5 place-items-center rounded-full bg-brand text-brand-contrast shadow-control"
-        >
-          <Check className="size-3.5" />
-        </span>
-      ) : null}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            aria-label={t("background.deleteImage", { name: image.name })}
-            className="absolute right-1 top-1 size-7 bg-dialog/95 text-foreground opacity-100 shadow-control sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-            disabled={disabled}
-            onClick={onRemove}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <Trash2 aria-hidden="true" className="size-3.5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{t("background.delete")}</TooltipContent>
-      </Tooltip>
-    </div>
-  );
-}
-
-export function WorkbenchBackgroundSettings({
-  customImages,
-  disabled,
-  onCustomFilesAdd,
-  onCustomImageRemove,
-  onCustomImageSelect,
-  onPreferenceChange,
-  preference,
-}: Readonly<{
+export type WorkbenchBackgroundSettingsProps = Readonly<{
   customImages: readonly CustomBackgroundImage[];
   disabled: boolean;
+  loadError?: boolean;
+  onRetry?: () => void;
   onCustomFilesAdd: (files: readonly File[]) => void;
   onCustomImageRemove: (imageId: string) => void;
   onCustomImageSelect: (imageId: string) => void;
   onPreferenceChange: (preference: WorkbenchBackgroundPreference) => void;
   preference: WorkbenchBackgroundPreference;
+}>;
+
+function CustomWallpaperTile({ image, selected, disabled, onSelect, onRemove, onPreview }: Readonly<{
+  image: CustomBackgroundImage; selected: boolean; disabled: boolean;
+  onSelect: () => void; onRemove: () => void; onPreview: () => void;
 }>) {
+  const { t } = useTranslation("settings");
+  const source = useCustomWallpaperSource(image);
+  return <article className="wallpaper-tile" data-selected={selected}>
+    <button className="wallpaper-thumbnail" aria-label={t("background.selectImage", { name: image.name })} aria-pressed={selected} disabled={disabled} onClick={onSelect} type="button">
+      {source === null ? null : <img alt={image.name} src={source} loading="lazy" decoding="async" />}
+      {selected ? <span className="wallpaper-selected"><Check aria-hidden="true" className="size-3.5" />{t("wallpaper.selected")}</span> : null}
+    </button>
+    <div className="wallpaper-tile-footer"><p title={image.name}>{image.name}</p><div className="flex shrink-0">
+      <WallpaperAction label={t("wallpaper.view", { name: image.name })} onClick={onPreview}><Maximize2 aria-hidden="true" /></WallpaperAction>
+      <WallpaperAction label={t("background.deleteImage", { name: image.name })} onClick={onRemove} disabled={disabled}><Trash2 aria-hidden="true" /></WallpaperAction>
+    </div></div>
+  </article>;
+}
+
+function CustomWallpaperDialog({ image, onClose }: Readonly<{ image: CustomBackgroundImage; onClose: () => void }>) {
+  const source = useCustomWallpaperSource(image);
+  return <WallpaperImageDialog title={image.name} source={source} onClose={onClose} />;
+}
+
+export function WorkbenchBackgroundSettings({
+  customImages, disabled, loadError = false, onRetry, onCustomFilesAdd, onCustomImageRemove,
+  onCustomImageSelect, onPreferenceChange, preference,
+}: WorkbenchBackgroundSettingsProps) {
   const { t } = useTranslation("settings");
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<CustomBackgroundImage | null>(null);
+  const upload = () => inputRef.current?.click();
 
-  const selectMode = (mode: WorkbenchBackgroundMode) => {
-    onPreferenceChange({ ...preference, mode });
-  };
-
-  return (
-    <div className="min-w-0 space-y-5">
-      <div className="grid grid-cols-3 rounded-control bg-control p-0.5">
-        {backgroundModes.map(({ ariaKey, icon: Icon, labelKey, value }) => (
-          <Button
-            aria-label={t(ariaKey)}
-            aria-pressed={preference.mode === value}
-            className={
-              preference.mode === value
-                ? "h-8 gap-1 px-1 text-body-small text-foreground shadow-control"
-                : "h-8 gap-1 px-1 text-body-small"
-            }
-            disabled={disabled}
-            key={value}
-            onClick={() => {
-              selectMode(value);
-            }}
-            type="button"
-            variant={preference.mode === value ? "secondary" : "ghost"}
-          >
-            <Icon aria-hidden="true" className="hidden size-4 min-[360px]:block" />
-            <span>{t(labelKey)}</span>
-          </Button>
-        ))}
-      </div>
-
-      {preference.mode === "custom" ? (
-        <div className="space-y-3">
-          <div
-            aria-label={t("background.galleryLabel")}
-            className="grid grid-cols-3 gap-2 min-[420px]:grid-cols-4 sm:grid-cols-5"
-            role="group"
-          >
-            {customImages.map((image) => (
-              <CustomBackgroundThumbnail
-                disabled={disabled}
-                image={image}
-                key={image.id}
-                onRemove={() => {
-                  onCustomImageRemove(image.id);
-                }}
-                onSelect={() => {
-                  onCustomImageSelect(image.id);
-                }}
-                selected={preference.selectedCustomImageId === image.id}
-              />
-            ))}
-            <button
-              aria-label={t("background.uploadInput")}
-              className="flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-control border border-dashed border-separator-strong bg-control text-label text-muted-foreground outline-none transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:opacity-50"
-              disabled={disabled}
-              onClick={() => {
-                inputRef.current?.click();
-              }}
-              type="button"
-            >
-              <Upload aria-hidden="true" className="size-4" />
-              <span>{t("background.upload")}</span>
-            </button>
-          </div>
-          <input
-            accept="image/gif,image/jpeg,image/png,image/webp"
-            aria-label={t("background.uploadInput")}
-            className="hidden"
-            multiple
-            onChange={(event) => {
-              const files = [...(event.currentTarget.files ?? [])];
-              if (files.length === 0) return;
-              if (files.some((file) => !isSupportedCustomBackgroundImage(file))) {
-                setUploadError(t("background.invalidImage"));
-                event.currentTarget.value = "";
-                return;
-              }
-              setUploadError(null);
-              onCustomFilesAdd(files);
-              event.currentTarget.value = "";
-            }}
-            ref={inputRef}
-            type="file"
-          />
-          {customImages.length === 0 ? (
-            <p className="text-label text-muted-foreground">{t("background.uploadRequired")}</p>
-          ) : null}
-          {uploadError === null ? null : (
-            <p className="text-label text-danger" role="alert">
-              {uploadError}
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      <div className="space-y-3">
-        <BackgroundRangeField
-          ariaLabel={t("background.overlayOpacity")}
-          disabled={disabled || preference.mode === "none"}
-          id="background-opacity"
-          label={t("background.overlayOpacityLabel")}
-          onChange={(overlayOpacity) => {
-            onPreferenceChange({ ...preference, overlayOpacity });
-          }}
-          value={preference.overlayOpacity}
-        />
-        <BackgroundRangeField
-          ariaLabel={t("background.blur")}
-          disabled={disabled || preference.mode === "none"}
-          id="background-blur"
-          label={t("background.blurLabel")}
-          onChange={(blurPercentage) => {
-            onPreferenceChange({ ...preference, blurPercentage });
-          }}
-          value={preference.blurPercentage}
-        />
-      </div>
+  return <div className="wallpaper-settings">
+    <div className="wallpaper-modes" role="group" aria-label={t("wallpaper.source")}>
+      {backgroundModes.map(({ ariaKey, icon: Icon, labelKey, value }) => (
+        <Button aria-label={t(ariaKey)} aria-pressed={preference.mode === value} key={value}
+          className={preference.mode === value ? "bg-raised text-foreground shadow-control" : ""}
+          onClick={() => onPreferenceChange({ ...preference, mode: value })} type="button" variant="ghost">
+          <Icon aria-hidden="true" />{t(labelKey)}
+        </Button>
+      ))}
     </div>
-  );
+    {preference.mode === "bing" ? <BingBackgroundSettings preference={preference} onChange={onPreferenceChange} /> : <>
+      <WallpaperAdjustments preference={preference} onChange={onPreferenceChange} />
+      {preference.mode === "custom" ? <section>
+        <div className="wallpaper-section-heading"><h2>{t("wallpaper.custom")}<span className="wallpaper-heading-meta">{customImages.length}</span></h2>
+          <Button disabled={disabled} onClick={upload} type="button" variant="outline"><Upload aria-hidden="true" />{t("wallpaper.upload")}</Button>
+        </div>
+        {loadError ? <div className="wallpaper-empty" role="alert"><p>{t("wallpaper.loadError")}</p><Button onClick={onRetry} variant="outline"><RefreshCw aria-hidden="true" />{t("wallpaper.retry")}</Button></div> : customImages.length === 0 ? (
+          <button className="wallpaper-upload-empty" disabled={disabled} onClick={upload} type="button" aria-label={t("background.uploadInput")}><Upload aria-hidden="true" className="size-5" /><span>{t("wallpaper.empty")}</span><span className="text-brand">{t("wallpaper.upload")}</span></button>
+        ) : <div className="wallpaper-gallery" aria-label={t("background.galleryLabel")}>
+          {customImages.map((image) => <CustomWallpaperTile image={image} key={image.id} selected={preference.selectedCustomImageId === image.id} disabled={disabled} onSelect={() => onCustomImageSelect(image.id)} onRemove={() => onCustomImageRemove(image.id)} onPreview={() => setPreviewImage(image)} />)}
+        </div>}
+        <input accept="image/gif,image/jpeg,image/png,image/webp" aria-label={t("background.uploadInput")} className="hidden" multiple ref={inputRef} type="file"
+          onChange={(event) => {
+            const files = [...(event.currentTarget.files ?? [])];
+            event.currentTarget.value = "";
+            if (files.length === 0) return;
+            if (files.some((file) => !isSupportedCustomBackgroundImage(file))) { setUploadError(t("background.invalidImage")); return; }
+            setUploadError(null);
+            onCustomFilesAdd(files);
+          }}
+        />
+        {uploadError === null ? null : <p className="mt-3 text-label text-danger" role="alert">{uploadError}</p>}
+      </section> : null}
+    </>}
+    {previewImage === null ? null : <CustomWallpaperDialog image={previewImage} onClose={() => setPreviewImage(null)} />}
+  </div>;
 }

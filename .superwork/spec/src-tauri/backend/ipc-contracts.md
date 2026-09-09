@@ -70,7 +70,7 @@
 - `CodexErrorInfo.rateLimitExceeded` 必须映射为稳定的 `rate_limit_exceeded` IPC 错误码，不得退化为未知错误
 - `mcpServer/event/stream/notification` 与三类 `thread/realtime/item/*` 通知在没有完整 Hosted MCP 订阅或 Realtime 音频产品流程时显式忽略，避免暴露不可操作状态和引入高频无效传输
 - 附件上传与宿主文件导入是应用私有缓存能力，不得调用 `project/read`；必须支持没有真实 Codex Project 的 `temporary` 作用域，任务发送阶段再校验 Project/Task 归属
-- Bing 壁纸只允许 Rust 访问固定 HTTPS 元数据与图片端点；响应必须限制大小、校验 JPEG 并原子写入单日缓存，再按文件动态授权 asset protocol
+- Bing 壁纸只允许 Rust 访问固定 HTTPS 元数据与图片端点；目录用两个有界分页合并并按真实日期去重，最多九天。缩略图与原图分别有界缓存，最多三个图片下载并发，保留最近九天及固定选择；原图按文件动态授权 asset protocol。`get_workbench_background` 的空日期表示自动获取最新壁纸，固定日期先读缓存，离线自动模式回退最近缓存。`download_workbench_background` 只接受日期，目标路径只能来自系统保存窗口，取消返回 `cancelled`；禁止 WebView 指定任意下载 URL 或路径。
 - 新增或修改工作台能力时，同步更新 `docs/codexly-capability-matrix.md` 并运行真实 Codex 0.151 生命周期测试
 - CodeAgent 自身偏好写入 Tauri `app_data_dir()/app.json`，自定义背景写入 `app_data_dir()/backgrounds/custom/`；写入必须有界、校验资源标识并原子替换
 - 全局与 Project 的模型、推理、审批和沙箱默认值写入 `app_data_dir()/agent-settings.json`，不得写入 Codex 配置；更新必须整文件原子替换并返回实际变化字段，相同值不得触发磁盘写入或下游刷新

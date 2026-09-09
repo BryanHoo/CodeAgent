@@ -18,7 +18,9 @@ use application::{
     attachment_commands::{
         cache_project_image, import_host_attachment, list_host_files, upload_attachment,
     },
-    background_commands::get_workbench_background,
+    background_commands::{
+        download_workbench_background, get_workbench_background, list_workbench_backgrounds,
+    },
     catalog_commands::{
         cancel_provider_login, configure_custom_provider, get_global_settings,
         get_project_defaults, get_provider_connection, list_mcp_servers, list_models, list_skills,
@@ -183,6 +185,8 @@ pub fn run() {
             layout_desktop_pet,
             open_desktop_pet_task,
             get_workbench_background,
+            list_workbench_backgrounds,
+            download_workbench_background,
             list_workbench_pets,
             download_workbench_pet,
             list_models,

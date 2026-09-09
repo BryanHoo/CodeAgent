@@ -13,6 +13,7 @@ export type WorkbenchBackgroundPreference = Readonly<{
   mode: WorkbenchBackgroundMode;
   overlayOpacity: number;
   selectedCustomImageId: string | null;
+  selectedBingDay: string | null;
 }>;
 
 export type CustomBackgroundImage = Readonly<{
@@ -33,6 +34,7 @@ export const DEFAULT_WORKBENCH_BACKGROUND: WorkbenchBackgroundPreference = {
   mode: "none",
   overlayOpacity: 60,
   selectedCustomImageId: null,
+  selectedBingDay: null,
 };
 
 export const WORKBENCH_BACKGROUND_CHANGED_EVENT = "codeagent:workbench-background-changed";
@@ -79,6 +81,8 @@ export function readWorkbenchBackgroundPreference(
         mode: value.mode,
         overlayOpacity: value.overlayOpacity,
         selectedCustomImageId: value.selectedCustomImageId,
+        selectedBingDay: "selectedBingDay" in value && typeof value.selectedBingDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.selectedBingDay)
+          ? value.selectedBingDay : null,
       };
     }
   } catch {
@@ -152,7 +156,7 @@ export async function readCustomBackgroundImageSource(id: string): Promise<strin
   return image === undefined ? null : buildNativeAssetUrl(image.assetPath);
 }
 
-async function applyCustomBackgroundMutation(mutation: CustomBackgroundMutation): Promise<void> {
+export async function applyCustomBackgroundMutation(mutation: CustomBackgroundMutation): Promise<void> {
   if (mutation.deletedImageIds.length === 0 && mutation.imagesToSave.length === 0) return;
   const images: NativeCustomBackground[] = await Promise.all(
     mutation.imagesToSave.map(async (image) => {
@@ -169,12 +173,7 @@ async function applyCustomBackgroundMutation(mutation: CustomBackgroundMutation)
   await updateNativeCustomBackgrounds(mutation.deletedImageIds, images);
 }
 
-export async function applyWorkbenchBackgroundPreference(
-  preference: WorkbenchBackgroundPreference,
-  mutation: CustomBackgroundMutation,
-): Promise<void> {
-  // 先提交图片集合再发布偏好，避免工作台读取到尚未落盘的图片 ID。
-  await applyCustomBackgroundMutation(mutation);
+export function publishWorkbenchBackgroundPreference(preference: WorkbenchBackgroundPreference): void {
   saveWorkbenchBackgroundPreference(preference, appPreferenceStorage);
   window.dispatchEvent(
     new CustomEvent<WorkbenchBackgroundPreference>(WORKBENCH_BACKGROUND_CHANGED_EVENT, {

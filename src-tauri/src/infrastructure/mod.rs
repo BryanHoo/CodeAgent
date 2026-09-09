@@ -1,4 +1,5 @@
 pub mod app_storage;
+pub mod bing_wallpaper;
 pub mod codex;
 pub mod diagnostics;
 pub mod filesystem;

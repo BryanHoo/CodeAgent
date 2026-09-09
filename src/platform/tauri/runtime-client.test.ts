@@ -55,6 +55,7 @@ describe("TauriRuntimeClient", () => {
     });
     expect(invoke).toHaveBeenCalledWith("get_workbench_background", {
       day: "2026-08-25",
+      thumbnail: false,
     });
   });
 
@@ -68,5 +69,15 @@ describe("TauriRuntimeClient", () => {
 
     await expect(client.getPerformanceMetrics()).resolves.toEqual(response);
     expect(invoke).toHaveBeenCalledWith("get_runtime_performance_metrics");
+  });
+
+  it("lists history and saves an original without starting the agent runtime", async () => {
+    const ensureRuntime = vi.fn(async () => undefined);
+    const invoke = vi.fn(async (command: string) => command === "list_workbench_backgrounds" ? [] : { status: "cancelled" });
+    const client = new TauriRuntimeClient({ ensureRuntime, invoke: invoke as InvokeImplementation });
+    await expect(client.listWorkbenchBackgrounds()).resolves.toEqual([]);
+    await expect(client.downloadWorkbenchBackground("2026-09-01")).resolves.toEqual({ status: "cancelled" });
+    expect(invoke).toHaveBeenCalledWith("download_workbench_background", { day: "2026-09-01" });
+    expect(ensureRuntime).not.toHaveBeenCalled();
   });
 });

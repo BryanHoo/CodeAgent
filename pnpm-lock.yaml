@@ -92,6 +92,9 @@ importers:
       sonner:
         specifier: 2.0.7
         version: 2.0.7(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      stackblur-canvas:
+        specifier: 3.0.1
+        version: 3.0.1
       streamdown:
         specifier: 2.5.0
         version: 2.5.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)
@@ -4528,6 +4531,10 @@ packages:
 
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
+
+  stackblur-canvas@3.0.1:
+    resolution: {integrity: sha512-eJpxkL5PR39dioN3ZapIIhkjQd01wxcigCnBURzbRofZk5M+cHZUA8VwBelHLhsFW20gO9vdH6hFRIekA+jJfA==}
+    engines: {node: '>=0.1.16'}
 
   std-env@4.2.0:
     resolution: {integrity: sha512-oCUKSupKTHX53EyjDtuZQ64pjLJ6yYCtpmEw0goYxtjG9KpbRe8KAsl2tBUGU9DyMcJ0RwJ8GqJAFzMXcXW1Rw==}
@@ -9788,6 +9795,8 @@ snapshots:
       escape-string-regexp: 2.0.0
 
   stackback@0.0.2: {}
+
+  stackblur-canvas@3.0.1: {}
 
   std-env@4.2.0: {}
 

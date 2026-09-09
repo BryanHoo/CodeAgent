@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  formatBingWallpaperDay,
   loadBingWallpaperSource,
 } from "./workbench-background.js";
 import {
@@ -11,13 +10,13 @@ import {
 } from "./workbench-wallpaper-processing.js";
 
 describe("Workbench Bing background", () => {
-  it("loads the local-day wallpaper through the native client", async () => {
+  it("loads the selected historical wallpaper through the native client", async () => {
     const getWorkbenchBackground = vi.fn(async () => ({ assetPath: "/cache/bing.jpg" }));
     const toAssetUrl = vi.fn((path: string) => `asset://localhost${path}`);
 
     await expect(
       loadBingWallpaperSource(
-        new Date(2026, 7, 25, 23, 59, 59),
+        "2026-08-25",
         { getWorkbenchBackground },
         toAssetUrl,
       ),
@@ -26,8 +25,10 @@ describe("Workbench Bing background", () => {
     expect(toAssetUrl).toHaveBeenCalledWith("/cache/bing.jpg");
   });
 
-  it("formats the day without depending on UTC", () => {
-    expect(formatBingWallpaperDay(new Date(2026, 0, 2, 23, 30))).toBe("2026-01-02");
+  it("lets the native catalog resolve today's image in automatic mode", async () => {
+    const getWorkbenchBackground = vi.fn(async () => ({ assetPath: "/cache/latest.jpg" }));
+    await loadBingWallpaperSource(null, { getWorkbenchBackground }, (path) => path);
+    expect(getWorkbenchBackground).toHaveBeenCalledWith(undefined);
   });
 });
 
@@ -48,7 +49,7 @@ describe("Workbench wallpaper preprocessing", () => {
     });
   });
 
-  it("draws the wallpaper once at physical size with a physical blur radius", () => {
+  it("draws the wallpaper once at physical size with a physical blur radius", async () => {
     const filters: string[] = [];
     const drawImage = vi.fn();
     const context = {
@@ -73,7 +74,7 @@ describe("Workbench wallpaper preprocessing", () => {
     } as HTMLImageElement;
 
     expect(
-      drawPreprocessedWallpaper(canvas, image, { height: 1000, width: 2000 }, 10, 2),
+      await drawPreprocessedWallpaper(canvas, image, { height: 1000, width: 2000 }, 10, 2),
     ).toBe(true);
     expect(canvas.width).toBe(2000);
     expect(canvas.height).toBe(1000);
