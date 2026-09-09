@@ -43,25 +43,81 @@ async function renderSettings(initialSection: "appearance" | "commit" = "appeara
 }
 
 describe("GlobalSettingsPage", () => {
-  it("organizes existing permissions and follow-up controls in General and saves their values", async () => {
+  it("uses only the outer search focus ring and names model defaults consistently", async () => {
+    const { screen } = await renderSettings();
+    const input = screen.getByRole("searchbox", { name: "搜索设置" }).element() as HTMLInputElement;
+    input.focus();
+    expect(input.matches(":focus-visible")).toBe(true);
+    expect(getComputedStyle(input).outlineStyle).toBe("none");
+    expect(getComputedStyle(input).borderTopWidth).toBe("0px");
+    expect(getComputedStyle(input.parentElement!).boxShadow).not.toBe("none");
+    await screen.getByRole("button", { name: "智能体配置", exact: true }).click();
+    await expect.element(screen.getByRole("heading", { name: "模型默认设置", exact: true })).toBeVisible();
+  });
+  it("frames settings groups and keeps labels smaller than section headings", async () => {
+    const { screen } = await renderSettings();
+    const heading = screen.getByRole("heading", { name: "通用", exact: true }).element();
+    const group = heading.nextElementSibling as HTMLElement;
+    const row = group.firstElementChild as HTMLElement;
+    const label = row.querySelector("span")!;
+    const description = row.querySelector("p")!;
+    const cardStyle = getComputedStyle(group);
+    expect(cardStyle.borderLeftWidth).toBe("1px");
+    expect(cardStyle.borderRightWidth).toBe("1px");
+    expect(Number.parseFloat(cardStyle.borderRadius)).toBe(8);
+    expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeGreaterThan(Number.parseFloat(getComputedStyle(label).fontSize));
+    expect(Number.parseFloat(getComputedStyle(label).fontSize)).toBeGreaterThan(Number.parseFloat(getComputedStyle(description).fontSize));
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(66);
+    expect(screen.getByRole("combobox", { name: "默认打开方式" }).element().getBoundingClientRect().height).toBeLessThanOrEqual(32);
+    await screen.getByRole("button", { name: "提交消息", exact: true }).click();
+    const panel = document.querySelector("#settings-panel-commit")!;
+    expect(getComputedStyle(panel.lastElementChild!).borderLeftWidth).toBe("1px");
+  });
+  it("keeps permissions and runtime preferences in agent configuration", async () => {
     const { screen, onSave } = await renderSettings();
-    await expect.element(screen.getByRole("button", { name: "常规", exact: true })).toBeVisible();
-    for (const name of ["权限", "通用", "编辑器", "通知"]) {
-      await expect.element(screen.getByRole("heading", { name, exact: true })).toBeVisible();
-    }
+    expect(screen.getByRole("combobox", { name: "审批", exact: true }).all()).toHaveLength(0);
+    await screen.getByRole("button", { name: "智能体配置", exact: true }).click();
     await screen.getByRole("combobox", { name: "审批", exact: true }).selectOptions("auto-review");
     await screen.getByRole("combobox", { name: "工作区", exact: true }).selectOptions("read-only");
-    await screen.getByRole("button", { name: "引导", exact: true }).click();
+    await screen.getByRole("combobox", { name: "网页搜索", exact: true }).selectOptions("live");
+    await screen.getByRole("combobox", { name: "输出详细程度", exact: true }).selectOptions("high");
+    await screen.getByRole("combobox", { name: "推理摘要", exact: true }).selectOptions("detailed");
     await expect.poll(() => onSave.mock.calls.at(-1)?.[0]).toMatchObject({
-      approvalPolicy: "on-request", approvalsReviewer: "auto_review", sandboxMode: "read-only", followUpBehavior: "steer",
+      approvalPolicy: "on-request", approvalsReviewer: "auto_review", sandboxMode: "read-only",
+      webSearch: "live", modelVerbosity: "high", reasoningSummary: "detailed",
     });
-    await screen.getByRole("button", { name: "Agent 默认值", exact: true }).click();
-    expect(screen.getByRole("combobox", { name: "审批", exact: true }).all()).toHaveLength(0);
-    await expect.element(screen.getByRole("combobox", { name: "模型", exact: true })).toBeVisible();
-    await screen.getByRole("searchbox", { name: "搜索设置" }).fill("审批");
-    expect(screen.getByRole("button", { name: "Agent 默认值", exact: true }).all()).toHaveLength(0);
+    await screen.getByRole("combobox", { name: "输出详细程度", exact: true }).selectOptions("");
+    await expect.poll(() => onSave.mock.calls.at(-1)?.[0]).toMatchObject({ modelVerbosity: null });
+    for (const term of ["审批", "工作区", "网页搜索", "输出详细程度", "推理摘要"]) {
+      await screen.getByRole("searchbox", { name: "搜索设置" }).fill(term);
+      await expect.element(screen.getByRole("button", { name: "智能体配置", exact: true })).toBeVisible();
+      expect(screen.getByRole("button", { name: "常规", exact: true }).all()).toHaveLength(0);
+    }
+    await screen.getByRole("button", { name: "清除搜索" }).click();
+    await screen.getByRole("button", { name: "智能体配置", exact: true }).click();
+    for (const [width, height] of [[1280, 720], [1920, 1080]] as const) {
+      await page.viewport(width, height);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      await page.screenshot({ path: `../../../../test-results/settings-page-agent-${width}.png` });
+    }
+    document.documentElement.dataset.theme = "dark";
+    await page.screenshot({ path: "../../../../test-results/settings-page-agent-dark.png" });
+    document.documentElement.dataset.theme = "light";
+    await i18n.changeLanguage("en");
+    await page.viewport(1280, 720);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1280);
+    await page.screenshot({ path: "../../../../test-results/settings-page-agent-en.png" });
+    await i18n.changeLanguage("zh-CN");
+  });
+  it("keeps general preferences and follow-up controls in General", async () => {
+    const { screen, onSave } = await renderSettings();
+    for (const name of ["通用", "编辑器", "通知"]) {
+      await expect.element(screen.getByRole("heading", { name, exact: true })).toBeVisible();
+    }
+    await screen.getByRole("button", { name: "引导", exact: true }).click();
+    await expect.poll(() => onSave.mock.calls.at(-1)?.[0]).toMatchObject({ followUpBehavior: "steer" });
+    await screen.getByRole("button", { name: "智能体配置", exact: true }).click();
     await screen.getByRole("button", { name: "常规", exact: true }).click();
-    await expect.element(screen.getByRole("combobox", { name: "工作区", exact: true })).toHaveValue("read-only");
     await expect.element(screen.getByRole("button", { name: "引导", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
   it("opens a full-page settings view with navigation and no modal", async () => {
@@ -69,9 +125,9 @@ describe("GlobalSettingsPage", () => {
     await expect.element(screen.getByRole("main", { name: "全局设置" })).toBeVisible();
     expect(screen.getByRole("dialog").all()).toHaveLength(0);
     await expect.element(screen.getByRole("button", { name: "返回应用" })).toBeVisible();
-    await screen.getByRole("button", { name: "Agent 默认值", exact: true }).click();
+    await screen.getByRole("button", { name: "智能体配置", exact: true }).click();
     await expect.element(screen.getByRole("combobox", { name: "模型", exact: true })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Agent 默认值", exact: true })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "智能体配置", exact: true })).toHaveAttribute("aria-current", "page");
     await screen.getByRole("button", { name: "常规", exact: true }).click();
 
     for (const [width, height] of [[1280, 720], [1920, 1080]] as const) {
@@ -101,9 +157,9 @@ describe("GlobalSettingsPage", () => {
     const { screen } = await renderSettings();
     const search = screen.getByRole("searchbox", { name: "搜索设置" });
     await search.fill("思考量");
-    await expect.element(screen.getByRole("button", { name: "Agent 默认值", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "智能体配置", exact: true })).toBeVisible();
     expect(screen.getByRole("button", { name: "常规", exact: true }).all()).toHaveLength(0);
-    await screen.getByRole("button", { name: "Agent 默认值", exact: true }).click();
+    await screen.getByRole("button", { name: "智能体配置", exact: true }).click();
     await expect.element(screen.getByRole("combobox", { name: "思考量", exact: true })).toBeVisible();
     await search.fill("no-matching-setting");
     await expect.element(screen.getByText("未找到相关设置")).toBeVisible();

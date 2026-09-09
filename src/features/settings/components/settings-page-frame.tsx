@@ -14,11 +14,11 @@ const sectionGroups = [
 
 // 搜索仅索引已有分类与字段文案，不为搜索挂载面板或请求额外配置数据。
 const sectionSearchKeys: Record<SettingsSectionId, readonly string[]> = {
-  appearance: ["appearance.colorMode", "appearance.language", "appearance.notifications", "fields.defaultOpenWith", "fields.approvalPolicy", "fields.sandbox", "fields.followUpMessages", "general.permissions", "general.editor", "general.taskNotifications"],
+  appearance: ["appearance.colorMode", "appearance.language", "appearance.notifications", "fields.defaultOpenWith", "fields.followUpMessages", "general.editor", "general.taskNotifications"],
   background: ["background.label", "background.bing", "background.custom", "background.blurLabel", "background.overlayOpacityLabel"],
   pets: ["pets.enabled", "pets.selectionLabel"],
   provider: ["provider.apiKey", "provider.baseUrl", "provider.models", "provider.official", "provider.custom"],
-  agent: ["fields.fastMode", "fields.model", "fields.reasoningEffort"],
+  agent: ["fields.fastMode", "fields.model", "fields.reasoningEffort", "fields.approvalPolicy", "fields.sandbox", "agent.webSearch.label", "agent.modelVerbosity.label", "agent.reasoningSummary.label"],
   commit: ["fields.commitModel", "fields.commitMessagePrompt", "fields.prompt"],
   about: ["about.codeagentVersion", "about.codexVersion", "about.update", "about.releaseNotes", "about.diagnostics"],
 };
@@ -83,7 +83,7 @@ export function SettingsPageFrame({
           <Search aria-hidden="true" className="text-subtle-foreground" />
           <input
             aria-label={t("search.label")}
-            className="min-w-0 flex-1 bg-transparent text-body-small outline-none placeholder:text-subtle-foreground [&::-webkit-search-cancel-button]:appearance-none"
+            className="min-w-0 flex-1 bg-transparent text-body-small !outline-none placeholder:text-subtle-foreground [&::-webkit-search-cancel-button]:appearance-none"
             onChange={(event) => setSearch(event.currentTarget.value)}
             placeholder={t("search.placeholder")}
             ref={searchRef}

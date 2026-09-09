@@ -74,6 +74,7 @@
 - 新增或修改工作台能力时，同步更新 `docs/codexly-capability-matrix.md` 并运行真实 Codex 0.151 生命周期测试
 - CodeAgent 自身偏好写入 Tauri `app_data_dir()/app.json`，自定义背景写入 `app_data_dir()/backgrounds/custom/`；写入必须有界、校验资源标识并原子替换
 - 全局与 Project 的模型、推理、审批和沙箱默认值写入 `app_data_dir()/agent-settings.json`，不得写入 Codex 配置；更新必须整文件原子替换并返回实际变化字段，相同值不得触发磁盘写入或下游刷新
+- 智能体全局配置的 `webSearch`（disabled/cached/live）、`modelVerbosity`（null/low/medium/high）和 `reasoningSummary`（auto/concise/detailed/none）仅保存于应用设置；既有文件缺少新增字段时分别补 cached、null、auto，不能重置其他偏好。后端读取后映射至 thread/start、thread/resume 的 `config.web_search`、`config.model_verbosity`、`config.model_reasoning_summary`；null 省略 verbosity 覆盖。网页搜索与详细程度用于新建或冷恢复的会话，不强制重建已加载线程；推理摘要还必须经普通 turn/start 和目标 thread/settings/update 的 `summary` 应用到后续轮次，计划任务复用同一链路
 - 偏好、编辑器输入缓存与待办更新必须进入 Rust 单写者有界队列，由底层覆盖合并和失败重试；WebView 不得持有定时合并器或持久化 Promise 队列
 - Rust `TaskActivityState` 是任务运行、等待、完成、失败及项目/标题元数据的唯一原生事实来源，并统一驱动系统通知、状态栏、桌面宠物和 WebView 恢复快照
 - 任务取消订阅的终态触发、busy 重试和新回合取消必须由 Rust lease 管理器执行；WebView 只声明任务消费者挂载或卸载

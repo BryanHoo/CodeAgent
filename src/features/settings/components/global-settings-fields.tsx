@@ -10,7 +10,7 @@ import {
   ServerCog,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode, SelectHTMLAttributes } from "react";
+import { useId, type ReactNode, type SelectHTMLAttributes } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { PromptInputSelect } from "../../../shared/components/agent/prompt-input.js";
@@ -52,9 +52,27 @@ export function SettingsPanel({
   if (activeSection !== id) return null;
   return (
     <section id={`settings-panel-${id}`}>
-      <h1 className="mb-8 text-title font-semibold">{title}</h1>
-      <div className="divide-y divide-separator">{children}</div>
+      <h1 className="mb-6 text-xl font-semibold">{title}</h1>
+      <SettingsCard>{children}</SettingsCard>
     </section>
+  );
+}
+
+export function SettingsGroup({ children, title }: Readonly<{ children: ReactNode; title: string }>) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id}>
+      <h2 className="mb-2 text-body font-semibold" id={id}>{title}</h2>
+      <SettingsCard>{children}</SettingsCard>
+    </section>
+  );
+}
+
+function SettingsCard({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <div className="divide-y divide-separator rounded-surface border border-separator bg-panel px-4">
+      {children}
+    </div>
   );
 }
 
@@ -71,11 +89,11 @@ export function SettingsField({
 }>) {
   return (
     <div
-      className={`grid min-h-18 ${description === undefined ? "grid-cols-[minmax(9rem,1fr)_minmax(0,22rem)]" : "grid-cols-[minmax(0,1fr)_minmax(10rem,16rem)]"} gap-6 py-4 ${alignStart ? "items-start" : "items-center"}`}
+      className={`grid min-h-14 ${description === undefined ? "grid-cols-[minmax(9rem,1fr)_minmax(0,22rem)]" : "grid-cols-[minmax(0,1fr)_minmax(10rem,16rem)]"} gap-4 py-3 ${alignStart ? "items-start" : "items-center"}`}
     >
       <div className={`min-w-0 ${alignStart ? "pt-2" : ""}`}>
-        <span className="text-body font-medium text-foreground">{label}</span>
-        {description === undefined ? null : <p className="mt-1 text-body-small leading-relaxed text-muted-foreground">{description}</p>}
+        <span className="block text-body-small font-medium text-foreground">{label}</span>
+        {description === undefined ? null : <p className="mt-0.5 text-label text-muted-foreground">{description}</p>}
       </div>
       <div className="flex min-w-0 justify-end">{children}</div>
     </div>
@@ -170,7 +188,7 @@ export function SettingsSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <div className="relative min-w-40 max-w-full">
       <PromptInputSelect
-        className="h-9 w-full max-w-none !border !border-separator-strong !bg-control px-2.5 pr-8 text-body-small text-foreground"
+        className="h-8 w-full max-w-none !border !border-separator-strong !bg-control px-2.5 pr-8 text-body-small text-foreground"
         {...props}
       />
       <ChevronDown

@@ -1,3 +1,4 @@
+pub mod agent_configuration;
 pub mod conversation;
 pub mod project_terminal;
 pub mod runtime;

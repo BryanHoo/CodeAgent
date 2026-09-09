@@ -5,7 +5,9 @@ use tauri::{AppHandle, Manager};
 use super::{error::AppError, state::AppState};
 use crate::{
     domain::sidebar::AgentTaskMutationResponse,
-    infrastructure::{codex, temporary_workspace, workspace},
+    infrastructure::{
+        codex, local_settings::read_agent_runtime_settings, temporary_workspace, workspace,
+    },
 };
 
 pub(crate) const TEMPORARY_PROJECT_ID: &str = "temporary";
@@ -16,6 +18,9 @@ pub(crate) async fn start_task(
     project_id: String,
 ) -> Result<AgentTaskMutationResponse, AppError> {
     let app_data = app_data_dir(app)?;
+    let settings = read_agent_runtime_settings(&app_data)
+        .await
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
     let temporary_cwd = if project_id == TEMPORARY_PROJECT_ID {
         Some(
             temporary_workspace::create(&app_data)
@@ -26,7 +31,7 @@ pub(crate) async fn start_task(
         None
     };
 
-    match codex::start_task(connection, project_id, temporary_cwd.as_deref()).await {
+    match codex::start_task(connection, project_id, temporary_cwd.as_deref(), &settings).await {
         Ok(response) => Ok(response),
         Err(error) => {
             if let Some(cwd) = temporary_cwd {

@@ -63,6 +63,7 @@ async fn goal_start_should_persist_settings_before_setting_objective() {
         assert_eq!(settings["method"], "thread/settings/update");
         assert_eq!(settings["params"]["threadId"], "thread-a");
         assert_eq!(settings["params"]["model"], "gpt-5.6-sol");
+        assert_eq!(settings["params"]["summary"], "none");
         server_writer
             .write_all(
                 format!("{}\n", json!({"id": settings["id"].clone(), "result": {}})).as_bytes(),
@@ -94,7 +95,11 @@ async fn goal_start_should_persist_settings_before_setting_objective() {
     });
 
     let options = crate::domain::conversation::AgentTurnOptions::default();
-    update_thread_settings(&connection, "thread-a", &options)
+    let settings = crate::domain::agent_configuration::AgentRuntimeSettings {
+        reasoning_summary: crate::domain::agent_configuration::ReasoningSummary::None,
+        ..Default::default()
+    };
+    update_thread_settings(&connection, "thread-a", &options, &settings)
         .await
         .expect("thread settings should persist");
     let goal = set_goal_objective(&connection, "thread-a", "持续完成迁移")
@@ -413,9 +418,14 @@ async fn temporary_task_should_start_without_project_context() {
             .unwrap();
     });
 
-    let response = start_task(&connection, "temporary".to_owned(), Some(&temporary_cwd))
-        .await
-        .expect("temporary task should start");
+    let response = start_task(
+        &connection,
+        "temporary".to_owned(),
+        Some(&temporary_cwd),
+        &Default::default(),
+    )
+    .await
+    .expect("temporary task should start");
     assert_eq!(response.task.project_id, "temporary");
     assert_eq!(response.task.id, "thread-temp");
     server_task.await.unwrap();

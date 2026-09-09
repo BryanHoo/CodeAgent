@@ -70,14 +70,14 @@ export function GlobalSettingsPetsView({
   const { t } = useTranslation("settings");
   return (
     <section id="settings-panel-pets">
-      <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
-        <h3 className="text-heading font-semibold">{t("sections.pets")}</h3>
+      <div className="mb-6 flex min-w-0 items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">{t("sections.pets")}</h1>
         <Button onClick={onRefresh} size="sm" type="button" variant="ghost">
           <RefreshCw aria-hidden="true" data-icon="inline-start" />
           {t("pets.refresh")}
         </Button>
       </div>
-      <div className="flex min-h-12 items-center justify-between gap-3 border-b border-separator py-3 text-body-small font-medium">
+      <div className="flex min-h-14 items-center justify-between gap-3 rounded-surface border border-separator bg-panel px-4 py-3 text-body-small font-medium">
         <span>{t("pets.enabled")}</span>
         <Select
           disabled={isLoading || pets.length === 0}

@@ -13,18 +13,14 @@ import { getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import { getNotificationPreference } from "../notification-preference.js";
 import type { ThemePreference } from "../theme-preference.js";
 import {
-  FastModeSettingsField,
   ModelSelect,
-  ReasoningSelect,
   SettingsField,
   SettingsPanel,
   type SettingsSectionId,
 } from "./global-settings-fields.js";
 import {
-  applyApprovalMode,
   createFallbackSettings,
   readInitialTheme,
-  resolveGlobalSettingsModel,
 } from "./global-settings-model.js";
 import {
   createGlobalSettingsSaveQueue,
@@ -36,6 +32,7 @@ import { GlobalSettingsPets } from "../../pets/components/global-settings-pets.j
 import { useWorkbenchBackgroundDraft } from "./use-workbench-background-draft.js";
 import { GlobalSettingsBackground } from "./global-settings-background.js";
 import { applyBrowserSettingsChanges } from "./browser-settings-apply.js";
+import { AgentSettingsPanel } from "./agent-settings-panel.js";
 import { GeneralSettingsPanel } from "./general-settings-panel.js";
 import { SettingsPageFrame } from "./settings-page-frame.js";
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
@@ -111,7 +108,6 @@ export function GlobalSettingsPage({
   const saveQueue = saveQueueRef.current;
   const appliedBackgroundRef = useRef(background);
   const [isApplyingBackground, setIsApplyingBackground] = useState(false);
-  const selectedModel = models.find((model) => model.id === draft.model);
   useEffect(() => {
     if (settings !== undefined && !hasLocalChangesRef.current) {
       draftRef.current = settings;
@@ -192,10 +188,9 @@ export function GlobalSettingsPage({
       />
 
       {activeSection === "provider" ? (
-        <section id="settings-panel-provider">
-          <h1 className="mb-8 text-title font-semibold">{t("sections.provider")}</h1>
-          <ProviderConnectionPanel />
-        </section>
+        <SettingsPanel activeSection={activeSection} id="provider" title={t("sections.provider")}>
+          <div className="py-4"><ProviderConnectionPanel /></div>
+        </SettingsPanel>
       ) : activeSection === "about" ? null : error !== null ? (
         <div
           className="flex min-h-40 flex-col items-center justify-center gap-3"
@@ -224,8 +219,6 @@ export function GlobalSettingsPage({
             activeSection={activeSection}
             apps={apps}
             settings={draft}
-            onApprovalModeChange={(mode) => updateDraft((current) => applyApprovalMode(current, mode))}
-            onSandboxChange={(sandboxMode) => updateDraft((current) => ({ ...current, sandboxMode }))}
             onFollowUpChange={(followUpBehavior) => updateDraft((current) => ({ ...current, followUpBehavior }))}
             language={language}
             notificationsEnabled={notificationsEnabled}
@@ -271,44 +264,9 @@ export function GlobalSettingsPage({
             />
           ) : null}
 
-          <SettingsPanel
-            activeSection={activeSection}
-            id="agent"
-            title={t("sections.agent")}
-          >
-            {fastModeAvailable ? (
-              <FastModeSettingsField
-                enabled={draft.fastMode}
-                onChange={(fastMode) => {
-                  updateDraft((current) => ({ ...current, fastMode }));
-                }}
-              />
-            ) : null}
-            <SettingsField label={t("fields.model")}>
-              <ModelSelect
-                ariaLabel={t("fields.model")}
-                models={models}
-                onChange={(modelId) => {
-                  updateDraft((current) => ({
-                    ...current,
-                    ...resolveGlobalSettingsModel(models, modelId, current.reasoningEffort),
-                  }));
-                }}
-                value={draft.model}
-              />
-            </SettingsField>
-            <SettingsField label={t("fields.reasoningEffort")}>
-              <ReasoningSelect
-                ariaLabel={t("fields.reasoningEffort")}
-                disabled={selectedModel === undefined}
-                model={selectedModel}
-                onChange={(reasoningEffort) => {
-                  updateDraft((current) => ({ ...current, reasoningEffort }));
-                }}
-                value={draft.reasoningEffort}
-              />
-            </SettingsField>
-          </SettingsPanel>
+          {activeSection === "agent" ? (
+            <AgentSettingsPanel settings={draft} models={models} fastModeAvailable={fastModeAvailable} onChange={(next) => updateDraft(() => next)} />
+          ) : null}
 
           <SettingsPanel
             activeSection={activeSection}

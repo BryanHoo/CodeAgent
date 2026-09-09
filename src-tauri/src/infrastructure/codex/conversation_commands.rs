@@ -14,6 +14,7 @@ use super::{
     sidebar::unix_seconds_to_rfc3339,
 };
 use crate::domain::{
+    agent_configuration::{AgentRuntimeSettings, ModelVerbosity, ReasoningSummary, WebSearchMode},
     conversation::{
         AgentPromptInput, AgentTurnActionResponse, AgentTurnOptions, EventCheckpoint,
         StartAgentTurnResponse,
@@ -84,11 +85,29 @@ struct ThreadResumeParams<'a> {
 pub(super) struct ThreadConfig {
     #[serde(rename = "tools.update_plan.enabled")]
     update_plan_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    web_search: Option<WebSearchMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_verbosity: Option<ModelVerbosity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_reasoning_summary: Option<ReasoningSummary>,
 }
 
 pub(super) const fn thread_config() -> ThreadConfig {
     ThreadConfig {
         update_plan_enabled: true,
+        web_search: None,
+        model_verbosity: None,
+        model_reasoning_summary: None,
+    }
+}
+
+fn agent_thread_config(settings: &AgentRuntimeSettings) -> ThreadConfig {
+    ThreadConfig {
+        web_search: Some(settings.web_search),
+        model_verbosity: settings.model_verbosity,
+        model_reasoning_summary: Some(settings.reasoning_summary),
+        ..thread_config()
     }
 }
 
@@ -107,6 +126,7 @@ struct NativeTaskIdentity {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TurnStartParams<'a> {
+    summary: ReasoningSummary,
     approval_policy: &'a Value,
     approvals_reviewer: &'a str,
     collaboration_mode: Value,
@@ -121,6 +141,7 @@ struct TurnStartParams<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadSettingsUpdateParams<'a> {
+    summary: ReasoningSummary,
     approval_policy: &'a Value,
     approvals_reviewer: &'a str,
     collaboration_mode: Value,
@@ -161,6 +182,7 @@ pub async fn start_task(
     connection: &AppServerConnection,
     project_id: String,
     temporary_cwd: Option<&Path>,
+    settings: &AgentRuntimeSettings,
 ) -> Result<AgentTaskMutationResponse, ConnectionError> {
     let root_paths = if project_id == TEMPORARY_PROJECT_ID {
         Vec::new()
@@ -194,7 +216,7 @@ pub async fn start_task(
         .request(
             "thread/start",
             &ThreadStartParams {
-                config: thread_config(),
+                config: agent_thread_config(settings),
                 cwd,
                 history_mode: "paginated",
                 project_id: native_project_id,
@@ -220,16 +242,18 @@ pub async fn start_turn(
     input: AgentPromptInput,
     options: AgentTurnOptions,
     resume_task_before_turn: bool,
+    settings: &AgentRuntimeSettings,
 ) -> Result<StartAgentTurnResponse, ConnectionError> {
     // 新线程已由 thread/start 载入，但首个 Turn 前尚无 rollout，不能立即 resume。
     if resume_task_before_turn {
-        resume_task(connection, &project_id, &task_id).await?;
+        resume_task(connection, &project_id, &task_id, settings).await?;
     }
 
     let response: NativeTurnResponse = connection
         .request(
             "turn/start",
             &TurnStartParams {
+                summary: settings.reasoning_summary,
                 approval_policy: &options.approval_policy,
                 approvals_reviewer: map_approvals_reviewer(&options.approvals_reviewer)?,
                 collaboration_mode: collaboration_mode(&options),
@@ -257,12 +281,13 @@ pub async fn resume_task(
     connection: &AppServerConnection,
     project_id: &str,
     task_id: &str,
+    settings: &AgentRuntimeSettings,
 ) -> Result<(), ConnectionError> {
     let resumed: NativeResumeResponse = connection
         .request(
             "thread/resume",
             &ThreadResumeParams {
-                config: thread_config(),
+                config: agent_thread_config(settings),
                 // 历史由分页接口加载，Resume 仅返回元数据，避免极限会话形成超大单帧。
                 exclude_turns: true,
                 thread_id: task_id,
@@ -280,11 +305,13 @@ pub async fn update_thread_settings(
     connection: &AppServerConnection,
     task_id: &str,
     options: &AgentTurnOptions,
+    settings: &AgentRuntimeSettings,
 ) -> Result<(), ConnectionError> {
     let _: Value = connection
         .request(
             "thread/settings/update",
             &ThreadSettingsUpdateParams {
+                summary: settings.reasoning_summary,
                 approval_policy: &options.approval_policy,
                 approvals_reviewer: map_approvals_reviewer(&options.approvals_reviewer)?,
                 collaboration_mode: collaboration_mode(options),

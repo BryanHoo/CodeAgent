@@ -167,7 +167,7 @@ export const settings = {
   },
   sections: {
     about: "About",
-    agent: "Agent defaults",
+    agent: "Agent configuration",
     appearance: "General",
     background: "Workbench background",
     commit: "Commit messages",

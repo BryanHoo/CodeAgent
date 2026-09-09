@@ -44,6 +44,14 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
             let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap())
                 .expect("request should be JSON");
             assert_eq!(request["method"], method);
+            if method == "thread/start" || method == "thread/resume" {
+                assert_eq!(request["params"]["config"]["web_search"], "live");
+                assert_eq!(
+                    request["params"]["config"]["model_reasoning_summary"],
+                    "detailed"
+                );
+                assert_eq!(request["params"]["config"]["model_verbosity"], "high");
+            }
             if method == "thread/start" {
                 assert_eq!(request["params"]["projectId"], "project-a");
                 assert_eq!(request["params"]["cwd"], "/work/a");
@@ -66,6 +74,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
                 );
             }
             if method == "turn/start" {
+                assert_eq!(request["params"]["summary"], "detailed");
                 assert_eq!(request["params"]["threadId"], "thread-a");
                 assert_eq!(request["params"]["input"][0]["text"], "修复测试");
                 assert_eq!(request["params"]["model"], "gpt-5.6-sol");
@@ -89,7 +98,11 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
         }
     });
 
-    let task = start_task(&connection, "project-a".to_owned(), None)
+    let settings = serde_json::from_value(json!({
+        "webSearch": "live", "modelVerbosity": "high", "reasoningSummary": "detailed",
+    }))
+    .unwrap();
+    let task = start_task(&connection, "project-a".to_owned(), None, &settings)
         .await
         .expect("task should start");
     assert_eq!(task.task.id, "thread-a");
@@ -105,6 +118,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
         AgentPromptInput::text("修复测试"),
         options,
         true,
+        &settings,
     )
     .await
     .expect("turn should start");
@@ -159,9 +173,14 @@ async fn new_task_first_turn_should_skip_thread_resume() {
         }
     });
 
-    let task = start_task(&connection, "project-a".to_owned(), None)
-        .await
-        .expect("task should start");
+    let task = start_task(
+        &connection,
+        "project-a".to_owned(),
+        None,
+        &Default::default(),
+    )
+    .await
+    .expect("task should start");
     let turn = start_turn(
         &connection,
         "project-a".to_owned(),
@@ -169,6 +188,7 @@ async fn new_task_first_turn_should_skip_thread_resume() {
         AgentPromptInput::text("首条消息"),
         AgentTurnOptions::default(),
         false,
+        &Default::default(),
     )
     .await
     .expect("first turn should start without resuming the new thread");

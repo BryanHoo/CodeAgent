@@ -167,7 +167,7 @@ export const settings = {
   },
   sections: {
     about: "关于",
-    agent: "Agent 默认值",
+    agent: "智能体配置",
     appearance: "常规",
     background: "工作台背景",
     commit: "提交消息",

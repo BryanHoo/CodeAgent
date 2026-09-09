@@ -6,10 +6,13 @@ use tokio::time::timeout;
 
 use crate::{
     domain::{
+        agent_configuration::AgentRuntimeSettings,
         conversation::{AgentPromptInput, AgentTaskSettings, AgentTurnOptions},
         scheduled_task::ScheduledTask,
     },
-    infrastructure::{codex, task_settings::write_task_settings},
+    infrastructure::{
+        codex, local_settings::read_agent_runtime_settings, task_settings::write_task_settings,
+    },
 };
 
 use super::{error::AppError, sidebar_prompt_title::prompt_task_title, state::AppState};
@@ -30,6 +33,10 @@ pub(crate) async fn start_turn_for_task(
     super::attachment_commands::resolve_prompt_attachments(&app_data, project_id, &mut input)
         .await?;
     let connection = state.codex_connection().await?;
+    // 在后端读取最新偏好，普通任务和计划任务共用，不增加 WebView 的逐轮传输字段。
+    let settings = read_agent_runtime_settings(&app_data)
+        .await
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
     // App Server 可能先推送 turn/started，再返回响应，必须提前建立事件归属。
     state.remember_tasks(project_id, [task_id]).await;
     if let Some(task_title) = prompt_task_title(&input) {
@@ -46,13 +53,18 @@ pub(crate) async fn start_turn_for_task(
     .await
     .map_err(|_| AppError::FilesystemRequestFailed)?;
     if options.goal_mode {
+        if resume_task {
+            codex::resume_task(&connection, project_id, task_id, &settings)
+                .await
+                .map_err(AppError::from)?;
+        }
         return start_goal_turn(
             &connection,
             project_id,
             task_id,
             input,
             options,
-            resume_task,
+            &settings,
             state,
         )
         .await;
@@ -64,6 +76,7 @@ pub(crate) async fn start_turn_for_task(
         input,
         options,
         resume_task,
+        &settings,
     )
     .await
     .map_err(AppError::from)?;
@@ -77,20 +90,15 @@ async fn start_goal_turn(
     task_id: &str,
     input: AgentPromptInput,
     options: AgentTurnOptions,
-    resume_task: bool,
+    settings: &AgentRuntimeSettings,
     state: &AppState,
 ) -> Result<Value, AppError> {
     if !input.attachments.is_empty() || !input.skills.is_empty() {
         return Err(AppError::CodexRequestFailed);
     }
-    if resume_task {
-        codex::resume_task(connection, project_id, task_id)
-            .await
-            .map_err(AppError::from)?;
-    }
     let (waiter_id, turn_started) = state.register_turn_started(task_id).await;
     let result = async {
-        codex::update_thread_settings(connection, task_id, &options)
+        codex::update_thread_settings(connection, task_id, &options, settings)
             .await
             .map_err(AppError::from)?;
         codex::set_goal_objective(connection, task_id, &input.text)

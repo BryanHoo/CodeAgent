@@ -10,8 +10,10 @@ use serde_json::{Value, json};
 use thiserror::Error;
 use tokio::{fs, sync::Mutex};
 
+use crate::domain::agent_configuration::AgentRuntimeSettings;
+
 const SETTINGS_VERSION: u8 = 1;
-const GLOBAL_FIELDS: [&str; 11] = [
+const GLOBAL_FIELDS: [&str; 14] = [
     "approvalPolicy",
     "approvalsReviewer",
     "commitMessageModel",
@@ -20,9 +22,12 @@ const GLOBAL_FIELDS: [&str; 11] = [
     "fastMode",
     "followUpBehavior",
     "model",
+    "modelVerbosity",
     "pet",
     "reasoningEffort",
+    "reasoningSummary",
     "sandboxMode",
+    "webSearch",
 ];
 const PROJECT_FIELDS: [&str; 6] = [
     "approvalPolicy",
@@ -72,6 +77,14 @@ impl Default for SettingsFile {
 pub async fn read_global_settings(app_data: &Path) -> Result<Value, LocalSettingsError> {
     let _guard = SETTINGS_LOCK.lock().await;
     Ok(read_settings_file(app_data).await?.global)
+}
+
+pub async fn read_agent_runtime_settings(
+    app_data: &Path,
+) -> Result<AgentRuntimeSettings, LocalSettingsError> {
+    Ok(serde_json::from_value(
+        read_global_settings(app_data).await?,
+    )?)
 }
 
 pub async fn update_global_settings(
@@ -139,9 +152,21 @@ async fn read_settings_file(app_data: &Path) -> Result<SettingsFile, LocalSettin
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(SettingsFile::default()),
         Err(error) => return Err(error.into()),
     };
-    let stored: SettingsFile = serde_json::from_slice(&bytes)?;
+    let mut stored: SettingsFile = serde_json::from_slice(&bytes)?;
     if stored.version != SETTINGS_VERSION {
         return Err(LocalSettingsError::InvalidData);
+    }
+    // 只补齐本次新增字段；保留已保存的偏好，其他缺失或未知字段仍由严格校验拒绝。
+    let global = stored
+        .global
+        .as_object_mut()
+        .ok_or(LocalSettingsError::InvalidData)?;
+    for (key, value) in [
+        ("webSearch", json!("cached")),
+        ("modelVerbosity", Value::Null),
+        ("reasoningSummary", json!("auto")),
+    ] {
+        global.entry(key).or_insert(value);
     }
     validate_global_settings(&stored.global)?;
     for (project_id, settings) in &stored.projects {
@@ -188,9 +213,12 @@ fn default_global_settings() -> Value {
         "fastMode": false,
         "followUpBehavior": "queue",
         "model": "gpt-5.6-sol",
+        "modelVerbosity": null,
         "pet": {"enabled": false, "selectedPetId": null},
         "reasoningEffort": "high",
+        "reasoningSummary": "auto",
         "sandboxMode": "workspace-write",
+        "webSearch": "cached",
     })
 }
 
@@ -216,7 +244,20 @@ fn validate_global_settings(settings: &Value) -> Result<(), LocalSettingsError> 
     ) && matches!(
         settings.get("followUpBehavior").and_then(Value::as_str),
         Some("queue" | "steer")
-    ) && valid_pet(settings.get("pet"));
+    ) && valid_pet(settings.get("pet"))
+        && matches!(
+            settings.get("webSearch").and_then(Value::as_str),
+            Some("disabled" | "cached" | "live")
+        )
+        && matches!(
+            settings.get("reasoningSummary").and_then(Value::as_str),
+            Some("auto" | "concise" | "detailed" | "none")
+        )
+        && (settings.get("modelVerbosity") == Some(&Value::Null)
+            || matches!(
+                settings.get("modelVerbosity").and_then(Value::as_str),
+                Some("low" | "medium" | "high")
+            ));
     valid.then_some(()).ok_or(LocalSettingsError::InvalidData)
 }
 
