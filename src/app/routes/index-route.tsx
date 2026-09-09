@@ -1,6 +1,6 @@
 import { createRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Activity, lazy, Suspense, useEffect, useState } from "react";
 
 import { useProjectActions, useProjectData } from "../../features/projects/project-context.js";
 import {
@@ -10,7 +10,7 @@ import {
   globalSettingsQueryOptions,
   modelsQueryOptions,
 } from "../../features/projects/project-queries.js";
-import { loadGlobalSettingsDialog } from "../../features/settings/components/global-settings-lazy.js";
+import { loadGlobalSettingsPage } from "../../features/settings/components/global-settings-lazy.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import { RuntimeUnavailable } from "../../shared/components/core/runtime-unavailable.js";
 import {
@@ -24,8 +24,8 @@ import {
 } from "../../features/workbench/project-sidebar-preferences.js";
 import { rootRoute } from "./root-route.js";
 
-const LazyGlobalSettingsDialog = lazy(() =>
-  loadGlobalSettingsDialog().then((module) => ({ default: module.GlobalSettingsDialog })),
+const LazyGlobalSettingsPage = lazy(() =>
+  loadGlobalSettingsPage().then((module) => ({ default: module.GlobalSettingsPage })),
 );
 
 export const indexRoute = createRoute({
@@ -91,28 +91,32 @@ function IndexPage() {
     );
   }
   return (
-    <div
-      className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
-      data-inspector-open="false"
-      data-sidebar-open={sidebarOpen}
-    >
-      <ProjectSidebar
-        {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-        onClose={() => undefined}
-        onOpenSettings={(section) => {
-          setGlobalSettingsSection(section);
-        }}
-        onPanelShortcut={(panel) => {
-          if (panel === "search") setSidebarOpen(true);
-          else if (panel === "sidebar") setSidebarOpen((open) => !open);
-        }}
-      />
-      <main className="grid min-h-0 min-w-0 place-items-center bg-content text-sm text-muted-foreground">
-        {t("app.noProjects")}
-      </main>
+    <>
+      <Activity mode={globalSettingsSection === null ? "visible" : "hidden"}>
+        <div
+          className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
+          data-inspector-open="false"
+          data-sidebar-open={sidebarOpen}
+        >
+          <ProjectSidebar
+            {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
+            onClose={() => undefined}
+            onOpenSettings={(section) => {
+              setGlobalSettingsSection(section);
+            }}
+            onPanelShortcut={(panel) => {
+              if (panel === "search") setSidebarOpen(true);
+              else if (panel === "sidebar") setSidebarOpen((open) => !open);
+            }}
+          />
+          <main className="grid min-h-0 min-w-0 place-items-center bg-content text-sm text-muted-foreground">
+            {t("app.noProjects")}
+          </main>
+        </div>
+      </Activity>
       {globalSettingsSection === null ? null : (
-        <Suspense fallback={null}>
-          <LazyGlobalSettingsDialog
+        <Suspense fallback={<main className="grid h-full place-items-center text-body-small text-muted-foreground" role="status">{t("settings:loading")}</main>}>
+          <LazyGlobalSettingsPage
             {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
             appInfoError={appInfoQuery.error}
             initialSection={globalSettingsSection}
@@ -146,6 +150,6 @@ function IndexPage() {
           />
         </Suspense>
       )}
-    </div>
+    </>
   );
 }

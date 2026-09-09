@@ -1,26 +1,20 @@
-import type { AgentGlobalSettings, AgentModel, ProjectOpenApp } from "@/protocol/index.js";
+import type { AgentModel } from "@/protocol/index.js";
 import {
   Bot,
   ChevronDown,
   GitCommitHorizontal,
   Images,
   Info,
-  MonitorCog,
-  Moon,
   PawPrint,
-  Palette,
+  Settings,
   ServerCog,
-  Sun,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode, SelectHTMLAttributes } from "react";
 
-import type { SupportedLanguage } from "../../../i18n/language-preference.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { PromptInputSelect } from "../../../shared/components/agent/prompt-input.js";
-import { Button } from "../../../shared/components/core/button.js";
 import { Checkbox } from "../../../shared/components/core/checkbox.js";
-import type { ThemePreference } from "../theme-preference.js";
 
 export type SettingsSectionId =
   | "about"
@@ -35,7 +29,7 @@ export const settingsSections: readonly Readonly<{
   icon: LucideIcon;
   id: SettingsSectionId;
 }>[] = [
-  { icon: Palette, id: "appearance" },
+  { icon: Settings, id: "appearance" },
   { icon: Images, id: "background" },
   { icon: PawPrint, id: "pets" },
   { icon: ServerCog, id: "provider" },
@@ -43,17 +37,6 @@ export const settingsSections: readonly Readonly<{
   { icon: GitCommitHorizontal, id: "commit" },
   { icon: Info, id: "about" },
 ];
-
-const themeOptions = [
-  {
-    ariaKey: "appearance.automaticMode",
-    icon: MonitorCog,
-    labelKey: "appearance.automatic",
-    value: "system",
-  },
-  { ariaKey: "appearance.lightMode", icon: Sun, labelKey: "appearance.light", value: "light" },
-  { ariaKey: "appearance.darkMode", icon: Moon, labelKey: "appearance.dark", value: "dark" },
-] as const;
 
 export function SettingsPanel({
   activeSection,
@@ -66,9 +49,10 @@ export function SettingsPanel({
   id: SettingsSectionId;
   title: string;
 }>) {
+  if (activeSection !== id) return null;
   return (
-    <section hidden={activeSection !== id} id={`settings-panel-${id}`}>
-      <h3 className="mb-4 text-heading font-semibold">{title}</h3>
+    <section id={`settings-panel-${id}`}>
+      <h1 className="mb-8 text-title font-semibold">{title}</h1>
       <div className="divide-y divide-separator">{children}</div>
     </section>
   );
@@ -77,20 +61,23 @@ export function SettingsPanel({
 export function SettingsField({
   alignStart = false,
   children,
+  description,
   label,
 }: Readonly<{
   alignStart?: boolean;
   children: ReactNode;
+  description?: string;
   label: string;
 }>) {
   return (
     <div
-      className={`grid min-h-16 gap-3 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] ${alignStart ? "items-start" : "items-center"}`}
+      className={`grid min-h-18 ${description === undefined ? "grid-cols-[minmax(9rem,1fr)_minmax(0,22rem)]" : "grid-cols-[minmax(0,1fr)_minmax(10rem,16rem)]"} gap-6 py-4 ${alignStart ? "items-start" : "items-center"}`}
     >
-      <span className={`text-body-small font-medium text-foreground ${alignStart ? "pt-2" : ""}`}>
-        {label}
-      </span>
-      {children}
+      <div className={`min-w-0 ${alignStart ? "pt-2" : ""}`}>
+        <span className="text-body font-medium text-foreground">{label}</span>
+        {description === undefined ? null : <p className="mt-1 text-body-small leading-relaxed text-muted-foreground">{description}</p>}
+      </div>
+      <div className="flex min-w-0 justify-end">{children}</div>
     </div>
   );
 }
@@ -113,127 +100,6 @@ export function FastModeSettingsField({
         }}
       />
     </SettingsField>
-  );
-}
-
-export function ThemeButton({
-  ariaLabel,
-  icon: Icon,
-  label,
-  onClick,
-  selected,
-}: Readonly<{
-  ariaLabel: string;
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-  selected: boolean;
-}>) {
-  return (
-    <Button
-      aria-label={ariaLabel}
-      aria-pressed={selected}
-      className={`inline-flex h-8 items-center justify-center gap-1 rounded-[5px] px-1 text-body-small font-medium transition-colors ${selected ? "bg-raised text-foreground shadow-control" : "text-muted-foreground hover:text-foreground"}`}
-      onClick={onClick}
-      type="button"
-      variant="ghost"
-    >
-      <Icon aria-hidden="true" className="hidden size-4 min-[360px]:block" />
-      <span>{label}</span>
-    </Button>
-  );
-}
-
-export function AppearanceSettingsPanel({
-  activeSection,
-  apps,
-  defaultOpenAppId,
-  language,
-  notificationsEnabled,
-  onDefaultOpenAppChange,
-  onLanguageChange,
-  onNotificationsChange,
-  onThemeChange,
-  theme,
-}: Readonly<{
-  activeSection: SettingsSectionId;
-  apps: readonly ProjectOpenApp[];
-  defaultOpenAppId: AgentGlobalSettings["defaultOpenAppId"];
-  language: SupportedLanguage;
-  notificationsEnabled: boolean;
-  onDefaultOpenAppChange: (appId: AgentGlobalSettings["defaultOpenAppId"]) => void;
-  onLanguageChange: (language: SupportedLanguage) => void;
-  onNotificationsChange: (enabled: boolean) => void;
-  onThemeChange: (theme: ThemePreference) => void;
-  theme: ThemePreference;
-}>) {
-  const { t } = useTranslation("settings");
-  return (
-    <SettingsPanel activeSection={activeSection} id="appearance" title={t("sections.appearance")}>
-      <SettingsField label={t("appearance.colorMode")}>
-        <div className="grid grid-cols-3 rounded-control bg-control p-0.5">
-          {themeOptions.map((option) => {
-            return (
-              <ThemeButton
-                ariaLabel={t(option.ariaKey)}
-                icon={option.icon}
-                key={option.value}
-                label={t(option.labelKey)}
-                onClick={() => {
-                  onThemeChange(option.value);
-                }}
-                selected={theme === option.value}
-              />
-            );
-          })}
-        </div>
-      </SettingsField>
-      <SettingsField label={t("appearance.language")}>
-        <SettingsSelect
-          aria-label={t("appearance.language")}
-          onChange={(event) => {
-            onLanguageChange(event.currentTarget.value as SupportedLanguage);
-          }}
-          value={language}
-        >
-          <option value="zh-CN">{t("languages.zhCN")}</option>
-          <option value="en">{t("languages.en")}</option>
-        </SettingsSelect>
-      </SettingsField>
-      <SettingsField label={t("appearance.notifications")}>
-        <SettingsSelect
-          aria-label={t("appearance.notifications")}
-          onChange={(event) => {
-            onNotificationsChange(event.currentTarget.value === "enabled");
-          }}
-          value={notificationsEnabled ? "enabled" : "disabled"}
-        >
-          <option value="enabled">{t("notifications.enabled")}</option>
-          <option value="disabled">{t("notifications.disabled")}</option>
-        </SettingsSelect>
-      </SettingsField>
-      <SettingsField label={t("fields.defaultOpenWith")}>
-        <SettingsSelect
-          aria-label={t("fields.defaultOpenWith")}
-          onChange={(event) => {
-            const appId = event.currentTarget.value;
-            onDefaultOpenAppChange(
-              appId === "" ? null : (appId as AgentGlobalSettings["defaultOpenAppId"]),
-            );
-          }}
-          value={defaultOpenAppId ?? ""}
-        >
-          <option value="">{t("appearance.defaultOpenAutomatic")}</option>
-          {apps
-            .filter((app) => app.kind !== "system-default")
-            .map((app) => (
-              <option key={app.id} value={app.id}>
-                {app.name}
-              </option>
-            ))}
-        </SettingsSelect>
-      </SettingsField>
-    </SettingsPanel>
   );
 }
 
@@ -302,7 +168,7 @@ export function ReasoningSelect({
 
 export function SettingsSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <div className="relative min-w-0">
+    <div className="relative min-w-40 max-w-full">
       <PromptInputSelect
         className="h-9 w-full max-w-none !border !border-separator-strong !bg-control px-2.5 pr-8 text-body-small text-foreground"
         {...props}

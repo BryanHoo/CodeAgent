@@ -10,6 +10,8 @@ export function TerminalWorkbench({ children, enabled, projectId, rootId, taskId
   const state = useSyncExternalStore(useCallback((listener) => enabled ? terminalStore.subscribe(projectId, listener) : () => undefined, [enabled, projectId]), useCallback(() => terminalStore.get(projectId), [projectId]));
   const previousFocus = useRef<HTMLElement | null>(null);
   const wasVisible = useRef(false);
+  const collapsedScope = useRef<{ projectId: string; taskId: string | undefined } | null>(null);
+  const initializedScope = useRef<{ projectId: string; taskId: string | undefined } | null>(null);
   const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   const captureFocus = useCallback(() => {
     const active = document.activeElement;
@@ -21,16 +23,22 @@ export function TerminalWorkbench({ children, enabled, projectId, rootId, taskId
   }, [captureFocus, projectId, rootId]);
 
   useLayoutEffect(() => {
-    // 任务作用域变化时只收起面板，保留项目终端会话供用户再次打开。
+    // 设置页使用 Activity 暂停工作台；同一任务恢复时保留终端展开状态。
+    if (collapsedScope.current?.projectId === projectId && collapsedScope.current.taskId === taskId) return;
+    collapsedScope.current = { projectId, taskId };
     terminalStore.update(projectId, { visible: false });
   }, [projectId, taskId]);
   useEffect(() => {
     if (!enabled) return;
+    if (initializedScope.current?.projectId === projectId && initializedScope.current.taskId === taskId) return;
     let active = true;
     void initializeTerminalLayout(projectId)
       .then(() => {
         // 布局恢复可能晚于任务切换完成，恢复后再次确保终端不会自动展开。
-        if (active) terminalStore.update(projectId, { visible: false });
+        if (active) {
+          initializedScope.current = { projectId, taskId };
+          terminalStore.update(projectId, { visible: false });
+        }
       })
       .catch((error: unknown) => terminalActionError(projectId, error));
     return () => { active = false; };

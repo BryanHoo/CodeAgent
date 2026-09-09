@@ -18,7 +18,6 @@ import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 import { WorkbenchInspectorToggle } from "./workbench-inspector-toggle.js";
-import { WorkbenchPetLayer } from "../../pets/components/workbench-pet-layer.js";
 import { getWorkbenchInspectorMountKey } from "../workbench-inspector-activation.js";
 import { LazyScheduledTasksContainer } from "./scheduled-tasks-lazy.js";
 
@@ -487,11 +486,9 @@ export function WorkbenchShellLayout({
           {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
         />
       ) : null}
-      <WorkbenchPetLayer settings={globalSettings?.pet} />
       <WorkbenchShellDialogs
         context={context}
         projectId={projectId}
-        projectToolsEnabled={!temporary}
         {...(taskId === undefined ? {} : { taskId })}
       />
     </div>

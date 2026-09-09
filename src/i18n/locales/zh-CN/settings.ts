@@ -22,8 +22,7 @@ export const settings = {
     updating: "正在准备更新",
   },
   actions: {
-    close: "关闭",
-    closeDialog: "关闭全局设置",
+    backToApp: "返回应用",
     closeReleaseNotes: "关闭更新日志",
   },
   appearance: {
@@ -95,12 +94,23 @@ export const settings = {
     queue: "排队",
     steer: "引导",
   },
-  languages: {
+ languages: {
     en: "English",
     zhCN: "简体中文",
   },
   loading: "正在加载全局设置",
   navigationLabel: "设置分类",
+  groups: {
+    personal: "个人",
+    coding: "编码",
+    app: "应用",
+  },
+  search: {
+    label: "搜索设置",
+    placeholder: "搜索设置…",
+    clear: "清除搜索",
+    empty: "未找到相关设置",
+  },
   notifications: {
     disabled: "关闭",
     enabled: "开启",
@@ -158,7 +168,7 @@ export const settings = {
   sections: {
     about: "关于",
     agent: "Agent 默认值",
-    appearance: "基础设置",
+    appearance: "常规",
     background: "工作台背景",
     commit: "提交消息",
     pets: "桌面宠物",

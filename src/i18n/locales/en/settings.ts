@@ -22,8 +22,7 @@ export const settings = {
     updating: "Preparing update",
   },
   actions: {
-    close: "Close",
-    closeDialog: "Close global settings",
+    backToApp: "Back to app",
     closeReleaseNotes: "Close release notes",
   },
   appearance: {
@@ -95,12 +94,23 @@ export const settings = {
     queue: "Queue",
     steer: "Steer",
   },
-  languages: {
+ languages: {
     en: "English",
     zhCN: "简体中文",
   },
   loading: "Loading global settings",
   navigationLabel: "Settings categories",
+  groups: {
+    personal: "Personal",
+    coding: "Coding",
+    app: "Application",
+  },
+  search: {
+    label: "Search settings",
+    placeholder: "Search settings...",
+    clear: "Clear search",
+    empty: "No matching settings",
+  },
   notifications: {
     disabled: "Off",
     enabled: "On",
