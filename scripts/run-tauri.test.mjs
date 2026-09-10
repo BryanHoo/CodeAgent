@@ -20,7 +20,7 @@ void test("the main window should allow SPA navigation event subscriptions", asy
 });
 
 void test("macOS builds should default to the Apple Silicon target", () => {
-  assert.deepEqual(resolveTauriArguments(["build", "--no-sign"], "darwin"), [
+  assert.deepEqual(resolveTauriArguments(["build", "--no-sign"], "darwin", "arm64"), [
     "build",
     "--target",
     "aarch64-apple-darwin",
@@ -28,10 +28,36 @@ void test("macOS builds should default to the Apple Silicon target", () => {
   ]);
 });
 
-void test("macOS builds should reject an Intel target", () => {
+void test("macOS builds should preserve an explicit Intel target", () => {
+  const args = ["build", "-t", "x86_64-apple-darwin"];
+  assert.deepEqual(resolveTauriArguments(args, "darwin", "arm64"), args);
+});
+
+void test("Legacy builds should select Intel and append the isolated configuration", () => {
+  assert.deepEqual(resolveTauriArguments(["build"], "darwin", "arm64", "legacy"), [
+    "build", "--target", "x86_64-apple-darwin",
+    "--config", "src-tauri/tauri.macos-legacy.conf.json",
+  ]);
+});
+
+void test("Legacy builds should reject unsupported platforms and targets", () => {
+  assert.throws(() => resolveTauriArguments(["build"], "linux", "x64", "legacy"), /Legacy/);
+  assert.throws(() => resolveTauriArguments(
+    ["build", "--target=aarch64-apple-darwin"], "darwin", "arm64", "legacy",
+  ), /Legacy/);
+  assert.throws(() => resolveTauriArguments(["build"], "darwin", "arm64", "typo"), /profile/);
+});
+
+void test("Intel hosts should build an Intel app by default", () => {
+  assert.deepEqual(resolveTauriArguments(["build"], "darwin", "x64"), [
+    "build", "--target", "x86_64-apple-darwin",
+  ]);
+});
+
+void test("macOS builds should reject targets without a matching runtime", () => {
   assert.throws(
-    () => resolveTauriArguments(["build", "-t", "x86_64-apple-darwin"], "darwin"),
-    /aarch64-apple-darwin/,
+    () => resolveTauriArguments(["build", "-t", "universal-apple-darwin"], "darwin"),
+    /Unsupported macOS target/,
   );
 });
 

@@ -42,14 +42,33 @@ pub(super) struct AppUpdate {
 struct GitHubRelease {
     body: Option<String>,
     tag_name: String,
+    #[serde(default)]
+    assets: Vec<GitHubAsset>,
 }
 
-pub(super) async fn check_for_update(current_version: &str) -> AppUpdate {
+#[derive(Deserialize)]
+struct GitHubAsset {
+    name: String,
+}
+
+pub(super) async fn check_for_update(current_version: &str, app: &AppHandle) -> AppUpdate {
+    let required_asset = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|config| config.get("endpoints"))
+        .and_then(|endpoints| endpoints.get(0))
+        .and_then(serde_json::Value::as_str)
+        .and_then(|endpoint| endpoint.rsplit('/').next());
+    let Some(required_asset) = required_asset else {
+        return failed_update(current_version);
+    };
     let response = match fetch_releases().await {
         Ok(response) => response,
         Err(()) => return failed_update(current_version),
     };
-    resolve_release_response(current_version, &response)
+    resolve_release_response_for_channel(current_version, &response, Some(required_asset))
 }
 
 pub(super) async fn install_update(
@@ -138,7 +157,11 @@ async fn read_bounded_body(response: Response) -> Result<Vec<u8>, ()> {
     Ok(bytes)
 }
 
-fn resolve_release_response(current_version: &str, body: &[u8]) -> AppUpdate {
+fn resolve_release_response_for_channel(
+    current_version: &str,
+    body: &[u8],
+    required_asset: Option<&str>,
+) -> AppUpdate {
     let current = match Version::parse(current_version) {
         Ok(version) => version,
         Err(_) => return failed_update(current_version),
@@ -173,6 +196,11 @@ fn resolve_release_response(current_version: &str, body: &[u8]) -> AppUpdate {
     let latest = latest_version.to_string();
 
     if latest_version > current {
+        // 复用发布响应检查当前渠道清单，避免构建尚未上传完成时提示不可安装的更新。
+        if required_asset.is_some_and(|name| !release.assets.iter().any(|asset| asset.name == name))
+        {
+            return current_update(current_version, None);
+        }
         AppUpdate {
             latest_version: Some(latest.clone()),
             release_notes: truncate_notes(notes),
@@ -237,13 +265,14 @@ fn truncate_notes(notes: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppUpdate, resolve_release_response};
+    use super::{AppUpdate, resolve_release_response_for_channel};
 
     #[test]
     fn newer_github_release_should_be_available_with_its_notes() {
-        let update = resolve_release_response(
+        let update = resolve_release_response_for_channel(
             "0.1.0",
             br###"[{"tag_name":"v0.2.0","body":"## Added\n\n- New flow"}]"###,
+            None,
         );
 
         assert_eq!(
@@ -260,9 +289,10 @@ mod tests {
 
     #[test]
     fn matching_github_release_should_be_current() {
-        let update = resolve_release_response(
+        let update = resolve_release_response_for_channel(
             "0.2.0",
             br#"[{"tag_name":"v0.2.0","body":"Current notes"}]"#,
+            None,
         );
 
         assert_eq!(update.status, "current");
@@ -272,12 +302,25 @@ mod tests {
 
     #[test]
     fn no_release_should_only_be_current_for_initial_version() {
-        let initial = resolve_release_response("0.1.0", b"[]");
-        let later = resolve_release_response("0.2.0", b"[]");
+        let initial = resolve_release_response_for_channel("0.1.0", b"[]", None);
+        let later = resolve_release_response_for_channel("0.2.0", b"[]", None);
 
         assert_eq!(initial.status, "current");
         assert_eq!(initial.latest_version, None);
         assert_eq!(initial.release_notes_version, "0.1.0");
         assert_eq!(later.status, "check-failed");
+    }
+
+    #[test]
+    fn legacy_should_not_offer_a_release_before_its_manifest_is_uploaded() {
+        let body = br#"[{"tag_name":"v0.2.0","body":"Notes","assets":[{"name":"latest.json"}]}]"#;
+        assert!(
+            !super::resolve_release_response_for_channel("0.1.0", body, Some("latest-legacy.json"))
+                .update_available
+        );
+        assert!(
+            super::resolve_release_response_for_channel("0.1.0", body, Some("latest.json"))
+                .update_available
+        );
     }
 }

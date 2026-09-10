@@ -1,5 +1,12 @@
 use super::runtime_manager::Distribution;
 
+pub(super) const DARWIN_X64: Distribution = Distribution {
+    target: "x86_64-apple-darwin",
+    url: "https://registry.npmmirror.com/@openai/codex/-/codex-0.153.4-darwin-x64.tgz",
+    fallback_url: "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-darwin-x64.tgz",
+    integrity: "vnSbbPzfoDZmmyzsxswsDDXQ06IVFBzkQU7/hroB3ji93Ok2utcsq8Psfk2tjF5r9mEx8RWFJhzuTGHG26/NDA==",
+};
+
 pub(super) const DARWIN_ARM64: Distribution = Distribution {
     target: "aarch64-apple-darwin",
     url: "https://registry.npmmirror.com/@openai/codex/-/codex-0.153.4-darwin-arm64.tgz",

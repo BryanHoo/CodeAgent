@@ -9,7 +9,8 @@
 | --- | --- | --- | --- |
 | Windows | x86_64 | EXE（免安装）、NSIS | Windows 10/11，使用系统 WebView2 Runtime |
 | Ubuntu | x86_64 | DEB、AppImage | Ubuntu 24.04 LTS+ |
-| macOS | Apple Silicon | app、DMG | macOS 14+ |
+| macOS Modern | Apple Silicon、Intel x86_64 | app、DMG | macOS 14.5+ |
+| macOS Legacy | Intel x86_64 | app、DMG（`_legacy`） | macOS 12.4+，需真机验收 |
 
 Windows 同时发布两种产物：按 `tauri build --no-bundle --no-sign` 生成的 `portable.exe` 用于
 免安装运行，NSIS 安装器作为 Tauri updater 的 Windows 更新目标。两者都不包含 Authenticode
@@ -17,6 +18,7 @@ Windows 同时发布两种产物：按 `tauri build --no-bundle --no-sign` 生�
 更新，仍使用 Windows 10/11 自带并维护的 WebView2 Runtime，应用数据也写入系统应用数据目录。
 Linux 和 macOS 的平台覆盖配置分别位于 `src-tauri/tauri.linux.conf.json` 和
 `src-tauri/tauri.macos.conf.json`。
+Legacy 在此基础上合并 `src-tauri/tauri.macos-legacy.conf.json`，构建与真机验收要求见 [macOS 分档构建](./macos-build-profiles.md)。
 
 ## Ubuntu 安装
 
@@ -45,7 +47,8 @@ chmod +x CodeAgent.AppImage
 - `Release`：`v*` 标签或手动触发后，从 `CHANGELOG.md` 提取对应版本日志，通过全部质量门禁，构建各平台安装包并直接创建正式 GitHub Release。
 
 Windows portable 构建显式使用 `--no-sign` 且不进入自动更新链路；Windows NSIS、Ubuntu 与
-macOS 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。Tauri updater 签名只校验更新
+macOS Modern 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。macOS Legacy 单独上传
+带 `_legacy` 的归档和 `latest-legacy.json`，不参与 Modern 平台键合并。Tauri updater 签名只校验更新
 来源与完整性，不等同于操作系统代码签名。
 
 ## 发布步骤
@@ -81,3 +84,7 @@ CodeAgent 发布包不得包含 Codex、Claude Code 等 Provider 可执行文件
 - [Tauri Windows Code Signing](https://v2.tauri.app/distribute/sign/windows/)
 - [Tauri macOS Code Signing](https://v2.tauri.app/distribute/sign/macos/)
 - [Tauri Linux Package Signing](https://v2.tauri.app/distribute/sign/linux/)
+
+## 预发布打包测试
+
+三处应用版本与 Cargo lock 同步使用 `0.1.11-beta.1` 一类预发布版本号，并添加对应 CHANGELOG 条目。在测试分支推送同版本 `v` 标签后，Release 工作流根据版本中的 `-` 标记 GitHub prerelease，正式版更新端点仍指向 GitHub latest。不得用现有正式版标签测试或覆盖正式版资产。

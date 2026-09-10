@@ -96,6 +96,9 @@ jobs:
       - name: Check browser components
         run: pnpm test:browser
 
+      - name: Check macOS build isolation and compiled Legacy theme
+        run: pnpm test:macos-build-output
+
       - name: Check source open performance
         run: pnpm performance:browser
 

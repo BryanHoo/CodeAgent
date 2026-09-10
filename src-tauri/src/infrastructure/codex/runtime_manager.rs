@@ -16,7 +16,9 @@ use super::{
     process::{SUPPORTED_CODEX_VERSION, is_compatible_codex_version, probe_codex_version},
     runtime_active::read_active_codex_runtime,
     runtime_discovery::private_codex_binary_path,
-    runtime_distributions::{DARWIN_ARM64, LINUX_ARM64, LINUX_X64, WINDOWS_ARM64, WINDOWS_X64},
+    runtime_distributions::{
+        DARWIN_ARM64, DARWIN_X64, LINUX_ARM64, LINUX_X64, WINDOWS_ARM64, WINDOWS_X64,
+    },
     runtime_download::download_verified,
     runtime_download_progress::DownloadProgressReporter,
     runtime_path::resolve_runtime_path,
@@ -192,6 +194,7 @@ fn availability(
 pub(super) fn distribution_for(os: &str, arch: &str) -> Option<&'static Distribution> {
     match (os, arch) {
         ("macos", "aarch64") => Some(&DARWIN_ARM64),
+        ("macos", "x86_64") => Some(&DARWIN_X64),
         ("linux", "aarch64") => Some(&LINUX_ARM64),
         ("linux", "x86_64") => Some(&LINUX_X64),
         ("windows", "aarch64") => Some(&WINDOWS_ARM64),

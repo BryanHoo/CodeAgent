@@ -53,7 +53,10 @@ CodeAgent 将 AI 编程任务、对话、审批、项目文件和 Git 操作集�
 | --- | --- | --- |
 | Windows 10/11 | x86_64 | EXE（免安装） |
 | Ubuntu 24.04+ | x86_64 | DEB、AppImage |
-| macOS 14+ | Apple Silicon | app、DMG |
+| macOS 14.5+（Modern） | Apple Silicon、Intel x86_64 | app、DMG |
+| macOS 12.4+（Legacy） | Intel x86_64 | app、DMG（文件名含 `_legacy`） |
+
+Legacy 使用独立构建和更新清单，部分视觉效果与 Diff 高亮简化；最低系统的真机验收要求见 [macOS 分档构建](docs/macos-build-profiles.md)。
 
 ## 安装、放行与卸载
 
@@ -129,9 +132,9 @@ rm -rf "$HOME/.local/share/com.codeagent.desktop"
 rm -rf "$HOME/.cache/com.codeagent.desktop"
 ```
 
-### macOS 14+
+### macOS
 
-macOS 版本仅支持 Apple Silicon。下载后将文件重命名为 `CodeAgent.dmg`：
+按系统版本和芯片选择安装包：Modern 支持 macOS 14.5+ 的 Apple Silicon / Intel，Legacy 面向 macOS 12.4+ 的 Intel。升级系统后可手动安装 Modern，保留相同的本地数据目录。下载后将文件重命名为 `CodeAgent.dmg`：
 
 ```bash
 hdiutil attach "./CodeAgent.dmg"

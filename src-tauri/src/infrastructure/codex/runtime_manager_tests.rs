@@ -6,6 +6,7 @@ use std::path::Path;
 fn runtime_download_should_prefer_the_domestic_mirror_on_every_platform() {
     for (os, arch) in [
         ("macos", "aarch64"),
+        ("macos", "x86_64"),
         ("linux", "aarch64"),
         ("linux", "x86_64"),
         ("windows", "aarch64"),
@@ -33,6 +34,13 @@ fn private_runtime_should_use_the_provider_version_directory() {
 #[test]
 fn distribution_should_be_fixed_to_the_official_supported_package() {
     let cases = [
+        (
+            "macos",
+            "x86_64",
+            "x86_64-apple-darwin",
+            "darwin-x64",
+            "vnSbbPzfoDZmmyzsxswsDDXQ06IVFBzkQU7/hroB3ji93Ok2utcsq8Psfk2tjF5r9mEx8RWFJhzuTGHG26/NDA==",
+        ),
         (
             "macos",
             "aarch64",
@@ -84,8 +92,8 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
 }
 
 #[test]
-fn macos_intel_runtime_should_not_be_supported() {
-    assert!(distribution_for("macos", "x86_64").is_none());
+fn unsupported_architecture_should_not_select_a_runtime() {
+    assert!(distribution_for("macos", "i686").is_none());
 }
 
 #[cfg(unix)]

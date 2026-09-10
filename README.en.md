@@ -53,7 +53,8 @@ Current packages are unsigned previews, so your system may display source or sec
 | --- | --- | --- |
 | Windows 10/11 | x86_64 | Portable EXE |
 | Ubuntu 24.04+ | x86_64 | DEB, AppImage |
-| macOS 14+ | Apple Silicon | app, DMG |
+| macOS 14.5+ (Modern) | Apple Silicon, Intel x86_64 | app, DMG |
+| macOS 12.4+ (Legacy) | Intel x86_64 | app, DMG (`_legacy` filenames) |
 
 ## Install, Permissions, and Uninstall
 
@@ -129,9 +130,9 @@ rm -rf "$HOME/.local/share/com.codeagent.desktop"
 rm -rf "$HOME/.cache/com.codeagent.desktop"
 ```
 
-### macOS 14+
+### macOS
 
-The macOS build supports Apple Silicon only. After downloading it, rename the file to `CodeAgent.dmg`:
+Choose Modern for macOS 14.5+ on Apple Silicon or Intel, or Legacy for Intel on macOS 12.4+. Legacy uses simplified surfaces and a virtualized plain-text diff. Monterey hardware validation is still required; see [build profiles](docs/macos-build-profiles.md). After downloading it, rename the file to `CodeAgent.dmg`:
 
 ```bash
 hdiutil attach "./CodeAgent.dmg"

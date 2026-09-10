@@ -61,7 +61,7 @@ void test("stable releases should publish signed updater artifacts directly", as
   const releaseWorkflow = await readProjectFile(".github/workflows/release.yml");
 
   assert.match(releaseWorkflow, /releaseDraft:\s*false/);
-  assert.match(releaseWorkflow, /prerelease:\s*false/);
+  assert.ok(releaseWorkflow.includes("prerelease: ${{ contains(steps.build-version.outputs.version, '-') }}"));
   assert.match(
     releaseWorkflow,
     /TAURI_SIGNING_PRIVATE_KEY:\s*\$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY \}\}/,

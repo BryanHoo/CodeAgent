@@ -12,6 +12,8 @@
 
 ## 验证检查
 
+- macOS 架构、最低系统、WebKit 和更新分档遵循 [macOS 分档构建](../../../docs/macos-build-profiles.md)；兼容代码只进入 Legacy 产物，不得下调 Modern 的优化目标。
+
 - Web 变更运行 `pnpm check:web`
 - Rust 或 IPC 变更运行 `pnpm check:rust`
 - 跨层或发布相关变更运行 `pnpm check`

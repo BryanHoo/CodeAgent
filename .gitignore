@@ -1,6 +1,7 @@
 # Dependencies and generated web output
 /node_modules/
 /dist/
+/dist-legacy/
 /dist-ssr/
 /coverage/
 /playwright-report/

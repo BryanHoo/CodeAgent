@@ -2,14 +2,38 @@ import { fileURLToPath, URL } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import legacy from "@vitejs/plugin-legacy";
 import { defineConfig } from "vitest/config";
+import { legacyCssPlugins } from "./scripts/legacy-css.mjs";
 
 const tauriDevHost = process.env.TAURI_DEV_HOST;
+const macosLegacy = process.env.VITE_MACOS_LEGACY === "true";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(), tailwindcss(),
+    // Monterey 支持原生 ESM，只补充缺失的标准 API，避免额外的 SystemJS 加载器。
+    ...(macosLegacy ? [legacy({
+      modernTargets: ["Safari 15.5"], modernPolyfills: true, renderLegacyChunks: false,
+    })] : []),
+    ...(macosLegacy ? [{
+      name: "codeagent-legacy-entry",
+      transformIndexHtml: {
+        order: "pre" as const,
+        handler(html: string) {
+          return html.replace('/src/main.tsx', '/src/compat/macos-legacy/main.ts');
+        },
+      },
+      enforce: "pre" as const,
+    }] : []),
+  ],
+  css: macosLegacy ? { postcss: { plugins: legacyCssPlugins() } } : undefined,
   resolve: {
     alias: [
+      ...(macosLegacy ? [{
+        find: /(?:\.\/|.*\/)patch-diff-viewer\.js$/u,
+        replacement: fileURLToPath(new URL("./src/compat/macos-legacy/patch-diff-viewer.tsx", import.meta.url)),
+      }] : []),
       { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
       {
         find: /^shiki$/u,
@@ -48,6 +72,7 @@ export default defineConfig({
     },
   },
   build: {
+    outDir: macosLegacy ? "dist-legacy" : "dist",
     manifest: true,
     chunkSizeWarningLimit: 512,
     rolldownOptions: {
@@ -71,7 +96,7 @@ export default defineConfig({
       },
     },
     // Windows 使用 WebView2，其余桌面平台使用 WebKit，避免为无关浏览器额外转译。
-    target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome116" : "safari17.4",
+    target: macosLegacy ? undefined : process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome116" : "safari17.5",
     sourcemap: process.env.TAURI_ENV_DEBUG === "true",
   },
   test: {

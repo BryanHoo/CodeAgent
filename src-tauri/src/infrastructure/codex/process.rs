@@ -230,7 +230,18 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
         // Codex 0.152 会从自身环境复制 PATH，再用它解析 npx 等 stdio MCP 命令。
         command.env("PATH", runtime_path);
     }
+    #[cfg(target_os = "macos")]
+    configure_packaged_shell(&mut command, macos_panel_activation::macos_major_version());
     command
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn configure_packaged_shell(command: &mut Command, macos_major: isize) {
+    // 官方 0.153.4 内置 zsh 的 Mach-O 最低系统为 15.0；旧系统保留标准 shell 执行路径。
+    // 按宿主能力选择，而非按 Legacy 标志选择，让升级后的系统自动使用原生实现。
+    if macos_major < 15 {
+        command.args(["--disable", "shell_zsh_fork"]);
+    }
 }
 
 fn build_version_probe_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Command {
@@ -289,16 +300,35 @@ mod tests {
     use crate::infrastructure::codex::{catalogs, conversation_commands, tasks};
 
     #[test]
+    fn packaged_shell_should_only_be_disabled_on_unsupported_macos() {
+        let mut old = tokio::process::Command::new("codex");
+        super::configure_packaged_shell(&mut old, 12);
+        assert_eq!(
+            old.as_std().get_args().collect::<Vec<_>>(),
+            ["--disable", "shell_zsh_fork"]
+        );
+        let mut modern = tokio::process::Command::new("codex");
+        super::configure_packaged_shell(&mut modern, 15);
+        assert_eq!(modern.as_std().get_args().count(), 0);
+    }
+
+    #[test]
     fn command_should_use_stdio_and_inherit_official_codex_home() {
         let runtime_path = OsStr::new("/shell/node/bin:/usr/bin:/bin");
         let command = build_app_server_command(OsStr::new("codex-test"), Some(runtime_path));
         let command = command.as_std();
 
         assert_eq!(command.get_program(), "codex-test");
-        assert_eq!(
-            command.get_args().collect::<Vec<_>>(),
-            ["app-server", "--enable", "plugins", "--listen", "stdio://"]
-        );
+        let expected = vec!["app-server", "--enable", "plugins", "--listen", "stdio://"];
+        #[cfg(target_os = "macos")]
+        let expected = {
+            let mut expected = expected;
+            if macos_panel_activation::macos_major_version() < 15 {
+                expected.extend(["--disable", "shell_zsh_fork"]);
+            }
+            expected
+        };
+        assert_eq!(command.get_args().collect::<Vec<_>>(), expected);
         assert!(command.get_envs().all(|(key, _)| key != "CODEX_HOME"));
         assert_eq!(
             command.get_envs().find(|(key, _)| *key == "RUST_LOG"),

@@ -1,4 +1,4 @@
-const MACOS_TARGET = "aarch64-apple-darwin";
+const MACOS_TARGETS = { arm64: "aarch64-apple-darwin", x64: "x86_64-apple-darwin" };
 
 function findTarget(argumentsList) {
   for (let index = 1; index < argumentsList.length; index += 1) {
@@ -23,8 +23,19 @@ function hasBundleSelection(argumentsList) {
   );
 }
 
-export function resolveTauriArguments(argumentsList, platform = process.platform) {
+export function resolveTauriArguments(
+  argumentsList,
+  platform = process.platform,
+  arch = process.arch,
+  profile = "modern",
+) {
   const resolved = [...argumentsList];
+  if (profile !== "modern" && profile !== "legacy") {
+    throw new Error(`Unknown macOS build profile: ${profile}`);
+  }
+  if (profile === "legacy" && (platform !== "darwin" || resolved[0] !== "build")) {
+    throw new Error("Legacy only supports macOS production builds");
+  }
   if (resolved[0] !== "build") {
     return resolved;
   }
@@ -42,12 +53,21 @@ export function resolveTauriArguments(argumentsList, platform = process.platform
   }
 
   const explicitTarget = findTarget(resolved);
-  if (explicitTarget && explicitTarget !== MACOS_TARGET) {
-    throw new Error(`macOS builds only support ${MACOS_TARGET}`);
+  if (profile === "legacy" && explicitTarget && explicitTarget !== MACOS_TARGETS.x64) {
+    throw new Error("Legacy requires x86_64-apple-darwin");
+  }
+  if (explicitTarget && !Object.values(MACOS_TARGETS).includes(explicitTarget)) {
+    throw new Error(`Unsupported macOS target: ${explicitTarget}`);
   }
   if (!explicitTarget) {
-    // 统一项目构建入口，避免 Intel 主机隐式生成 x86_64 应用。
-    resolved.splice(1, 0, "--target", MACOS_TARGET);
+    const target = profile === "legacy" ? MACOS_TARGETS.x64 : MACOS_TARGETS[arch];
+    if (!target) throw new Error(`Unsupported macOS architecture: ${arch}`);
+    // 本机构建匹配宿主架构；CI 可以显式选择另一架构交叉编译。
+    resolved.splice(1, 0, "--target", target);
+  }
+  if (profile === "legacy") {
+    // 最后合并兼容配置，确保前端目录、最低系统与更新端点属于同一档构建。
+    resolved.push("--config", "src-tauri/tauri.macos-legacy.conf.json");
   }
   return resolved;
 }

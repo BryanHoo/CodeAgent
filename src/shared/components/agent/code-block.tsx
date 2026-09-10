@@ -51,6 +51,10 @@ function getTokenStyle(token: ThemedToken): CSSProperties {
   const lightBackground = token.bgColor ?? sourceStyle?.backgroundColor;
   const darkBackground = sourceStyle?.["--shiki-dark-bg"];
 
+  if (import.meta.env.VITE_MACOS_LEGACY === "true") {
+    // 旧 WebKit 的亮暗色由兼容样式选择；现代构建会移除此分支。
+    return { ...sourceStyle, color: lightColor, backgroundColor: lightBackground };
+  }
   // 项目通过 color-scheme 切换主题，light-dark() 可直接消费 Shiki 的双主题 token。
   return {
     ...sourceStyle,
@@ -208,6 +212,7 @@ export function CodeBlockContent({
                           <span
                             key={`${String(lineNumber)}-${String(tokenIndex)}`}
                             style={getTokenStyle(token)}
+                            className={import.meta.env.VITE_MACOS_LEGACY === "true" ? "legacy-code-token" : undefined}
                           >
                             {token.content}
                           </span>

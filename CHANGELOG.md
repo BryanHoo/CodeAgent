@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [0.1.11-beta.1] - 2026-09-10
+
+### Added
+
+- 添加 Modern Intel 与 Legacy Intel 独立 macOS 构建，Legacy 最低构建目标为 macOS 12.4。
+- 添加旧 WebKit 兼容渲染、Intel Codex 运行时及隔离更新清单，保持 Modern 优化。
+
+### Testing
+
+- 此预发布版本用于跨平台打包测试；macOS 12.4 尚需真机验收。
+
 ## [0.1.10] - 2026-09-08
 
 ### Added

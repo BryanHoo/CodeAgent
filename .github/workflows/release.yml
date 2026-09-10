@@ -63,6 +63,21 @@ jobs:
             uploadPlainBinary: false
             uploadUpdaterArtifacts: true
             releaseAssetNamePattern: ""
+          - name: macOS Intel
+            platform: macos-latest
+            args: --target x86_64-apple-darwin --bundles app,dmg --ci
+            rustTargets: x86_64-apple-darwin
+            uploadPlainBinary: false
+            uploadUpdaterArtifacts: true
+            releaseAssetNamePattern: ""
+          - name: macOS Intel Legacy
+            platform: macos-latest
+            args: --target x86_64-apple-darwin --config src-tauri/tauri.macos-legacy.conf.json --bundles app,dmg --ci
+            rustTargets: x86_64-apple-darwin
+            macosProfile: legacy
+            uploadPlainBinary: false
+            uploadUpdaterArtifacts: false
+            releaseAssetNamePattern: "[name]_[version]_[arch]_legacy[ext]"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -117,21 +132,42 @@ jobs:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
         run: node scripts/release-notes.mjs >> "$GITHUB_OUTPUT"
 
+      - name: Read build version
+        id: build-version
+        shell: bash
+        run: node -p '"version=" + JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version' >> "$GITHUB_OUTPUT"
+
       - name: Build and upload release artifacts
+        id: build
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          CODEAGENT_MACOS_PROFILE: ${{ matrix.macosProfile || 'modern' }}
+          CARGO_TARGET_DIR: ${{ matrix.macosProfile == 'legacy' && format('{0}/src-tauri/target/legacy', github.workspace) || format('{0}/src-tauri/target', github.workspace) }}
         with:
+          tauriScript: pnpm tauri
           tagName: v__VERSION__
           releaseName: CodeAgent v__VERSION__
           releaseBody: ${{ steps.release-notes.outputs.body }}
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ contains(steps.build-version.outputs.version, '-') }}
           uploadUpdaterJson: ${{ matrix.uploadUpdaterArtifacts }}
           uploadUpdaterSignatures: ${{ matrix.uploadUpdaterArtifacts }}
           uploadPlainBinary: ${{ matrix.uploadPlainBinary }}
           uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: ${{ matrix.macosProfile == 'legacy' && '[platform]-[arch]-[bundle]-legacy' || '' }}
           releaseAssetNamePattern: ${{ matrix.releaseAssetNamePattern }}
           args: ${{ matrix.args }}
+
+      - name: Publish isolated Legacy updater metadata
+        if: matrix.macosProfile == 'legacy'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_PATHS: ${{ steps.build.outputs.artifactPaths }}
+          APP_VERSION: ${{ steps.build.outputs.appVersion }}
+        run: |
+          node scripts/legacy-release.mjs
+          gh release upload "v${APP_VERSION}" "${RUNNER_TEMP}/latest-legacy.json" --clobber
