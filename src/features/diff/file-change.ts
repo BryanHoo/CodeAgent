@@ -18,6 +18,18 @@ export function getFileName(filePath: string): string {
 }
 
 export function countFileChangeLines(change: AgentFileChange): FileChangeStats {
+  if (change.kind === "create" || change.kind === "delete") {
+    // Codex 的新增、删除事件携带原始文件内容；末尾换行不额外算一行。
+    let lines = change.diff.length > 0 && !change.diff.endsWith("\n") ? 1 : 0;
+    for (let index = 0; index < change.diff.length; index += 1) {
+      if (change.diff.charCodeAt(index) === 10) lines += 1;
+    }
+    return {
+      additions: change.kind === "create" ? lines : 0,
+      removals: change.kind === "delete" ? lines : 0,
+    };
+  }
+
   let additions = 0;
   let removals = 0;
 
@@ -72,10 +84,23 @@ function getPatchFileHeaders(change: AgentFileChange): Readonly<{
 }
 
 export function normalizeFileChangePatch(change: AgentFileChange): string {
-  const trimmedDiff = change.diff.trimEnd();
   const { additionPath, deletionPath } = getPatchFileHeaders(change);
   const fileHeaders = `--- ${deletionPath}\n+++ ${additionPath}`;
 
+  if (change.kind === "create" || change.kind === "delete") {
+    // 原始内容可能包含补丁标记，必须先按类型处理，并保留空行和尾部空格。
+    const lines = change.diff.length === 0 ? [] : change.diff.split("\n");
+    if (change.diff.endsWith("\n")) lines.pop();
+    if (lines.length === 0) return fileHeaders;
+    const prefix = change.kind === "create" ? "+" : "-";
+    const range = `1,${String(lines.length)}`;
+    const hunkHeader = change.kind === "create" ? `@@ -0,0 +${range} @@` : `@@ -${range} +0,0 @@`;
+    const body = lines.map((line) => `${prefix}${line}`);
+    if (!change.diff.endsWith("\n")) body.push("\\ No newline at end of file");
+    return [fileHeaders, hunkHeader, ...body].join("\n");
+  }
+
+  const trimmedDiff = change.diff.trimEnd();
   const hasFileHeaders = /^---\s/m.test(trimmedDiff) && /^\+\+\+\s/m.test(trimmedDiff);
   if (hasFileHeaders) {
     return trimmedDiff;
