@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
+import "../../../i18n/settings-provider.js";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
-import { ProviderConnectionPanel } from "./provider-connection-panel.js";
 import { providerConnectionQueryOptions } from "../provider-connection-queries.js";
+
+// 已连接时只通过 Gate，不下载首次配置表单及其设置面板依赖。
+const ProviderConnectionPanel = lazy(() => import("./provider-connection-panel.js").then((module) => ({ default: module.ProviderConnectionPanel })));
 
 export function ProviderConnectionGate({ children }: Readonly<{ children: ReactNode }>) {
   const { t } = useTranslation("settings");
@@ -28,7 +31,9 @@ export function ProviderConnectionGate({ children }: Readonly<{ children: ReactN
           <p className="mt-1 text-body-small text-muted-foreground">{t("provider.title")}</p>
         </header>
         {connection.error === null ? (
-          <ProviderConnectionPanel />
+          <Suspense fallback={<p role="status" className="text-body-small text-muted-foreground">{t("provider.loading")}</p>}>
+            <ProviderConnectionPanel />
+          </Suspense>
         ) : (
           <div className="grid justify-items-start gap-3" role="alert">
             <p className="text-body-small text-danger">{t("provider.errors.load")}</p>

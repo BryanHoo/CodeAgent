@@ -8,12 +8,13 @@ import { settingsSections, type SettingsSectionId } from "./global-settings-fiel
 
 const sectionGroups = [
   { id: "personal", sections: ["appearance", "background", "pets"] },
-  { id: "coding", sections: ["provider", "agent", "commit"] },
+  { id: "coding", sections: ["provider", "agent", "personalization", "commit"] },
   { id: "app", sections: ["about"] },
 ] as const;
 
 // 搜索仅索引已有分类与字段文案，不为搜索挂载面板或请求额外配置数据。
 const sectionSearchKeys: Record<SettingsSectionId, readonly string[]> = {
+  personalization: ["personalization.instructions", "personalization.memories", "personalization.enabled", "personalization.external"],
   appearance: ["appearance.colorMode", "appearance.language", "appearance.notifications", "fields.defaultOpenWith", "fields.followUpMessages", "general.editor", "general.taskNotifications"],
   background: ["background.label", "background.bing", "background.custom", "background.blurLabel", "background.overlayOpacityLabel"],
   pets: ["pets.enabled", "pets.selectionLabel"],
@@ -41,7 +42,7 @@ export function SettingsPageFrame({
   const contentRef = useRef<HTMLElement>(null);
   const query = search.trim().toLocaleLowerCase();
   const matches = settingsSections.filter(({ id }) =>
-    [t(`sections.${id}`), ...sectionSearchKeys[id].map((key) => t(key))]
+    [t(`sections.${id}`), t(`sectionKeywords.${id}`), ...sectionSearchKeys[id].map((key) => t(key))]
       .some((label) => label.toLocaleLowerCase().includes(query)),
   );
 

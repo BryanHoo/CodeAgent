@@ -7,6 +7,8 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("global instructions changed; reload before saving")]
+    GlobalInstructionsChanged,
     #[error("task window operation failed")]
     TaskWindowFailed,
     #[error("at most three task windows can be open")]
@@ -74,6 +76,9 @@ impl Serialize for AppError {
             return payload.end();
         }
         let structured_error = match self {
+            Self::GlobalInstructionsChanged => {
+                Some(("GLOBAL_INSTRUCTIONS_CHANGED", self.to_string()))
+            }
             Self::TaskWindowLimit => Some(("TASK_WINDOW_LIMIT", self.to_string())),
             Self::Terminal(error) => Some((error.code(), error.to_string())),
             Self::CodexThreadBusy => Some(("CODEX_THREAD_BUSY", self.to_string())),

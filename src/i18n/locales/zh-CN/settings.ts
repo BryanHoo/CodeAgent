@@ -166,6 +166,7 @@ export const settings = {
     workspaceWrite: "工作区可写",
   },
   sections: {
+    personalization: "个性化",
     about: "关于",
     agent: "智能体配置",
     appearance: "常规",
@@ -175,4 +176,14 @@ export const settings = {
     provider: "模型服务",
   },
   title: "全局设置",
+  sectionKeywords: {
+    appearance: "颜色模式 语言 通知 编辑器 默认打开方式 跟进消息",
+    background: "壁纸 Bing 自定义 模糊 遮罩",
+    personalization: "Codex 说明 AGENTS.md 全局指令 记忆 MCP 网页搜索",
+    pets: "启用 宠物 选择",
+    provider: "API 密钥 Base URL 模型 官方 自定义",
+    agent: "快速模式 模型 思考强度 审批 文件访问 沙箱 网页搜索 输出详细程度",
+    commit: "提交模型 提示词",
+    about: "版本 更新 更新日志 诊断",
+  },
 } as const;

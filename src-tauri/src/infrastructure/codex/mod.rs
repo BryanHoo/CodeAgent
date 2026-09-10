@@ -23,6 +23,7 @@ mod conversation_requests;
 mod conversation_runtime_events;
 mod conversation_turn_settings;
 mod generated_image_store;
+pub mod personalization;
 mod plugins;
 mod process;
 mod protocol;

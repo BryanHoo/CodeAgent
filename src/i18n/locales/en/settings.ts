@@ -166,6 +166,7 @@ export const settings = {
     workspaceWrite: "Workspace write",
   },
   sections: {
+    personalization: "Personalization",
     about: "About",
     agent: "Agent configuration",
     appearance: "General",
@@ -175,4 +176,14 @@ export const settings = {
     provider: "Model service",
   },
   title: "Global settings",
+  sectionKeywords: {
+    appearance: "Color mode language notifications editor default open follow-up messages",
+    background: "Wallpaper Bing custom blur overlay",
+    personalization: "Codex instructions AGENTS.md global memory MCP web search",
+    pets: "Enable pet selection",
+    provider: "API key Base URL models official custom",
+    agent: "Fast mode model reasoning approval file access sandbox web search output verbosity",
+    commit: "Commit model prompt",
+    about: "Version update release notes diagnostics",
+  },
 } as const;

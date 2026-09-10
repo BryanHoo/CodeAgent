@@ -24,8 +24,33 @@ import type {
 } from "@/protocol/index.js";
 
 import { TauriWorkspaceClient } from "./workspace-client.js";
+import type { GlobalInstructions, MemorySettings, MemorySettingsUpdate } from "@/protocol/index.js";
 
 export class TauriCatalogClient extends TauriWorkspaceClient {
+  public async getGlobalInstructions(): Promise<GlobalInstructions> {
+    const { parseInstructions } = await import("./personalization-response.js");
+    return parseInstructions(await this.call("get_global_instructions"));
+  }
+
+  public async saveGlobalInstructions(content: string, expectedContent: string): Promise<GlobalInstructions> {
+    const { parseInstructions } = await import("./personalization-response.js");
+    return parseInstructions(await this.call("save_global_instructions", { content, expectedContent }));
+  }
+
+  public async getMemorySettings(): Promise<MemorySettings> {
+    const { parseMemories } = await import("./personalization-response.js");
+    return parseMemories(await this.call("get_memory_settings"));
+  }
+
+  public async updateMemorySettings(update: MemorySettingsUpdate): Promise<MemorySettings> {
+    const { parseMemories } = await import("./personalization-response.js");
+    return parseMemories(await this.call("update_memory_settings", { update }));
+  }
+
+  public async resetMemories(): Promise<void> {
+    await this.call("reset_memories");
+  }
+
   public async listModels(_options: ReadOptions = {}): Promise<AgentModelPage> {
     return this.call("list_models");
   }

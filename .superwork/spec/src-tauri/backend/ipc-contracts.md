@@ -9,6 +9,8 @@
 
 ## 数据契约
 
+- 个性化说明直接使用当前运行时报告的 `CODEX_HOME/AGENTS.md`，不得复制到应用设置文件；原文保存前校验读取基线并原子替换，冲突返回 `GLOBAL_INSTRUCTIONS_CHANGED`，不得覆盖外部修改。记忆选项只通过官方配置 API 读写；删除调用 `memory/reset` 同时清理文件与数据库，禁止自行递归删除 Codex 目录。能力仅授权主窗口，验证使用隔离的 Codex home。
+
 - 对外结构使用 `serde(rename_all = "camelCase")`；带标签枚举的变体字段必须同时使用 `rename_all_fields = "camelCase"`，防止嵌套字段退化为 snake_case
 - 事件枚举使用 `serde(tag = "type", content = "data")`
 - Codex 线程被其他 writer 占用时返回 `{ code: "CODEX_THREAD_BUSY", message }`；其他 Codex RPC 错误返回 `{ code: "CODEX_RPC_ERROR", message, rpcCode }`，保留上游错误信息供用户处理，非 RPC 的传输与解析错误继续使用通用错误

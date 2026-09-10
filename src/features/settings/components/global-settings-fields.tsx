@@ -6,6 +6,7 @@ import {
   Images,
   Info,
   PawPrint,
+  SlidersHorizontal,
   Settings,
   ServerCog,
   type LucideIcon,
@@ -23,6 +24,7 @@ export type SettingsSectionId =
   | "background"
   | "commit"
   | "pets"
+  | "personalization"
   | "provider";
 
 export const settingsSections: readonly Readonly<{
@@ -34,6 +36,7 @@ export const settingsSections: readonly Readonly<{
   { icon: PawPrint, id: "pets" },
   { icon: ServerCog, id: "provider" },
   { icon: Bot, id: "agent" },
+  { icon: SlidersHorizontal, id: "personalization" },
   { icon: GitCommitHorizontal, id: "commit" },
   { icon: Info, id: "about" },
 ];

@@ -24,6 +24,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
+| 个性化说明与记忆 | Codex CLI 原生配置 | 当前运行时 `CODEX_HOME/AGENTS.md` 原文读取、显式保存与外部修改冲突检查；存在有效 `AGENTS.override.md` 时提示优先级。记忆通过 `config/read`、`config/batchWrite` 控制 `features.memories`、生成/使用及外部上下文资格；清除调用实验接口 `memory/reset`，保留聊天记录 | 已实现 |
 | 运行时与健康 | `getHealth`, `getCapabilities` | 仅使用应用私有 Codex `0.153.4`，首次缺失、损坏或版本不符时自动安装；五个平台固定官方 npm 包通过 SHA-512 校验后原子切换，失败提供重试；后台已就绪时恢复窗口跳过检测，Rust supervisor 按 1–30 秒有界退避恢复；CI 验证私有安装、app-server 生命周期与实验协议 Schema | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法；兼容 0.152 `recencyAt`，继续按用户维护的 `position` 排序且不请求 `recencyAt` 排序 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |

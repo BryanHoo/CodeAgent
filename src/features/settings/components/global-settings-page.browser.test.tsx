@@ -39,6 +39,7 @@ async function renderSettings(initialSection: "appearance" | "commit" = "appeara
       </TooltipProvider>
     </I18nextProvider>,
   );
+  await expect.element(screen.getByRole("heading", { name: initialSection === "appearance" ? "常规" : "提交消息", exact: true })).toBeVisible();
   return { onClose, onSave, screen };
 }
 
@@ -70,6 +71,7 @@ describe("GlobalSettingsPage", () => {
     expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(66);
     expect(screen.getByRole("combobox", { name: "默认打开方式" }).element().getBoundingClientRect().height).toBeLessThanOrEqual(32);
     await screen.getByRole("button", { name: "提交消息", exact: true }).click();
+    await expect.element(screen.getByRole("heading", { name: "提交消息", exact: true })).toBeVisible();
     const panel = document.querySelector("#settings-panel-commit")!;
     expect(getComputedStyle(panel.lastElementChild!).borderLeftWidth).toBe("1px");
   });

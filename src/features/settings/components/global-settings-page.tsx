@@ -6,18 +6,13 @@ import type {
   ExportDiagnosticsResponse,
   ProjectOpenApp,
 } from "@/protocol/index.js";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
 import { getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import { getNotificationPreference } from "../notification-preference.js";
 import type { ThemePreference } from "../theme-preference.js";
-import {
-  ModelSelect,
-  SettingsField,
-  SettingsPanel,
-  type SettingsSectionId,
-} from "./global-settings-fields.js";
+import type { SettingsSectionId } from "./global-settings-fields.js";
 import {
   createFallbackSettings,
   readInitialTheme,
@@ -26,14 +21,8 @@ import {
   createGlobalSettingsSaveQueue,
   SETTINGS_INPUT_DEBOUNCE_MS,
 } from "./global-settings-save.js";
-import { GlobalSettingsAbout } from "./global-settings-about.js";
-import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
-import { GlobalSettingsPets } from "../../pets/components/global-settings-pets.js";
-import { useWorkbenchBackgroundDraft } from "./use-workbench-background-draft.js";
-import { GlobalSettingsBackground } from "./global-settings-background.js";
+import { GlobalSettingsAbout, ProviderConnectionPanel, GlobalSettingsPets, BackgroundSettingsSection, AgentSettingsPanel, GeneralSettingsPanel, PersonalizationSettingsPanel, CommitSettingsPanel } from "./settings-section-loaders.js";
 import { applyBrowserSettingsChanges } from "./browser-settings-apply.js";
-import { AgentSettingsPanel } from "./agent-settings-panel.js";
-import { GeneralSettingsPanel } from "./general-settings-panel.js";
 import { SettingsPageFrame } from "./settings-page-frame.js";
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
 
@@ -83,18 +72,6 @@ export function GlobalSettingsPage({
     () => settings ?? createFallbackSettings(models),
   );
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
-  const {
-    addCustomBackgroundFiles,
-    background,
-    customImages,
-    isLoading: isLoadingBackgrounds,
-    isSavingImages,
-    loadError: backgroundLoadError,
-    retryLoad: retryBackgroundLoad,
-    removeCustomBackgroundImage,
-    selectCustomBackgroundImage,
-    setBackground,
-  } = useWorkbenchBackgroundDraft();
   const [language, setLanguage] = useState(getCurrentLanguage);
   const [notificationsEnabled, setNotificationsEnabled] = useState(getNotificationPreference);
   const onSaveRef = useRef(onSave);
@@ -141,7 +118,8 @@ export function GlobalSettingsPage({
       onBack={close}
       onSectionChange={setActiveSection}
     >
-      <GlobalSettingsAbout
+      <Suspense fallback={<div className="grid min-h-40 place-items-center text-body-small text-muted-foreground" role="status">{t("loading")}</div>}>
+      {activeSection === "about" ? <GlobalSettingsAbout
         activeSection={activeSection}
         {...(appInfo === undefined ? {} : { appInfo })}
         error={appInfoError}
@@ -149,13 +127,17 @@ export function GlobalSettingsPage({
         onRetry={onRetryAppInfo}
         onExportDiagnostics={onExportDiagnostics}
         onUpdate={onUpdate}
-      />
+      /> : null}
 
       {activeSection === "provider" ? (
         <section id="settings-panel-provider">
           <h1 className="mb-6 text-xl font-semibold">{t("sections.provider")}</h1>
           <ProviderConnectionPanel />
         </section>
+      ) : activeSection === "personalization" ? (
+        <PersonalizationSettingsPanel />
+      ) : activeSection === "background" ? (
+        <BackgroundSettingsSection />
       ) : activeSection === "about" ? null : error !== null ? (
         <div
           className="flex min-h-40 flex-col items-center justify-center gap-3"
@@ -180,7 +162,7 @@ export function GlobalSettingsPage({
         </div>
       ) : (
         <>
-          <GeneralSettingsPanel
+          {activeSection === "appearance" ? <GeneralSettingsPanel
             activeSection={activeSection}
             apps={apps}
             settings={draft}
@@ -207,20 +189,7 @@ export function GlobalSettingsPage({
               void applyBrowserSettingsChanges({ theme: nextTheme }).catch(() => undefined);
             }}
             theme={theme}
-          />
-
-          <GlobalSettingsBackground
-            activeSection={activeSection}
-            customImages={customImages}
-            disabled={isLoadingBackgrounds || isSavingImages || backgroundLoadError}
-            loadError={backgroundLoadError}
-            onRetry={retryBackgroundLoad}
-            onCustomFilesAdd={addCustomBackgroundFiles}
-            onCustomImageRemove={removeCustomBackgroundImage}
-            onCustomImageSelect={selectCustomBackgroundImage}
-            onPreferenceChange={setBackground}
-            preference={background}
-          />
+          /> : null}
 
           {activeSection === "pets" ? (
             <GlobalSettingsPets
@@ -235,43 +204,11 @@ export function GlobalSettingsPage({
             <AgentSettingsPanel settings={draft} models={models} fastModeAvailable={fastModeAvailable} onChange={(next) => updateDraft(() => next)} />
           ) : null}
 
-          <SettingsPanel
-            activeSection={activeSection}
-            id="commit"
-            title={t("sections.commit")}
-          >
-            <SettingsField label={t("fields.model")}>
-              <ModelSelect
-                ariaLabel={t("fields.commitModel")}
-                models={models}
-                onChange={(modelId) => {
-                  updateDraft((current) => ({ ...current, commitMessageModel: modelId }));
-                }}
-                value={draft.commitMessageModel}
-              />
-            </SettingsField>
-            <SettingsField alignStart label={t("fields.prompt")}>
-              <textarea
-                aria-label={t("fields.commitMessagePrompt")}
-                className="h-28 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small text-foreground outline-none focus:border-brand focus:shadow-focus disabled:opacity-50"
-                maxLength={4_000}
-                onBlur={() => {
-                  saveQueue.save(draftRef.current);
-                }}
-                onChange={(event) => {
-                  const commitMessagePrompt = event.currentTarget.value;
-                  updateDraft(
-                    (current) => ({ ...current, commitMessagePrompt }),
-                    true,
-                  );
-                }}
-                value={draft.commitMessagePrompt}
-              />
-            </SettingsField>
-          </SettingsPanel>
+          {activeSection === "commit" ? <CommitSettingsPanel settings={draft} models={models} onChange={updateDraft} onFlush={() => saveQueue.save(draftRef.current)} /> : null}
 
         </>
       )}
+      </Suspense>
     </SettingsPageFrame>
   );
 }

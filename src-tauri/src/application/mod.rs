@@ -18,6 +18,7 @@ pub mod extension_commands;
 mod model_turn_waiters;
 pub mod notification_commands;
 pub mod open_commands;
+pub mod personalization_commands;
 mod pet_assets;
 pub mod pet_commands;
 pub mod project_file_window_commands;
