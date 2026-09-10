@@ -1,4 +1,5 @@
 import type { AgentGlobalSettings } from "@/protocol/index.js";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -16,12 +17,16 @@ const models = [{
   supportedReasoningEfforts: ["low", "medium", "high"].map((id) => ({ id, description: id })),
 }];
 
-async function renderSettings(initialSection: "appearance" | "commit" = "appearance") {
+async function renderSettings(initialSection: "appearance" | "personalization" = "appearance") {
   await i18n.changeLanguage("zh-CN");
   const onClose = vi.fn();
   const onSave = vi.fn(async (_settings: AgentGlobalSettings) => undefined);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  queryClient.setQueryData(["personalization", "instructions"], { content: "现有说明", path: "/custom/AGENTS.md", overrideActive: false });
+  queryClient.setQueryData(["personalization", "memories"], { enabled: false, allowExternalContext: true });
   const screen = await render(
     <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <div style={{ height: "100dvh" }}>
           <GlobalSettingsPage
@@ -37,9 +42,10 @@ async function renderSettings(initialSection: "appearance" | "commit" = "appeara
           />
         </div>
       </TooltipProvider>
+      </QueryClientProvider>
     </I18nextProvider>,
   );
-  await expect.element(screen.getByRole("heading", { name: initialSection === "appearance" ? "常规" : "提交消息", exact: true })).toBeVisible();
+  await expect.element(screen.getByRole("heading", { name: initialSection === "appearance" ? "常规" : "个性化", exact: true })).toBeVisible();
   return { onClose, onSave, screen };
 }
 
@@ -70,10 +76,19 @@ describe("GlobalSettingsPage", () => {
     expect(Number.parseFloat(getComputedStyle(label).fontSize)).toBeGreaterThan(Number.parseFloat(getComputedStyle(description).fontSize));
     expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(66);
     expect(screen.getByRole("combobox", { name: "默认打开方式" }).element().getBoundingClientRect().height).toBeLessThanOrEqual(32);
-    await screen.getByRole("button", { name: "提交消息", exact: true }).click();
+    expect(screen.getByRole("button", { name: "提交消息", exact: true }).all()).toHaveLength(0);
+    await screen.getByRole("button", { name: "个性化", exact: true }).click();
     await expect.element(screen.getByRole("heading", { name: "提交消息", exact: true })).toBeVisible();
-    const panel = document.querySelector("#settings-panel-commit")!;
+    const panel = document.querySelector("#personalization-commit-settings")!;
     expect(getComputedStyle(panel.lastElementChild!).borderLeftWidth).toBe("1px");
+    const prompt = screen.getByRole("textbox", { name: "提交提示词" }).element();
+    expect(prompt.getBoundingClientRect().width).toBeGreaterThan(panel.getBoundingClientRect().width * 0.85);
+    await screen.getByRole("searchbox", { name: "搜索设置" }).fill("提交");
+    await expect.element(screen.getByRole("button", { name: "个性化", exact: true })).toBeVisible();
+    await screen.getByRole("searchbox", { name: "搜索设置" }).fill("");
+    await page.viewport(1440, 1100);
+    await page.screenshot({ path: "../../../../test-results/settings-personalization-commit.png" });
+    await page.viewport(1440, 900);
   });
   it("keeps permissions and runtime preferences in agent configuration", async () => {
     const { screen, onSave } = await renderSettings();
@@ -170,10 +185,10 @@ describe("GlobalSettingsPage", () => {
   });
 
   it("flushes the latest prompt before returning to the app", async () => {
-    const { screen, onClose, onSave } = await renderSettings("commit");
+    const { screen, onClose, onSave } = await renderSettings("personalization");
     await screen.getByRole("textbox", { name: "提交提示词" }).fill("新的提交规则");
     await screen.getByRole("button", { name: "常规", exact: true }).click();
-    await screen.getByRole("button", { name: "提交消息", exact: true }).click();
+    await screen.getByRole("button", { name: "个性化", exact: true }).click();
     await expect.element(screen.getByRole("textbox", { name: "提交提示词" })).toHaveValue("新的提交规则");
     await screen.getByRole("button", { name: "返回应用" }).click();
     expect(onClose).toHaveBeenCalledOnce();

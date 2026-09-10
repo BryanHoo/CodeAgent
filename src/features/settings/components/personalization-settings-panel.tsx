@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { NativeClient } from "@/platform/native-client-contract.js";
 import type { MemorySettingsUpdate } from "@/protocol/index.js";
 import "../../../i18n/settings-personalization.js";
@@ -14,7 +14,7 @@ type PersonalizationClient = Pick<NativeClient, "getGlobalInstructions" | "saveG
 const instructionsKey = ["personalization", "instructions"] as const;
 const memoriesKey = ["personalization", "memories"] as const;
 
-export function PersonalizationSettingsPanel({ client = nativeClient }: Readonly<{ client?: PersonalizationClient }>) {
+export function PersonalizationSettingsPanel({ client = nativeClient, commitSettings }: Readonly<{ client?: PersonalizationClient; commitSettings?: ReactNode }>) {
   const { t } = useTranslation("settings");
   const cache = useQueryClient();
   const [draft, setDraft] = useState<string | null>(null);
@@ -66,9 +66,9 @@ export function PersonalizationSettingsPanel({ client = nativeClient }: Readonly
         {save.isError ? <p role="alert" className="text-body-small text-danger">{t(conflict ? "personalization.conflict" : "personalization.saveError")}</p> : null}
         {instructions.isError || conflict ? <Button type="button" variant="ghost" disabled={instructions.isFetching} onClick={() => { void instructions.refetch().then((result) => { if (result.isSuccess) { setDraft(null); save.reset(); } }); }}>{t("personalization.reload")}</Button> : null}
       </div>
+      {commitSettings}
       <div className="space-y-3">
-        <p className="text-body-small text-muted-foreground">{t("personalization.memoryDescription")}</p>
-        <SettingsGroup title={t("personalization.memories")}>
+        <SettingsGroup title={t("personalization.memories")} description={t("personalization.memoryDescription")}>
           {(["enabled", "allowExternalContext"] as const).map((key) => {
             const label = t(key === "enabled" ? "personalization.enabled" : "personalization.external");
             const checked = memories.data?.[key] ?? false;

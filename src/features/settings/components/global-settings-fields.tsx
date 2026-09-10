@@ -2,7 +2,6 @@ import type { AgentModel } from "@/protocol/index.js";
 import {
   Bot,
   ChevronDown,
-  GitCommitHorizontal,
   Images,
   Info,
   PawPrint,
@@ -22,7 +21,6 @@ export type SettingsSectionId =
   | "agent"
   | "appearance"
   | "background"
-  | "commit"
   | "pets"
   | "personalization"
   | "provider";
@@ -37,7 +35,6 @@ export const settingsSections: readonly Readonly<{
   { icon: ServerCog, id: "provider" },
   { icon: Bot, id: "agent" },
   { icon: SlidersHorizontal, id: "personalization" },
-  { icon: GitCommitHorizontal, id: "commit" },
   { icon: Info, id: "about" },
 ];
 
@@ -61,11 +58,12 @@ export function SettingsPanel({
   );
 }
 
-export function SettingsGroup({ children, title }: Readonly<{ children: ReactNode; title: string }>) {
+export function SettingsGroup({ children, title, description }: Readonly<{ children: ReactNode; title: string; description?: string }>) {
   const id = useId();
   return (
     <section aria-labelledby={id}>
-      <h2 className="mb-2 text-body font-semibold" id={id}>{title}</h2>
+      <h2 className={`${description === undefined ? "mb-2" : "mb-1"} text-body font-semibold`} id={id}>{title}</h2>
+      {description === undefined ? null : <p className="mb-3 text-body-small text-muted-foreground">{description}</p>}
       <SettingsCard>{children}</SettingsCard>
     </section>
   );

@@ -171,7 +171,6 @@ export const settings = {
     agent: "Agent configuration",
     appearance: "General",
     background: "Workbench background",
-    commit: "Commit messages",
     pets: "Pets",
     provider: "Model service",
   },
@@ -179,11 +178,10 @@ export const settings = {
   sectionKeywords: {
     appearance: "Color mode language notifications editor default open follow-up messages",
     background: "Wallpaper Bing custom blur overlay",
-    personalization: "Codex instructions AGENTS.md global memory MCP web search",
+    personalization: "Codex instructions AGENTS.md global memory MCP web search Git commit messages model prompt generation rules",
     pets: "Enable pet selection",
     provider: "API key Base URL models official custom",
     agent: "Fast mode model reasoning approval file access sandbox web search output verbosity",
-    commit: "Commit model prompt",
     about: "Version update release notes diagnostics",
   },
 } as const;

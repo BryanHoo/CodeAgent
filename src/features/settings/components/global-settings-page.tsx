@@ -135,7 +135,14 @@ export function GlobalSettingsPage({
           <ProviderConnectionPanel />
         </section>
       ) : activeSection === "personalization" ? (
-        <PersonalizationSettingsPanel />
+        <PersonalizationSettingsPanel commitSettings={
+          error !== null ? <div role="alert" className="text-body-small text-danger">
+            <p>{t("errors.load")}</p>
+            <Button variant="ghost" onClick={() => void onRetry()}>{t("common:actions.retry")}</Button>
+          </div> : isPending || settings === undefined ? <p role="status" className="text-body-small text-muted-foreground">{t("loading")}</p> : (
+            <CommitSettingsPanel settings={draft} models={models} onChange={updateDraft} onFlush={() => saveQueue.save(draftRef.current)} />
+          )
+        } />
       ) : activeSection === "background" ? (
         <BackgroundSettingsSection />
       ) : activeSection === "about" ? null : error !== null ? (
@@ -204,7 +211,6 @@ export function GlobalSettingsPage({
             <AgentSettingsPanel settings={draft} models={models} fastModeAvailable={fastModeAvailable} onChange={(next) => updateDraft(() => next)} />
           ) : null}
 
-          {activeSection === "commit" ? <CommitSettingsPanel settings={draft} models={models} onChange={updateDraft} onFlush={() => saveQueue.save(draftRef.current)} /> : null}
 
         </>
       )}

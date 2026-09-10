@@ -3,6 +3,13 @@ import { i18n } from "./i18n.js";
 // 文案随设置页面加载，不增加工作台初始加载体积。
 i18n.addResourceBundle("zh-CN", "settings", { personalization: {
   instructions: "Codex 说明",
+  commitTitle: "提交消息",
+  commitDescription: "设置 Git 提交消息的生成偏好，修改后自动保存。",
+  commitModel: "生成模型",
+  commitModelDescription: "选择用于生成提交消息的模型。",
+  commitRules: "生成规则",
+  commitRulesDescription: "指定语言、格式和内容要求，仅用于生成提交消息。",
+  commitPlaceholder: "例如：使用简体中文，遵循 Conventional Commits，简要说明变更目的。",
   fileLocation: "文件位置：{{path}}",
   description: "为在此电脑上运行的任务提供说明和上下文。项目中的说明也会适用。保存后对新会话生效。",
   save: "保存", saving: "正在保存", saved: "已保存", reload: "重新读取",
@@ -18,6 +25,13 @@ i18n.addResourceBundle("zh-CN", "settings", { personalization: {
 } }, true);
 i18n.addResourceBundle("en", "settings", { personalization: {
   instructions: "Codex instructions",
+  commitTitle: "Commit messages",
+  commitDescription: "Set preferences for generated Git commit messages. Changes are saved automatically.",
+  commitModel: "Generation model",
+  commitModelDescription: "Choose the model used to generate commit messages.",
+  commitRules: "Generation rules",
+  commitRulesDescription: "Specify language, format, and content requirements for commit messages only.",
+  commitPlaceholder: "For example: follow Conventional Commits and briefly explain the purpose of the changes.",
   fileLocation: "File location: {{path}}",
   description: "Provide instructions and context for tasks on this computer. Project instructions also apply. Saved changes apply to new sessions.",
   save: "Save", saving: "Saving", saved: "Saved", reload: "Reload",
