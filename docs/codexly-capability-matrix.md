@@ -42,7 +42,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 小窗访问 | Task 只读输出 | 440×220 横向透明无外框置顶小窗，最多 3 个且同任务复用；工作台同源样式的 12px Markdown 与 160 字符操作标题；仅挂载可视块，支持滚动查看最近输出，置底时跟随新输出；独立入口与受限 Channel，单窗最多一个未确认包、12 项、每项 4 KiB；仅读取最近回合一页；双击恢复对应普通/临时任务路由后销毁，主窗口销毁不影响输出 | 已实现 |
 | 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
 | 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |
-| Item 映射 | 消息、推理、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.152 官方 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；未知类型降级为可见活动 | 已实现 |
+| Item 映射 | 消息、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.153.4 官方可见 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；推理 Item 在适配层过滤，未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 0.152 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | Rust 路径包含校验、过滤 `.git` 与 `.DS_Store`、遵守 ignore 规则的缓存索引、会话取消和结果上限；临时任务按 `thread/read.cwd` 验证预览根目录；源码与图片通过最小 capability 的轻量原生独立窗口预览 | 已实现 |
@@ -58,7 +58,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/value/write`, `config/mcpServer/reload`；“扩展中心”的“MCP 管理”仅投影非插件来源的全局服务名称与启用状态，切换后热重载连接；当前 Task 继续精确保留 0.152 线程连接态，启动通知只触发清单失效，IPC 仅传固定大小摘要；`openaiForm` 与 `openai/form` 均显式降级为 unsupported | 已实现 |
 | Provider 认证 | login/cancel/logout/custom provider | 原生账号协议与受限配置写入；密钥不持久化到 WebView | 已实现 |
 | 全局/项目设置 | get/update settings/defaults | `appData/agent-settings.json` 原子配置；返回实际变化字段，模型与权限默认值不写入 Codex 配置 | 已实现 |
-| 智能体配置 | 网页搜索、输出详细程度、推理摘要 | 应用全局配置经 thread/start、thread/resume 的 config 覆盖传入；搜索与详细程度用于新建/冷恢复会话，摘要另经 turn/start 与 thread/settings/update 的 summary 逐轮更新；普通、目标和计划任务共用，不修改 config.toml | 已实现 |
+| 智能体配置 | 网页搜索、输出详细程度 | 应用全局配置经 thread/start、thread/resume 的 config 覆盖传入；推理摘要固定为 `none`，不提供设置入口；普通、目标和计划任务共用，不修改 config.toml | 已实现 |
 | Feedback | `uploadFeedback` | 原生 `feedback/upload` | 已实现 |
 | 宠物 | `listWorkbenchPets`, `downloadWorkbenchPet` | 内置 CDN 下载、WebP 校验、自定义 `pets`/旧 `avatars` 扫描、动态资产授权、全屏置顶桌面面板、拖动动画、Rust 任务活动投影与跨显示器位置恢复 | 已实现 |
 | Bing 每日壁纸 | `/v1/workbench-background/bing` | 九日日期图库、固定日期或每日更新、原图预览、系统保存窗口下载；Rust 固定来源有界下载、JPEG 校验、原子缓存、Tauri asset protocol | 已实现 |
@@ -71,7 +71,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 类别 | Codex 0.152 通知 |
 | --- | --- |
 | 回合 | `turn/started`, `turn/completed`, `turn/plan/updated` |
-| 文本与推理 | `item/agentMessage/delta`, reasoning delta/summary 通知 |
+| 文本输出 | `item/agentMessage/delta`；reasoning 通知在适配层过滤 |
 | 工具与文件 | command output、MCP progress、file patch、`functionCallOutput`、九类协作 Agent 工具、item started/completed |
 | 运行时 | warning/error、token usage、model reroute/safety/verification；认证恢复通知校验结构后显式消费，暂不投影 UI |
 | 生命周期 | thread status/name/archive/delete、goal、queue |

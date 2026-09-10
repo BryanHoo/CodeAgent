@@ -60,20 +60,6 @@ export const MessageDeltaEventSchema = createEventSchema({
   type: Type.Literal("message.delta"),
 });
 
-export const ReasoningDeltaEventSchema = createEventSchema({
-  itemId: Type.String({ minLength: 1 }),
-  payload: Type.Object(
-    {
-      delta: Type.String(),
-      field: Type.Union([Type.Literal("content"), Type.Literal("summary")]),
-      sectionIndex: Type.Optional(Type.Integer({ minimum: 0 })),
-    },
-    { additionalProperties: false },
-  ),
-  turnId: Type.String({ minLength: 1 }),
-  type: Type.Literal("reasoning.delta"),
-});
-
 export const PlanDeltaEventSchema = createEventSchema({
   itemId: Type.String({ minLength: 1 }),
   payload: Type.Object({ delta: Type.String() }, { additionalProperties: false }),
@@ -285,7 +271,6 @@ export const PendingRequestExpiredEventSchema = createPendingRequestEventSchema(
 export const AgentEventSchema = Type.Union([
   TurnStartedEventSchema,
   MessageDeltaEventSchema,
-  ReasoningDeltaEventSchema,
   CommandOutputDeltaEventSchema,
   PlanDeltaEventSchema,
   ToolProgressEventSchema,

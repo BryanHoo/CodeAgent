@@ -55,7 +55,6 @@ export function createFallbackSettings(models: readonly AgentModel[]): AgentGlob
     followUpBehavior: "queue",
     webSearch: "cached",
     modelVerbosity: null,
-    reasoningSummary: "auto",
     model: model?.id ?? "",
     pet: { enabled: false, selectedPetId: null },
     reasoningEffort: model?.defaultReasoningEffort ?? "",

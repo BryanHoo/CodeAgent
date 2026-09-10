@@ -8,7 +8,6 @@ import {
   AgentItemStatusSchema,
   AgentMessageAttachmentSchema,
   AgentMessageItemSchema,
-  AgentReasoningItemSchema,
   MAX_AGENT_ATTACHMENT_BYTES,
   MAX_AGENT_HISTORY_IMAGES,
 } from "./agent-attachments.js";
@@ -199,7 +198,6 @@ export const AgentReviewItemSchema = Type.Object(
 
 export const AgentItemSchema = Type.Union([
   AgentMessageItemSchema,
-  AgentReasoningItemSchema,
   AgentCommandItemSchema,
   AgentFileChangeItemSchema,
   AgentToolItemSchema,

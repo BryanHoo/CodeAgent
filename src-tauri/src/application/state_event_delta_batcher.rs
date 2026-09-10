@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tokio::time::Instant;
 
-use crate::domain::runtime::{AgentDeltaEvent, AgentDeltaType, AgentEvent, ReasoningDeltaField};
+use crate::domain::runtime::{AgentDeltaEvent, AgentDeltaType, AgentEvent};
 
 pub(super) const DELTA_MERGE_WINDOW: Duration = Duration::from_millis(12);
 
@@ -12,8 +12,6 @@ struct DeltaStreamKey {
     turn_id: String,
     item_id: String,
     event_type: AgentDeltaType,
-    field: Option<ReasoningDeltaField>,
-    section_index: Option<u64>,
 }
 
 impl From<&AgentDeltaEvent> for DeltaStreamKey {
@@ -23,8 +21,6 @@ impl From<&AgentDeltaEvent> for DeltaStreamKey {
             turn_id: event.turn_id.clone(),
             item_id: event.item_id.clone(),
             event_type: event.event_type,
-            field: event.payload.field,
-            section_index: event.payload.section_index,
         }
     }
 }
@@ -35,8 +31,6 @@ impl DeltaStreamKey {
             && self.turn_id == event.turn_id
             && self.item_id == event.item_id
             && self.event_type == event.event_type
-            && self.field == event.payload.field
-            && self.section_index == event.payload.section_index
     }
 }
 
@@ -129,8 +123,6 @@ mod tests {
             item_id: item_id.to_owned(),
             payload: AgentDeltaPayload {
                 delta: value.to_owned(),
-                field: None,
-                section_index: None,
             },
             provider: ProviderKind::Codex,
             received_at_unix_ms: 0,

@@ -81,14 +81,14 @@ describe("GlobalSettingsPage", () => {
     await screen.getByRole("combobox", { name: "工作区", exact: true }).selectOptions("read-only");
     await screen.getByRole("combobox", { name: "网页搜索", exact: true }).selectOptions("live");
     await screen.getByRole("combobox", { name: "输出详细程度", exact: true }).selectOptions("high");
-    await screen.getByRole("combobox", { name: "推理摘要", exact: true }).selectOptions("detailed");
+    expect(screen.getByRole("combobox", { name: "推理摘要", exact: true }).all()).toHaveLength(0);
     await expect.poll(() => onSave.mock.calls.at(-1)?.[0]).toMatchObject({
       approvalPolicy: "on-request", approvalsReviewer: "auto_review", sandboxMode: "read-only",
-      webSearch: "live", modelVerbosity: "high", reasoningSummary: "detailed",
+      webSearch: "live", modelVerbosity: "high",
     });
     await screen.getByRole("combobox", { name: "输出详细程度", exact: true }).selectOptions("");
     await expect.poll(() => onSave.mock.calls.at(-1)?.[0]).toMatchObject({ modelVerbosity: null });
-    for (const term of ["审批", "工作区", "网页搜索", "输出详细程度", "推理摘要"]) {
+    for (const term of ["审批", "工作区", "网页搜索", "输出详细程度"]) {
       await screen.getByRole("searchbox", { name: "搜索设置" }).fill(term);
       await expect.element(screen.getByRole("button", { name: "智能体配置", exact: true })).toBeVisible();
       expect(screen.getByRole("button", { name: "常规", exact: true }).all()).toHaveLength(0);

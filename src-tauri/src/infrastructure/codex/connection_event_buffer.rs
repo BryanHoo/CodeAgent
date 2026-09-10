@@ -10,8 +10,12 @@ const RECOVERABLE_DELTA_METHODS: &[&str] = &[
     "item/agentMessage/delta",
     "item/commandExecution/outputDelta",
     "item/plan/delta",
-    "item/reasoning/summaryTextDelta",
+];
+
+const IGNORED_REASONING_METHODS: &[&str] = &[
     "item/reasoning/textDelta",
+    "item/reasoning/summaryTextDelta",
+    "item/reasoning/summaryPartAdded",
 ];
 
 #[derive(Deserialize)]
@@ -56,6 +60,11 @@ impl NotificationBuffer {
     }
 
     pub(super) fn push(&mut self, message: ServerMessage) {
+        // 推理内容不进入排队链路，避免无效事件占用内存和触发重同步。
+        if is_ignored_reasoning_notification(&message) {
+            return;
+        }
+
         if self.notifications.len() < self.capacity {
             self.notifications.push_back(message);
             return;
@@ -92,4 +101,34 @@ impl NotificationBuffer {
 
 fn is_recoverable_delta(message: &ServerMessage) -> bool {
     message.id.is_none() && RECOVERABLE_DELTA_METHODS.contains(&message.method.as_str())
+}
+
+fn is_ignored_reasoning_notification(message: &ServerMessage) -> bool {
+    message.id.is_none() && IGNORED_REASONING_METHODS.contains(&message.method.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::value::to_raw_value;
+
+    use super::*;
+
+    #[test]
+    fn reasoning_notifications_are_discarded_before_buffering() {
+        let mut buffer = NotificationBuffer::new(1);
+
+        for method in IGNORED_REASONING_METHODS {
+            buffer.push(ServerMessage {
+                id: None,
+                method: (*method).to_owned(),
+                params: to_raw_value(&serde_json::json!({
+                    "threadId": "thread-a",
+                    "turnId": "turn-a"
+                }))
+                .unwrap(),
+            });
+        }
+
+        assert!(buffer.is_empty());
+    }
 }

@@ -104,7 +104,6 @@ const AgentGlobalSettingProperties = {
   followUpBehavior: Type.Union([Type.Literal("queue"), Type.Literal("steer")]),
   webSearch: Type.Union([Type.Literal("disabled"), Type.Literal("cached"), Type.Literal("live")]),
   modelVerbosity: Type.Union([Type.Null(), Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]),
-  reasoningSummary: Type.Union([Type.Literal("auto"), Type.Literal("concise"), Type.Literal("detailed"), Type.Literal("none")]),
   pet: WorkbenchPetSettingsSchema,
   ...AgentTaskSettingProperties,
 };

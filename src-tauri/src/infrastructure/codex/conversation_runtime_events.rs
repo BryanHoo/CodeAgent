@@ -2,7 +2,7 @@ use serde_json::{Map, Value, json};
 
 use super::{
     connection::ConnectionError,
-    conversation_events::{envelope, required_string, required_u64},
+    conversation_events::{envelope, required_string},
 };
 
 pub(super) fn map_runtime_notification(
@@ -21,21 +21,6 @@ pub(super) fn map_runtime_notification(
             json!({
                 "payload": {"reason": if method == "thread/archived" {"archived"} else {"deleted"}},
                 "type": "task.removed",
-            }),
-        ),
-        "item/reasoning/summaryPartAdded" => envelope(
-            sequence,
-            timestamp,
-            required_string(params, "threadId")?,
-            json!({
-                "itemId": required_string(params, "itemId")?,
-                "payload": {
-                    "delta": "",
-                    "field": "summary",
-                    "sectionIndex": required_u64(params, "summaryIndex")?,
-                },
-                "turnId": required_string(params, "turnId")?,
-                "type": "reasoning.delta",
             }),
         ),
         "model/rerouted" => model_rerouted_event(params, sequence, timestamp)?,

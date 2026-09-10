@@ -204,16 +204,6 @@ export const AgentMessageItemSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const AgentReasoningItemSchema = Type.Object(
-  {
-    content: Type.String(),
-    id: Type.String({ minLength: 1 }),
-    summary: Type.String(),
-    type: Type.Literal("reasoning"),
-  },
-  { additionalProperties: false },
-);
-
 export const AgentCommandOutputOmissionSchema = Type.Object(
   {
     bytes: Type.Integer({ minimum: 0 }),

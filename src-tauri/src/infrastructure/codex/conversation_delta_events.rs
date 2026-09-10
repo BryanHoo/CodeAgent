@@ -2,9 +2,7 @@ use std::borrow::Cow;
 
 use serde::Deserialize;
 
-use crate::domain::runtime::{
-    AgentDeltaEvent, AgentDeltaPayload, AgentDeltaType, ProviderKind, ReasoningDeltaField,
-};
+use crate::domain::runtime::{AgentDeltaEvent, AgentDeltaPayload, AgentDeltaType, ProviderKind};
 
 use super::{
     connection::{ConnectionError, ServerMessage},
@@ -20,8 +18,6 @@ struct DeltaNotification<'a> {
     // JSON 转义内容无法直接借用；Cow 仅在换行等转义出现时分配解码缓冲区。
     #[serde(borrow)]
     delta: Cow<'a, str>,
-    #[serde(default)]
-    summary_index: Option<u64>,
 }
 
 pub(super) fn map_delta_message(
@@ -30,33 +26,19 @@ pub(super) fn map_delta_message(
     timestamp: &str,
     received_at_unix_ms: u64,
 ) -> Result<Option<AgentDeltaEvent>, ConnectionError> {
-    let (event_type, field, requires_summary_index) = match message.method.as_str() {
-        "item/agentMessage/delta" => (AgentDeltaType::Message, None, false),
-        "item/reasoning/textDelta" => (
-            AgentDeltaType::Reasoning,
-            Some(ReasoningDeltaField::Content),
-            false,
-        ),
-        "item/reasoning/summaryTextDelta" => (
-            AgentDeltaType::Reasoning,
-            Some(ReasoningDeltaField::Summary),
-            true,
-        ),
-        "item/commandExecution/outputDelta" => (AgentDeltaType::CommandOutput, None, false),
-        "item/plan/delta" => (AgentDeltaType::Plan, None, false),
+    let event_type = match message.method.as_str() {
+        "item/reasoning/textDelta" | "item/reasoning/summaryTextDelta" => return Ok(None),
+        "item/agentMessage/delta" => AgentDeltaType::Message,
+        "item/commandExecution/outputDelta" => AgentDeltaType::CommandOutput,
+        "item/plan/delta" => AgentDeltaType::Plan,
         _ => return Ok(None),
     };
     let params: DeltaNotification<'_> = serde_json::from_str(message.params.get())?;
-    if requires_summary_index && params.summary_index.is_none() {
-        return Err(ConnectionError::InvalidMessage);
-    }
 
     Ok(Some(AgentDeltaEvent {
         item_id: params.item_id.to_owned(),
         payload: AgentDeltaPayload {
             delta: params.delta.into_owned(),
-            field,
-            section_index: params.summary_index,
         },
         provider: ProviderKind::Codex,
         received_at_unix_ms,
@@ -78,43 +60,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_raw_delta_directly_to_typed_event() {
-        let message = ServerMessage {
-            id: None,
-            method: "item/reasoning/summaryTextDelta".to_owned(),
-            params: to_raw_value(&json!({
-                "threadId": "thread-a",
-                "turnId": "turn-a",
-                "itemId": "item-a",
-                "delta": "结果",
-                "summaryIndex": 2
-            }))
-            .unwrap(),
-        };
-
-        let event = map_delta_message(&message, 3, "2025-01-01T00:00:00Z", 1_735_689_600_123)
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(
-            serde_json::to_value(event).unwrap(),
-            json!({
-                "itemId": "item-a",
-                "payload": {"delta": "结果", "field": "summary", "sectionIndex": 2},
-                "provider": "codex",
-                "receivedAtUnixMs": 1_735_689_600_123_u64,
-                "sequence": 3,
-                "sessionId": "codeagent-runtime",
-                "taskId": "thread-a",
-                "timestamp": "2025-01-01T00:00:00Z",
-                "turnId": "turn-a",
-                "type": "reasoning.delta",
-                "version": 2
-            })
-        );
-    }
-
-    #[test]
     fn maps_agent_message_delta_with_escaped_newlines() {
         let message = ServerMessage {
             id: None,
@@ -134,5 +79,33 @@ mod tests {
 
         assert_eq!(event.payload.delta, "\n\n- 下一项");
         assert_eq!(event.event_type, AgentDeltaType::Message);
+    }
+
+    #[test]
+    fn ignores_reasoning_deltas() {
+        for method in [
+            "item/reasoning/summaryTextDelta",
+            "item/reasoning/textDelta",
+        ] {
+            let message = ServerMessage {
+                id: None,
+                method: method.to_owned(),
+                params: to_raw_value(&json!({
+                    "threadId": "thread-a",
+                    "turnId": "turn-a",
+                    "itemId": "item-a",
+                    "delta": "hidden",
+                    "summaryIndex": 0,
+                    "contentIndex": 0
+                }))
+                .unwrap(),
+            };
+
+            assert!(
+                map_delta_message(&message, 1, "2025-01-01T00:00:00Z", 0)
+                    .unwrap()
+                    .is_none()
+            );
+        }
     }
 }

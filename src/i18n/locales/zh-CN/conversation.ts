@@ -330,8 +330,6 @@ export const conversation = {
       strict_review_required: "需要严格审核",
       strictReviewRequired: "安全审核已升级，当前操作将在严格审核完成后继续",
     },
-    reasoning: "推理摘要",
-    reasoningStreaming: "正在推理",
     runtimeStatus: {
       duration: "耗时 {{duration}} 毫秒",
       fasterModel: "可使用更快的模型：{{model}}",

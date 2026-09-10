@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::domain::runtime::{AgentDeltaType, AgentEvent, ReasoningDeltaField};
+use crate::domain::runtime::{AgentDeltaType, AgentEvent};
 
 pub(super) const MAX_ROWS: usize = 12;
 pub(super) const MAX_TEXT_BYTES: usize = 4096;
@@ -89,9 +89,6 @@ impl TaskWindowProjection {
                 text,
                 ..
             } => self.upsert(id, "message", text, false),
-            AgentItem::Reasoning { id, summary, .. } if !summary.is_empty() => {
-                self.upsert(id, "reasoning", summary, false)
-            }
             AgentItem::Plan { id, text } => self.upsert(id, "plan", text, false),
             AgentItem::Command { id, command, .. } => self.upsert(id, "command", command, false),
             AgentItem::Tool { id, name, .. } => self.upsert(id, "tool", name, false),
@@ -162,7 +159,6 @@ impl TaskWindowProjection {
         let string = |key| item.get(key).and_then(Value::as_str).unwrap_or("");
         let text = match kind {
             "message" if string("role") == "assistant" => string("text"),
-            "reasoning" => string("summary"),
             "plan" => string("text"),
             "command" => string("command"),
             "tool" => string("name"),
@@ -200,12 +196,7 @@ impl TaskWindowProjection {
             let kind = match delta.event_type {
                 AgentDeltaType::Message => "message",
                 AgentDeltaType::Plan => "plan",
-                AgentDeltaType::Reasoning
-                    if delta.payload.field == Some(ReasoningDeltaField::Summary) =>
-                {
-                    "reasoning"
-                }
-                // 执行输出与原始推理量大，小窗只展示命令和工具摘要。
+                // 执行输出量大，小窗只展示命令和工具摘要。
                 _ => return,
             };
             self.upsert(&delta.item_id, kind, &delta.payload.delta, true);
@@ -220,7 +211,7 @@ impl TaskWindowProjection {
                     self.item(item);
                 }
             }
-            Some("message.delta" | "plan.delta" | "reasoning.delta") => {
+            Some("message.delta" | "plan.delta") => {
                 let Some(id) = value.get("itemId").and_then(Value::as_str) else {
                     return;
                 };

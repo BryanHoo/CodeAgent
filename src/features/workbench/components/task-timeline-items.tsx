@@ -24,11 +24,6 @@ import {
   PlanTitle,
   PlanTrigger,
 } from "../../../shared/components/agent/plan.js";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "../../../shared/components/agent/reasoning.js";
 import { Task, TaskContent, TaskItem, TaskTrigger } from "../../../shared/components/agent/task.js";
 import {
   Terminal,
@@ -197,29 +192,6 @@ export function TimelineItemContent({
         <MessageContent>
           <p>{getReviewMessageText(item)}</p>
         </MessageContent>
-      );
-    case "reasoning":
-      if (item.summary.trim().length === 0) {
-        return null;
-      }
-      return (
-        <Reasoning isStreaming={turnStatus === "running"}>
-          <ReasoningTrigger
-            title={i18n.t(
-              turnStatus === "running" ? "timeline.reasoningStreaming" : "timeline.reasoning",
-              { ns: "conversation" },
-            )}
-          />
-          <ReasoningContent>
-            {/* 仅渲染 Provider 明确提供的摘要，原始 content 永不进入展示组件。 */}
-            <LazyMessageResponse
-              {...(textSource === undefined ? {} : { textSource })}
-              mode={turnStatus === "running" ? "streaming" : "static"}
-            >
-              {item.summary}
-            </LazyMessageResponse>
-          </ReasoningContent>
-        </Reasoning>
       );
     case "approval_review":
       return <ApprovalReviewItem item={item} />;

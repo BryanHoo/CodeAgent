@@ -43,12 +43,10 @@ const fileChange: AgentItem = {
 };
 
 describe("groupConsecutiveTimelineOperations", () => {
-  it("groups visually consecutive operations across hidden reasoning items", () => {
+  it("groups visually consecutive operations", () => {
     const items: AgentItem[] = [
       webSearch,
-      { content: "", id: "reasoning-1", summary: "", type: "reasoning" },
       command,
-      { content: "raw reasoning", id: "reasoning-2", summary: "", type: "reasoning" },
       mcpTool,
       fileChange,
       { id: "assistant-1", role: "assistant", text: "继续分析", type: "message" },
@@ -71,20 +69,6 @@ describe("groupConsecutiveTimelineOperations", () => {
         key: "file-change-1",
         type: "operation_group",
       },
-    ]);
-  });
-
-  it("keeps visible reasoning as an operation group boundary", () => {
-    const items: AgentItem[] = [
-      webSearch,
-      { content: "", id: "reasoning-visible", summary: "核对资料", type: "reasoning" },
-      command,
-    ];
-
-    expect(groupItems(items)).toEqual([
-      { itemKey: "search-1", type: "item" },
-      { itemKey: "reasoning-visible", type: "item" },
-      { itemKey: "command-1", type: "item" },
     ]);
   });
 });

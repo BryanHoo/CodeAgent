@@ -14,7 +14,7 @@ use super::{
     sidebar::unix_seconds_to_rfc3339,
 };
 use crate::domain::{
-    agent_configuration::{AgentRuntimeSettings, ModelVerbosity, ReasoningSummary, WebSearchMode},
+    agent_configuration::{AgentRuntimeSettings, ModelVerbosity, WebSearchMode},
     conversation::{
         AgentPromptInput, AgentTurnActionResponse, AgentTurnOptions, EventCheckpoint,
         StartAgentTurnResponse,
@@ -89,8 +89,7 @@ pub(super) struct ThreadConfig {
     web_search: Option<WebSearchMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     model_verbosity: Option<ModelVerbosity>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    model_reasoning_summary: Option<ReasoningSummary>,
+    model_reasoning_summary: &'static str,
 }
 
 pub(super) const fn thread_config() -> ThreadConfig {
@@ -98,7 +97,7 @@ pub(super) const fn thread_config() -> ThreadConfig {
         update_plan_enabled: true,
         web_search: None,
         model_verbosity: None,
-        model_reasoning_summary: None,
+        model_reasoning_summary: "none",
     }
 }
 
@@ -106,7 +105,6 @@ fn agent_thread_config(settings: &AgentRuntimeSettings) -> ThreadConfig {
     ThreadConfig {
         web_search: Some(settings.web_search),
         model_verbosity: settings.model_verbosity,
-        model_reasoning_summary: Some(settings.reasoning_summary),
         ..thread_config()
     }
 }
@@ -126,7 +124,7 @@ struct NativeTaskIdentity {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TurnStartParams<'a> {
-    summary: ReasoningSummary,
+    summary: &'static str,
     approval_policy: &'a Value,
     approvals_reviewer: &'a str,
     collaboration_mode: Value,
@@ -141,7 +139,7 @@ struct TurnStartParams<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadSettingsUpdateParams<'a> {
-    summary: ReasoningSummary,
+    summary: &'static str,
     approval_policy: &'a Value,
     approvals_reviewer: &'a str,
     collaboration_mode: Value,
@@ -253,7 +251,7 @@ pub async fn start_turn(
         .request(
             "turn/start",
             &TurnStartParams {
-                summary: settings.reasoning_summary,
+                summary: "none",
                 approval_policy: &options.approval_policy,
                 approvals_reviewer: map_approvals_reviewer(&options.approvals_reviewer)?,
                 collaboration_mode: collaboration_mode(&options),
@@ -305,13 +303,12 @@ pub async fn update_thread_settings(
     connection: &AppServerConnection,
     task_id: &str,
     options: &AgentTurnOptions,
-    settings: &AgentRuntimeSettings,
 ) -> Result<(), ConnectionError> {
     let _: Value = connection
         .request(
             "thread/settings/update",
             &ThreadSettingsUpdateParams {
-                summary: settings.reasoning_summary,
+                summary: "none",
                 approval_policy: &options.approval_policy,
                 approvals_reviewer: map_approvals_reviewer(&options.approvals_reviewer)?,
                 collaboration_mode: collaboration_mode(options),

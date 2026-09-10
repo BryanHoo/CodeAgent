@@ -443,7 +443,7 @@ mod tests {
 
         // 使用产品真实命令创建并立即删除临时任务，验证持久化生命周期参数。
         let agent_settings = serde_json::from_value(json!({
-            "webSearch": "live", "modelVerbosity": "high", "reasoningSummary": "detailed",
+            "webSearch": "live", "modelVerbosity": "high",
         }))
         .unwrap();
         let task = conversation_commands::start_task(

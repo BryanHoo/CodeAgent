@@ -84,25 +84,12 @@ pub enum AgentDeltaType {
     Message,
     #[serde(rename = "plan.delta")]
     Plan,
-    #[serde(rename = "reasoning.delta")]
-    Reasoning,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ReasoningDeltaField {
-    Content,
-    Summary,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentDeltaPayload {
     pub delta: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub field: Option<ReasoningDeltaField>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub section_index: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -130,8 +117,6 @@ impl AgentDeltaEvent {
             && self.turn_id == other.turn_id
             && self.item_id == other.item_id
             && self.event_type == other.event_type
-            && self.payload.field == other.payload.field
-            && self.payload.section_index == other.payload.section_index
     }
 
     pub fn append(&mut self, other: Self) {
@@ -167,7 +152,6 @@ impl AgentEvent {
                 AgentDeltaType::CommandOutput => "command.output_delta",
                 AgentDeltaType::Message => "message.delta",
                 AgentDeltaType::Plan => "plan.delta",
-                AgentDeltaType::Reasoning => "reasoning.delta",
             }),
             Self::Json(event) => event.get("type").and_then(Value::as_str),
         }

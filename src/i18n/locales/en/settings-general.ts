@@ -23,8 +23,4 @@ export const agentSettings = {
         label: "Output verbosity", description: "Choose the level of detail in new task replies. Support varies by model.",
         default: "Model default", low: "Low", medium: "Medium", high: "High",
     },
-    reasoningSummary: {
-        label: "Reasoning summary", description: "Choose how the agent summarizes its reasoning. Support varies by model.",
-        auto: "Auto", concise: "Concise", detailed: "Detailed", none: "Disabled",
-    },
 } as const;

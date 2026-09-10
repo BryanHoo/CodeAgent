@@ -23,8 +23,4 @@ export const agentSettings = {
         label: "输出详细程度", description: "选择新任务回复包含细节的详细程度，支持情况因模型而异。",
         default: "模型默认", low: "简洁", medium: "适中", high: "详细",
     },
-    reasoningSummary: {
-        label: "推理摘要", description: "选择智能体总结推理的方式，支持情况因模型而异。",
-        auto: "自动", concise: "简洁", detailed: "详细", none: "关闭",
-    },
 } as const;

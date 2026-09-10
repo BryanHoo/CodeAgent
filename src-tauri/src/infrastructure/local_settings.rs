@@ -13,7 +13,7 @@ use tokio::{fs, sync::Mutex};
 use crate::domain::agent_configuration::AgentRuntimeSettings;
 
 const SETTINGS_VERSION: u8 = 1;
-const GLOBAL_FIELDS: [&str; 14] = [
+const GLOBAL_FIELDS: [&str; 13] = [
     "approvalPolicy",
     "approvalsReviewer",
     "commitMessageModel",
@@ -25,7 +25,6 @@ const GLOBAL_FIELDS: [&str; 14] = [
     "modelVerbosity",
     "pet",
     "reasoningEffort",
-    "reasoningSummary",
     "sandboxMode",
     "webSearch",
 ];
@@ -156,15 +155,15 @@ async fn read_settings_file(app_data: &Path) -> Result<SettingsFile, LocalSettin
     if stored.version != SETTINGS_VERSION {
         return Err(LocalSettingsError::InvalidData);
     }
-    // 只补齐本次新增字段；保留已保存的偏好，其他缺失或未知字段仍由严格校验拒绝。
+    // 删除已下线字段，避免旧设置文件阻断其余偏好的读取。
     let global = stored
         .global
         .as_object_mut()
         .ok_or(LocalSettingsError::InvalidData)?;
+    global.remove("reasoningSummary");
     for (key, value) in [
         ("webSearch", json!("cached")),
         ("modelVerbosity", Value::Null),
-        ("reasoningSummary", json!("auto")),
     ] {
         global.entry(key).or_insert(value);
     }
@@ -216,7 +215,6 @@ fn default_global_settings() -> Value {
         "modelVerbosity": null,
         "pet": {"enabled": false, "selectedPetId": null},
         "reasoningEffort": "high",
-        "reasoningSummary": "auto",
         "sandboxMode": "workspace-write",
         "webSearch": "cached",
     })
@@ -248,10 +246,6 @@ fn validate_global_settings(settings: &Value) -> Result<(), LocalSettingsError> 
         && matches!(
             settings.get("webSearch").and_then(Value::as_str),
             Some("disabled" | "cached" | "live")
-        )
-        && matches!(
-            settings.get("reasoningSummary").and_then(Value::as_str),
-            Some("auto" | "concise" | "detailed" | "none")
         )
         && (settings.get("modelVerbosity") == Some(&Value::Null)
             || matches!(

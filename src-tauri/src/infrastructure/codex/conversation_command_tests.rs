@@ -48,7 +48,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
                 assert_eq!(request["params"]["config"]["web_search"], "live");
                 assert_eq!(
                     request["params"]["config"]["model_reasoning_summary"],
-                    "detailed"
+                    "none"
                 );
                 assert_eq!(request["params"]["config"]["model_verbosity"], "high");
             }
@@ -74,7 +74,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
                 );
             }
             if method == "turn/start" {
-                assert_eq!(request["params"]["summary"], "detailed");
+                assert_eq!(request["params"]["summary"], "none");
                 assert_eq!(request["params"]["threadId"], "thread-a");
                 assert_eq!(request["params"]["input"][0]["text"], "修复测试");
                 assert_eq!(request["params"]["model"], "gpt-5.6-sol");
@@ -99,7 +99,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
     });
 
     let settings = serde_json::from_value(json!({
-        "webSearch": "live", "modelVerbosity": "high", "reasoningSummary": "detailed",
+        "webSearch": "live", "modelVerbosity": "high",
     }))
     .unwrap();
     let task = start_task(&connection, "project-a".to_owned(), None, &settings)

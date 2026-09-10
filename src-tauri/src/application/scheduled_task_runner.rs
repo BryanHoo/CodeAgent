@@ -6,7 +6,6 @@ use tokio::time::timeout;
 
 use crate::{
     domain::{
-        agent_configuration::AgentRuntimeSettings,
         conversation::{AgentPromptInput, AgentTaskSettings, AgentTurnOptions},
         scheduled_task::ScheduledTask,
     },
@@ -58,16 +57,7 @@ pub(crate) async fn start_turn_for_task(
                 .await
                 .map_err(AppError::from)?;
         }
-        return start_goal_turn(
-            &connection,
-            project_id,
-            task_id,
-            input,
-            options,
-            &settings,
-            state,
-        )
-        .await;
+        return start_goal_turn(&connection, project_id, task_id, input, options, state).await;
     }
     let mut response = codex::start_turn(
         &connection,
@@ -90,7 +80,6 @@ async fn start_goal_turn(
     task_id: &str,
     input: AgentPromptInput,
     options: AgentTurnOptions,
-    settings: &AgentRuntimeSettings,
     state: &AppState,
 ) -> Result<Value, AppError> {
     if !input.attachments.is_empty() || !input.skills.is_empty() {
@@ -98,7 +87,7 @@ async fn start_goal_turn(
     }
     let (waiter_id, turn_started) = state.register_turn_started(task_id).await;
     let result = async {
-        codex::update_thread_settings(connection, task_id, &options, settings)
+        codex::update_thread_settings(connection, task_id, &options)
             .await
             .map_err(AppError::from)?;
         codex::set_goal_objective(connection, task_id, &input.text)

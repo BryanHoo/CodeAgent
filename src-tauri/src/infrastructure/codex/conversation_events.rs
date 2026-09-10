@@ -11,6 +11,7 @@ use super::{
     conversation_advanced::{NativeGoal, map_native_goal},
     conversation_delta_events::map_delta_message,
     conversation_items::apply_transient_item_lifecycle,
+    conversation_items::is_reasoning_item,
     conversation_runtime_events::map_runtime_notification,
     sidebar::unix_seconds_to_rfc3339,
 };
@@ -32,6 +33,14 @@ pub fn map_server_message(
 ) -> Result<Option<Value>, ConnectionError> {
     // 带 id 的服务端请求由审批切片处理，不能误当成普通通知。
     if message.id.is_some() {
+        return Ok(None);
+    }
+    if matches!(
+        message.method.as_str(),
+        "item/reasoning/summaryTextDelta"
+            | "item/reasoning/summaryPartAdded"
+            | "item/reasoning/textDelta"
+    ) {
         return Ok(None);
     }
     let params: Value = serde_json::from_str(message.params.get())?;
@@ -75,23 +84,6 @@ pub fn map_server_message(
         "item/agentMessage/delta" => {
             delta_event(params_object, sequence, timestamp, "message.delta", None)?
         }
-        "item/reasoning/textDelta" => delta_event(
-            params_object,
-            sequence,
-            timestamp,
-            "reasoning.delta",
-            Some(json!({"field": "content"})),
-        )?,
-        "item/reasoning/summaryTextDelta" => delta_event(
-            params_object,
-            sequence,
-            timestamp,
-            "reasoning.delta",
-            Some(json!({
-                "field": "summary",
-                "sectionIndex": required_u64(params_object, "summaryIndex")?,
-            })),
-        )?,
         "item/commandExecution/outputDelta" => delta_event(
             params_object,
             sequence,
@@ -164,6 +156,9 @@ pub fn map_server_message(
                 .get("item")
                 .cloned()
                 .ok_or(ConnectionError::InvalidMessage)?;
+            if is_reasoning_item(&native_item) {
+                return Ok(None);
+            }
             let item_id = native_item
                 .as_object()
                 .and_then(|item| item.get("id"))

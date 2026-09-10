@@ -18,7 +18,7 @@ const sectionSearchKeys: Record<SettingsSectionId, readonly string[]> = {
   background: ["background.label", "background.bing", "background.custom", "background.blurLabel", "background.overlayOpacityLabel"],
   pets: ["pets.enabled", "pets.selectionLabel"],
   provider: ["provider.apiKey", "provider.baseUrl", "provider.models", "provider.official", "provider.custom"],
-  agent: ["fields.fastMode", "fields.model", "fields.reasoningEffort", "fields.approvalPolicy", "fields.sandbox", "agent.webSearch.label", "agent.modelVerbosity.label", "agent.reasoningSummary.label"],
+  agent: ["fields.fastMode", "fields.model", "fields.reasoningEffort", "fields.approvalPolicy", "fields.sandbox", "agent.webSearch.label", "agent.modelVerbosity.label"],
   commit: ["fields.commitModel", "fields.commitMessagePrompt", "fields.prompt"],
   about: ["about.codeagentVersion", "about.codexVersion", "about.update", "about.releaseNotes", "about.diagnostics"],
 };

@@ -130,19 +130,15 @@ async fn read_task_snapshot_should_map_native_thread_history() {
         "final_answer"
     );
     assert_eq!(
-        value["snapshot"]["turns"][0]["items"][2]["type"],
-        "reasoning"
-    );
-    assert_eq!(
-        value["snapshot"]["turns"][0]["items"][3]["command"],
+        value["snapshot"]["turns"][0]["items"][2]["command"],
         "pnpm check"
     );
     assert_eq!(
-        value["snapshot"]["turns"][0]["items"][4]["type"],
+        value["snapshot"]["turns"][0]["items"][3]["type"],
         "file_change"
     );
     assert_eq!(
-        value["snapshot"]["turns"][0]["items"][5]["name"],
+        value["snapshot"]["turns"][0]["items"][4]["name"],
         "docs/search"
     );
     assert_eq!(
@@ -334,14 +330,6 @@ fn sidebar_notifications_should_map_task_lifecycle() {
 fn runtime_notifications_should_map_visible_timeline_state() {
     let timestamp = "2025-01-01T00:00:00Z";
     let cases = [
-        (
-            "item/reasoning/summaryPartAdded",
-            json!({
-                "threadId": "thread-a", "turnId": "turn-a", "itemId": "reasoning-a",
-                "summaryIndex": 1
-            }),
-            "reasoning.delta",
-        ),
         (
             "model/rerouted",
             json!({

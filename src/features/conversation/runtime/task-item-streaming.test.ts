@@ -48,15 +48,6 @@ describe("streamed item reads", () => {
     expect(appended).toMatchObject({ text: "initial addition" });
   });
 
-  it("caches reasoning fields independently and preserves summary section boundaries", () => {
-    const store = createTaskItemStore({ id: "message", type: "reasoning", content: "raw", summary: "summary" });
-    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "content", delta: " next" } });
-    expect(store.read()).toMatchObject({ content: "raw next", summary: "summary" });
-    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "summary", delta: "section", sectionIndex: 1 } });
-    expect(store.read()).toMatchObject({ content: "raw next", summary: "summary\n\nsection" });
-    expect(store.readText()!.chunks.join("")).toBe("summary\n\nsection");
-  });
-
   it("appends plans across reads and retains accurate byte accounting", () => {
     const store = createTaskItemStore({ id: "message", type: "plan", text: "plan" });
     const bytes = store.getRetainedBytes();
@@ -67,17 +58,4 @@ describe("streamed item reads", () => {
     expect(store.getRetainedBytes() - bytes).toBe(11);
   });
 
-  it("tracks summary visibility across deltas and authoritative replacements", () => {
-    const initial = { id: "message", type: "reasoning", content: "", summary: "" } as const;
-    const store = createTaskItemStore(initial);
-    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "content", delta: "raw" } });
-    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "summary", delta: " \n", sectionIndex: 0 } });
-    expect(store.hasReasoningSummary()).toBe(false);
-    store.appendDelta({ ...delta(""), type: "reasoning.delta", payload: { field: "summary", delta: "Summary", sectionIndex: 0 } });
-    expect(store.hasReasoningSummary()).toBe(true);
-    store.replace(initial);
-    expect(store.hasReasoningSummary()).toBe(false);
-    store.replace({ ...initial, summary: "Final summary" });
-    expect(store.hasReasoningSummary()).toBe(true);
-  });
 });

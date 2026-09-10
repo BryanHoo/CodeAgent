@@ -90,7 +90,6 @@ html[data-app-surface="task-window"] #root { padding: 6px; }
 .task-window-markdown--rule { min-height: 1px; border: 0; border-top: 1px solid var(--ui-color-separator-strong); }
 .task-window-markdown--table { font-size: 11px; border-bottom: 1px solid var(--ui-color-separator-strong); }
 .task-window-link { color: var(--ui-color-accent); }
-.task-window-markdown.is-reasoning { color: var(--ui-color-text-muted); font-size: 11px; }
 .task-window-operation {
   display: flex;
   align-items: center;

@@ -31,7 +31,7 @@ const OutputContent = memo(function OutputContent({ item, labels }: Readonly<{ i
   }
   const block = item.block;
   const text = <InlineText runs={block.runs} />;
-  const className = `task-window-markdown task-window-markdown--${block.kind}${block.continuation ? " is-continuation" : ""}${item.kind === "reasoning" ? " is-reasoning" : ""}`;
+  const className = `task-window-markdown task-window-markdown--${block.kind}${block.continuation ? " is-continuation" : ""}`;
   if (block.kind === "heading") return createElement(`h${block.level ?? 3}`, { className }, text);
   if (block.kind === "quote") return <blockquote className={className}>{text}</blockquote>;
   if (block.kind === "rule") return <hr className={className} />;
@@ -46,7 +46,7 @@ export function TaskWindowOutput({ rows, labels, empty }: Readonly<{ rows: reado
     const next = new Map<TaskWindowRow, readonly OutputBlock[]>();
     const result = rows.flatMap((row) => {
       const parsed = cache.current.get(row) ?? (
-        ["message", "reasoning", "plan"].includes(row.kind)
+        ["message", "plan"].includes(row.kind)
           ? parseTaskWindowMarkdown(row.text).map((block, index) => ({ key: `${row.id}:${index}`, kind: row.kind, block }))
           : [{ key: row.id, kind: row.kind, text: row.text.replace(/\s+/g, " ") }]
       );

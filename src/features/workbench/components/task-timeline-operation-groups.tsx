@@ -25,10 +25,6 @@ function isTimelineOperation(item: AgentItem | undefined): item is TimelineOpera
   return item?.type === "command" || item?.type === "file_change" || item?.type === "tool";
 }
 
-function isHiddenReasoning(item: AgentItem | undefined): boolean {
-  return item?.type === "reasoning" && item.summary.trim().length === 0;
-}
-
 export function groupConsecutiveTimelineOperations(
   itemKeys: readonly string[],
   getItem: (itemKey: string) => AgentItem | undefined,
@@ -55,10 +51,6 @@ export function groupConsecutiveTimelineOperations(
 
   for (const itemKey of itemKeys) {
     const item = getItem(itemKey);
-    // 空 reasoning 没有可见内容，直接过滤并保持两侧操作连续。
-    if (isHiddenReasoning(item)) {
-      continue;
-    }
     if (isTimelineOperation(item)) {
       operationKeys.push(itemKey);
       // 一个 file_change Item 可包含多行文件操作，按实际可见行决定是否聚合。

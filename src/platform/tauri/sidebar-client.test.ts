@@ -460,7 +460,6 @@ describe("TauriSidebarClient", () => {
       followUpBehavior: "queue",
       webSearch: "cached",
       modelVerbosity: null,
-      reasoningSummary: "auto",
       model: "gpt-5.6-sol",
       pet: { enabled: false, selectedPetId: null },
       reasoningEffort: "high",

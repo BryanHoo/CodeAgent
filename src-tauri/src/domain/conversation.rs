@@ -221,12 +221,6 @@ pub enum AgentItem {
         skills: Option<Vec<Value>>,
         text: String,
     },
-    #[serde(rename = "reasoning")]
-    Reasoning {
-        content: String,
-        id: String,
-        summary: String,
-    },
     #[serde(rename = "command")]
     Command {
         command: String,

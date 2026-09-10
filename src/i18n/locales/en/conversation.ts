@@ -332,8 +332,6 @@ export const conversation = {
       strict_review_required: "Strict review required",
       strictReviewRequired: "Safety review was escalated; this action will continue after review",
     },
-    reasoning: "Reasoning summary",
-    reasoningStreaming: "Reasoning",
     runtimeStatus: {
       duration: "Completed in {{duration}} ms",
       fasterModel: "A faster model is available: {{model}}",

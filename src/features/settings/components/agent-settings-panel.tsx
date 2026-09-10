@@ -8,7 +8,6 @@ import { applyApprovalMode, deriveApprovalMode, resolveGlobalSettingsModel, type
 const runtimeFields = [
   { key: "webSearch", options: ["disabled", "cached", "live"] },
   { key: "modelVerbosity", options: ["", "low", "medium", "high"] },
-  { key: "reasoningSummary", options: ["auto", "concise", "detailed", "none"] },
 ] as const;
 
 export function AgentSettingsPanel({ settings, models, fastModeAvailable, onChange }: Readonly<{

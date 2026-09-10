@@ -27,17 +27,13 @@ async fn agent_configuration_should_validate_and_persist_runtime_preferences() {
     let mut settings = read_global_settings(&root).await.unwrap();
     assert_eq!(settings["webSearch"], "cached");
     assert_eq!(settings["modelVerbosity"], serde_json::Value::Null);
-    assert_eq!(settings["reasoningSummary"], "auto");
+    assert!(settings.get("reasoningSummary").is_none());
     settings["webSearch"] = json!("live");
     settings["modelVerbosity"] = json!("high");
-    settings["reasoningSummary"] = json!("detailed");
     let result = update_global_settings(&root, settings.clone())
         .await
         .unwrap();
-    assert_eq!(
-        result.changed_fields,
-        ["modelVerbosity", "reasoningSummary", "webSearch"]
-    );
+    assert_eq!(result.changed_fields, ["modelVerbosity", "webSearch"]);
     assert_eq!(read_global_settings(&root).await.unwrap(), settings);
     let runtime = read_agent_runtime_settings(&root).await.unwrap();
     assert_eq!(serde_json::to_value(runtime.web_search).unwrap(), "live");
@@ -45,11 +41,7 @@ async fn agent_configuration_should_validate_and_persist_runtime_preferences() {
         serde_json::to_value(runtime.model_verbosity).unwrap(),
         "high"
     );
-    assert_eq!(
-        serde_json::to_value(runtime.reasoning_summary).unwrap(),
-        "detailed"
-    );
-    for key in ["webSearch", "modelVerbosity", "reasoningSummary"] {
+    for key in ["webSearch", "modelVerbosity"] {
         let mut invalid = settings.clone();
         invalid[key] = json!("invalid");
         assert!(update_global_settings(&root, invalid).await.is_err());
@@ -104,9 +96,10 @@ async fn settings_should_add_runtime_defaults_without_losing_saved_preferences()
     let root = test_root();
     let mut global = read_global_settings(&root).await.unwrap();
     global["model"] = json!("saved-model");
-    for key in ["webSearch", "modelVerbosity", "reasoningSummary"] {
+    for key in ["webSearch", "modelVerbosity"] {
         global.as_object_mut().unwrap().remove(key);
     }
+    global["reasoningSummary"] = json!("detailed");
     let project = read_project_defaults(&root, "project-a").await.unwrap();
     fs::create_dir_all(&root).unwrap();
     fs::write(
@@ -120,7 +113,7 @@ async fn settings_should_add_runtime_defaults_without_losing_saved_preferences()
     let migrated = read_global_settings(&root).await.unwrap();
     assert_eq!(migrated["model"], "saved-model");
     assert_eq!(migrated["webSearch"], "cached");
-    assert_eq!(migrated["reasoningSummary"], "auto");
+    assert!(migrated.get("reasoningSummary").is_none());
     assert_eq!(
         read_project_defaults(&root, "project-a").await.unwrap(),
         project

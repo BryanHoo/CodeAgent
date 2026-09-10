@@ -95,11 +95,7 @@ async fn goal_start_should_persist_settings_before_setting_objective() {
     });
 
     let options = crate::domain::conversation::AgentTurnOptions::default();
-    let settings = crate::domain::agent_configuration::AgentRuntimeSettings {
-        reasoning_summary: crate::domain::agent_configuration::ReasoningSummary::None,
-        ..Default::default()
-    };
-    update_thread_settings(&connection, "thread-a", &options, &settings)
+    update_thread_settings(&connection, "thread-a", &options)
         .await
         .expect("thread settings should persist");
     let goal = set_goal_objective(&connection, "thread-a", "持续完成迁移")

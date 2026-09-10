@@ -1,26 +1,56 @@
+use serde_json::value::to_raw_value;
 use serde_json::{Value, json, to_value};
 
-use super::conversation::map_item;
-
-#[test]
-fn reasoning_summary_should_preserve_markdown_section_boundaries() {
-    let item = map_item(json!({
-        "id": "reasoning-a", "type": "reasoning", "content": [],
-        "summary": ["**Checking files**", "**Checking tests**\n\nComplete details."]
-    }))
-    .unwrap();
-
-    assert_eq!(
-        to_value(item).unwrap()["summary"],
-        "**Checking files**\n\n**Checking tests**\n\nComplete details."
-    );
-}
+use super::{
+    connection::ServerMessage, conversation::map_item, conversation_events::map_server_message,
+};
 
 fn absolute_test_path(name: &str) -> String {
     std::env::temp_dir()
         .join(name)
         .to_string_lossy()
         .into_owned()
+}
+
+#[test]
+fn reasoning_notifications_should_be_ignored() {
+    let reasoning = json!({
+        "id": "reasoning-a", "type": "reasoning", "summary": ["hidden"], "content": []
+    });
+    for (method, params) in [
+        (
+            "item/reasoning/summaryTextDelta",
+            json!({"threadId": "thread-a", "turnId": "turn-a", "itemId": "reasoning-a", "delta": "hidden", "summaryIndex": 0}),
+        ),
+        (
+            "item/reasoning/textDelta",
+            json!({"threadId": "thread-a", "turnId": "turn-a", "itemId": "reasoning-a", "delta": "hidden", "contentIndex": 0}),
+        ),
+        (
+            "item/reasoning/summaryPartAdded",
+            json!({"threadId": "thread-a", "turnId": "turn-a", "itemId": "reasoning-a", "summaryIndex": 0}),
+        ),
+        (
+            "item/started",
+            json!({"threadId": "thread-a", "turnId": "turn-a", "item": reasoning.clone()}),
+        ),
+        (
+            "item/completed",
+            json!({"threadId": "thread-a", "turnId": "turn-a", "item": reasoning}),
+        ),
+    ] {
+        let event = map_server_message(
+            ServerMessage {
+                id: None,
+                method: method.to_owned(),
+                params: to_raw_value(&params).unwrap(),
+            },
+            1,
+            "2025-01-01T00:00:00Z",
+        )
+        .unwrap();
+        assert!(event.is_none(), "{method} should be filtered");
+    }
 }
 
 #[test]
