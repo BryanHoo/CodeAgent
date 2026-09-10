@@ -81,18 +81,27 @@ pub async fn configure_custom_provider(
 }
 
 #[tauri::command]
-pub async fn get_global_settings(app: AppHandle) -> Result<Value, AppError> {
-    let settings = local_settings::read_global_settings(&app_data_dir(&app)?)
+pub async fn get_global_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Value, AppError> {
+    let connection = state.codex_connection().await?;
+    let settings = codex::read_global_settings(&connection, &app_data_dir(&app)?)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     Ok(json!({"settings": settings}))
 }
 
 #[tauri::command]
-pub async fn update_global_settings(app: AppHandle, settings: Value) -> Result<Value, AppError> {
-    let update = local_settings::update_global_settings(&app_data_dir(&app)?, settings)
+pub async fn update_global_settings(
+    app: AppHandle,
+    settings: Value,
+    state: State<'_, AppState>,
+) -> Result<Value, AppError> {
+    let connection = state.codex_connection().await?;
+    let update = codex::update_global_settings(&connection, &app_data_dir(&app)?, settings)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     Ok(json!({
         "changedFields": update.changed_fields,
         "settings": update.settings,
@@ -122,10 +131,10 @@ pub async fn get_project_defaults(
     project_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    validate_project(&state, &project_id).await?;
-    let settings = local_settings::read_project_defaults(&app_data_dir(&app)?, &project_id)
+    let (connection, _) = validate_project(&state, &project_id).await?;
+    let settings = codex::read_project_defaults(&connection, &app_data_dir(&app)?, &project_id)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     Ok(json!({"settings": settings}))
 }
 

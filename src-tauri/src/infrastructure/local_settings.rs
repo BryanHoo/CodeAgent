@@ -10,10 +10,8 @@ use serde_json::{Value, json};
 use thiserror::Error;
 use tokio::{fs, sync::Mutex};
 
-use crate::domain::agent_configuration::AgentRuntimeSettings;
-
 const SETTINGS_VERSION: u8 = 1;
-const GLOBAL_FIELDS: [&str; 13] = [
+pub(crate) const GLOBAL_FIELDS: [&str; 13] = [
     "approvalPolicy",
     "approvalsReviewer",
     "commitMessageModel",
@@ -27,6 +25,13 @@ const GLOBAL_FIELDS: [&str; 13] = [
     "reasoningEffort",
     "sandboxMode",
     "webSearch",
+];
+const LOCAL_FIELDS: [&str; 5] = [
+    "commitMessageModel",
+    "commitMessagePrompt",
+    "defaultOpenAppId",
+    "followUpBehavior",
+    "pet",
 ];
 const PROJECT_FIELDS: [&str; 6] = [
     "approvalPolicy",
@@ -78,14 +83,6 @@ pub async fn read_global_settings(app_data: &Path) -> Result<Value, LocalSetting
     Ok(read_settings_file(app_data).await?.global)
 }
 
-pub async fn read_agent_runtime_settings(
-    app_data: &Path,
-) -> Result<AgentRuntimeSettings, LocalSettingsError> {
-    Ok(serde_json::from_value(
-        read_global_settings(app_data).await?,
-    )?)
-}
-
 pub async fn update_global_settings(
     app_data: &Path,
     settings: Value,
@@ -93,7 +90,7 @@ pub async fn update_global_settings(
     validate_global_settings(&settings)?;
     let _guard = SETTINGS_LOCK.lock().await;
     let mut stored = read_settings_file(app_data).await?;
-    let changed_fields = changed_fields(&stored.global, &settings, &GLOBAL_FIELDS);
+    let changed_fields = changed_fields(&stored.global, &settings, &LOCAL_FIELDS);
     if !changed_fields.is_empty() {
         stored.global = settings.clone();
         write_settings_file(app_data, &stored).await?;
@@ -107,15 +104,11 @@ pub async fn update_global_settings(
 pub async fn read_project_defaults(
     app_data: &Path,
     project_id: &str,
-) -> Result<Value, LocalSettingsError> {
+) -> Result<Option<Value>, LocalSettingsError> {
     validate_identifier(project_id)?;
     let _guard = SETTINGS_LOCK.lock().await;
     let stored = read_settings_file(app_data).await?;
-    Ok(stored
-        .projects
-        .get(project_id)
-        .cloned()
-        .unwrap_or_else(|| project_defaults_from_global(&stored.global)))
+    Ok(stored.projects.get(project_id).cloned())
 }
 
 pub async fn update_project_defaults(
@@ -131,7 +124,7 @@ pub async fn update_project_defaults(
         .projects
         .get(project_id)
         .cloned()
-        .unwrap_or_else(|| project_defaults_from_global(&stored.global));
+        .unwrap_or(Value::Null);
     let changed_fields = changed_fields(&current, &settings, &PROJECT_FIELDS);
     if !changed_fields.is_empty() {
         stored
@@ -155,18 +148,18 @@ async fn read_settings_file(app_data: &Path) -> Result<SettingsFile, LocalSettin
     if stored.version != SETTINGS_VERSION {
         return Err(LocalSettingsError::InvalidData);
     }
-    // 删除已下线字段，避免旧设置文件阻断其余偏好的读取。
-    let global = stored
+    // 本地文件只提供应用偏好；智能体默认值统一由 Codex 配置读取，旧值不再参与回退。
+    let local = stored
         .global
-        .as_object_mut()
+        .as_object()
         .ok_or(LocalSettingsError::InvalidData)?;
-    global.remove("reasoningSummary");
-    for (key, value) in [
-        ("webSearch", json!("cached")),
-        ("modelVerbosity", Value::Null),
-    ] {
-        global.entry(key).or_insert(value);
+    let mut global = default_global_settings();
+    for key in LOCAL_FIELDS {
+        if let Some(value) = local.get(key) {
+            global[key] = value.clone();
+        }
     }
+    stored.global = global;
     validate_global_settings(&stored.global)?;
     for (project_id, settings) in &stored.projects {
         validate_identifier(project_id)?;
@@ -186,7 +179,19 @@ async fn write_settings_file(
         std::process::id(),
         TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed)
     ));
-    fs::write(&temporary, serde_json::to_vec(settings)?).await?;
+    let local: serde_json::Map<String, Value> = LOCAL_FIELDS
+        .iter()
+        .map(|key| ((*key).to_owned(), settings.global[*key].clone()))
+        .collect();
+    fs::write(
+        &temporary,
+        serde_json::to_vec(&json!({
+            "global": local,
+            "projects": settings.projects,
+            "version": settings.version,
+        }))?,
+    )
+    .await?;
     if let Err(error) = super::app_storage::replace_file_atomic(&temporary, &target).await {
         let _ = fs::remove_file(&temporary).await;
         return Err(error.into());
@@ -194,7 +199,7 @@ async fn write_settings_file(
     Ok(())
 }
 
-fn changed_fields(current: &Value, next: &Value, fields: &[&str]) -> Vec<String> {
+pub(crate) fn changed_fields(current: &Value, next: &Value, fields: &[&str]) -> Vec<String> {
     fields
         .iter()
         .filter(|field| current.get(**field) != next.get(**field))
@@ -202,7 +207,7 @@ fn changed_fields(current: &Value, next: &Value, fields: &[&str]) -> Vec<String>
         .collect()
 }
 
-fn default_global_settings() -> Value {
+pub(crate) fn default_global_settings() -> Value {
     json!({
         "approvalPolicy": "on-request",
         "approvalsReviewer": "user",
@@ -220,7 +225,7 @@ fn default_global_settings() -> Value {
     })
 }
 
-fn project_defaults_from_global(global: &Value) -> Value {
+pub(crate) fn project_defaults_from_global(global: &Value) -> Value {
     json!({
         "approvalPolicy": global["approvalPolicy"],
         "approvalsReviewer": global["approvalsReviewer"],
@@ -231,7 +236,7 @@ fn project_defaults_from_global(global: &Value) -> Value {
     })
 }
 
-fn validate_global_settings(settings: &Value) -> Result<(), LocalSettingsError> {
+pub(crate) fn validate_global_settings(settings: &Value) -> Result<(), LocalSettingsError> {
     validate_exact_fields(settings, &GLOBAL_FIELDS)?;
     validate_common_settings(settings, false)?;
     required_string(settings, "commitMessageModel", 256)?;

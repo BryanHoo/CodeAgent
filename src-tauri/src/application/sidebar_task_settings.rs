@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager};
 use super::error::AppError;
 use crate::{
     domain::conversation::AgentTaskSettings,
-    infrastructure::{local_settings, task_settings::read_task_settings},
+    infrastructure::{codex, task_settings::read_task_settings},
 };
 
 pub(super) async fn effective_task_settings(
@@ -23,9 +23,13 @@ pub(super) async fn effective_task_settings(
     }
 
     // 未配置 Task 专属设置时回退项目默认值，并在进入运行时前验证完整性。
-    let settings = local_settings::read_project_defaults(&app_data, project_id)
+    let connection = app
+        .state::<super::state::AppState>()
+        .codex_connection()
+        .await?;
+    let settings = codex::read_project_defaults(&connection, &app_data, project_id)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     let settings: AgentTaskSettings =
         serde_json::from_value(settings).map_err(|_| AppError::FilesystemRequestFailed)?;
     if settings.is_valid() {

@@ -121,6 +121,17 @@ impl From<ConnectionError> for AppError {
     }
 }
 
+impl From<crate::infrastructure::codex::AgentSettingsError> for AppError {
+    fn from(error: crate::infrastructure::codex::AgentSettingsError) -> Self {
+        match error {
+            crate::infrastructure::codex::AgentSettingsError::Connection(error) => error.into(),
+            crate::infrastructure::codex::AgentSettingsError::Local(_) => {
+                Self::FilesystemRequestFailed
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

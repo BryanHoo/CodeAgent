@@ -18,6 +18,14 @@
 - Project 任务列表必须使用 `thread/list` 的 `recency_at` 倒序；Codex 在 `TurnStarted` 时单调推进该字段，确保用户再次发送消息后任务回到左栏首位
 - `project/list` 接受项目的 `recencyAt` 字段，但不得请求 `recencyAt` 排序，产品顺序继续由 `position` 决定
 
+## 智能体默认设置
+
+- 智能体默认值通过不带 `cwd` 的 `config/read` 读取，通过 `config/batchWrite` 写入用户全局 `config.toml`，由 Codex 解析 `CODEX_HOME`；写入启用 `reloadUserConfig`，只提交变化的标准键
+- 模型、推理强度、审批策略、审核方、沙箱、网页搜索和输出详细程度分别映射标准配置键；快速模式读取 `fast` / `priority`，启用写入 `priority`，关闭写入 `default`；空详细程度使用 `null` 删除覆盖
+- `agent-settings.json` 只持久化应用专属偏好及按项目隔离的覆盖值，不再读取旧智能体全局字段；项目未保存覆盖值时继承最新 Codex 全局默认值，显式保存后不随全局值改变
+- 普通任务和计划任务的运行参数共用 Codex 全局配置读取；项目覆盖读取不触发全局写入，Codex 写入失败不得继续保存应用偏好
+- 验证配置键映射、变更批写、失败传播、空值删除、快速模式及项目覆盖隔离；运行 `pnpm check:rust`
+
 ## Provider 配置
 
 - Codex `config.toml` 只写入标准 Provider 字段：内置 OpenAI 覆盖使用 `openai_base_url`，自定义 Provider 使用 `model_provider` 与 `model_providers.<id>`

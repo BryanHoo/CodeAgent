@@ -1,3 +1,6 @@
+mod agent_settings;
+#[cfg(test)]
+mod agent_settings_tests;
 mod auth;
 mod catalogs;
 mod commit_message;
@@ -86,6 +89,10 @@ mod conversation_tests;
 #[path = "runtime_manager_tests.rs"]
 mod runtime_manager_tests;
 
+pub use agent_settings::{
+    AgentSettingsError, read_agent_runtime_settings, read_global_settings, read_project_defaults,
+    update_global_settings,
+};
 pub use auth::{
     ProviderError, cancel_provider_login, configure_custom_provider, get_provider_connection,
     list_provider_models, logout_provider, start_official_provider_login,

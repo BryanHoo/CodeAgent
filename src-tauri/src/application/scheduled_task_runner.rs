@@ -9,9 +9,7 @@ use crate::{
         conversation::{AgentPromptInput, AgentTaskSettings, AgentTurnOptions},
         scheduled_task::ScheduledTask,
     },
-    infrastructure::{
-        codex, local_settings::read_agent_runtime_settings, task_settings::write_task_settings,
-    },
+    infrastructure::{codex, task_settings::write_task_settings},
 };
 
 use super::{error::AppError, sidebar_prompt_title::prompt_task_title, state::AppState};
@@ -33,9 +31,9 @@ pub(crate) async fn start_turn_for_task(
         .await?;
     let connection = state.codex_connection().await?;
     // 在后端读取最新偏好，普通任务和计划任务共用，不增加 WebView 的逐轮传输字段。
-    let settings = read_agent_runtime_settings(&app_data)
+    let settings = codex::read_agent_runtime_settings(&connection)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(AppError::from)?;
     // App Server 可能先推送 turn/started，再返回响应，必须提前建立事件归属。
     state.remember_tasks(project_id, [task_id]).await;
     if let Some(task_title) = prompt_task_title(&input) {

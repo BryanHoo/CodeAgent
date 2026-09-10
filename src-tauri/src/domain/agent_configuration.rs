@@ -17,7 +17,7 @@ pub enum ModelVerbosity {
     High,
 }
 
-/// 从应用全局偏好提取运行参数，不混入项目级或任务级持久化设置。
+/// 从 Codex 全局配置提取运行参数，不混入项目级或任务级持久化设置。
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRuntimeSettings {
