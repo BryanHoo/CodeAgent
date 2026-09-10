@@ -104,7 +104,7 @@ void test("bundled releases should publish signed updater artifacts", async () =
   assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY \}\}/);
   assert.match(workflow, /uploadUpdaterJson: \$\{\{ matrix\.uploadUpdaterArtifacts \}\}/);
   assert.match(workflow, /uploadUpdaterSignatures: \$\{\{ matrix\.uploadUpdaterArtifacts \}\}/);
-  assert.match(workflow, /prerelease: false/);
+  assert.ok(workflow.includes("prerelease: ${{ contains(steps.build-version.outputs.version, '-') }}"));
 });
 
 void test("Tauri should use signed GitHub release metadata", async () => {
