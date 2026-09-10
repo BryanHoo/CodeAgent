@@ -174,39 +174,24 @@ export function useComposerQueue({
 
   const editQueuedPrompt = async (queuedPrompt: QueuedComposerPrompt) => {
     const editablePrompt = resolveQueuedPromptEdit(queuedPrompt);
-    if (editablePrompt === undefined) {
+    if (
+      editablePrompt === undefined ||
+      taskId === undefined ||
+      queuedPrompt.status !== "queued"
+    ) {
       return;
     }
     const content = createPromptSkillContentFromSubmission(
       editablePrompt.text,
       editablePrompt.skills,
     );
-    if (taskId === undefined || queuedPrompt.status !== "queued") {
-      return;
-    }
-    const updateRequest = client.updateQueuedSubmission(
-      projectId,
-      taskId,
-      queuedPrompt.id,
-      {
-        attachments: editablePrompt.files.flatMap((file) =>
-          file.source === "host" ? [file.attachment] : [],
-        ),
-        skills: editablePrompt.skills.map(({ id, name }) => ({ id, name })),
-        text: editablePrompt.text,
-        type: "prompt",
-      },
-      "editing",
-      { idempotencyKey: createUuid() },
-    );
-    // 首次 await 前同步回填，禁止慢请求在用户开始输入后用旧内容覆盖草稿。
+    // 先撤回服务端排队项，确保旧附件不再与编辑中的草稿共享生命周期。
+    await removeQueuedPrompt(queuedPrompt.id);
     replacePromptContent(content, serializePromptSkillContent(content).length);
     handleAttachmentsChange(editablePrompt.files);
     requestAnimationFrame(() => {
       skillEditorRef.current?.focus(serializePromptSkillContent(content).length);
     });
-    await updateRequest;
-    await invalidateQueue();
   };
 
   const onSteerAccepted = (accepted: AcceptedSteerPrompt) => {
