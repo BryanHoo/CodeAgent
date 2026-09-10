@@ -24,6 +24,11 @@ export function useWorkbenchBackgroundDraft() {
   const [loadVersion, reload] = useState(0);
 
   useEffect(() => {
+    // 无背景和 Bing 模式不读取自定义图库，切换模式时取消过期加载结果。
+    if (background.mode !== "custom") {
+      setLoading(false);
+      return;
+    }
     let disposed = false;
     setLoading(true);
     setLoadError(false);
@@ -37,7 +42,7 @@ export function useWorkbenchBackgroundDraft() {
       if (!disposed) setLoading(false);
     });
     return () => { disposed = true; };
-  }, [loadVersion]);
+  }, [background.mode, loadVersion]);
 
   const setBackground = useCallback((next: WorkbenchBackgroundPreference) => {
     backgroundRef.current = next;

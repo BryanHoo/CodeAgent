@@ -24,19 +24,24 @@ function imageFixture(): string {
   return canvas.toDataURL();
 }
 
-function Harness({ onChange = () => undefined, disabled = false }: Readonly<{ onChange?: (value: WorkbenchBackgroundPreference) => void; disabled?: boolean }>) {
+function Harness({ onChange = () => undefined, disabled = false, mode = "bing" }: Readonly<{ onChange?: (value: WorkbenchBackgroundPreference) => void; disabled?: boolean; mode?: WorkbenchBackgroundPreference["mode"] }>) {
   const { t } = useTranslation("settings");
-  const [preference, setPreference] = useState({ ...DEFAULT_WORKBENCH_BACKGROUND, mode: "bing" as const } as WorkbenchBackgroundPreference);
-  return <div style={{ height: "100dvh" }}><SettingsPageFrame activeSection="background" onBack={() => undefined} onSectionChange={() => undefined}>
-    <h1 className="mb-6 text-xl font-semibold">{t("sections.background")}</h1>
+  const [preference, setPreference] = useState({ ...DEFAULT_WORKBENCH_BACKGROUND, mode } as WorkbenchBackgroundPreference);
+  return <div style={{ height: "100dvh" }}><SettingsPageFrame activeSection="appearance" onBack={() => undefined} onSectionChange={() => undefined}>
+    <h1 className="mb-6 text-xl font-semibold">{t("sections.appearance")}</h1>
     <WorkbenchBackgroundSettings preference={preference} onPreferenceChange={(next) => { setPreference(next); onChange(next); }} disabled={disabled} customImages={[]} onCustomFilesAdd={() => undefined} onCustomImageRemove={() => undefined} onCustomImageSelect={() => undefined} />
   </SettingsPageFrame></div>;
 }
 
-async function setup(props: Parameters<typeof Harness>[0] = {}) {
+async function setup(props: Parameters<typeof Harness>[0] = {}, openPicker = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const screen = await render(<I18nextProvider i18n={i18n}><QueryClientProvider client={client}><TooltipProvider><Harness {...props} /></TooltipProvider></QueryClientProvider></I18nextProvider>);
-  await expect.element(screen.getByRole("button", { name: "使用 2026-09-01", exact: true })).toBeVisible();
+  if (openPicker) {
+    await screen.getByRole("button", { name: "选择图片", exact: true }).click();
+    await vi.waitFor(() => {
+      if (!screen.getByRole("button", { name: "使用 2026-09-01", exact: true }).query()) throw new Error("Gallery is loading");
+    });
+  }
   return screen;
 }
 
@@ -64,20 +69,22 @@ describe("wallpaper settings", () => {
     const onChange = vi.fn();
     const screen = await setup({ onChange });
     await screen.getByRole("button", { name: "预览 2026-09-01", exact: true }).click();
-    await expect.element(screen.getByRole("dialog")).toBeVisible();
-    await expect.element(screen.getByRole("dialog").getByRole("img")).toBeVisible();
+    await expect.element(screen.getByRole("dialog").last()).toBeVisible();
+    await expect.element(screen.getByRole("dialog").last().getByRole("img")).toBeVisible();
     await screen.getByRole("button", { name: "下载原图", exact: true }).click();
     expect(native.downloadWorkbenchBackground).toHaveBeenCalledWith("2026-09-01");
     expect(onChange).not.toHaveBeenCalled();
     await userEvent.keyboard("{Escape}");
-    await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
+    await expect.poll(() => screen.getByRole("dialog").all().length).toBe(1);
   });
 
   it("keeps sliders responsive while image mutations are busy and resets appearance", async () => {
     const onChange = vi.fn();
-    const screen = await setup({ onChange, disabled: true });
+    const screen = await setup({ onChange, disabled: true }, false);
     const slider = screen.getByRole("slider").first();
     await expect.element(slider).toBeEnabled();
+    expect(native.listWorkbenchBackgrounds).not.toHaveBeenCalled();
+    await page.screenshot({ path: "../../../../test-results/background-bing-summary.png" });
     (slider.element() as HTMLElement).focus();
     await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ overlayOpacity: 63 }));
@@ -86,13 +93,21 @@ describe("wallpaper settings", () => {
   });
 
   it("hides adjustments without a wallpaper and never renders an effect preview", async () => {
-    const screen = await setup();
+    const screen = await setup({ mode: "none" }, false);
     expect(document.querySelector(".wallpaper-preview")).toBeNull();
-    expect(native.getWorkbenchBackground.mock.calls.every((call) => call[1] === true)).toBe(true);
-    await screen.getByRole("button", { name: "无工作台背景", exact: true }).click();
+    expect(native.getWorkbenchBackground).not.toHaveBeenCalled();
+    expect(native.listWorkbenchBackgrounds).not.toHaveBeenCalled();
     expect(screen.getByRole("slider").all()).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "选择图片", exact: true }).all()).toHaveLength(0);
+    expect(document.querySelector(".wallpaper-settings")!.getBoundingClientRect().height).toBeLessThan(80);
     await screen.getByRole("button", { name: "自定义工作台背景", exact: true }).click();
     expect(screen.getByRole("slider").all()).toHaveLength(2);
+    await expect.element(screen.getByRole("button", { name: "选择图片", exact: true })).toBeVisible();
+    await page.screenshot({ path: "../../../../test-results/background-custom-summary.png" });
+    await screen.getByRole("button", { name: "选择图片", exact: true }).click();
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("renders nonblank gallery images across desktop viewports and themes", async () => {
@@ -103,9 +118,11 @@ describe("wallpaper settings", () => {
         await page.viewport(width, height);
         for (const theme of ["light", "dark"]) {
           document.documentElement.dataset.theme = theme;
-          const main = screen.getByRole("main").element();
+          document.getAnimations().forEach((animation) => animation.finish());
+          const main = screen.getByRole("dialog").element();
           main.scrollTo(0, 0);
           expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth);
+          expect(main.getBoundingClientRect().height).toBeLessThanOrEqual(height - 64);
           await page.screenshot({ path: `../../../../test-results/wallpaper-${theme}-${width}.png` });
           expect(document.querySelector<HTMLImageElement>(".wallpaper-thumbnail img")!.naturalWidth).toBeGreaterThan(0);
         }
@@ -120,10 +137,10 @@ describe("wallpaper settings", () => {
     });
     const screen = await setup();
     await screen.getByRole("button", { name: "预览 2026-09-01", exact: true }).click();
-    await expect.element(screen.getByRole("dialog").getByRole("alert")).toHaveTextContent("图片无法预览");
+    await expect.element(screen.getByRole("dialog").last().getByRole("alert")).toHaveTextContent("图片无法预览");
     native.getWorkbenchBackground.mockResolvedValue({ assetPath: imageFixture() });
-    await screen.getByRole("dialog").getByRole("button", { name: "重新加载" }).click();
-    await expect.element(screen.getByRole("dialog").getByRole("img")).toBeVisible();
+    await screen.getByRole("dialog").last().getByRole("button", { name: "重新加载" }).click();
+    await expect.element(screen.getByRole("dialog").last().getByRole("img")).toBeVisible();
   });
 
   it("keeps English controls inside the narrow desktop layout", async () => {
@@ -131,7 +148,8 @@ describe("wallpaper settings", () => {
     try {
       await i18n.changeLanguage("en");
       await page.viewport(1280, 720);
-      const main = screen.getByRole("main").element();
+      document.getAnimations().forEach((animation) => animation.finish());
+      const main = screen.getByRole("dialog").element();
       main.scrollTo(0, 0);
       expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth);
       await expect.element(screen.getByRole("checkbox", { name: "Update daily" })).toBeVisible();

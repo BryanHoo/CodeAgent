@@ -1,25 +1,14 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Check, Download, LoaderCircle, Maximize2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import type { BingWallpaper } from "../../../protocol/workbench-background.js";
-import { buildNativeAssetUrl } from "../../../platform/native-asset-url.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { nativeClient } from "../../projects/project-queries.js";
 import { notifyActionError, notifyActionSuccess } from "../../notifications/action-notifications.js";
 import type { WorkbenchBackgroundPreference } from "../workbench-background-preference.js";
-import { WallpaperAction, WallpaperAdjustments, WallpaperImageDialog } from "./wallpaper-controls.js";
-
-export function bingImageQuery(day: string | undefined, thumbnail: boolean) {
-  return queryOptions({
-    queryKey: ["bing-wallpaper", day, thumbnail],
-    queryFn: async () => buildNativeAssetUrl((await nativeClient.getWorkbenchBackground(day, thumbnail)).assetPath),
-    enabled: day !== undefined,
-    staleTime: Infinity,
-    gcTime: 5 * 60_000,
-    retry: 1,
-  });
-}
+import { WallpaperAction, WallpaperImageDialog } from "./wallpaper-controls.js";
+import { bingImageQuery } from "./bing-wallpaper-queries.js";
 
 function BingWallpaperTile({ image, selected, onSelect, onPreview, onDownload, downloading }: Readonly<{
   image: BingWallpaper; selected: boolean; onSelect: () => void; onPreview: () => void;
@@ -73,7 +62,6 @@ export function BingBackgroundSettings({ preference, onChange }: Readonly<{
     }).catch(notifyActionError).finally(() => setDownloading(false));
   };
   return <>
-    <WallpaperAdjustments preference={preference} onChange={onChange} />
     <section>
       <div className="wallpaper-section-heading"><h2>{t("wallpaper.collection")}<span className="wallpaper-heading-meta">{t("wallpaper.recent")}</span></h2>
         <label className="wallpaper-daily"><input type="checkbox" checked={preference.selectedBingDay === null} disabled={images.length === 0} onChange={(event) => onChange({ ...preference, selectedBingDay: event.currentTarget.checked ? null : selectedDay ?? null })} />{t("wallpaper.daily")}</label>

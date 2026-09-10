@@ -2,7 +2,6 @@ import { lazy } from "react";
 
 // 每个分类独立拆包；声明 lazy 不触发下载，只有实际渲染才加载对应模块。
 export const GeneralSettingsPanel = lazy(() => import("./general-settings-panel.js").then((module) => ({ default: module.GeneralSettingsPanel })));
-export const BackgroundSettingsSection = lazy(() => import("./background-settings-section.js").then((module) => ({ default: module.BackgroundSettingsSection })));
 export const AgentSettingsPanel = lazy(() => import("./agent-settings-panel.js").then((module) => ({ default: module.AgentSettingsPanel })));
 export const CommitSettingsPanel = lazy(() => import("./commit-settings-panel.js").then((module) => ({ default: module.CommitSettingsPanel })));
 export const GlobalSettingsAbout = lazy(() => import("./global-settings-about.js").then((module) => ({ default: module.GlobalSettingsAbout })));

@@ -2,7 +2,6 @@ import type { AgentModel } from "@/protocol/index.js";
 import {
   Bot,
   ChevronDown,
-  Images,
   Info,
   PawPrint,
   SlidersHorizontal,
@@ -20,7 +19,6 @@ export type SettingsSectionId =
   | "about"
   | "agent"
   | "appearance"
-  | "background"
   | "pets"
   | "personalization"
   | "provider";
@@ -30,7 +28,6 @@ export const settingsSections: readonly Readonly<{
   id: SettingsSectionId;
 }>[] = [
   { icon: Settings, id: "appearance" },
-  { icon: Images, id: "background" },
   { icon: PawPrint, id: "pets" },
   { icon: ServerCog, id: "provider" },
   { icon: Bot, id: "agent" },

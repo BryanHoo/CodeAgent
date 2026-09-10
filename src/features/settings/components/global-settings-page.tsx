@@ -21,7 +21,7 @@ import {
   createGlobalSettingsSaveQueue,
   SETTINGS_INPUT_DEBOUNCE_MS,
 } from "./global-settings-save.js";
-import { GlobalSettingsAbout, ProviderConnectionPanel, GlobalSettingsPets, BackgroundSettingsSection, AgentSettingsPanel, GeneralSettingsPanel, PersonalizationSettingsPanel, CommitSettingsPanel } from "./settings-section-loaders.js";
+import { GlobalSettingsAbout, ProviderConnectionPanel, GlobalSettingsPets, AgentSettingsPanel, GeneralSettingsPanel, PersonalizationSettingsPanel, CommitSettingsPanel } from "./settings-section-loaders.js";
 import { applyBrowserSettingsChanges } from "./browser-settings-apply.js";
 import { SettingsPageFrame } from "./settings-page-frame.js";
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
@@ -143,8 +143,7 @@ export function GlobalSettingsPage({
             <CommitSettingsPanel settings={draft} models={models} onChange={updateDraft} onFlush={() => saveQueue.save(draftRef.current)} />
           )
         } />
-      ) : activeSection === "background" ? (
-        <BackgroundSettingsSection />
+
       ) : activeSection === "about" ? null : error !== null ? (
         <div
           className="flex min-h-40 flex-col items-center justify-center gap-3"

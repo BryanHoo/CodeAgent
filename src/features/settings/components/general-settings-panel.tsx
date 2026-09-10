@@ -9,6 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/compone
 import type { ThemePreference } from "../theme-preference.js";
 import { SettingsField, SettingsGroup, SettingsSelect, type SettingsSectionId } from "./global-settings-fields.js";
 
+import { BackgroundSettingsField } from "./background-settings-field.js";
+
 const themeOptions = [
   { value: "system", icon: MonitorCog, label: "automatic", aria: "automaticMode" },
   { value: "light", icon: Sun, label: "light", aria: "lightMode" },
@@ -65,6 +67,7 @@ export function GeneralSettingsPanel({
               ))}
             </div>
           </SettingsField>
+          <BackgroundSettingsField />
         </SettingsGroup>
         <SettingsGroup title={t("general.editor")}>
           <SettingsField label={t("fields.followUpMessages")} description={t("general.followUpDescription")}>

@@ -1,11 +1,10 @@
-import { GlobalSettingsBackground } from "./global-settings-background.js";
+import { WorkbenchBackgroundSettings } from "./workbench-background-settings.js";
 import { useWorkbenchBackgroundDraft } from "./use-workbench-background-draft.js";
 
-export function BackgroundSettingsSection() {
-  // 自定义图片读取和壁纸副作用只在用户进入背景分类后启动。
+export function BackgroundSettingsField() {
+  // 仅启用自定义背景时读取图库；通用设置默认不触发图片 I/O。
   const draft = useWorkbenchBackgroundDraft();
-  return <GlobalSettingsBackground
-    activeSection="background"
+  return <WorkbenchBackgroundSettings
     customImages={draft.customImages}
     disabled={draft.isLoading || draft.isSavingImages || draft.loadError}
     loadError={draft.loadError}
