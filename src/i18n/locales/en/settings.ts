@@ -148,7 +148,7 @@ export const settings = {
       downloadable: "Download required",
       ready: "Ready",
     },
-    enabled: "Enable desktop pet",
+    enabled: "Enable pet",
     errors: {
       load: "Unable to load pet assets. Try again.",
     },
@@ -158,7 +158,7 @@ export const settings = {
       enabled: "On",
     },
     refresh: "Refresh list",
-    selectionLabel: "Choose a desktop pet",
+    selectionLabel: "Choose a pet",
   },
   sandbox: {
     dangerFullAccess: "Full access",
@@ -171,7 +171,7 @@ export const settings = {
     appearance: "General",
     background: "Workbench background",
     commit: "Commit messages",
-    pets: "Desktop pet",
+    pets: "Pets",
     provider: "Model service",
   },
   title: "Global settings",

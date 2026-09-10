@@ -148,7 +148,7 @@ export const settings = {
       downloadable: "需要下载",
       ready: "已就绪",
     },
-    enabled: "启用桌面宠物",
+    enabled: "启用宠物",
     errors: {
       load: "无法加载宠物资源，请重试",
     },
@@ -158,7 +158,7 @@ export const settings = {
       enabled: "开启",
     },
     refresh: "刷新列表",
-    selectionLabel: "选择桌面宠物",
+    selectionLabel: "选择宠物",
   },
   sandbox: {
     dangerFullAccess: "完全访问",
@@ -171,7 +171,7 @@ export const settings = {
     appearance: "常规",
     background: "工作台背景",
     commit: "提交消息",
-    pets: "桌面宠物",
+    pets: "宠物",
     provider: "模型服务",
   },
   title: "全局设置",
