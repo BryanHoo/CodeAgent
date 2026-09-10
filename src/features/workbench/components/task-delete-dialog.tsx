@@ -45,7 +45,6 @@ export function TaskDeleteConfirmationDialog({
       open
     >
       <DialogContent
-        aria-labelledby="task-delete-confirmation-title"
         className="max-w-96 p-4"
         onEscapeKeyDown={(event) => {
           if (isPending) event.preventDefault();
@@ -55,7 +54,7 @@ export function TaskDeleteConfirmationDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle id="task-delete-confirmation-title">{title}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>

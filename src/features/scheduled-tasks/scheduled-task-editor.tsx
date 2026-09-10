@@ -10,7 +10,7 @@ import {
   type ScheduledTask,
   type ScheduledTaskInput,
 } from "@/protocol/index.js";
-import { ExternalLink, Play, Save, Trash2 } from "lucide-react";
+import { CalendarClock, ExternalLink, History, Play, Save, SlidersHorizontal } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
@@ -34,8 +34,8 @@ import { ScheduledTaskScheduleFields } from "./scheduled-task-schedule-fields.js
 
 type EditorProps = Readonly<{
   composerProps: WorkbenchComposerProps;
-  onDelete: (id: string) => Promise<void>;
   onOpenRun: (projectId: string, taskId: string) => void;
+  openingRun?: boolean;
   onProjectChange: (projectId: string) => void;
   onRunNow: (id: string) => Promise<void>;
   onSave: (taskId: string | undefined, input: ScheduledTaskInput) => Promise<void>;
@@ -80,7 +80,6 @@ export function ScheduledTaskEditor(props: EditorProps) {
   const [settings, setSettings] = useState<AgentTaskSettings>(
     props.task?.turnOptions ?? props.composerProps.settings,
   );
-  const [deleteArmed, setDeleteArmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasPromptInput, setHasPromptInput] = useState(
     props.task !== undefined &&
@@ -123,6 +122,10 @@ export function ScheduledTaskEditor(props: EditorProps) {
   return (
     <section className="scheduled-task-editor">
       <div className="scheduled-task-editor__toolbar">
+        <span className="scheduled-task-status" data-enabled={props.task?.enabled ?? true}>
+          <span />{t(props.task === undefined ? "scheduledTasks.create" : props.task.enabled ? "scheduledTasks.enabled" : "scheduledTasks.disabled")}
+        </span>
+        <div className="scheduled-task-editor__actions">
         {props.task === undefined ? <span /> : (
           <Button
             aria-label={t("scheduledTasks.runNow")}
@@ -143,14 +146,14 @@ export function ScheduledTaskEditor(props: EditorProps) {
         >
           <Save aria-hidden="true" />{t("scheduledTasks.save")}
         </Button>
+        </div>
       </div>
 
-      <div className="scheduled-task-fields">
-        <label><span>{t("scheduledTasks.name")}</span><Input maxLength={120} onChange={(event) => setName(event.currentTarget.value)} placeholder={t("scheduledTasks.namePlaceholder")} value={name} /></label>
-        <label><span>{t("scheduledTasks.project")}</span><select onChange={(event) => props.onProjectChange(event.currentTarget.value)} value={props.projectId}><option value={TEMPORARY_TASK_SCOPE_ID}>{t("shell.temporaryTask")}</option>{props.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
-        <ScheduledTaskScheduleFields onChange={setSchedule} schedule={schedule} />
-      </div>
-
+      <div className="scheduled-task-editor__body">
+      <label className="scheduled-task-title">
+        <span className="sr-only">{t("scheduledTasks.name")}</span>
+        <Input maxLength={120} onChange={(event) => setName(event.currentTarget.value)} placeholder={t("scheduledTasks.namePlaceholder")} value={name} />
+      </label>
       <div className="scheduled-task-prompt">
         <h3>{t("scheduledTasks.prompt")}</h3>
         <WorkbenchComposer
@@ -172,39 +175,35 @@ export function ScheduledTaskEditor(props: EditorProps) {
         />
       </div>
 
+      <section className="scheduled-task-section">
+        <h3><SlidersHorizontal aria-hidden="true" />{t("scheduledTasks.details")}</h3>
+        <div className="scheduled-task-fields">
+          <label><span>{t("scheduledTasks.project")}</span><select onChange={(event) => props.onProjectChange(event.currentTarget.value)} value={props.projectId}><option value={TEMPORARY_TASK_SCOPE_ID}>{t("shell.temporaryTask")}</option>{props.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+          <div className="scheduled-task-info"><span>{t("scheduledTasks.runIn")}</span><span>{t("scheduledTasks.newChat")}</span></div>
+        </div>
+      </section>
+      <section className="scheduled-task-section">
+        <h3><CalendarClock aria-hidden="true" />{t("scheduledTasks.frequency")}</h3>
+        <div className="scheduled-task-fields"><ScheduledTaskScheduleFields onChange={setSchedule} schedule={schedule} /></div>
+        {props.task?.enabled && props.task.nextRunAtUnixMs !== null ? (
+          <p className="scheduled-task-next-run">{t("scheduledTasks.nextRun")}<span>{formatScheduledTime(props.task.nextRunAtUnixMs, i18n.resolvedLanguage)}</span></p>
+        ) : null}
+      </section>
       {props.task === undefined ? null : (
         <>
           <div className="scheduled-task-runs">
-            <h3>{t("scheduledTasks.lastRun")}</h3>
+            <h3><History aria-hidden="true" />{t("scheduledTasks.lastRun")}<span>{props.task.runs.length}</span></h3>
             {props.task.runs.length === 0 ? <p>{t("scheduledTasks.noRuns")}</p> : props.task.runs.toReversed().map((run) => (
               <div className="scheduled-task-run" data-status={run.status} key={run.id}>
                 <span>{t(`scheduledTasks.${run.status}`)}</span>
                 <time>{formatScheduledTime(run.startedAtUnixMs, i18n.resolvedLanguage)}</time>
-                {run.taskId === null ? <span className="scheduled-task-run__error">{run.error}</span> : <Button aria-label={run.taskId} onClick={() => props.onOpenRun(props.task!.projectId, run.taskId!)} size="icon-sm" variant="ghost"><ExternalLink aria-hidden="true" /></Button>}
+                {run.taskId === null ? <span className="scheduled-task-run__error">{run.error}</span> : <Button aria-label={run.taskId} disabled={props.openingRun} onClick={() => props.onOpenRun(props.task!.projectId, run.taskId!)} size="icon-sm" variant="ghost"><ExternalLink aria-hidden="true" /></Button>}
               </div>
             ))}
           </div>
-          <div className="scheduled-task-danger-zone">
-            {deleteArmed ? (
-              <Button onClick={() => setDeleteArmed(false)} size="sm" variant="ghost">
-                {t("actions.cancel")}
-              </Button>
-            ) : null}
-            <Button
-              aria-label={deleteArmed ? t("scheduledTasks.deleteConfirm") : t("scheduledTasks.delete")}
-              onClick={() => {
-                if (deleteArmed) void props.onDelete(props.task!.id);
-                else setDeleteArmed(true);
-              }}
-              size="sm"
-              variant="destructive"
-            >
-              <Trash2 aria-hidden="true" />
-              {deleteArmed ? t("scheduledTasks.deleteConfirm") : t("scheduledTasks.delete")}
-            </Button>
-          </div>
         </>
       )}
+      </div>
     </section>
   );
 }

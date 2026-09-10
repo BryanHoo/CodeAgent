@@ -1,11 +1,12 @@
 import type { ScheduledTask } from "@/protocol/index.js";
 import { CalendarClock, CircleAlert, Clock3, Plus, Search } from "lucide-react";
-import { Switch } from "radix-ui";
+import { ScheduledTaskMenu } from "./scheduled-task-menu.js";
+import { useState } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
 import { Button } from "../../shared/components/core/button.js";
 import { Input } from "../../shared/components/core/input.js";
-import { formatScheduledTime } from "./scheduled-task-schedule.js";
+import { formatScheduledTime, scheduleToDraft } from "./scheduled-task-schedule.js";
 
 function statusTone(task: ScheduledTask): "failed" | "paused" | "running" | "scheduled" {
   if (!task.enabled) return "paused";
@@ -18,6 +19,7 @@ export function ScheduledTaskList({
   activeId,
   loading,
   onCreate,
+  onDelete,
   onEnabledChange,
   onSelect,
   query,
@@ -27,6 +29,7 @@ export function ScheduledTaskList({
   activeId?: string;
   loading: boolean;
   onCreate: () => void;
+  onDelete: (id: string) => void | Promise<unknown>;
   onEnabledChange: (id: string, enabled: boolean) => void;
   onSelect: (task: ScheduledTask) => void;
   query: string;
@@ -34,6 +37,9 @@ export function ScheduledTaskList({
   tasks: readonly ScheduledTask[];
 }>) {
   const { i18n, t } = useTranslation("workbench");
+  const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
+  // 筛选只作用于列表，保留右侧编辑草稿；后端未提供完成态，不推断执行结果。
+  const filteredTasks = tasks.filter((task) => filter === "all" || task.enabled === (filter === "enabled"));
   return (
     <aside className="scheduled-task-list">
       <div className="scheduled-task-list__header">
@@ -50,6 +56,13 @@ export function ScheduledTaskList({
           <Plus aria-hidden="true" />
         </Button>
       </div>
+      <div className="scheduled-task-filters" role="group" aria-label={t("scheduledTasks.filter")}>
+        {(["all", "enabled", "disabled"] as const).map((value) => (
+          <button aria-pressed={filter === value} key={value} onClick={() => setFilter(value)} type="button">
+            {t(`scheduledTasks.${value}`)}
+          </button>
+        ))}
+      </div>
       <div className="scheduled-task-search">
         <Search aria-hidden="true" />
         <Input
@@ -65,13 +78,13 @@ export function ScheduledTaskList({
           <div className="scheduled-task-list__empty" role="status">
             <Clock3 aria-hidden="true" />
           </div>
-        ) : tasks.length === 0 ? (
+        ) : filteredTasks.length === 0 ? (
           <div className="scheduled-task-list__empty">
             <CalendarClock aria-hidden="true" />
-            <span>{t("scheduledTasks.empty")}</span>
+            <span>{t(tasks.length === 0 && query === "" ? "scheduledTasks.empty" : "scheduledTasks.noMatches")}</span>
           </div>
         ) : (
-          tasks.map((task) => {
+          filteredTasks.map((task) => {
             const tone = statusTone(task);
             return (
               <div
@@ -89,7 +102,7 @@ export function ScheduledTaskList({
                   type="button"
                 >
                   <strong>{task.name}</strong>
-                  <span>{task.projectName}</span>
+                  <span>{t(`scheduledTasks.${scheduleToDraft(task.schedule).preset}`)} · {task.projectName}</span>
                   <span className="scheduled-task-row__time">
                     {tone === "failed" ? <CircleAlert aria-hidden="true" /> : <Clock3 aria-hidden="true" />}
                     {task.enabled
@@ -97,14 +110,7 @@ export function ScheduledTaskList({
                       : t("scheduledTasks.disabled")}
                   </span>
                 </button>
-                <Switch.Root
-                  aria-label={t(task.enabled ? "scheduledTasks.disableTask" : "scheduledTasks.enableTask", { name: task.name })}
-                  checked={task.enabled}
-                  className="scheduled-task-row__switch"
-                  onCheckedChange={(enabled) => onEnabledChange(task.id, enabled)}
-                >
-                  <Switch.Thumb className="scheduled-task-row__switch-thumb" />
-                </Switch.Root>
+                <ScheduledTaskMenu task={task} onDelete={onDelete} onEnabledChange={onEnabledChange} />
               </div>
             );
           })

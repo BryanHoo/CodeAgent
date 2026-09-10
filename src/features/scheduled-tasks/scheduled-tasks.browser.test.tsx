@@ -97,6 +97,82 @@ const task: ScheduledTask = {
 };
 
 describe("ScheduledTaskList", () => {
+  it("opens only on click and keeps a compact menu with delete confirmation", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const onDelete = vi.fn();
+    const onEnabledChange = vi.fn();
+    const screen = await render(<I18nextProvider i18n={i18n}>
+      <ScheduledTaskList onDelete={onDelete} loading={false} onCreate={vi.fn()}
+        onEnabledChange={onEnabledChange} onSelect={vi.fn()} query="" setQuery={vi.fn()}
+        tasks={[{ ...task, enabled: false }]} />
+    </I18nextProvider>);
+    const trigger = screen.getByRole("button", { name: "每日巡检操作" });
+    expect(screen.container.querySelector('[role="switch"]')).toBeNull();
+    await trigger.hover();
+    await expect.element(page.getByRole("menu")).not.toBeInTheDocument();
+    await trigger.click();
+    expect(page.getByRole("menu").element().getBoundingClientRect().width).toBeLessThanOrEqual(132);
+    await page.getByRole("menuitem", { name: "启用每日巡检" }).click();
+    expect(onEnabledChange).toHaveBeenCalledWith(task.id, true);
+    await trigger.click();
+    await page.getByRole("menuitem", { name: "删除", exact: true }).click();
+    expect(onDelete).not.toHaveBeenCalled();
+    await expect.element(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("button", { name: "取消", exact: true }).click();
+    await trigger.click();
+    await page.getByRole("menuitem", { name: "删除", exact: true }).click();
+    await page.getByRole("button", { name: "确认删除", exact: true }).click();
+    expect(onDelete).toHaveBeenCalledExactlyOnceWith(task.id);
+  });
+
+  it.each([1280, 1920])("keeps the split panel within desktop bounds at %i", async (width) => {
+    await page.viewport(width, 900);
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <div className="scheduled-tasks" style={{ height: 850, width: width - 240 }}>
+          <ScheduledTaskList onDelete={vi.fn()} activeId={task.id} loading={false} onCreate={vi.fn()} onEnabledChange={vi.fn()}
+            onSelect={vi.fn()} query="" setQuery={vi.fn()}
+            tasks={[task, { ...task, id: "paused", name: "每周回顾", enabled: false }]} />
+          <ScheduledTaskEditor composerProps={{ settings: task.turnOptions } as never}
+            onOpenRun={vi.fn()} onProjectChange={vi.fn()}
+            onRunNow={async () => undefined} onSave={async () => undefined}
+            projectId={task.projectId} projects={[]} skills={[]} task={task} />
+        </div>
+      </I18nextProvider>,
+    );
+    const panel = screen.container.querySelector<HTMLElement>(".scheduled-tasks")!;
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+    const prompt = screen.container.querySelector(".scheduled-task-prompt")!.getBoundingClientRect();
+    const details = screen.container.querySelector(".scheduled-task-section")!.getBoundingClientRect();
+    expect(prompt.bottom).toBeLessThan(details.top);
+    const titleStyle = getComputedStyle(screen.getByRole("textbox", { name: "任务名称" }).element());
+    expect(titleStyle.borderTopWidth).toBe("1px");
+    expect(titleStyle.borderTopColor).not.toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(screen.getByRole("combobox", { name: "重复规则" }).element()).textAlignLast).toBe("right");
+    for (const control of screen.container.querySelectorAll("input, select")) {
+      expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right);
+    }
+    await page.viewport(1440, 900);
+  });
+
+  it("filters enabled and paused tasks without losing selection actions", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <ScheduledTaskList onDelete={vi.fn()} loading={false} onCreate={vi.fn()} onEnabledChange={vi.fn()}
+          onSelect={vi.fn()} query="" setQuery={vi.fn()}
+          tasks={[task, { ...task, id: "paused", name: "每周回顾", enabled: false }]} />
+      </I18nextProvider>,
+    );
+    await screen.getByRole("button", { name: "已暂停", exact: true }).click();
+    await expect.element(screen.getByRole("button", { name: "每日巡检", exact: true })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "每周回顾", exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "已启用", exact: true }).click();
+    await expect.element(screen.getByRole("button", { name: "每日巡检", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "每周回顾", exact: true })).not.toBeInTheDocument();
+  });
+
   it("renders search and an icon-only create action in the list header", async () => {
     await i18n.changeLanguage("zh-CN");
     const onCreate = vi.fn();
@@ -105,7 +181,7 @@ describe("ScheduledTaskList", () => {
     const setQuery = vi.fn();
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <ScheduledTaskList
+        <ScheduledTaskList onDelete={vi.fn()}
           activeId="schedule-a"
           loading={false}
           onCreate={onCreate}
@@ -131,8 +207,9 @@ describe("ScheduledTaskList", () => {
     expect(createButton.element().getAttribute("data-size")).toBe("icon-toolbar");
     expect(createButton.element().getAttribute("data-variant")).toBe("default");
     await createButton.click();
-    await screen.getByRole("button", { name: "每日巡检" }).click();
-    await screen.getByRole("switch", { name: "停用每日巡检" }).click();
+    await screen.getByRole("button", { name: "每日巡检", exact: true }).click();
+    await screen.getByRole("button", { name: "每日巡检操作" }).click();
+    await page.getByRole("menuitem", { name: "停用每日巡检" }).click();
     expect(setQuery).toHaveBeenLastCalledWith("日报");
     expect(onCreate).toHaveBeenCalledOnce();
     expect(onSelect).toHaveBeenCalledWith(task);
@@ -146,7 +223,6 @@ describe("ScheduledTaskList", () => {
       <I18nextProvider i18n={i18n}>
         <ScheduledTaskEditor
           composerProps={{ settings: task.turnOptions } as never}
-          onDelete={async () => undefined}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
           onRunNow={async () => undefined}
@@ -174,7 +250,6 @@ describe("ScheduledTaskList", () => {
       <I18nextProvider i18n={i18n}>
         <ScheduledTaskEditor
           composerProps={{ settings: task.turnOptions } as never}
-          onDelete={async () => undefined}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
           onRunNow={async () => undefined}
@@ -200,7 +275,6 @@ describe("ScheduledTaskList", () => {
       <I18nextProvider i18n={i18n}>
         <ScheduledTaskEditor
           composerProps={{ settings: task.turnOptions } as never}
-          onDelete={async () => undefined}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
           onRunNow={async () => undefined}
@@ -218,9 +292,7 @@ describe("ScheduledTaskList", () => {
     expect(toolbar?.querySelector("[aria-label='立即运行']")).not.toBeNull();
     expect(toolbar?.querySelector("[aria-label='保存任务']")).not.toBeNull();
     expect(toolbar?.querySelector("[aria-label='删除']")).toBeNull();
-    expect(dangerZone?.querySelector("[aria-label='删除']")?.getAttribute("data-variant")).toBe(
-      "destructive",
-    );
+    expect(dangerZone).toBeNull();
   });
 
   it("keeps the repeat field fixed when the date picker opens", async () => {
@@ -229,7 +301,6 @@ describe("ScheduledTaskList", () => {
       <I18nextProvider i18n={i18n}>
         <ScheduledTaskEditor
           composerProps={{ settings: task.turnOptions } as never}
-          onDelete={async () => undefined}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
           onRunNow={async () => undefined}
@@ -259,7 +330,6 @@ describe("ScheduledTaskList", () => {
       <I18nextProvider i18n={i18n}>
         <ScheduledTaskEditor
           composerProps={{ settings: task.turnOptions } as never}
-          onDelete={async () => undefined}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
           onRunNow={async () => undefined}
@@ -276,6 +346,13 @@ describe("ScheduledTaskList", () => {
     await repeat.selectOptions("weekly");
     await expect.element(screen.getByRole("textbox", { name: "触发时间" })).not.toBeInTheDocument();
     await screen.getByRole("combobox", { name: "周几" }).selectOptions("FR");
+    expect(screen.getByRole("combobox", { name: "周几" }).element().getBoundingClientRect().top)
+      .toBeLessThan(screen.getByLabelText("时间", { exact: true }).element().getBoundingClientRect().top);
+    const timeInput = screen.getByLabelText("时间", { exact: true });
+    const initialBackground = getComputedStyle(timeInput.element()).backgroundColor;
+    await timeInput.hover();
+    expect(getComputedStyle(timeInput.element()).cursor).toBe("pointer");
+    expect(getComputedStyle(timeInput.element()).backgroundColor).toBe(initialBackground);
     await screen.getByLabelText("时间", { exact: true }).fill("");
     await expect.element(screen.getByRole("button", { name: "保存任务" })).toBeDisabled();
     await screen.getByLabelText("时间", { exact: true }).fill("17:45");
@@ -286,6 +363,8 @@ describe("ScheduledTaskList", () => {
     await repeat.selectOptions("monthly");
     await expect.element(screen.getByRole("combobox", { name: "周几" })).not.toBeInTheDocument();
     await screen.getByRole("combobox", { name: "每月几号" }).selectOptions("31");
+    expect(screen.getByRole("combobox", { name: "每月几号" }).element().getBoundingClientRect().top)
+      .toBeLessThan(screen.getByLabelText("时间", { exact: true }).element().getBoundingClientRect().top);
     const controls = [...screen.container.querySelectorAll(".scheduled-task-fields input, .scheduled-task-fields select")];
     for (const control of controls) {
       const bounds = control.getBoundingClientRect();
@@ -326,7 +405,6 @@ describe("ScheduledTaskList", () => {
       <I18nextProvider i18n={i18n}>
         <ScheduledTaskEditor
           composerProps={{ settings: task.turnOptions } as never}
-          onDelete={async () => undefined}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
           onRunNow={async () => undefined}

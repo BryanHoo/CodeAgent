@@ -6,6 +6,9 @@ import {
 } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { CalendarClock } from "lucide-react";
+import { notifyActionError } from "../notifications/action-notifications.js";
+import { readScheduledTaskRun } from "./scheduled-task-run.js";
 
 import "../../shared/styles/scheduled-tasks.css";
 import type { useWorkbenchShellController } from "../workbench/components/workbench-shell-controller.js";
@@ -83,9 +86,9 @@ export function ScheduledTasksContainer({
   });
   const deleteMutation = useMutation({
     mutationFn: (taskId: string) => client.deleteScheduledTask(taskId),
-    onSuccess: () => {
-      setSelectedId(undefined);
-      setCreating(false);
+    onSuccess: (_response, taskId) => {
+      // 删除其他列表项时保留当前编辑任务与新建草稿。
+      setSelectedId((current) => current === taskId ? undefined : current);
       void refresh();
     },
   });
@@ -109,6 +112,12 @@ export function ScheduledTasksContainer({
   const runMutation = useMutation({
     mutationFn: (taskId: string) => client.runScheduledTaskNow(taskId),
     onSuccess: () => void refresh(),
+  });
+  const openRunMutation = useMutation({
+    meta: { actionNotification: false },
+    mutationFn: ({ runProjectId, taskId }: { runProjectId: string; taskId: string }) =>
+      readScheduledTaskRun(client, runProjectId, taskId),
+    onError: notifyActionError,
   });
 
   const changeProject = (nextProjectId: string) => {
@@ -158,6 +167,7 @@ export function ScheduledTasksContainer({
           setCreating(true);
           setSelectedId(undefined);
         }}
+        onDelete={deleteMutation.mutateAsync}
         onEnabledChange={(taskId, enabled) => {
           enabledMutation.mutate({ enabled, taskId });
         }}
@@ -170,14 +180,24 @@ export function ScheduledTasksContainer({
         <ScheduledTaskEditor
           key={selectedTask?.id ?? `new:${projectId}`}
           composerProps={composerProps}
-          onDelete={(taskId) => deleteMutation.mutateAsync(taskId).then(() => undefined)}
           onOpenRun={(runProjectId, taskId) => {
-            void navigate(
-              runProjectId === TEMPORARY_TASK_SCOPE_ID
-                ? { params: { taskId }, to: "/temporary/t/$taskId" }
-                : { params: { projectId: runProjectId, taskId }, to: "/p/$projectId/t/$taskId" },
-            );
+            if (openRunMutation.isPending) return;
+            openRunMutation.mutate({ runProjectId, taskId }, {
+              onSuccess: (response) => {
+                if (response === null) {
+                  notifyActionError(context.t("scheduledTasks.runUnavailable"));
+                  return;
+                }
+                queryClient.setQueryData(["projects", runProjectId, "tasks", taskId], response);
+                void navigate(
+                  runProjectId === TEMPORARY_TASK_SCOPE_ID
+                    ? { params: { taskId }, to: "/temporary/t/$taskId" }
+                    : { params: { projectId: runProjectId, taskId }, to: "/p/$projectId/t/$taskId" },
+                );
+              },
+            });
           }}
+          openingRun={openRunMutation.isPending}
           onProjectChange={changeProject}
           onRunNow={(taskId) => runMutation.mutateAsync(taskId).then(() => undefined)}
           onSave={(taskId, input) =>
@@ -192,6 +212,9 @@ export function ScheduledTasksContainer({
         />
       ) : (
         <div className="scheduled-task-welcome">
+          <CalendarClock aria-hidden="true" />
+          <h2>{context.t("scheduledTasks.welcome")}</h2>
+          <p>{context.t("scheduledTasks.welcomeHint")}</p>
           <span>{context.t("scheduledTasks.selectTask")}</span>
         </div>
       )}

@@ -67,7 +67,8 @@ export function ScheduledTaskDateTimePicker({
         dateFormat={language === "en" ? "MMM d, yyyy, h:mm aa" : "yyyy年M月d日 HH:mm"}
         disabledDayAriaLabelPrefix={t("scheduledTasks.dateUnavailable")}
         dropdownMode="select"
-        icon={<CalendarDays aria-hidden="true" />}
+        // 阻止库把 SVG 的 mousedown 当作外部点击；开关统一由随后的 click 处理。
+        icon={<CalendarDays aria-hidden="true" onMouseDown={(event) => event.preventDefault()} />}
         locale={language}
         {...(minimumDate === null ? {} : { minDate: minimumDate })}
         nextMonthAriaLabel={t("scheduledTasks.nextMonth")}

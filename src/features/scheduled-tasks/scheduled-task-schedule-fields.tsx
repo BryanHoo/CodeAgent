@@ -48,28 +48,6 @@ export function ScheduledTaskScheduleFields({
           ))}
         </select>
       </label>
-      {needsDate ? (
-        <label>
-          <span>{t("scheduledTasks.time")}</span>
-          <Suspense fallback={<Input aria-label={t("scheduledTasks.time")} aria-busy="true" disabled value="" />}>
-            <ScheduledTaskDateTimePicker
-              minimum={schedule.preset === "once" ? minimum : ""}
-              onChange={(dateTime) => onChange({ ...schedule, dateTime })}
-              value={schedule.dateTime}
-            />
-          </Suspense>
-        </label>
-      ) : (
-        <label>
-          <span>{t("scheduledTasks.timeOfDay")}</span>
-          <Input
-            onChange={(event) => onChange({ ...schedule, time: event.currentTarget.value })}
-            step={60}
-            type="time"
-            value={schedule.time}
-          />
-        </label>
-      )}
       {schedule.preset === "weekly" ? (
         <label>
           <span>{t("scheduledTasks.weekday")}</span>
@@ -92,6 +70,29 @@ export function ScheduledTaskScheduleFields({
           </select>
         </label>
       ) : null}
+      {needsDate ? (
+        // 日历包含多个交互元素，不能嵌入 label，否则整行点击会转发并反复切换焦点。
+        <div className="scheduled-task-field">
+          <span>{t("scheduledTasks.time")}</span>
+          <Suspense fallback={<Input aria-label={t("scheduledTasks.time")} aria-busy="true" disabled value="" />}>
+            <ScheduledTaskDateTimePicker
+              minimum={schedule.preset === "once" ? minimum : ""}
+              onChange={(dateTime) => onChange({ ...schedule, dateTime })}
+              value={schedule.dateTime}
+            />
+          </Suspense>
+        </div>
+      ) : (
+        <label>
+          <span>{t("scheduledTasks.timeOfDay")}</span>
+          <Input
+            onChange={(event) => onChange({ ...schedule, time: event.currentTarget.value })}
+            step={60}
+            type="time"
+            value={schedule.time}
+          />
+        </label>
+      )}
       {schedule.preset === "custom" ? (
         <label className="scheduled-task-fields__wide">
           <span>{t("scheduledTasks.rrule")}</span>

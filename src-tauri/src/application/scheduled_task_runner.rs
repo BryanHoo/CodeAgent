@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::timeout;
 
 use crate::{
@@ -133,27 +133,35 @@ pub(crate) async fn start_scheduled_task_turn(
         .codex_connection()
         .await
         .map_err(|error| error.to_string())?;
-    let response =
+    let mut response =
         super::task_workspace::start_task(app, &connection, scheduled.project_id.clone())
             .await
             .map_err(|error| error.to_string())?;
-    let task_id = response.task.id;
+    let task_id = &response.task.id;
     state
         .remember_task_metadata(
             &scheduled.project_id,
             [(task_id.as_str(), response.task.title.as_str())],
         )
         .await;
-    start_turn_for_task(
+    let result = start_turn_for_task(
         app,
         &scheduled.project_id,
-        &task_id,
+        task_id,
         scheduled.prompt.clone(),
         scheduled.turn_options.clone(),
         false,
         &state,
     )
-    .await
-    .map_err(|error| error.to_string())?;
-    Ok(task_id)
+    .await;
+    // 后端创建的 Task 不经过 WebView Mutation；启动尝试结束后主动通知主窗口补入左栏。
+    // 即使启动 Turn 失败，已创建的线程仍应可见；通知失败不能让调度器重复启动任务。
+    response.task.title = prompt_task_title(&scheduled.prompt)
+        .unwrap_or(&scheduled.name)
+        .to_owned();
+    if let Err(error) = app.emit_to("main", "scheduled-task://started", &response.task) {
+        crate::infrastructure::diagnostics::record_error("scheduled_task_notify_failed", error);
+    }
+    result.map_err(|error| error.to_string())?;
+    Ok(response.task.id)
 }
