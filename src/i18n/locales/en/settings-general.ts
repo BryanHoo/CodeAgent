@@ -1,4 +1,9 @@
 export const generalSettings = {
+    temporaryFolder: "Non-project task folder",
+    temporaryFolderDescription: "New tasks store files and attachments in task ID subfolders. Existing tasks keep their original location.",
+    changeFolder: "Change",
+    temporaryFolderLoadError: "Unable to load storage location",
+    temporaryFolderSaveError: "Unable to save the location. Choose a writable folder and try again.",
     permissions: "Permissions",
     preferences: "Preferences",
     editor: "Editor",

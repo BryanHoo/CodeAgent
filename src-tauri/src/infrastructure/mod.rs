@@ -9,7 +9,9 @@ pub mod provider_models;
 pub mod scheduled_tasks;
 pub mod skills_market;
 pub mod task_settings;
+pub mod temporary_task_storage;
 pub mod temporary_workspace;
+pub mod temporary_workspace_settings;
 pub mod workspace;
 
 #[cfg(test)]

@@ -175,7 +175,7 @@ export const settings = {
   },
   title: "Global settings",
   sectionKeywords: {
-    appearance: "Color mode language notifications editor default open follow-up messages background wallpaper Bing custom blur overlay",
+    appearance: "Color mode language notifications editor default open follow-up messages background wallpaper Bing custom blur overlay non-project temporary task folder storage location",
     personalization: "Codex instructions AGENTS.md global memory MCP web search Git commit messages model prompt generation rules",
     pets: "Enable pet selection",
     provider: "API key Base URL models official custom",

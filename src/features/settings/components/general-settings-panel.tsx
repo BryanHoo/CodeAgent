@@ -10,6 +10,7 @@ import type { ThemePreference } from "../theme-preference.js";
 import { SettingsField, SettingsGroup, SettingsSelect, type SettingsSectionId } from "./global-settings-fields.js";
 
 import { BackgroundSettingsField } from "./background-settings-field.js";
+import { TemporaryWorkspaceSettingsField } from "./temporary-workspace-settings-field.js";
 
 const themeOptions = [
   { value: "system", icon: MonitorCog, label: "automatic", aria: "automaticMode" },
@@ -41,6 +42,7 @@ export function GeneralSettingsPanel({
       <h1 className="mb-6 text-xl font-semibold">{t("sections.appearance")}</h1>
       <div className="space-y-6">
         <SettingsGroup title={t("general.preferences")}>
+          <TemporaryWorkspaceSettingsField />
           <SettingsField label={t("fields.defaultOpenWith")} description={t("general.openAppDescription")}>
             <SettingsSelect aria-label={t("fields.defaultOpenWith")} value={settings.defaultOpenAppId ?? ""} onChange={(event) => onDefaultOpenAppChange((event.currentTarget.value || null) as AgentGlobalSettings["defaultOpenAppId"])}>
               <option value="">{t("appearance.defaultOpenAutomatic")}</option>

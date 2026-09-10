@@ -43,6 +43,8 @@ permissions = [
   "allow-configure-custom-provider",
   "allow-logout-provider",
   "allow-get-global-settings",
+  "allow-get-temporary-workspace-settings",
+  "allow-choose-temporary-workspace-root",
   "allow-get-global-instructions",
   "allow-save-global-instructions",
   "allow-get-memory-settings",

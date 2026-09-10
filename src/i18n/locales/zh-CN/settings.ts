@@ -175,7 +175,7 @@ export const settings = {
   },
   title: "全局设置",
   sectionKeywords: {
-    appearance: "颜色模式 语言 通知 编辑器 默认打开方式 跟进消息 背景 壁纸 Bing 自定义 模糊 遮罩",
+    appearance: "颜色模式 语言 通知 编辑器 默认打开方式 跟进消息 背景 壁纸 Bing 自定义 模糊 遮罩 无项目 临时任务 文件夹 存储位置",
     personalization: "Codex 说明 AGENTS.md 全局指令 记忆 MCP 网页搜索 Git 提交消息 提交模型 提示词 生成规则",
     pets: "启用 宠物 选择",
     provider: "API 密钥 Base URL 模型 官方 自定义",

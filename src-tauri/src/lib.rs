@@ -52,10 +52,10 @@ use application::{
     },
     scheduled_task_runtime::ScheduledTaskRuntime,
     sidebar_commands::{
-        add_project, archive_task, compact_task, delete_task, fork_task, get_task_settings,
-        interrupt_turn, list_projects, list_tasks, pin_task, read_task, remove_project,
-        rename_project, rename_task, reorder_projects, resolve_pending_request, start_review,
-        start_task, start_turn, steer_turn, unarchive_task, update_task_settings,
+        add_project, archive_task, compact_task, delete_task, get_task_settings, interrupt_turn,
+        list_projects, list_tasks, pin_task, read_task, remove_project, rename_project,
+        rename_task, reorder_projects, resolve_pending_request, start_review, start_task,
+        start_turn, steer_turn, unarchive_task, update_task_settings,
     },
     sidebar_directory_commands::list_project_directories,
     skills_market_commands::{
@@ -65,10 +65,14 @@ use application::{
     state::AppState,
     task_activity_commands::{acknowledge_task_activity, get_task_activities},
     task_board_commands::list_completed_tasks,
+    task_fork_commands::fork_task,
     task_subscription_commands::{release_task_subscription, retain_task_subscription},
     task_window_commands::{
         acknowledge_task_window, close_task_window, connect_task_window, drag_task_window,
         open_task_window, restore_task_window,
+    },
+    temporary_workspace_commands::{
+        choose_temporary_workspace_root, get_temporary_workspace_settings,
     },
     tray_commands::setup_tray,
     workflow_commands::{
@@ -170,6 +174,8 @@ pub fn run() {
             get_runtime_performance_metrics,
             record_frontend_diagnostic,
             export_diagnostics,
+            get_temporary_workspace_settings,
+            choose_temporary_workspace_root,
             get_task_activities,
             acknowledge_task_activity,
             release_task_subscription,

@@ -73,6 +73,8 @@ fn main() {
         "configure_custom_provider",
         "logout_provider",
         "get_global_settings",
+        "get_temporary_workspace_settings",
+        "choose_temporary_workspace_root",
         "get_global_instructions",
         "save_global_instructions",
         "get_memory_settings",

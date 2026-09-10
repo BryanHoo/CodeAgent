@@ -12,6 +12,8 @@ mod conversation_advanced;
 mod conversation_background;
 mod conversation_collaboration;
 mod conversation_commands;
+mod task_workspace;
+pub use task_workspace::update_task_workspace;
 mod conversation_delta_events;
 mod conversation_events;
 mod conversation_file_input;

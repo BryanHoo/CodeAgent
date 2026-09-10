@@ -1,4 +1,9 @@
 export const generalSettings = {
+    temporaryFolder: "无项目任务文件夹",
+    temporaryFolderDescription: "新任务按任务 ID 建立子文件夹，存放工作文件和附件；已有任务保留原位置。",
+    changeFolder: "更改",
+    temporaryFolderLoadError: "无法读取存储位置",
+    temporaryFolderSaveError: "无法保存存储位置，请选择可写的文件夹后重试。",
     permissions: "权限",
     preferences: "通用",
     editor: "编辑器",

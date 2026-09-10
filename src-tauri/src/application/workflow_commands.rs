@@ -134,8 +134,13 @@ pub async fn add_queued_submission(
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    super::attachment_commands::resolve_prompt_attachments(&app_data, &project_id, &mut input)
-        .await?;
+    super::attachment_commands::resolve_prompt_attachments(
+        &app_data,
+        &project_id,
+        &task_id,
+        &mut input,
+    )
+    .await?;
     let connection = validate_task(&state, project_id, &task_id).await?;
     let response =
         codex::add_queued_submission(&connection, &task_id, &input, &client_user_message_id)
@@ -163,8 +168,13 @@ pub async fn update_queued_submission(
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    super::attachment_commands::resolve_prompt_attachments(&app_data, &project_id, &mut input)
-        .await?;
+    super::attachment_commands::resolve_prompt_attachments(
+        &app_data,
+        &project_id,
+        &task_id,
+        &mut input,
+    )
+    .await?;
     let connection = validate_task(&state, project_id, &task_id).await?;
     let mut response =
         codex::update_queued_submission(&connection, &task_id, &queued_submission_id, &input)

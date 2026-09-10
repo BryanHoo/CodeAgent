@@ -30,7 +30,43 @@ pub(crate) async fn start_task(
     };
 
     match codex::start_task(connection, project_id, temporary_cwd.as_deref(), &settings).await {
-        Ok(response) => Ok(response),
+        Ok(response) => {
+            if let Some(cwd) = temporary_cwd {
+                let workspace = match temporary_workspace::bind_task(
+                    &app_data,
+                    &cwd,
+                    &response.task.id,
+                )
+                .await
+                {
+                    Ok(workspace) => workspace,
+                    Err(_) => {
+                        let _ = codex::delete_task(
+                            connection,
+                            TEMPORARY_PROJECT_ID.to_owned(),
+                            response.task.id,
+                        )
+                        .await;
+                        let _ = temporary_workspace::remove(&app_data, &cwd).await;
+                        return Err(AppError::FilesystemRequestFailed);
+                    }
+                };
+                if let Err(error) =
+                    codex::update_task_workspace(connection, &response.task.id, &workspace).await
+                {
+                    let _ = codex::delete_task(
+                        connection,
+                        TEMPORARY_PROJECT_ID.to_owned(),
+                        response.task.id,
+                    )
+                    .await;
+                    let _ = temporary_workspace::remove(&app_data, &workspace).await;
+                    return Err(AppError::from(error));
+                }
+                allow_attachment_assets(app, TEMPORARY_PROJECT_ID, &response.task.id).await?;
+            }
+            Ok(response)
+        }
         Err(error) => {
             if let Some(cwd) = temporary_cwd {
                 let _ = temporary_workspace::remove(&app_data, &cwd).await;
@@ -40,9 +76,31 @@ pub(crate) async fn start_task(
     }
 }
 
+pub(crate) async fn allow_attachment_assets(
+    app: &AppHandle,
+    project_id: &str,
+    task_id: &str,
+) -> Result<(), AppError> {
+    if let Some(root) = crate::infrastructure::temporary_task_storage::root(
+        &app_data_dir(app)?,
+        project_id,
+        task_id,
+    )
+    .await
+    .map_err(|_| AppError::FilesystemRequestFailed)?
+    {
+        // 仅开放已登记任务的附件目录，不扩大到用户选择的整个文件夹。
+        app.asset_protocol_scope()
+            .allow_directory(root.join("attachments"), true)
+            .map_err(|_| AppError::FilesystemRequestFailed)?;
+    }
+    Ok(())
+}
+
 pub(crate) async fn remove_deleted_workspace(
     app: &AppHandle,
     project_id: &str,
+    task_id: &str,
     working_directory: Option<&Path>,
 ) -> Result<(), AppError> {
     if project_id != TEMPORARY_PROJECT_ID {
@@ -52,6 +110,23 @@ pub(crate) async fn remove_deleted_workspace(
         return Ok(());
     };
     let app_data = app_data_dir(app)?;
+    if let Some(owned) =
+        crate::infrastructure::temporary_workspace_settings::task_workspace(&app_data, task_id)
+            .await
+            .map_err(|_| AppError::FilesystemRequestFailed)?
+    {
+        return temporary_workspace::remove(&app_data, &owned)
+            .await
+            .map_err(|_| AppError::FilesystemRequestFailed);
+    }
+    // 未登记的历史分叉可能共用父任务目录；不允许按另一个任务的 ID 清理。
+    if working_directory
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name != task_id && !name.starts_with("task-"))
+    {
+        return Ok(());
+    }
     match temporary_workspace::canonical_workspace(&app_data, working_directory).await {
         Ok(workspace) => temporary_workspace::remove(&app_data, &workspace)
             .await

@@ -37,7 +37,7 @@ pub async fn read_task_settings(
     project_id: &str,
     task_id: &str,
 ) -> Result<Option<AgentTaskSettings>, TaskSettingsError> {
-    let path = settings_path(app_data, project_id, task_id)?;
+    let path = settings_path(app_data, project_id, task_id).await?;
     let bytes = match fs::read(path).await {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -59,7 +59,7 @@ pub async fn write_task_settings(
     if !settings.is_valid() {
         return Err(TaskSettingsError::InvalidData);
     }
-    let target = settings_path(app_data, project_id, task_id)?;
+    let target = settings_path(app_data, project_id, task_id).await?;
     let parent = target
         .parent()
         .ok_or(TaskSettingsError::InvalidIdentifier)?;
@@ -100,7 +100,7 @@ pub async fn delete_task_settings(
     project_id: &str,
     task_id: &str,
 ) -> Result<(), TaskSettingsError> {
-    let path = settings_path(app_data, project_id, task_id)?;
+    let path = settings_path(app_data, project_id, task_id).await?;
     match fs::remove_file(path).await {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -120,13 +120,16 @@ pub async fn delete_project_task_settings(
     }
 }
 
-fn settings_path(
+async fn settings_path(
     app_data: &Path,
     project_id: &str,
     task_id: &str,
 ) -> Result<PathBuf, TaskSettingsError> {
     if !valid_identifier(task_id) {
         return Err(TaskSettingsError::InvalidIdentifier);
+    }
+    if let Some(root) = super::temporary_task_storage::root(app_data, project_id, task_id).await? {
+        return Ok(root.join(".codeagent/task-settings.json"));
     }
     Ok(project_path(app_data, project_id)?.join(format!("{task_id}.json")))
 }

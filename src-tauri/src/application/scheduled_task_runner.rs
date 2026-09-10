@@ -27,8 +27,10 @@ pub(crate) async fn start_turn_for_task(
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    super::attachment_commands::resolve_prompt_attachments(&app_data, project_id, &mut input)
-        .await?;
+    super::attachment_commands::resolve_prompt_attachments(
+        &app_data, project_id, task_id, &mut input,
+    )
+    .await?;
     let connection = state.codex_connection().await?;
     // 在后端读取最新偏好，普通任务和计划任务共用，不增加 WebView 的逐轮传输字段。
     let settings = codex::read_agent_runtime_settings(&connection)

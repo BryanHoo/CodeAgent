@@ -174,8 +174,16 @@ pub async fn cache_project_image(
 pub async fn resolve_prompt_attachments(
     app_data: &Path,
     project_id: &str,
+    task_id: &str,
     input: &mut AgentPromptInput,
 ) -> Result<(), AppError> {
+    use crate::infrastructure::temporary_task_storage;
+    if input.attachments.is_empty() {
+        return Ok(());
+    }
+    let task_root = temporary_task_storage::root(app_data, project_id, task_id)
+        .await
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
     let mut budget = AttachmentBudget::default();
     for attachment in &mut input.attachments {
         let object = attachment
@@ -185,11 +193,14 @@ pub async fn resolve_prompt_attachments(
             .get("id")
             .and_then(Value::as_str)
             .ok_or(AppError::FilesystemRequestFailed)?;
-        let path = workspace::validate_attachment(app_data, project_id, id)
-            .await
-            .map_err(|_| AppError::FilesystemRequestFailed)?;
-        let path_string = path.to_string_lossy().into_owned();
-        object.insert("id".to_owned(), Value::String(path_string.clone()));
+        let path = temporary_task_storage::validate_attachment_in_root(
+            app_data,
+            project_id,
+            task_root.as_deref(),
+            id,
+        )
+        .await
+        .map_err(|_| AppError::FilesystemRequestFailed)?;
         let metadata = tokio::fs::metadata(&path)
             .await
             .map_err(|_| AppError::FilesystemRequestFailed)?;
@@ -227,6 +238,20 @@ pub async fn resolve_prompt_attachments(
             kind.ok_or(AppError::FilesystemRequestFailed)?,
             metadata.len(),
         )?;
+        let retained = match &task_root {
+            Some(root) => temporary_task_storage::retain_attachment(
+                root,
+                &path,
+                kind.ok_or(AppError::FilesystemRequestFailed)?,
+            )
+            .await
+            .map_err(|_| AppError::FilesystemRequestFailed)?,
+            None => path,
+        };
+        object.insert(
+            "id".to_owned(),
+            Value::String(retained.to_string_lossy().into_owned()),
+        );
     }
     Ok(())
 }
@@ -331,6 +356,42 @@ mod tests {
                 "message": "attachment exceeds the 52428800 byte limit",
             })
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn temporary_prompt_should_store_attachments_in_its_own_task_directory() {
+        use crate::infrastructure::temporary_workspace;
+        let root = std::env::temp_dir().join(format!(
+            "codeagent-task-input-{}",
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let pending = temporary_workspace::create(&root).await.unwrap();
+        let task_root = temporary_workspace::bind_task(&root, &pending, "thread-input")
+            .await
+            .unwrap();
+        let staged =
+            store_attachment_without_codex(&root, "temporary", "file", "report.json", b"{}")
+                .await
+                .unwrap();
+        let mut input = AgentPromptInput {
+            attachments: vec![staged["attachment"].clone()],
+            skills: vec![],
+            text: "Read it".into(),
+        };
+        resolve_prompt_attachments(&root, "temporary", "thread-input", &mut input)
+            .await
+            .unwrap();
+        let id = input.attachments[0]["id"].as_str().unwrap().to_owned();
+        assert!(Path::new(&id).starts_with(&task_root));
+        assert_eq!(fs::read(&id).unwrap(), b"{}");
+        resolve_prompt_attachments(&root, "temporary", "thread-input", &mut input)
+            .await
+            .unwrap();
+        assert_eq!(input.attachments[0]["id"], id);
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -145,6 +145,7 @@ pub async fn read_task(
             .map_err(AppError::from)?;
             response.snapshot.settings =
                 effective_task_settings(&app, &project_id, &task_id).await?;
+            task_workspace::allow_attachment_assets(&app, &project_id, &task_id).await?;
             response.checkpoint.sequence = state.project_sequence(&project_id).await;
             state.remember_task_snapshot(&response.snapshot).await;
             Ok(response)
@@ -261,6 +262,7 @@ pub async fn steer_turn(
     super::attachment_commands::resolve_prompt_attachments(
         &app_data_dir(&app)?,
         &project_id,
+        &task_id,
         &mut input,
     )
     .await?;
@@ -368,36 +370,6 @@ pub async fn compact_task(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn fork_task(
-    app: AppHandle,
-    project_id: String,
-    task_id: String,
-    last_turn_id: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<AgentTaskMutationResponse, AppError> {
-    let connection = state.codex_connection().await?;
-    let settings = effective_task_settings(&app, &project_id, &task_id).await?;
-    let response = codex::fork_task(&connection, &project_id, &task_id, last_turn_id.as_deref())
-        .await
-        .map_err(AppError::from)?;
-    write_task_settings(
-        &app_data_dir(&app)?,
-        &project_id,
-        &response.task.id,
-        &settings,
-    )
-    .await
-    .map_err(|_| AppError::FilesystemRequestFailed)?;
-    state
-        .remember_task_metadata(
-            &project_id,
-            [(response.task.id.as_str(), response.task.title.as_str())],
-        )
-        .await;
-    Ok(response)
-}
-
-#[tauri::command(rename_all = "camelCase")]
 pub async fn rename_task(
     project_id: String,
     task_id: String,
@@ -482,6 +454,7 @@ pub async fn delete_task(
     task_workspace::remove_deleted_workspace(
         &app,
         &project_id,
+        &task_id,
         deleted.working_directory.as_deref(),
     )
     .await?;

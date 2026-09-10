@@ -127,14 +127,21 @@ pub async fn open_task_attachment(
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let connection = state.codex_connection().await?;
-    codex::read_task(&connection, project_id.clone(), task_id)
+    codex::read_task(&connection, project_id.clone(), task_id.clone())
         .await
         .map_err(AppError::from)?;
     let app_data = app
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    let path = match workspace::validate_attachment(&app_data, &project_id, &attachment_id).await {
+    let path = match crate::infrastructure::temporary_task_storage::validate_attachment(
+        &app_data,
+        &project_id,
+        &task_id,
+        &attachment_id,
+    )
+    .await
+    {
         Ok(path) => path,
         Err(_) => workspace::validate_generated_attachment(&app_data, &attachment_id)
             .await

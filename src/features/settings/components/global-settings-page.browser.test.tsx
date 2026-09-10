@@ -22,6 +22,7 @@ async function renderSettings(initialSection: "appearance" | "personalization" =
   const onClose = vi.fn();
   const onSave = vi.fn(async (_settings: AgentGlobalSettings) => undefined);
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  queryClient.setQueryData(["temporary-workspace-settings"], { rootPath: "/Users/example/Documents/CodeAgent/Temporary tasks" });
   queryClient.setQueryData(["personalization", "instructions"], { content: "现有说明", path: "/custom/AGENTS.md", overrideActive: false });
   queryClient.setQueryData(["personalization", "memories"], { enabled: false, allowExternalContext: true });
   const screen = await render(

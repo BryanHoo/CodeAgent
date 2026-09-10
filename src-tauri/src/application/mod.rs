@@ -39,6 +39,7 @@ pub mod task_activity_commands;
 #[cfg(test)]
 mod task_activity_tests;
 pub mod task_board_commands;
+pub mod task_fork_commands;
 mod task_subscription;
 pub mod task_subscription_commands;
 #[cfg(test)]
@@ -49,6 +50,7 @@ mod task_window_stream;
 #[cfg(test)]
 mod task_window_tests;
 mod task_workspace;
+pub mod temporary_workspace_commands;
 pub mod terminal_commands;
 pub(crate) mod terminal_lifecycle;
 #[cfg(feature = "webview-tests")]
