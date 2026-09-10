@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { i18n } from "../../../i18n/i18n.js";
@@ -15,7 +16,16 @@ vi.mock("../../../platform/tauri/app-storage.js", async (importOriginal) => ({
 describe("settings lazy loading", () => {
   it("does not read image data until custom background is enabled", async () => {
     await i18n.changeLanguage("zh-CN");
-    const screen = await render(<TooltipProvider><GlobalSettingsPage apps={[]} error={null} isPending={false} models={[]} onClose={vi.fn()} onRetry={vi.fn()} onSave={async () => undefined} settings={createFallbackSettings([])} /></TooltipProvider>);
+    // 补齐常规设置依赖的查询上下文，并预置临时目录以避免调用原生接口。
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    queryClient.setQueryData(["temporary-workspace-settings"], { rootPath: "/Users/example/Documents/CodeAgent/Temporary tasks" });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <GlobalSettingsPage apps={[]} error={null} isPending={false} models={[]} onClose={vi.fn()} onRetry={vi.fn()} onSave={async () => undefined} settings={createFallbackSettings([])} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
     await expect.element(screen.getByRole("heading", { name: "常规", exact: true })).toBeVisible();
     expect(backgroundRead).not.toHaveBeenCalled();
     await screen.getByRole("searchbox", { name: "搜索设置" }).fill("记忆");
