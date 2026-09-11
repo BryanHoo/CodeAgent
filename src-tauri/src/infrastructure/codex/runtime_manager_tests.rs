@@ -2,6 +2,30 @@ use super::runtime_discovery::private_codex_binary_path;
 use super::runtime_manager::distribution_for;
 use std::path::Path;
 
+#[cfg(unix)]
+#[tokio::test]
+async fn staged_runtime_should_allow_cold_launch_without_relaxing_regular_probes() {
+    use super::process::{ProcessError, probe_codex_version};
+    use std::os::unix::fs::PermissionsExt;
+    let root = std::env::temp_dir().join(format!("codeagent-cold-probe-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let binary = root.join("codex");
+    // 同一进程延迟用于验证安装与日常探测的不同预算，不依赖网络或 macOS 缓存。
+    std::fs::write(
+        &binary,
+        b"#!/bin/sh\nsleep 4\nprintf 'codex-cli 0.154.0\\n'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(matches!(
+        probe_codex_version(&binary, None).await,
+        Err(ProcessError::VersionProbeTimeout)
+    ));
+    let result = super::runtime_manager::validate_staged_runtime(&binary).await;
+    std::fs::remove_dir_all(&root).unwrap();
+    assert!(result.is_ok(), "cold install should validate: {result:?}");
+}
+
 #[test]
 fn runtime_download_should_prefer_the_domestic_mirror_on_every_platform() {
     for (os, arch) in [
@@ -26,7 +50,7 @@ fn runtime_download_should_prefer_the_domestic_mirror_on_every_platform() {
 fn private_runtime_should_use_the_provider_version_directory() {
     assert_eq!(
         private_codex_binary_path(Path::new("/application-data")),
-        Path::new("/application-data/providers/codex/bin/0.153.4/bin")
+        Path::new("/application-data/providers/codex/bin/0.154.0/bin")
             .join(format!("codex{}", std::env::consts::EXE_SUFFIX))
     );
 }
@@ -39,42 +63,42 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
             "x86_64",
             "x86_64-apple-darwin",
             "darwin-x64",
-            "vnSbbPzfoDZmmyzsxswsDDXQ06IVFBzkQU7/hroB3ji93Ok2utcsq8Psfk2tjF5r9mEx8RWFJhzuTGHG26/NDA==",
+            "2aqz+72Hop8PF2RYglQ4JnGjm3OlRIrTykJIT0hyLeUgM6NCFy09RgTmqRCoWliKQZjEn9jjZqUEp7QujAj77g==",
         ),
         (
             "macos",
             "aarch64",
             "aarch64-apple-darwin",
             "darwin-arm64",
-            "B1qhN3fa1ay0R0wGziXqgwSkB5icpYChNKHhtBHff/0UtSTC7z+l8aTtvMlGjH3E8HEvY3+njIJelM9CAAoVWg==",
+            "HP/vJCH/t2hB9Kg6hotN9UglClJ6/z584fal5lEP14C9gNAgAQS4/kTQC7l5V+BA3TqwDPwINSjul28cX8AYXg==",
         ),
         (
             "linux",
             "aarch64",
             "aarch64-unknown-linux-musl",
             "linux-arm64",
-            "QKdjYLYV4hXIuUQDP3P6F4NXuWFoKo9WUoV4nAREIx55kiUyi8UsYdsVobkeXir5n/maEQgYMCKLHVma4rNPiw==",
+            "KmTCB6ST484zeYlPpKP/K5P/gRaYmt6TihVD+zotoe6O9q0JSBP+FYvCz4A/zZXR7xDOHURTSjHp0sD8wWS0YQ==",
         ),
         (
             "linux",
             "x86_64",
             "x86_64-unknown-linux-musl",
             "linux-x64",
-            "x1EcwBlY3AObM1VTUHNM2AzAJQsyreGdagpF+qFiYi/Oa30VBktvvG0C6tLtCzqW6hjZNWkGZQWmeVk7MuJKWg==",
+            "a4FI3A8sGtwGrOqltrPbrS2hajrHQG591EwmRfiRoLMb10VxdBtUGW4gu6IJVYENiYGA7k3P4jlRHEoCZU/s9Q==",
         ),
         (
             "windows",
             "aarch64",
             "aarch64-pc-windows-msvc",
             "win32-arm64",
-            "/FBh42976ltF1kxDoPQBg1Q6+hwChRU5/sm5dfeC8kFVQMvOCGoGeY5d8rRZGVJE8XojlXo74VQb0sHowcfgBw==",
+            "CRUmZnE0Y/a8aLMrrA681EytOGaPaF659wJAiI4I3hsbQjaeYBSPV7PkCjy4Qn5LR/fmwIUORVH+6JaBNQL+tw==",
         ),
         (
             "windows",
             "x86_64",
             "x86_64-pc-windows-msvc",
             "win32-x64",
-            "lMkB43kJZH0VFr+hoXc11qqR7QtQIbkr07ALgj4urKL1osNyUyuy1iXd3Vzz2iCYvBUCSw7I0l/W1cEPGx9euQ==",
+            "Stg2KEJPIKVqPPR1wCverGOR4ey3RR3cvakR07w7FNKQUMzmHaOZomRsP2bR1qOT/67yHsks9rB+MCMfIWXcRA==",
         ),
     ];
 
@@ -84,7 +108,7 @@ fn distribution_should_be_fixed_to_the_official_supported_package() {
         assert_eq!(
             distribution.fallback_url,
             format!(
-                "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-{package_suffix}.tgz"
+                "https://registry.npmjs.org/@openai/codex/-/codex-0.154.0-{package_suffix}.tgz"
             )
         );
         assert_eq!(distribution.integrity, integrity);
@@ -143,10 +167,10 @@ mod private_runtime {
     async fn inspection_should_ignore_active_manifest_redirects() {
         let root = fixture();
         let alternate = root.join("providers/codex/bin/alternate/bin/codex");
-        binary(&alternate, "0.153.4");
+        binary(&alternate, "0.154.0");
         std::fs::write(
             root.join("providers/codex/active.json"),
-            serde_json::to_vec(&serde_json::json!({"path": alternate, "version": "0.153.4"}))
+            serde_json::to_vec(&serde_json::json!({"path": alternate, "version": "0.154.0"}))
                 .unwrap(),
         )
         .unwrap();
@@ -157,7 +181,7 @@ mod private_runtime {
     #[tokio::test]
     async fn installation_should_reuse_valid_private_binary_without_progress_or_manifest_writes() {
         let root = fixture();
-        binary(&private_codex_binary_path(&root), "0.153.4");
+        binary(&private_codex_binary_path(&root), "0.154.0");
         let result = install_codex_runtime(&root, |_| panic!("healthy runtime must not install"))
             .await
             .unwrap();

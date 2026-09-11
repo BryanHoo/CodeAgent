@@ -244,7 +244,7 @@ function RuntimeSetup({
   onDownload,
 }: RuntimeSetupProps) {
   const { t } = useTranslation("common");
-  const requiredVersion = availability?.requiredVersion ?? "0.153.4";
+  const requiredVersion = availability?.requiredVersion ?? "0.154.0";
   const failed = detectionFailed || availability?.status === "failed";
 
   return (

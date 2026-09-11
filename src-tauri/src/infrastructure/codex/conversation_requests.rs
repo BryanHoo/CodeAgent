@@ -147,6 +147,14 @@ pub fn response_for_resolution(
                 "scope": required_string(resolution, "scope")?,
             }))
         }
+        "mcpServer/elicitation/request" if pending.request["mode"] == "unsupported" => {
+            // 未实现设备验证与扩展表单，后端只允许取消或拒绝，不能伪造验证证明。
+            let action = required_string(resolution, "action")?;
+            if !matches!(action, "cancel" | "decline") {
+                return Err(ConnectionError::InvalidMessage);
+            }
+            Ok(json!({"_meta": null, "action": action, "content": null}))
+        }
         "mcpServer/elicitation/request" => Ok(json!({
             "_meta": null,
             "action": required_string(resolution, "action")?,
@@ -297,9 +305,15 @@ fn map_mcp_request(
     {
         return Ok(request);
     }
+    // 154 的验证请求使用 description 而非 message；challenge 留在服务端，不进入 IPC。
+    let message = if mode == "openai/userVerification" {
+        required_string(params, "description")?
+    } else {
+        required_string(params, "message")?
+    };
     let mut request = json!({
         "createdAt": timestamp, "expiresAt": null, "itemId": format!("mcp-elicitation:{request_id}"),
-        "message": required_string(params, "message")?, "projectId": "", "requestId": request_id,
+        "message": message, "projectId": "", "requestId": request_id,
         "serverName": required_string(params, "serverName")?, "status": "pending", "taskId": task_id,
         "turnId": turn_id, "type": "mcp_elicitation",
     });
@@ -313,7 +327,7 @@ fn map_mcp_request(
             fields.extend(json!({"mode": "url", "url": url}).as_object().unwrap().clone());
         }
         "form" => fields.extend(json!({"fields": map_mcp_fields(params.get("requestedSchema").ok_or(ConnectionError::InvalidMessage)?)?, "mode": "form"}).as_object().unwrap().clone()),
-        "openai/form" | "openaiForm" => { fields.insert("mode".to_owned(), json!("unsupported")); }
+        "openai/form" | "openaiForm" | "openai/userVerification" => { fields.insert("mode".to_owned(), json!("unsupported")); }
         _ => return Err(ConnectionError::InvalidMessage),
     }
     Ok(request)

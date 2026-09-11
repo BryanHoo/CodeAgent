@@ -365,7 +365,7 @@ fn map_installed_skill(skill: &Value) -> Option<Value> {
 fn map_mcp_server(server: Value) -> Option<Value> {
     let name = server.get("name")?.as_str()?;
     let info = server.get("serverInfo").filter(|value| !value.is_null());
-    // 保留 0.152 的线程连接态；仅按官方 TUI 规则补全无运行态但未登录的服务。
+    // 线程连接态优先；无运行态但未登录时沿用官方的认证提示。
     let status = match server.get("runtimeStatus")? {
         Value::Null if server.get("authStatus").and_then(Value::as_str) == Some("notLoggedIn") => {
             "authenticationRequired"
@@ -386,6 +386,15 @@ fn map_mcp_server(server: Value) -> Option<Value> {
             value
         }
         _ => return None,
+    };
+    // 154 将工具发现错误独立于连接态返回；只修正可用态，不覆盖认证和禁用态。
+    // 仅投影已有状态字段，不把错误正文或完整工具目录传入 WebView。
+    let status = if matches!(status, "connected" | "unknown")
+        && server.get("toolsError").is_some_and(Value::is_string)
+    {
+        "failed"
+    } else {
+        status
     };
     let tool_count = server
         .get("tools")

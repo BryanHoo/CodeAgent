@@ -4,6 +4,7 @@ use std::{
     io::{self, Write},
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
 
 use flate2::read::GzDecoder;
@@ -13,7 +14,10 @@ use thiserror::Error;
 use tokio::{fs, task};
 
 use super::{
-    process::{SUPPORTED_CODEX_VERSION, is_compatible_codex_version, probe_codex_version},
+    process::{
+        ProcessError, SUPPORTED_CODEX_VERSION, is_compatible_codex_version, probe_codex_version,
+        probe_codex_version_with_timeout,
+    },
     runtime_active::read_active_codex_runtime,
     runtime_discovery::private_codex_binary_path,
     runtime_distributions::{
@@ -56,7 +60,7 @@ pub enum RuntimeInstallError {
     #[error("failed to update the private Codex installation")]
     Filesystem(#[from] io::Error),
     #[error("the downloaded Codex binary failed validation")]
-    Validation,
+    Validation(#[source] ProcessError),
     #[error("the Codex extraction task failed")]
     ExtractionTask,
 }
@@ -226,18 +230,25 @@ where
     let staged_binary = staging_dir
         .join("bin")
         .join(format!("codex{}", env::consts::EXE_SUFFIX));
-    if probe_codex_version(&staged_binary, None)
-        .await
-        .ok()
-        .as_deref()
-        != Some(SUPPORTED_CODEX_VERSION)
-    {
-        return Err(RuntimeInstallError::Validation);
-    }
+    validate_staged_runtime(&staged_binary).await?;
 
     replace_runtime_directory(final_dir, staging_dir).await?;
     write_active_runtime(app_data, &private_codex_binary_path(app_data)).await?;
     progress.report_phase(CodexRuntimeInstallPhase::Ready);
+    Ok(())
+}
+
+pub(super) async fn validate_staged_runtime(binary: &Path) -> Result<(), RuntimeInstallError> {
+    // 新解包的大型签名二进制首次启动可能等待系统验证；仅安装阶段放宽预算。
+    // 日常探测仍为 3 秒，输出上限与超时终止逻辑共用，不重复启动进程。
+    let version = probe_codex_version_with_timeout(binary, None, Duration::from_secs(10))
+        .await
+        .map_err(RuntimeInstallError::Validation)?;
+    if version != SUPPORTED_CODEX_VERSION {
+        return Err(RuntimeInstallError::Validation(
+            ProcessError::UnsupportedVersion,
+        ));
+    }
     Ok(())
 }
 

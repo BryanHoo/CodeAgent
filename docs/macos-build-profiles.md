@@ -33,7 +33,7 @@ pnpm tauri:legacy --bundles app,dmg
 - Legacy Diff 使用 jsdiff 解析 unified patch，保留增删行、双行号与虚拟列表，省去语法/词级 Diff 高亮；避免替旧 WebKit 模拟 constructable stylesheets。代码块仍保留 Shiki 高亮，亮暗 token 由 CSS 切换。
 - 不支持 container queries 的旧系统保留表单默认单列布局。视觉特性可以降级，任务执行、审批和数据契约共用。
 - 原生新 API 应集中在平台模块，通过 availability / selector 能力检查调用，确保新符号不会在旧系统启动时被强链接。不能仅在 Rust 分支里判断版本后直接引用新符号。
-- 官方 Codex 0.153.4 的 Intel 主程序 Mach-O 最低版本为 10.12，内置 zsh 为 15.0。因此 macOS 15 以下在进程参数中关闭 `shell_zsh_fork`，使用标准系统 shell；15 及以上保留用户配置。不修改用户的 Codex 配置文件。
+- 官方 Codex 0.154.0 的 Intel 主程序 Mach-O 最低版本为 10.12，内置 zsh 为 15.0（已解包并使用 `otool -l` 核对）。因此 macOS 15 以下在进程参数中关闭 `shell_zsh_fork`，使用标准系统 shell；15 及以上保留用户配置。不修改用户的 Codex 配置文件。
 
 ## 发布与更新
 
