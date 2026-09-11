@@ -77,6 +77,7 @@ export const settings = {
     save: "无法保存全局设置",
     update: "更新失败，请重试",
     updateCheck: "无法检查更新",
+    githubConnection: "无法连接到GitHub",
   },
   fields: {
     approvalPolicy: "审批",

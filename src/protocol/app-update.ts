@@ -9,6 +9,7 @@ export const AppUpdateStatusSchema = Type.Union([
   Type.Literal("current"),
   Type.Literal("available"),
   Type.Literal("check-failed"),
+  Type.Literal("connection-failed"),
 ]);
 export type AppUpdateStatus = Static<typeof AppUpdateStatusSchema>;
 

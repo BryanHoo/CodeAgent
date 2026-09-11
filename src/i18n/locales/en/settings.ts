@@ -77,6 +77,7 @@ export const settings = {
     save: "Unable to save global settings",
     update: "Update failed. Try again.",
     updateCheck: "Unable to check for updates",
+    githubConnection: "Unable to connect to GitHub",
   },
   fields: {
     approvalPolicy: "Approval policy",

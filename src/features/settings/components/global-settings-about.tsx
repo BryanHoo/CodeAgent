@@ -47,6 +47,7 @@ export function GlobalSettingsAbout({
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<AppUpdateInstallProgress | null>(null);
   const updatePercentage = calculateUpdatePercentage(updateProgress);
+  const updateFailed = appInfo?.status === "check-failed" || appInfo?.status === "connection-failed";
   const checkForUpdates = () =>
     checkLockRef.current.run(async () => {
       setIsChecking(true);
@@ -100,17 +101,19 @@ export function GlobalSettingsAbout({
                   "shrink-0 text-body-small",
                   appInfo.status === "available"
                     ? "text-warning"
-                    : appInfo.status === "check-failed"
+                    : updateFailed
                       ? "text-danger"
                       : "text-muted-foreground",
                 )}
-                role={appInfo.status === "check-failed" ? "alert" : "status"}
+                role={updateFailed ? "alert" : "status"}
               >
                 {appInfo.status === "available" && appInfo.latestVersion !== null
                   ? t("about.available", { version: appInfo.latestVersion })
-                  : appInfo.status === "check-failed"
-                    ? t("errors.updateCheck")
-                    : t("about.current")}
+                  : appInfo.status === "connection-failed"
+                    ? t("errors.githubConnection")
+                    : appInfo.status === "check-failed"
+                      ? t("errors.updateCheck")
+                      : t("about.current")}
               </p>
               <Button
                 disabled={isChecking}

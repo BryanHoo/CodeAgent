@@ -15,11 +15,29 @@ pub(super) const REPOSITORY_URL: &str = "https://github.com/BryanHoo/CodeAgent";
 
 const INITIAL_VERSION: &str = "0.1.0";
 const RELEASES_URL: &str = "https://api.github.com/repos/BryanHoo/CodeAgent/releases?per_page=1";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_RESPONSE_BYTES: usize = 64 * 1024;
 const MAX_RELEASE_NOTES_BYTES: usize = 32 * 1024;
 const CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
 static HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
+
+#[derive(Debug)]
+enum UpdateCheckError {
+    ConnectionFailed,
+    InvalidResponse,
+}
+
+impl From<reqwest::Error> for UpdateCheckError {
+    fn from(error: reqwest::Error) -> Self {
+        // 连接和正文读取都可能超时，保留网络失败类别供设置页准确提示。
+        if error.is_timeout() || error.is_connect() {
+            Self::ConnectionFailed
+        } else {
+            Self::InvalidResponse
+        }
+    }
+}
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,7 +84,13 @@ pub(super) async fn check_for_update(current_version: &str, app: &AppHandle) -> 
     };
     let response = match fetch_releases().await {
         Ok(response) => response,
-        Err(()) => return failed_update(current_version),
+        Err(error) => {
+            let mut update = failed_update(current_version);
+            if matches!(error, UpdateCheckError::ConnectionFailed) {
+                update.status = "connection-failed";
+            }
+            return update;
+        }
     };
     resolve_release_response_for_channel(current_version, &response, Some(required_asset))
 }
@@ -104,21 +128,22 @@ pub(super) async fn install_update(
     app.restart();
 }
 
-fn http_client() -> Result<&'static Client, ()> {
+fn http_client() -> Result<&'static Client, UpdateCheckError> {
     if let Some(client) = HTTP_CLIENT.get() {
         return Ok(client);
     }
     let client = Client::builder()
-        .connect_timeout(REQUEST_TIMEOUT)
+        // 放宽慢网络的连接等待，同时用总超时限制整个响应读取过程。
+        .connect_timeout(CONNECT_TIMEOUT)
         .redirect(Policy::none())
         .timeout(REQUEST_TIMEOUT)
         .build()
-        .map_err(|_| ())?;
+        .map_err(UpdateCheckError::from)?;
     let _ = HTTP_CLIENT.set(client);
-    HTTP_CLIENT.get().ok_or(())
+    HTTP_CLIENT.get().ok_or(UpdateCheckError::InvalidResponse)
 }
 
-async fn fetch_releases() -> Result<Vec<u8>, ()> {
+async fn fetch_releases() -> Result<Vec<u8>, UpdateCheckError> {
     // 更新检查只允许访问固定 GitHub API，并限制超时与响应体，避免拖慢应用启动。
     let response = http_client()?
         .get(RELEASES_URL)
@@ -127,9 +152,9 @@ async fn fetch_releases() -> Result<Vec<u8>, ()> {
         .header("X-GitHub-Api-Version", "2022-11-28")
         .send()
         .await
-        .map_err(|_| ())?;
+        .map_err(UpdateCheckError::from)?;
     if !is_valid_response(&response) {
-        return Err(());
+        return Err(UpdateCheckError::InvalidResponse);
     }
     read_bounded_body(response).await
 }
@@ -144,13 +169,13 @@ fn is_valid_response(response: &Response) -> bool {
             .is_some_and(|value| value.to_ascii_lowercase().starts_with("application/json"))
 }
 
-async fn read_bounded_body(response: Response) -> Result<Vec<u8>, ()> {
+async fn read_bounded_body(response: Response) -> Result<Vec<u8>, UpdateCheckError> {
     let mut bytes = Vec::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|_| ())?;
+        let chunk = chunk.map_err(UpdateCheckError::from)?;
         if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
-            return Err(());
+            return Err(UpdateCheckError::InvalidResponse);
         }
         bytes.extend_from_slice(&chunk);
     }
@@ -266,6 +291,36 @@ fn truncate_notes(notes: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{AppUpdate, resolve_release_response_for_channel};
+
+    #[tokio::test]
+    async fn stalled_response_body_should_report_connection_failure() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            // 确认客户端已发出请求，再模拟只返回部分正文的服务端。
+            let mut request = [0; 1];
+            socket.read_exact(&mut request).await.unwrap();
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n[")
+                .await
+                .unwrap();
+            std::future::pending::<()>().await;
+        });
+        let response = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(1))
+            .build()
+            .unwrap()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap();
+        let error = super::read_bounded_body(response).await.unwrap_err();
+        server.abort();
+        assert!(matches!(error, super::UpdateCheckError::ConnectionFailed));
+    }
 
     #[test]
     fn newer_github_release_should_be_available_with_its_notes() {

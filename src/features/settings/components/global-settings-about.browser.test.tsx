@@ -18,6 +18,27 @@ const appInfo = {
 } satisfies AppInfoResponse;
 
 describe("GlobalSettingsAbout", () => {
+  it("shows a GitHub connection error and allows retry", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const onRetry = vi.fn();
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <GlobalSettingsAbout
+          activeSection="about"
+          appInfo={{ ...appInfo, status: "connection-failed" }}
+          error={null}
+          isPending={false}
+          onRetry={onRetry}
+          onExportDiagnostics={vi.fn(async () => ({ status: "cancelled" as const }))}
+          onUpdate={vi.fn()}
+        />
+      </I18nextProvider>,
+    );
+    await expect.element(screen.getByRole("alert")).toHaveTextContent("无法连接到GitHub");
+    await screen.getByRole("button", { name: "检查更新" }).click();
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
   it("keeps release notes available and links to the project changelog", async () => {
     await i18n.changeLanguage("zh-CN");
     const screen = await render(

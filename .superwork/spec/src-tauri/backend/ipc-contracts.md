@@ -48,6 +48,8 @@
 
 ## 诊断日志
 
+- 应用更新检查必须区分网络连接失败与发布数据异常：连接失败或请求超时返回 `connection-failed`，设置页显示“无法连接到GitHub”；响应无效继续返回 `check-failed`。正文读取超时也必须保留网络错误类别，不能被有界读取逻辑吞掉。
+
 - Rust、WebView 与 Codex stderr 统一写入带 `schemaVersion`、`timestamp`、`sessionId`、`source`、`level` 和稳定 `event` 的 JSONL；所有来源必须在 Rust 边界脱敏，凭据和提示内容不得落盘，路径必须替换，Project/Task/Thread 标识仅保留会话内稳定伪名
 - Codex RPC 最终失败必须记录 `codex_rpc_request_failed`，并保留经过格式校验的 `rpcMethod`、数字 `rpcCode` 与经过脱敏的原始错误消息；重试中的瞬时过载错误不得重复记录
 - Codex stderr 必须使用 JSON 格式、受控 `RUST_LOG`、有界单行读取和有界队列；丢弃 `debug/trace`，非法、超长或队列溢出只记录计数，不得回显原始内容
