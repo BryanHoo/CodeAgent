@@ -3,14 +3,16 @@ import {
   type ScheduledTask,
   type ScheduledTaskInput,
   type ScheduledTaskPage,
+  type ScheduledTaskSchedule,
 } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { CalendarClock } from "lucide-react";
 import { notifyActionError } from "../notifications/action-notifications.js";
 import { readScheduledTaskRun } from "./scheduled-task-run.js";
 
 import "../../shared/styles/scheduled-tasks.css";
+import "../../i18n/scheduled-recurrence.js";
 import type { useWorkbenchShellController } from "../workbench/components/workbench-shell-controller.js";
 import { ScheduledTaskEditor } from "./scheduled-task-editor.js";
 import { ScheduledTaskList } from "./scheduled-task-list.js";
@@ -48,6 +50,7 @@ export function ScheduledTasksContainer({
     setSelectedRootId,
     skillsQuery,
   } = context;
+  const previewSchedule = useCallback((schedule: ScheduledTaskSchedule) => client.previewScheduledTask(schedule), [client]);
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string>();
   const [creating, setCreating] = useState(false);
@@ -180,6 +183,7 @@ export function ScheduledTasksContainer({
         <ScheduledTaskEditor
           key={selectedTask?.id ?? `new:${projectId}`}
           composerProps={composerProps}
+          onPreview={previewSchedule}
           onOpenRun={(runProjectId, taskId) => {
             if (openRunMutation.isPending) return;
             openRunMutation.mutate({ runProjectId, taskId }, {

@@ -1,12 +1,13 @@
 import type { ScheduledTask } from "@/protocol/index.js";
+import "../../i18n/scheduled-recurrence.js";
 import { CalendarClock, CircleAlert, Clock3, Plus, Search } from "lucide-react";
 import { ScheduledTaskMenu } from "./scheduled-task-menu.js";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
 import { Button } from "../../shared/components/core/button.js";
 import { Input } from "../../shared/components/core/input.js";
-import { formatScheduledTime, scheduleToDraft } from "./scheduled-task-schedule.js";
+import { formatScheduledTime, scheduleToDraft, scheduledTaskEnded } from "./scheduled-task-schedule.js";
 
 function statusTone(task: ScheduledTask): "failed" | "paused" | "running" | "scheduled" {
   if (!task.enabled) return "paused";
@@ -38,6 +39,8 @@ export function ScheduledTaskList({
 }>) {
   const { i18n, t } = useTranslation("workbench");
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
+  // 列表搜索与状态切换复用已有规则摘要，不为每次重绘重新解析时区与规则。
+  const presets = useMemo(() => new Map(tasks.map((task) => [task.id, scheduleToDraft(task.schedule).preset])), [tasks]);
   // 筛选只作用于列表，保留右侧编辑草稿；后端未提供完成态，不推断执行结果。
   const filteredTasks = tasks.filter((task) => filter === "all" || task.enabled === (filter === "enabled"));
   return (
@@ -102,12 +105,12 @@ export function ScheduledTaskList({
                   type="button"
                 >
                   <strong>{task.name}</strong>
-                  <span>{t(`scheduledTasks.${scheduleToDraft(task.schedule).preset}`)} · {task.projectName}</span>
+                  <span>{t(`scheduledTasks.${presets.get(task.id)!}`)} · {task.projectName}</span>
                   <span className="scheduled-task-row__time">
                     {tone === "failed" ? <CircleAlert aria-hidden="true" /> : <Clock3 aria-hidden="true" />}
                     {task.enabled
                       ? formatScheduledTime(task.nextRunAtUnixMs, i18n.resolvedLanguage)
-                      : t("scheduledTasks.disabled")}
+                      : t(scheduledTaskEnded(task) ? "scheduledTasks.ended" : "scheduledTasks.disabled")}
                   </span>
                 </button>
                 <ScheduledTaskMenu task={task} onDelete={onDelete} onEnabledChange={onEnabledChange} />

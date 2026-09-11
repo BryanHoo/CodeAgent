@@ -1,4 +1,5 @@
 import { enUS, zhCN } from "date-fns/locale";
+import "../../i18n/scheduled-recurrence.js";
 import { CalendarDays } from "lucide-react";
 import DatePicker, { registerLocale } from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -42,29 +43,33 @@ function ScheduledTaskTimeInput({
 }
 
 export function ScheduledTaskDateTimePicker({
+  dateOnly = false,
+  label,
   minimum,
   onChange,
   value,
 }: Readonly<{
+  dateOnly?: boolean;
+  label?: string;
   minimum: string;
   onChange: (value: string) => void;
   value: string;
 }>) {
   const { i18n, t } = useTranslation("workbench");
   const language = resolveScheduledTaskLocale(i18n.resolvedLanguage);
-  const minimumDate = parseLocalDateTime(minimum);
-  const selectedDate = parseLocalDateTime(value);
+  const minimumDate = parseLocalDateTime(dateOnly && minimum ? `${minimum}T12:00` : minimum);
+  const selectedDate = parseLocalDateTime(dateOnly && value ? `${value}T12:00` : value);
 
   return (
     <div className="scheduled-task-date-time-field">
       <DatePicker
-        aria-label={t("scheduledTasks.time")}
+        aria-label={label ?? t("scheduledTasks.time")}
         autoComplete="off"
         calendarClassName="scheduled-task-date-time-picker__calendar"
         chooseDayAriaLabelPrefix={t("scheduledTasks.chooseDate")}
         customTimeInput={<ScheduledTaskTimeInput />}
         customInput={<Input lang={language} type="text" />}
-        dateFormat={language === "en" ? "MMM d, yyyy, h:mm aa" : "yyyy年M月d日 HH:mm"}
+        dateFormat={dateOnly ? (language === "en" ? "MMM d, yyyy" : "yyyy年M月d日") : language === "en" ? "MMM d, yyyy, h:mm aa" : "yyyy年M月d日 HH:mm"}
         disabledDayAriaLabelPrefix={t("scheduledTasks.dateUnavailable")}
         dropdownMode="select"
         // 阻止库把 SVG 的 mousedown 当作外部点击；开关统一由随后的 click 处理。
@@ -73,7 +78,7 @@ export function ScheduledTaskDateTimePicker({
         {...(minimumDate === null ? {} : { minDate: minimumDate })}
         nextMonthAriaLabel={t("scheduledTasks.nextMonth")}
         onChange={(date: Date | null) => {
-          if (date !== null) onChange(toLocalDateTimeInput(date.getTime()));
+          onChange(date === null ? "" : dateOnly ? toLocalDateTimeInput(date.getTime()).slice(0, 10) : toLocalDateTimeInput(date.getTime()));
         }}
         popperClassName="scheduled-task-date-time-picker__popper"
         popperPlacement="bottom-start"
@@ -84,7 +89,7 @@ export function ScheduledTaskDateTimePicker({
         showIcon
         showMonthDropdown
         showPopperArrow={false}
-        showTimeInput
+        showTimeInput={!dateOnly}
         showYearDropdown
         strictParsing
         timeInputLabel={t("scheduledTasks.timeOfDay")}

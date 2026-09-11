@@ -20,6 +20,12 @@ export const ScheduledTaskScheduleSchema = Type.Union([
 ]);
 export type ScheduledTaskSchedule = Readonly<Static<typeof ScheduledTaskScheduleSchema>>;
 
+export const ScheduledTaskPreviewSchema = Type.Object(
+  { dates: Type.Array(Type.Integer(), { maxItems: 5 }) },
+  { additionalProperties: false },
+);
+export type ScheduledTaskPreview = Readonly<Static<typeof ScheduledTaskPreviewSchema>>;
+
 export const ScheduledTaskRunStatusSchema = Type.Union([
   Type.Literal("failed"),
   Type.Literal("running"),

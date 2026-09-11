@@ -23,6 +23,30 @@ fn input(schedule: ScheduledTaskSchedule) -> ScheduledTaskInput {
     }
 }
 
+#[test]
+fn exhausted_recurring_schedule_should_remain_valid_and_disabled() {
+    let schedule = ScheduledTaskSchedule::Rrule {
+        rrule: "FREQ=DAILY;COUNT=2".to_owned(),
+        start_at_unix_ms: 1_893_456_000_000,
+        timezone: "UTC".to_owned(),
+    };
+    let task = build_task("ended".to_owned(), input(schedule), 1_894_000_000_000)
+        .expect("a completed schedule is valid data");
+    assert!(!task.enabled);
+    assert_eq!(task.next_run_at_unix_ms, None);
+}
+
+#[test]
+fn disabled_task_should_still_reject_invalid_recurrence() {
+    let mut value = input(ScheduledTaskSchedule::Rrule {
+        rrule: "not a rule".to_owned(),
+        start_at_unix_ms: 1_893_456_000_000,
+        timezone: "UTC".to_owned(),
+    });
+    value.enabled = false;
+    assert!(build_task("invalid".to_owned(), value, 1_893_456_000_000).is_err());
+}
+
 #[tokio::test]
 async fn failed_scheduled_task_writes_should_preserve_memory_and_allow_retry() {
     let root = std::env::temp_dir().join(format!(

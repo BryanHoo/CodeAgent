@@ -108,6 +108,15 @@ pub fn cancel_native_request(request_id: String, state: State<'_, AppState>) -> 
 #[cfg(test)]
 mod tests {
     #[test]
+    fn scheduled_preview_should_be_registered_and_allowed() {
+        assert!(include_str!("../../build.rs").contains("\"preview_scheduled_task\""));
+        assert!(include_str!("../lib.rs").contains("preview_scheduled_task,"));
+        assert!(
+            include_str!("../../permissions/window-command-sets.toml")
+                .contains("\"allow-preview-scheduled-task\"")
+        );
+    }
+    #[test]
     fn main_window_should_allow_runtime_recovery_commands() {
         let permissions = include_str!("../../permissions/window-command-sets.toml");
 

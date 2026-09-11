@@ -48,6 +48,8 @@ import type {
   ScheduledTaskInput,
   ScheduledTaskMutationResponse,
   ScheduledTaskPage,
+  ScheduledTaskSchedule,
+  ScheduledTaskPreview,
   TerminateAgentBackgroundTerminalResponse,
   UnarchiveAgentTaskResponse,
   UpdateAgentGoalRequest,
@@ -77,6 +79,13 @@ export class TauriSidebarClient extends TauriRuntimeClient {
 
   public async listScheduledTasks(): Promise<ScheduledTaskPage> {
     return this.invokeCommand("list_scheduled_tasks");
+  }
+
+  public async previewScheduledTask(schedule: ScheduledTaskSchedule): Promise<ScheduledTaskPreview> {
+    // Schema 校验按需加载，预览能力不增加工作台首屏的协议检查开销。
+    const { parseScheduledTaskPreview } = await import("./scheduled-task-response.js");
+    const result = await this.invokeCommand<unknown>("preview_scheduled_task", { schedule });
+    return parseScheduledTaskPreview(result);
   }
 
   public async createScheduledTask(

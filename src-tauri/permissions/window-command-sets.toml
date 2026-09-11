@@ -124,6 +124,7 @@ permissions = [
   "allow-open-project",
   "allow-open-task-attachment",
   "allow-list-scheduled-tasks",
+  "allow-preview-scheduled-task",
   "allow-create-scheduled-task",
   "allow-update-scheduled-task",
   "allow-delete-scheduled-task",

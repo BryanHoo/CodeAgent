@@ -18,7 +18,7 @@ use crate::{
     },
     infrastructure::scheduled_tasks::{
         MAX_SCHEDULED_TASK_RUNS, ScheduledTaskStoreError, read_scheduled_tasks,
-        validate_and_resolve_next_run, write_scheduled_tasks,
+        resolve_schedule_runs, write_scheduled_tasks,
     },
 };
 
@@ -178,8 +178,11 @@ impl ScheduledTaskRuntime {
         task.enabled = enabled;
         task.updated_at_unix_ms = now;
         if enabled {
-            task.next_run_at_unix_ms =
-                Some(validate_and_resolve_next_run(&task.schedule, now).map_err(map_store_error)?);
+            task.next_run_at_unix_ms = resolve_schedule_runs(&task.schedule, now, 1)
+                .map_err(map_store_error)?
+                .first()
+                .copied();
+            task.enabled = task.next_run_at_unix_ms.is_some();
         }
         let updated = task.clone();
         current.commit_candidate(state).await?;
@@ -210,13 +213,13 @@ pub(super) fn build_task(
     input: ScheduledTaskInput,
     now: i64,
 ) -> Result<ScheduledTask, ScheduledTaskStoreError> {
-    let next_run_at_unix_ms = input
-        .enabled
-        .then(|| validate_and_resolve_next_run(&input.schedule, now))
-        .transpose()?;
+    // 停用也校验规则；有限计划用 None 表达自然结束，不把正常结束当作保存错误。
+    let next_run_at_unix_ms = resolve_schedule_runs(&input.schedule, now, 1)?
+        .first()
+        .copied();
     let task = ScheduledTask {
         created_at_unix_ms: now,
-        enabled: input.enabled,
+        enabled: input.enabled && next_run_at_unix_ms.is_some(),
         id,
         last_run_at_unix_ms: None,
         last_run_status: None,
@@ -299,7 +302,9 @@ fn advance_schedule(task: &mut ScheduledTask, now: i64) {
             task.next_run_at_unix_ms = None;
         }
         ScheduledTaskSchedule::Rrule { .. } => {
-            task.next_run_at_unix_ms = validate_and_resolve_next_run(&task.schedule, now).ok();
+            task.next_run_at_unix_ms = resolve_schedule_runs(&task.schedule, now, 1)
+                .ok()
+                .and_then(|dates| dates.first().copied());
             task.enabled = task.next_run_at_unix_ms.is_some();
         }
     }

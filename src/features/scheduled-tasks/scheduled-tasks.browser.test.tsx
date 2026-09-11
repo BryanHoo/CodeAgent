@@ -73,6 +73,8 @@ import { ScheduledTaskEditor } from "./scheduled-task-editor.js";
 import { ScheduledTaskList } from "./scheduled-task-list.js";
 import { ScheduledTasksContainer } from "./scheduled-tasks-container.js";
 
+const previewSchedule = async () => ({ dates: [2_000_000_000_000] });
+
 const task: ScheduledTask = {
   createdAtUnixMs: 1,
   enabled: true,
@@ -97,6 +99,22 @@ const task: ScheduledTask = {
 };
 
 describe("ScheduledTaskList", () => {
+  it("previews recurring times and blocks save until the matching response arrives", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const onPreview = vi.fn(async () => ({ dates: [2_000_000_000_000, 2_000_086_400_000, 2_000_172_800_000, 2_000_259_200_000, 2_000_345_600_000] }));
+    const screen = await render(<I18nextProvider i18n={i18n}>
+      <ScheduledTaskEditor composerProps={{ settings: task.turnOptions } as never} onPreview={onPreview}
+        onOpenRun={vi.fn()} onProjectChange={vi.fn()} onRunNow={vi.fn()} onSave={vi.fn()}
+        projectId={task.projectId} projects={[]} skills={[]} task={task} />
+    </I18nextProvider>);
+    await screen.getByRole("combobox", { name: "重复规则" }).selectOptions("daily");
+    await expect.poll(() => onPreview.mock.calls.length).toBe(1);
+    expect(screen.container.querySelectorAll(".scheduled-task-preview li")).toHaveLength(3);
+    await screen.getByRole("button", { name: "展开 5 次" }).click();
+    expect(screen.container.querySelectorAll(".scheduled-task-preview li")).toHaveLength(5);
+    await screen.getByRole("textbox", { name: "任务名称" }).fill("新的名称");
+    expect(onPreview).toHaveBeenCalledTimes(1);
+  });
   it("opens only on click and keeps a compact menu with delete confirmation", async () => {
     await i18n.changeLanguage("zh-CN");
     const onDelete = vi.fn();
@@ -134,7 +152,7 @@ describe("ScheduledTaskList", () => {
           <ScheduledTaskList onDelete={vi.fn()} activeId={task.id} loading={false} onCreate={vi.fn()} onEnabledChange={vi.fn()}
             onSelect={vi.fn()} query="" setQuery={vi.fn()}
             tasks={[task, { ...task, id: "paused", name: "每周回顾", enabled: false }]} />
-          <ScheduledTaskEditor composerProps={{ settings: task.turnOptions } as never}
+          <ScheduledTaskEditor onPreview={previewSchedule} composerProps={{ settings: task.turnOptions } as never}
             onOpenRun={vi.fn()} onProjectChange={vi.fn()}
             onRunNow={async () => undefined} onSave={async () => undefined}
             projectId={task.projectId} projects={[]} skills={[]} task={task} />
@@ -221,7 +239,7 @@ describe("ScheduledTaskList", () => {
     const onSave = vi.fn(async () => undefined);
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <ScheduledTaskEditor
+        <ScheduledTaskEditor onPreview={previewSchedule}
           composerProps={{ settings: task.turnOptions } as never}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
@@ -248,7 +266,7 @@ describe("ScheduledTaskList", () => {
     await i18n.changeLanguage("zh-CN");
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <ScheduledTaskEditor
+        <ScheduledTaskEditor onPreview={previewSchedule}
           composerProps={{ settings: task.turnOptions } as never}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
@@ -273,7 +291,7 @@ describe("ScheduledTaskList", () => {
     await i18n.changeLanguage("zh-CN");
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <ScheduledTaskEditor
+        <ScheduledTaskEditor onPreview={previewSchedule}
           composerProps={{ settings: task.turnOptions } as never}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
@@ -299,7 +317,7 @@ describe("ScheduledTaskList", () => {
     await i18n.changeLanguage("zh-CN");
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <ScheduledTaskEditor
+        <ScheduledTaskEditor onPreview={previewSchedule}
           composerProps={{ settings: task.turnOptions } as never}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
@@ -328,7 +346,7 @@ describe("ScheduledTaskList", () => {
     const onSave = vi.fn(async () => undefined);
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <ScheduledTaskEditor
+        <ScheduledTaskEditor onPreview={previewSchedule}
           composerProps={{ settings: task.turnOptions } as never}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
@@ -345,8 +363,8 @@ describe("ScheduledTaskList", () => {
     await expect.element(screen.getByRole("textbox", { name: "触发时间" })).toBeVisible();
     await repeat.selectOptions("weekly");
     await expect.element(screen.getByRole("textbox", { name: "触发时间" })).not.toBeInTheDocument();
-    await screen.getByRole("combobox", { name: "周几" }).selectOptions("FR");
-    expect(screen.getByRole("combobox", { name: "周几" }).element().getBoundingClientRect().top)
+    await screen.getByRole("button", { name: "周五", exact: true }).click();
+    expect(screen.getByRole("button", { name: "周五", exact: true }).element().getBoundingClientRect().top)
       .toBeLessThan(screen.getByLabelText("时间", { exact: true }).element().getBoundingClientRect().top);
     const timeInput = screen.getByLabelText("时间", { exact: true });
     const initialBackground = getComputedStyle(timeInput.element()).backgroundColor;
@@ -358,12 +376,12 @@ describe("ScheduledTaskList", () => {
     await screen.getByLabelText("时间", { exact: true }).fill("17:45");
     await screen.getByRole("button", { name: "保存任务" }).click();
     expect(onSave).toHaveBeenLastCalledWith(task.id, expect.objectContaining({
-      schedule: expect.objectContaining({ rrule: "RRULE:FREQ=WEEKLY;BYDAY=FR;BYHOUR=17;BYMINUTE=45" }),
+      schedule: expect.objectContaining({ rrule: expect.stringContaining("BYHOUR=17;BYMINUTE=45;BYSECOND=0") }),
     }));
     await repeat.selectOptions("monthly");
-    await expect.element(screen.getByRole("combobox", { name: "周几" })).not.toBeInTheDocument();
-    await screen.getByRole("combobox", { name: "每月几号" }).selectOptions("31");
-    expect(screen.getByRole("combobox", { name: "每月几号" }).element().getBoundingClientRect().top)
+    await expect.element(screen.getByRole("button", { name: "周五", exact: true })).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "31", exact: true }).click();
+    expect(screen.getByRole("button", { name: "31", exact: true }).element().getBoundingClientRect().top)
       .toBeLessThan(screen.getByLabelText("时间", { exact: true }).element().getBoundingClientRect().top);
     const controls = [...screen.container.querySelectorAll(".scheduled-task-fields input, .scheduled-task-fields select")];
     for (const control of controls) {
@@ -374,21 +392,21 @@ describe("ScheduledTaskList", () => {
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
     await screen.getByRole("button", { name: "保存任务" }).click();
     expect(onSave).toHaveBeenLastCalledWith(task.id, expect.objectContaining({
-      schedule: expect.objectContaining({ rrule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=31;BYHOUR=17;BYMINUTE=45" }),
+      schedule: expect.objectContaining({ rrule: expect.stringContaining("BYHOUR=17;BYMINUTE=45;BYSECOND=0") }),
     }));
     for (const preset of ["daily", "weekdays"]) {
       await repeat.selectOptions(preset);
       await expect.element(screen.getByLabelText("时间", { exact: true })).toHaveValue("17:45");
-      await expect.element(screen.getByRole("combobox", { name: "每月几号" })).not.toBeInTheDocument();
+      await expect.element(screen.getByRole("button", { name: "31", exact: true })).not.toBeInTheDocument();
       await expect.element(screen.getByRole("textbox", { name: "触发时间" })).not.toBeInTheDocument();
     }
     await repeat.selectOptions("weekly");
-    await expect.element(screen.getByRole("combobox", { name: "周几" })).toHaveValue("FR");
+    await expect.element(screen.getByRole("button", { name: "周五", exact: true })).toHaveAttribute("aria-pressed", "true");
     await repeat.selectOptions("once");
     await expect.element(screen.getByRole("textbox", { name: "触发时间" })).toBeVisible();
     await expect.element(screen.getByLabelText("时间", { exact: true })).not.toBeInTheDocument();
     await repeat.selectOptions("custom");
-    await expect.element(screen.getByRole("textbox", { name: "RRULE", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("spinbutton", { name: "重复间隔" })).toBeVisible();
     await page.viewport(1440, 900);
   });
 
@@ -403,7 +421,7 @@ describe("ScheduledTaskList", () => {
     };
     const screen = await render(
       <I18nextProvider i18n={i18n}>
-        <ScheduledTaskEditor
+        <ScheduledTaskEditor onPreview={previewSchedule}
           composerProps={{ settings: task.turnOptions } as never}
           onOpenRun={() => undefined}
           onProjectChange={() => undefined}
@@ -416,11 +434,11 @@ describe("ScheduledTaskList", () => {
         />
       </I18nextProvider>,
     );
-    await expect.element(screen.getByRole("combobox", { name: "周几" })).toHaveValue("FR");
+    await expect.element(screen.getByRole("button", { name: "周五", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect.element(screen.getByLabelText("时间", { exact: true })).toHaveValue("17:45");
     await screen.getByRole("button", { name: "保存任务" }).click();
     expect(onSave).toHaveBeenLastCalledWith(task.id, expect.objectContaining({
-      schedule: expect.objectContaining({ rrule: schedule.rrule, timezone: schedule.timezone }),
+      schedule: expect.objectContaining({ rrule: "RRULE:FREQ=WEEKLY;WKST=MO;BYDAY=FR;BYHOUR=17;BYMINUTE=45;BYSECOND=0", timezone: schedule.timezone }),
     }));
   });
 

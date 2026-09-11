@@ -20,6 +20,14 @@ const input: ScheduledTaskInput = {
 };
 
 describe("scheduled task client", () => {
+  it("previews at most five dates without connecting the provider", async () => {
+    const invoke = vi.fn(async () => ({ dates: [2_000_000_000_000] }));
+    const ensureRuntime = vi.fn();
+    const client = new TauriSidebarClient({ invoke: invoke as InvokeImplementation, ensureRuntime });
+    expect(await client.previewScheduledTask(input.schedule)).toEqual({ dates: [2_000_000_000_000] });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("preview_scheduled_task", { schedule: input.schedule });
+    expect(ensureRuntime).not.toHaveBeenCalled();
+  });
   it("maps CRUD and execution commands without starting the interactive runtime", async () => {
     const invoke = vi.fn(async (command: string) =>
       command === "list_scheduled_tasks" ? { data: [] } : { task: { id: "schedule-a" } },

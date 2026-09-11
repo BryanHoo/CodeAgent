@@ -1,5 +1,4 @@
 import { skillsMarket } from "./skills-market.js";
-import { scheduledTasks } from "./scheduled-tasks.js";
 import { taskWindow } from "./task-window-menu.js";
 
 export const workbench = {
@@ -464,7 +463,7 @@ export const workbench = {
     unpin: "取消固定",
   },
   skillsMarket,
-  scheduledTasks,
+  scheduledTasks: { title: "定时任务" },
   taskBoard: {
     allProjects: "全部项目",
     approval: "待审批",

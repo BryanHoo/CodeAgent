@@ -150,6 +150,7 @@ export type NativeScheduledTaskClient = Pick<
   | "createScheduledTask"
   | "deleteScheduledTask"
   | "listScheduledTasks"
+  | "previewScheduledTask"
   | "runScheduledTaskNow"
   | "setScheduledTaskEnabled"
   | "updateScheduledTask"

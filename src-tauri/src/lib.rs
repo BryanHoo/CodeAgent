@@ -44,8 +44,8 @@ use application::{
     pet_commands::{download_workbench_pet, list_workbench_pets},
     project_file_window_commands::open_project_file_window,
     scheduled_task_commands::{
-        create_scheduled_task, delete_scheduled_task, list_scheduled_tasks, run_scheduled_task_now,
-        set_scheduled_task_enabled, update_scheduled_task,
+        create_scheduled_task, delete_scheduled_task, list_scheduled_tasks, preview_scheduled_task,
+        run_scheduled_task_now, set_scheduled_task_enabled, update_scheduled_task,
     },
     scheduled_task_runtime::ScheduledTaskRuntime,
     sidebar_commands::{
@@ -230,6 +230,7 @@ pub fn run() {
             list_project_directories,
             list_completed_tasks,
             list_scheduled_tasks,
+            preview_scheduled_task,
             create_scheduled_task,
             update_scheduled_task,
             delete_scheduled_task,

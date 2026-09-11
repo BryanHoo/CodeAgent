@@ -154,6 +154,7 @@ fn main() {
         "open_project",
         "open_task_attachment",
         "list_scheduled_tasks",
+        "preview_scheduled_task",
         "create_scheduled_task",
         "update_scheduled_task",
         "delete_scheduled_task",

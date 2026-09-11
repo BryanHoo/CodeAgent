@@ -1,7 +1,10 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::domain::scheduled_task::{ScheduledTask, ScheduledTaskInput, ScheduledTaskPage};
+use crate::domain::scheduled_task::{
+    ScheduledTask, ScheduledTaskInput, ScheduledTaskPage, ScheduledTaskSchedule,
+};
+use crate::infrastructure::scheduled_tasks::resolve_schedule_runs;
 
 use super::{error::AppError, scheduled_task_runtime::ScheduledTaskRuntime};
 
@@ -16,6 +19,25 @@ pub struct ScheduledTaskMutationResponse {
 pub struct DeleteScheduledTaskResponse {
     pub status: &'static str,
     pub task_id: String,
+}
+
+#[derive(Serialize)]
+pub struct ScheduledTaskPreview {
+    dates: Vec<i64>,
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn preview_scheduled_task(
+    schedule: ScheduledTaskSchedule,
+) -> Result<ScheduledTaskPreview, AppError> {
+    // 预览不获取调度器状态锁、不访问磁盘或 Provider；CPU 计算移出异步执行器。
+    tauri::async_runtime::spawn_blocking(move || {
+        resolve_schedule_runs(&schedule, chrono::Utc::now().timestamp_millis(), 5)
+            .map(|dates| ScheduledTaskPreview { dates })
+            .map_err(|_| AppError::ScheduledTaskInvalid)
+    })
+    .await
+    .map_err(|_| AppError::ScheduledTaskInvalid)?
 }
 
 #[tauri::command]

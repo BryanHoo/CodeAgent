@@ -28,15 +28,20 @@ import {
   draftToSchedule,
   formatScheduledTime,
   scheduleToDraft,
+  scheduleDraftError,
+  scheduledTaskEnded,
   type ScheduleDraft,
 } from "./scheduled-task-schedule.js";
 import { ScheduledTaskScheduleFields } from "./scheduled-task-schedule-fields.js";
+import { ScheduledTaskPreview } from "./scheduled-task-preview.js";
+import { useSchedulePreview, type PreviewSchedule } from "./use-schedule-preview.js";
 
 type EditorProps = Readonly<{
   composerProps: WorkbenchComposerProps;
   onOpenRun: (projectId: string, taskId: string) => void;
   openingRun?: boolean;
   onProjectChange: (projectId: string) => void;
+  onPreview: PreviewSchedule;
   onRunNow: (id: string) => Promise<void>;
   onSave: (taskId: string | undefined, input: ScheduledTaskInput) => Promise<void>;
   projectId: string;
@@ -69,9 +74,9 @@ function promptDraft(task: ScheduledTask | undefined, skills: readonly AgentSkil
 
 export function ScheduledTaskEditor(props: EditorProps) {
   const { i18n, t } = useTranslation("workbench");
-  const timezone = props.task?.schedule.type === "rrule"
+  const [timezone] = useState(() => props.task?.schedule.type === "rrule"
     ? props.task.schedule.timezone
-    : Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    : Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   const composerRef = useRef<WorkbenchComposerHandle>(null);
   const [name, setName] = useState(props.task?.name ?? "");
   const [schedule, setSchedule] = useState<ScheduleDraft>(
@@ -95,8 +100,10 @@ export function ScheduledTaskEditor(props: EditorProps) {
     props.projectId === TEMPORARY_TASK_SCOPE_ID
       ? t("shell.temporaryTask")
       : (props.projects.find((project) => project.id === props.projectId)?.name ?? props.projectId);
-  const resolvedSchedule = draftToSchedule(schedule, timezone);
-  const formComplete = name.trim() !== "" && resolvedSchedule !== undefined && hasPromptInput;
+  const resolvedSchedule = useMemo(() => draftToSchedule(schedule, timezone), [schedule, timezone]);
+  const preview = useSchedulePreview(resolvedSchedule, props.onPreview);
+  const scheduleError = scheduleDraftError(schedule) ?? (resolvedSchedule === undefined ? schedule.preset === "once" ? "oncePast" : "invalidWallTime" : undefined);
+  const formComplete = name.trim() !== "" && resolvedSchedule !== undefined && hasPromptInput && !preview.pending && !preview.failed;
 
   const capture = async (
     prompt: AgentPromptInput,
@@ -107,7 +114,7 @@ export function ScheduledTaskEditor(props: EditorProps) {
       throw new Error(t("scheduledTasks.name"));
     }
     const capturedSchedule = draftToSchedule(schedule, timezone);
-    if (capturedSchedule === undefined) throw new Error(t("scheduledTasks.scheduleInvalid"));
+    if (capturedSchedule === undefined || preview.pending || preview.failed) throw new Error(t("scheduledTasks.scheduleInvalid"));
     await props.onSave(props.task?.id, {
       enabled: props.task?.enabled ?? true,
       name: name.trim(),
@@ -123,7 +130,7 @@ export function ScheduledTaskEditor(props: EditorProps) {
     <section className="scheduled-task-editor">
       <div className="scheduled-task-editor__toolbar">
         <span className="scheduled-task-status" data-enabled={props.task?.enabled ?? true}>
-          <span />{t(props.task === undefined ? "scheduledTasks.create" : props.task.enabled ? "scheduledTasks.enabled" : "scheduledTasks.disabled")}
+          <span />{t(props.task === undefined ? "scheduledTasks.create" : scheduledTaskEnded(props.task) ? "scheduledTasks.ended" : props.task.enabled ? "scheduledTasks.enabled" : "scheduledTasks.disabled")}
         </span>
         <div className="scheduled-task-editor__actions">
         {props.task === undefined ? <span /> : (
@@ -185,9 +192,7 @@ export function ScheduledTaskEditor(props: EditorProps) {
       <section className="scheduled-task-section">
         <h3><CalendarClock aria-hidden="true" />{t("scheduledTasks.frequency")}</h3>
         <div className="scheduled-task-fields"><ScheduledTaskScheduleFields onChange={setSchedule} schedule={schedule} /></div>
-        {props.task?.enabled && props.task.nextRunAtUnixMs !== null ? (
-          <p className="scheduled-task-next-run">{t("scheduledTasks.nextRun")}<span>{formatScheduledTime(props.task.nextRunAtUnixMs, i18n.resolvedLanguage)}</span></p>
-        ) : null}
+        <ScheduledTaskPreview schedule={schedule} timezone={timezone} {...preview} error={scheduleError} />
       </section>
       {props.task === undefined ? null : (
         <>

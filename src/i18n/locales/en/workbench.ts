@@ -1,5 +1,4 @@
 import { skillsMarket } from "./skills-market.js";
-import { scheduledTasks } from "./scheduled-tasks.js";
 import { taskWindow } from "./task-window-menu.js";
 
 export const workbench = {
@@ -468,7 +467,7 @@ export const workbench = {
     unpin: "Unpin",
   },
   skillsMarket,
-  scheduledTasks,
+  scheduledTasks: { title: "Scheduled tasks" },
   taskBoard: {
     allProjects: "All projects",
     approval: "Awaiting approval",
