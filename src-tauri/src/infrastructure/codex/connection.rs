@@ -340,30 +340,26 @@ async fn read_responses<R>(
 
     loop {
         line.clear();
-        let read_result = if queued_notifications.is_empty() {
-            read_bounded_frame(
+        let read_result = {
+            // 跨通知发送轮次保留同一个 Future，避免丢失已消费的半帧和图片扫描状态。
+            let read = read_bounded_frame(
                 &mut reader,
                 &mut line,
                 MAX_STANDARD_FRAME_BYTES,
                 MAX_IMAGE_FRAME_BYTES,
-            )
-            .await
-        } else {
-            tokio::select! {
-                biased;
-                result = read_bounded_frame(
-                    &mut reader,
-                    &mut line,
-                    MAX_STANDARD_FRAME_BYTES,
-                    MAX_IMAGE_FRAME_BYTES,
-                ) => result,
-                permit = server_messages.reserve() => {
-                    let Ok(permit) = permit else {
-                        queued_notifications.clear();
-                        continue;
-                    };
-                    permit.send(queued_notifications.pop_front().expect("queue is not empty"));
-                    continue;
+            );
+            tokio::pin!(read);
+            loop {
+                tokio::select! {
+                    biased;
+                    result = &mut read => break result,
+                    permit = server_messages.reserve(), if !queued_notifications.is_empty() => {
+                        let Ok(permit) = permit else {
+                            queued_notifications.clear();
+                            continue;
+                        };
+                        permit.send(queued_notifications.pop_front().expect("queue is not empty"));
+                    }
                 }
             }
         };
@@ -480,3 +476,7 @@ fn fail_pending(pending: &PendingRequests, error: PendingError) {
         let _ = sender.send(Err(error.clone()));
     }
 }
+
+#[cfg(test)]
+#[path = "connection_frame_cancellation_tests.rs"]
+mod frame_cancellation_tests;
