@@ -5,14 +5,24 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-11
+
+### Added
+
+- 添加定时任务可视化重复规则与执行预览，支持工作日、周末、每周和每月计划。
+- 添加跨客户端任务交互锁，防止多个窗口或客户端同时提交冲突操作。
+- 添加原生剪贴板 Markdown 复制，保留消息的原始格式。
+
 ### Changed
 
 - 升级私有 Codex 运行时至 `0.154.0`，同步六个平台的官方校验值、实验协议快照与 CI 版本。
+- 更新 Rust 依赖、WebDriver 插件与 CI 的 pnpm 安装动作。
 
 ### Fixed
 
 - 修复 MCP 工具发现失败显示为正常空清单的问题，并为设备验证请求提供可取消的不支持提示，保持有界 IPC 与现有流式性能路径。
 - 为首次安装的 Codex 二进制提供独立冷启动校验预算并保留错误原因，维持日常版本探测时限。
+- 修复应用更新检查未区分连接失败与服务响应异常的问题。
 
 ## [0.1.12] - 2026-09-11
 
@@ -216,7 +226,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.12...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.12...v0.2.0
 [0.1.12]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.12
 [0.1.11]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.9...v0.1.10
