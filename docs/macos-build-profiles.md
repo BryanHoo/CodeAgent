@@ -27,6 +27,7 @@ pnpm tauri:legacy --bundles app,dmg
 
 - Modern 保留 Tailwind CSS 4、原生 `light-dark()`、Pierre Diff 和现代 JS 目标。原先的 `14.0` / `safari17.4` 低于已使用的 `light-dark()` 要求，现按官方支持版本对齐为 `14.5` / `safari17.5`。
 - Legacy 通过 Vite 官方 `plugin-legacy` 为 Safari 15.5 生成按使用量收集的标准 API 补丁，只生成 ESM，不引入 SystemJS。构建后检查 Modern 不包含补丁和兼容渲染器。
+- DOM API 不属于标准语言 polyfill：Legacy 入口在加载应用前补齐 `HTMLFormElement.requestSubmit`，通过原生按钮提交保留校验和 React 事件，覆盖回车发送、输入法确认与换行回归。
 - 正则后行断言从 Safari 16.4 才受支持，API polyfill 与 JS target 不能消除该限制。共用的文件链接处理使用捕获组；Legacy 构建单独转换 `remend` 单波浪线规则和 GFM 邮箱边界，依赖规则变化时中止构建。`pnpm test:macos-build-output` 扫描产物正则字面量，并在拒绝后行断言构造器的 WebKit 中加载、渲染任务消息，覆盖懒加载和正文解析阶段的崩溃。
 - CSS 使用 PostCSS Preset Env 转换嵌套、颜色函数等可静态处理的语法。运行时变量混色不能靠设置 JS target 解决，Legacy 使用明确的实色表面；不使用持续计算颜色的 JS polyfill。Safari 15.5 原生支持 `:has()` 与 cascade layers，无需对应观察器。
 - Legacy Diff 使用 jsdiff 解析 unified patch，保留增删行、双行号与虚拟列表，省去语法/词级 Diff 高亮；避免替旧 WebKit 模拟 constructable stylesheets。代码块仍保留 Shiki 高亮，亮暗 token 由 CSS 切换。

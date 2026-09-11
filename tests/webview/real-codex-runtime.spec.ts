@@ -88,9 +88,8 @@ describeRealRuntime("三平台真实 Codex 原生链路", () => {
   let projectId: string | undefined;
   let workspaceRoot: string | undefined;
 
-  before(async function () {
-    // 冷启动包含私有运行时下载，等待上限覆盖镜像与官方源的受控超时。
-    this.timeout(20 * 60_000);
+  before(async () => {
+    // 冷启动下载预算由 wdio.conf.ts 在外层包装器启动前配置。
     const temporaryRoot = await mkdtemp(join(tmpdir(), "codeagent-real-runtime-"));
     workspaceRoot = await realpath(temporaryRoot);
     await writeFile(join(workspaceRoot, "README.md"), "初始文件\n", "utf8");

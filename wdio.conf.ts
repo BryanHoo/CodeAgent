@@ -24,7 +24,9 @@ export const config: Options.Testrunner = {
   framework: "mocha",
   logLevel: "warn",
   maxInstances: 1,
-  mochaOpts: { timeout: 60_000, ui: "bdd" },
+  // WDIO 在执行 hook 前捕获超时；hook 内 this.timeout 无法延长外层计时器。
+  // 仅真实运行时模式预留受控下载窗口，普通交互与性能测试仍保持一分钟上限。
+  mochaOpts: { timeout: realRuntimeEnabled ? 20 * 60_000 : 60_000, ui: "bdd" },
   reporters: ["spec"],
   runner: "local",
   services: [

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { waitForWebviewBridge } from "../tests/webview/bridge-readiness.mjs";
+import "./webview-timeouts.test.mjs";
 
 void test("WebView bridge readiness retries transient startup failures", async () => {
   let attempts = 0;
