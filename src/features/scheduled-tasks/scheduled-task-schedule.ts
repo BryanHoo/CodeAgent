@@ -2,7 +2,7 @@ import type { ScheduledTask, ScheduledTaskSchedule } from "@/protocol/index.js";
 import { wallTimeToUnix, zonedDateTime } from "./scheduled-task-wall-time.js";
 import { restoreRecurrence } from "./scheduled-task-recurrence-parser.js";
 
-export type SchedulePreset = "once" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
+export type SchedulePreset = "once" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly" | "custom";
 export const SCHEDULE_WEEKDAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] as const;
 export const SCHEDULE_FREQUENCIES = ["HOURLY", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 export type ScheduleWeekday = (typeof SCHEDULE_WEEKDAYS)[number];
@@ -66,7 +66,7 @@ export function scheduleToDraft(schedule: ScheduledTaskSchedule): ScheduleDraft 
 
 export function scheduleFrequency(draft: ScheduleDraft): ScheduleFrequency {
   if (draft.preset === "daily") return "DAILY";
-  if (draft.preset === "weekly" || draft.preset === "weekdays") return "WEEKLY";
+  if (draft.preset === "weekly" || draft.preset === "weekdays" || draft.preset === "weekends") return "WEEKLY";
   if (draft.preset === "monthly") return "MONTHLY";
   return draft.frequency;
 }
@@ -82,7 +82,7 @@ export function scheduleDraftError(draft: ScheduleDraft): string | undefined {
   if (draft.preset === "custom" && !integer(draft.interval, 1, 999)) return "invalidInterval";
   if (wallTimeToUnix(`${draft.startDate}T00:00`, "UTC") === undefined) return "invalidDate";
   const frequency = scheduleFrequency(draft);
-  if (frequency === "WEEKLY" && draft.preset !== "weekdays" &&
+  if (frequency === "WEEKLY" && draft.preset !== "weekdays" && draft.preset !== "weekends" &&
       (!draft.weekdays.length || draft.weekdays.some((day) => !SCHEDULE_WEEKDAYS.includes(day)))) return "selectWeekday";
   if (frequency === "MONTHLY") {
     if (draft.monthMode === "date" && (!draft.monthDays.length || draft.monthDays.some((day) => day !== -1 && !integer(day, 1, 31)))) return "selectMonthDay";
@@ -108,7 +108,9 @@ export function draftToSchedule(draft: ScheduleDraft, timezone: string, now = Da
   const fields = [`FREQ=${frequency}`];
   if (draft.preset === "custom" && draft.interval > 1) fields.push(`INTERVAL=${draft.interval}`);
   if (frequency === "WEEKLY") {
-    const days = draft.preset === "weekdays" ? SCHEDULE_WEEKDAYS.slice(0, 5) : SCHEDULE_WEEKDAYS.filter((day) => draft.weekdays.includes(day));
+    // 固定预设直接确定执行日，不受此前自定义星期选择影响。
+    const days = draft.preset === "weekdays" ? SCHEDULE_WEEKDAYS.slice(0, 5)
+      : draft.preset === "weekends" ? SCHEDULE_WEEKDAYS.slice(5) : SCHEDULE_WEEKDAYS.filter((day) => draft.weekdays.includes(day));
     fields.push("WKST=MO", `BYDAY=${days.join(",")}`);
   }
   if (frequency === "MONTHLY") fields.push(draft.monthMode === "date"

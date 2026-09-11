@@ -54,7 +54,10 @@ export function restoreRecurrence(schedule: Extract<ScheduledTaskSchedule, { typ
   }
   if (interval === 1) {
     if (frequency === "DAILY") result = { ...result, preset: "daily" };
-    if (frequency === "WEEKLY") result = { ...result, preset: result.weekdays.join(",") === "MO,TU,WE,TH,FR" ? "weekdays" : "weekly" };
+    if (frequency === "WEEKLY") {
+      const days = SCHEDULE_WEEKDAYS.filter((day) => result.weekdays.includes(day)).join(",");
+      result = { ...result, preset: days === "MO,TU,WE,TH,FR" ? "weekdays" : days === "SA,SU" ? "weekends" : "weekly" };
+    }
     if (frequency === "MONTHLY") result = { ...result, preset: "monthly" };
   }
   return result;

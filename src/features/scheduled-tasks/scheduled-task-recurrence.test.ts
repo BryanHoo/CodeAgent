@@ -5,6 +5,12 @@ const now = Date.UTC(2030, 0, 1);
 const draft = () => ({ ...defaultScheduleDraft(now), startDate: "2030-01-02", time: "09:15" });
 
 describe("visual recurrence", () => {
+  it("builds and restores weekends independently of custom weekday selections", () => {
+    const schedule = draftToSchedule({ ...draft(), preset: "weekends", weekdays: [], endMode: "count", count: 6 }, "Asia/Shanghai", now)!;
+    expect(schedule).toMatchObject({ rrule: "RRULE:FREQ=WEEKLY;WKST=MO;BYDAY=SA,SU;BYHOUR=9;BYMINUTE=15;BYSECOND=0;COUNT=6" });
+    expect(scheduleToDraft(schedule)).toMatchObject({ preset: "weekends", weekdays: ["SA", "SU"], count: 6 });
+    expect(draftToSchedule(scheduleToDraft(schedule), "Asia/Shanghai", now)).toEqual(schedule);
+  });
   it("builds anchored biweekly rules with multiple weekdays and a finite count", () => {
     expect(draftToSchedule({ ...draft(), preset: "custom", frequency: "WEEKLY", interval: 2,
       weekdays: ["MO", "WE", "FR"], endMode: "count", count: 6 }, "Asia/Shanghai", now)).toEqual({

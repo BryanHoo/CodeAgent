@@ -17,6 +17,14 @@ function Form() {
 }
 
 describe("visual schedule fields", () => {
+  it("offers weekends without requiring weekday selection", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(<I18nextProvider i18n={i18n}><Form /></I18nextProvider>);
+    await expect.element(screen.getByRole("option", { name: "周末（周六、周日）", exact: true })).toBeInTheDocument();
+    await screen.getByRole("combobox", { name: "重复规则" }).selectOptions("weekends");
+    expect(screen.container.querySelector("output")!.textContent).toContain("BYDAY=SA,SU");
+    await expect.element(screen.getByRole("button", { name: "周六", exact: true })).not.toBeInTheDocument();
+  });
   it("keeps all choices within desktop bounds in both languages and themes", async () => {
     const screen = await render(<I18nextProvider i18n={i18n}><Form /></I18nextProvider>);
     try {

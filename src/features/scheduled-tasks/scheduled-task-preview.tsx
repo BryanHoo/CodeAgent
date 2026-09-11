@@ -22,7 +22,7 @@ export function ScheduledTaskPreview({ schedule, timezone, dates, pending, faile
   const frequency = scheduleFrequency(schedule);
   const interval = schedule.preset === "custom" ? schedule.interval : 1;
   let rule = t("scheduledTasks.summaryEvery", { interval, unit: t(`scheduledTasks.units.${frequency}`) });
-  if (schedule.preset === "weekdays") rule = t("scheduledTasks.weekdays");
+  if (schedule.preset === "weekdays" || schedule.preset === "weekends") rule = t(`scheduledTasks.${schedule.preset}`);
   else if (frequency === "WEEKLY") rule += ` · ${SCHEDULE_WEEKDAYS.filter((day) => schedule.weekdays.includes(day)).map((day) => weekdays[SCHEDULE_WEEKDAYS.indexOf(day)]).join("、")}`;
   if (frequency === "MONTHLY") {
     if (schedule.monthMode === "date") {

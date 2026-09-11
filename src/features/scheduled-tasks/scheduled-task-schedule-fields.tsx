@@ -41,7 +41,7 @@ export const ScheduledTaskScheduleFields = memo(function ScheduledTaskScheduleFi
     <label><span>{t("scheduledTasks.repeat")}</span><select
       onChange={(event) => patch({ preset: event.currentTarget.value as SchedulePreset, frequency, unsupported: false })}
       value={schedule.preset}>
-      {(["once", "daily", "weekdays", "weekly", "monthly", "custom"] as const).map((preset) =>
+      {(["once", "daily", "weekdays", "weekends", "weekly", "monthly", "custom"] as const).map((preset) =>
         <option key={preset} value={preset}>{t(`scheduledTasks.${preset}`)}</option>)}
     </select></label>
     {schedule.preset === "once" ? <ScheduleDateField dateOnly={false} label={t("scheduledTasks.time")}
@@ -57,7 +57,7 @@ export const ScheduledTaskScheduleFields = memo(function ScheduledTaskScheduleFi
           </select>
         </div>
       </div> : null}
-      {frequency === "WEEKLY" && schedule.preset !== "weekdays" ? <div className="scheduled-task-field scheduled-task-field--choices">
+      {frequency === "WEEKLY" && schedule.preset !== "weekdays" && schedule.preset !== "weekends" ? <div className="scheduled-task-field scheduled-task-field--choices">
         <span>{t("scheduledTasks.repeatDays")}</span><div className="scheduled-task-choices" role="group" aria-label={t("scheduledTasks.repeatDays")}>
           {SCHEDULE_WEEKDAYS.map((day, index) => <button key={day} type="button" aria-pressed={schedule.weekdays.includes(day)}
             onClick={() => patch({ weekdays: schedule.weekdays.includes(day) ? schedule.weekdays.filter((value) => value !== day) : [...schedule.weekdays, day] })}>

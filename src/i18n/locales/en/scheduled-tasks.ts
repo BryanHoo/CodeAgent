@@ -49,6 +49,7 @@ export const scheduledTasks = {
   timeOfDay: "Time",
   title: "Scheduled tasks",
   weekdays: "Monday to Friday",
+  weekends: "Weekends (Saturday and Sunday)",
   weekday: "Day of week",
   weekly: "Weekly",
 } as const;

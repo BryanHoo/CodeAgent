@@ -49,6 +49,7 @@ export const scheduledTasks = {
   timeOfDay: "时间",
   title: "定时任务",
   weekdays: "每周一至周五",
+  weekends: "周末（周六、周日）",
   weekday: "周几",
   weekly: "每周",
 } as const;
