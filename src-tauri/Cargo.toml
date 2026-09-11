@@ -56,7 +56,7 @@ tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "c9ec21
 
 [target.'cfg(unix)'.dependencies]
 filedescriptor = "=0.8.3"
-nix = { version = "=0.28.0", features = ["signal", "process"] }
+nix = { version = "=0.31.3", features = ["signal", "process"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 desktop-pet-platform = { path = "native/desktop-pet-platform", version = "=0.1.0" }
