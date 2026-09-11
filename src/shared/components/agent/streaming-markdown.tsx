@@ -96,7 +96,12 @@ const StreamingBlock = memo(function StreamingBlock({ block, options, index, fas
 }) {
   const context = useContext(StreamdownContext);
   const interactive = useMemo(() => ({ ...context, isAnimating: false }), [context]);
-  const content = fast && block.kind === "text"
+  const content = block.kind === "deferred"
+    ? <>
+        {block.content ? <Block {...options} content={block.content} index={index} /> : null}
+        <div data-streaming-markdown-preview="" className="whitespace-pre-wrap break-words"><TextTree tree={block.text} /></div>
+      </>
+    : fast && block.kind === "text"
     ? <p dir={options.dir}><TextTree tree={block.text} /></p>
     : fast && block.kind === "code"
       ? <StreamingCode block={block} />

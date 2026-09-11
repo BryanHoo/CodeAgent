@@ -387,7 +387,12 @@ function MessageResponseContent({
   const responseProcessor = useMemo(() => new IncrementalMessageResponseProcessor(), []);
   const incrementalBlockParser = useMemo(() => createIncrementalMarkdownBlockParser(), []);
   const parsedResponse = responseProcessor.process(textSource ?? children ?? "");
-  const blockTree = useMemo(() => incrementalBlockParser(parsedResponse), [incrementalBlockParser, parsedResponse]);
+  const streaming = props.mode !== "static" && props.isAnimating !== false;
+  const enabled = textSource !== undefined && props.mode !== "static" && parseMarkdownIntoBlocksFn === undefined;
+  const blockTree = useMemo(
+    () => enabled ? incrementalBlockParser(parsedResponse, streaming) : null,
+    [enabled, incrementalBlockParser, parsedResponse, streaming],
+  );
   const markdownComponents: Components = useMemo(
     () => ({ ...components, a: MarkdownLink }),
     [components],
@@ -406,9 +411,9 @@ function MessageResponseContent({
   return (
     <MessageFileReferenceContext.Provider value={onOpenFileReference ?? null}>
       <StreamingMarkdown
-        enabled={textSource !== undefined && props.mode !== "static" && parseMarkdownIntoBlocksFn === undefined}
+        enabled={enabled}
         tree={blockTree}
-        fast={components === undefined && remarkPlugins === undefined && props.rehypePlugins === undefined && props.plugins === undefined && !promptFileReferences}
+        fast={streaming && components === undefined && remarkPlugins === undefined && props.rehypePlugins === undefined && props.plugins === undefined && !promptFileReferences}
         className={`size-full ${markdownTypographyClassName} ${className}`}
         controls={MESSAGE_RESPONSE_CONTROLS}
         {...props}

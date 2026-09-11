@@ -6,6 +6,27 @@ import { MessageResponse } from "./message-response.js";
 import { AppendOnlyTextBuffer } from "../../lib/append-only-text.js";
 
 describe("MessageResponse file reference menu", () => {
+  it("previews oversized complex blocks and fully parses the same snapshot when streaming ends", async () => {
+    const buffer = new AppendOnlyTextBuffer("Stable paragraph\n\n- **first**\n");
+    const screen = await render(<MessageResponse textSource={buffer.getSnapshot()} mode="streaming" isAnimating />);
+    const stable = screen.container.querySelector("p");
+    buffer.append("- **next** list item\n".repeat(1_000));
+    const snapshot = buffer.getSnapshot();
+    await screen.rerender(<MessageResponse textSource={snapshot} mode="streaming" isAnimating />);
+    expect(screen.container.querySelector("p")).toBe(stable);
+    expect(screen.container.querySelector("[data-streaming-markdown-preview]")?.textContent).toContain("**next** list item");
+    buffer.append("- **latest**");
+    const finalSnapshot = buffer.getSnapshot();
+    const firstPage = screen.container.querySelector("[data-streaming-markdown-preview] > span");
+    await screen.rerender(<MessageResponse textSource={finalSnapshot} mode="streaming" isAnimating />);
+    expect(screen.container.querySelector("[data-streaming-markdown-preview] > span")).toBe(firstPage);
+    expect(screen.container.textContent).toContain("**latest**");
+    await screen.rerender(<MessageResponse textSource={finalSnapshot} mode="streaming" isAnimating={false} />);
+    expect(screen.container.querySelector("[data-streaming-markdown-preview]")).toBeNull();
+    expect(screen.container.querySelectorAll("li")).toHaveLength(1_002);
+    expect(screen.container.querySelector('li:last-child [data-streamdown="strong"]')?.textContent).toBe("latest");
+  });
+
   it("keeps stable paragraphs mounted across block page boundaries", async () => {
     const paragraph = vi.fn(({ children }: { children?: React.ReactNode }) => <p>{children}</p>);
     const components = { p: paragraph };

@@ -7,9 +7,26 @@ type CodeLine = string | SequenceNode<string>;
 export type CodeLineTree = SequenceNode<CodeLine> | null;
 export type MarkdownBlock = BlockSource & (
   Readonly<{ kind: "markdown" }> |
+  Readonly<{ kind: "deferred"; text: SequenceNode<string> | null }> |
   Readonly<{ kind: "text"; text: SequenceNode<string> | null; suffix: string }> |
   Readonly<{ kind: "code"; lines: CodeLineTree; code: string; fence: string; language: string; fenceState: FenceState }>
 );
+
+// 已解析前缀保持不变；超预算的新增内容仅更新文本尾页，不再送入 Markdown 引擎。
+export function deferMarkdownBlock(
+  previous: MarkdownBlock | undefined, source: string, replaceFrom: number, replacement: string,
+): MarkdownBlock {
+  if (previous?.kind === "deferred" && replaceFrom === previous.source.length) {
+    return { ...previous, source, text: appendTextSequence(previous.text, replacement) };
+  }
+  const prefix = previous !== undefined && previous.kind !== "deferred" &&
+    previous.content.length <= 8_192 && replaceFrom >= previous.source.length ? previous : undefined;
+  const previewFrom = prefix?.source.length ?? 0;
+  return {
+    kind: "deferred", source, content: prefix?.content ?? "",
+    text: appendTextSequence(null, source.slice(previewFrom)),
+  };
+}
 
 const PLAIN_TEXT = /^[\p{L}\p{N} ,.!?，。！？、;；]+$/u;
 const FENCE_START = /^(`{3,}|~{3,})([^\n]*)\n/;
