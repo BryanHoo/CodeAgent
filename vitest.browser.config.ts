@@ -19,7 +19,10 @@ export default defineConfig({
     browser: {
       enabled: true,
       headless: true,
-      instances: [{ browser: "chromium" }, { browser: "webkit" }],
+      instances: [
+        { browser: "chromium", provider: playwright({ contextOptions: { permissions: ["clipboard-read", "clipboard-write"] } }) },
+        { browser: "webkit" },
+      ],
       provider: playwright(),
       viewport: { height: 900, width: 1_440 },
     },

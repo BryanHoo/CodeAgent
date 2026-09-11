@@ -57,6 +57,7 @@ export {
   ComposerModeTag,
 } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
+import { ComposerInteractionBoundary } from "./composer-interaction-boundary.js";
 
 export function ComposerProjectPathButton({
   disabled,
@@ -119,6 +120,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
   const { t } = useTranslation(["workbench", "settings"]);
   const editingIndex = props.queuedPrompts.findIndex((prompt) => prompt.status === "editing");
   return (
+    <ComposerInteractionBoundary access={props.writeAccess}>
     <section
       className="shrink-0 bg-content px-1 pb-2 max-[360px]:px-0 sm:px-5"
       aria-label={t("composer.landmark")}
@@ -447,5 +449,6 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
         projectPathOpenDisabled={props.projectPathOpenDisabled} roots={props.projectRoots} selectedRootId={props.selectedProjectRootId}
       />} />
     </section>
+    </ComposerInteractionBoundary>
   );
 }

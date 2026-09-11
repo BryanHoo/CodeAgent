@@ -275,6 +275,7 @@ export function WorkbenchComposer({
     uploadedAttachments,
   });
   useImperativeHandle(composerRef, () => createComposerHandle({
+    disabled: turnControlsDisabled,
     activeTurnId,
     buildPlanPrompt: t("composer.buildPlanPrompt"),
     clearMode: () => setComposerModeState(undefined),
@@ -461,7 +462,7 @@ export function WorkbenchComposer({
       setActiveCommandIndex={setActiveCommandIndex}
       skills={skills}
       skillEditorRef={skillEditorRef}
-      state={state}
+      state={state} writeAccess={runtime?.writeAccess}
       steerQueuedPrompt={(queuedPrompt) => {
         void composerQueue.sendQueuedPrompt(queuedPrompt, submitPrompt).catch(setMutationError);
       }}
@@ -473,7 +474,7 @@ export function WorkbenchComposer({
       worktrees={branchMutation.worktrees}
     />
   );
-  if (attachmentPickerKind === undefined) {
+  if (attachmentPickerKind === undefined || draftInputDisabled) {
     return composerView;
   }
   return (

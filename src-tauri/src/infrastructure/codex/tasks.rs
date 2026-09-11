@@ -395,6 +395,22 @@ pub async fn unsubscribe_task(
     })
 }
 
+pub(super) async fn is_task_loaded(
+    connection: &AppServerConnection,
+    project_id: &str,
+    task_id: &str,
+) -> Result<bool, ConnectionError> {
+    let thread = read_native_task(connection, project_id, task_id).await?;
+    if thread.id != task_id {
+        return Err(ConnectionError::InvalidMessage);
+    }
+    match thread.status.kind.as_str() {
+        "idle" | "active" => Ok(true),
+        "notLoaded" | "systemError" => Ok(false),
+        _ => Err(ConnectionError::InvalidMessage),
+    }
+}
+
 async fn read_native_task(
     connection: &AppServerConnection,
     project_id: &str,

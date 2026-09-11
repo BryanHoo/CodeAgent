@@ -20,7 +20,7 @@ import { WorkbenchInspector } from "./workbench-inspector.js";
 import { WorkbenchInspectorToggle } from "./workbench-inspector-toggle.js";
 import { getWorkbenchInspectorMountKey } from "../workbench-inspector-activation.js";
 import { LazyScheduledTasksContainer } from "./scheduled-tasks-lazy.js";
-
+import { TaskInteractionContext } from "../task-interaction-context.js";
 export function WorkbenchShellLayout({
   board,
   context,
@@ -123,7 +123,9 @@ export function WorkbenchShellLayout({
   const utilityView = board || extensions || scheduledTasks;
   const viewTitle = scheduledTasks ? t("scheduledTasks.title") : extensions ? t("skillsMarket.title") : board ? t("taskBoard.title") : title;
   const inspectorVisible = resolveInspectorVisibility(utilityView, inspectorOpen);
+  const taskWriteBlocked = taskId !== undefined && runtime.writeAccess !== undefined && runtime.writeAccess !== "writable";
   return (
+    <TaskInteractionContext value={taskWriteBlocked ? JSON.stringify([projectId, taskId]) : null}>
     <div
       className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
       data-inspector-open={inspectorVisible}
@@ -197,6 +199,7 @@ export function WorkbenchShellLayout({
                   aria-label={t("shell.renameTask", { title })}
                   className="group flex max-w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-control-hover focus-visible:shadow-focus"
                   id="workbench-task-title-rename"
+                  disabled={taskWriteBlocked}
                   onClick={() => {
                     setTaskRenameOpen(true);
                   }}
@@ -492,5 +495,6 @@ export function WorkbenchShellLayout({
         {...(taskId === undefined ? {} : { taskId })}
       />
     </div>
+    </TaskInteractionContext>
   );
 }

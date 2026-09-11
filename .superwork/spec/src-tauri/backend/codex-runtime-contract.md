@@ -13,6 +13,8 @@
 
 ## 线程协议
 
+- `retain_task_subscription` 接收 `projectId` 与 `taskId`，以 `thread/resume(excludeTurns:true)` 确认写入权并恢复服务端通知订阅，不发送 Turn。仅在 154 明确返回当前线程没有 rollout 时，用轻量 `thread/read(includeTurns:false)` 确认该新线程仍由本进程载入后复用，不能将任意恢复失败视为可写。跨客户端 writer 冲突保留 `CODEX_THREAD_BUSY`，不转换为网络断开；释放必须等待挂载检查结束，迟到结果不得覆盖新挂载的状态，不增加轮询。
+
 - 每个 `thread/start`、`thread/resume`、`thread/fork` 请求必须在 `config` 中传入 `tools.update_plan.enabled: true`
 - 只使用请求级覆盖，不得改写用户全局 `config.toml`
 - `thread/resume` 不传 `cwd`，由 Codex 从已保存线程恢复工作目录；恢复响应新增字段必须保持可解析

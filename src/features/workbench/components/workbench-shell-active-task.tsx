@@ -17,6 +17,7 @@ import { memo, useCallback, useEffect, useState, type RefObject } from "react";
 import { toast } from "sonner";
 
 import { i18n } from "../../../i18n/i18n.js";
+import { NativeCommandError } from "../../../platform/tauri/native-client.js";
 import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import {
   mergeSubmittedPromptIntoSnapshot,
@@ -103,6 +104,18 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
 }>) {
   const taskScope = `${projectId}:${taskId}`;
+  const writeBlocked = runtime.writeAccess !== undefined && runtime.writeAccess !== "writable";
+  const runTaskAction = async <T,>(action: () => Promise<T>): Promise<T> => {
+    if (writeBlocked || runtime.store?.getState().writeAccess === "external") {
+      throw new NativeCommandError("CODEX_THREAD_BUSY", i18n.t("composer.threadBusy", { ns: "workbench" }));
+    }
+    try { return await action(); } catch (error) {
+      if (error instanceof NativeCommandError && error.code === "CODEX_THREAD_BUSY") {
+        runtime.store?.getState().setWriteAccess("external");
+      }
+      throw error;
+    }
+  };
   const answerQuestions = useCallback(
     (text: string) => composerRef.current?.answerQuestions(text) ?? Promise.resolve(false),
     [composerRef],
@@ -161,17 +174,18 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
     request: PendingRequest,
     resolution: PendingRequestResolution,
     idempotencyKey: string,
-  ) => client.resolvePendingRequest(request, resolution, { idempotencyKey }).then(() => undefined);
+  ) => runTaskAction(() => client.resolvePendingRequest(request, resolution, { idempotencyKey })).then(() => undefined);
   const forkTask = async (lastTurnId: string, idempotencyKey: string) => {
-    const response = await client.forkTask(projectId, taskId, { lastTurnId }, { idempotencyKey });
+    const response = await runTaskAction(() => client.forkTask(projectId, taskId, { lastTurnId }, { idempotencyKey }));
     // 复用统一的新任务入口，保证列表缓存先于路由切换更新。
     onTaskStarted(response.task);
   };
 
   return (
     <>
+      <div className="flex min-h-0 flex-1 flex-col" inert={writeBlocked}>
       <AsyncQuestionProvider
-        enabled={runtime.connectionState === "connected"}
+        enabled={!writeBlocked && runtime.connectionState === "connected"}
         key={taskScope}
         scope={JSON.stringify([projectId, taskId])}
         submit={answerQuestions}
@@ -198,6 +212,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         />
         <AsyncQuestionDock taskStore={runtime.store} />
       </AsyncQuestionProvider>
+      </div>
       <WorkbenchComposer
         composerRef={composerRef}
         capabilities={capabilities}

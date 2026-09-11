@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "../../../shared/components/core/dropdown-menu.js";
 import { TaskActionMenu, TaskLink } from "./project-sidebar-task-row.js";
+import { TaskInteractionContext } from "../task-interaction-context.js";
 const { openTaskWindow } = vi.hoisted(() => ({ openTaskWindow: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../../platform/tauri/task-window-client.js", () => ({ openTaskWindow }));
 
@@ -31,6 +32,21 @@ const task: AgentTask = {
 };
 
 describe("TaskActionMenu", () => {
+  it("disables all actions for the externally owned task, including an already open menu", async () => {
+    const view = (scope: string | null) => <TaskInteractionContext value={scope}>
+      <DropdownMenu defaultOpen><DropdownMenuTrigger>菜单</DropdownMenuTrigger>
+        <TaskActionMenu isPending={false} onArchive={vi.fn()} onDelete={vi.fn()}
+          onPin={vi.fn()} onRename={vi.fn()} task={task} />
+      </DropdownMenu>
+    </TaskInteractionContext>;
+    const screen = await render(view(null));
+    await screen.rerender(view(JSON.stringify([task.projectId, task.id])));
+    for (const item of document.querySelectorAll('[role="menuitem"]')) {
+      expect(item.getAttribute("aria-disabled")).toBe("true");
+    }
+    await screen.rerender(view(JSON.stringify([task.projectId, "another-task"])));
+    expect(document.querySelector('[role="menuitem"][aria-disabled="true"]')).toBeNull();
+  });
   it("opens the selected task in a floating window", async () => {
     await i18n.changeLanguage("zh-CN");
     const screen = await render(

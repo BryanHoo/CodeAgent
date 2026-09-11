@@ -144,6 +144,8 @@ pub use tasks::{
     archive_task, delete_task, list_completed_tasks, list_tasks, pin_task, read_task, rename_task,
     task_working_directory, unarchive_task, unsubscribe_task,
 };
+mod conversation_access;
 mod model_cache;
+pub use conversation_access::retain_task_writer;
 #[cfg(test)]
 mod model_cache_tests;

@@ -9,6 +9,7 @@ import {
   runDetailViewInterval,
 } from "../../../shared/lifecycle/application-visibility.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { copyFormattedMessage } from "../../../shared/components/agent/copy-formatted-message.js";
 import {
   notifyActionError,
   notifyActionSuccess,
@@ -312,11 +313,11 @@ export function MessageMetadata({
   const locale = getCurrentLanguage();
   const dateFormatters = messageDate === undefined ? undefined : getMessageDateFormatters(locale);
 
-  const copyMessage = () =>
+  const copyMessage = (markdown: boolean) =>
     messageActionLockRef.current.run(async () => {
       try {
-        // 只在明确点击时访问 Clipboard，避免渲染阶段触发浏览器权限请求。
-        await navigator.clipboard.writeText(text);
+        // Markdown 直接复制原文；仅 HTML 按钮按需加载转换器，不增加渲染成本。
+        await (markdown ? navigator.clipboard.writeText(text) : copyFormattedMessage(text));
         notifyActionSuccess();
       } catch (error) {
         notifyActionError(error);
@@ -343,15 +344,16 @@ export function MessageMetadata({
 
   return (
     <MessageActions className="mt-2 text-label text-muted-foreground">
-      <MessageAction
-        label={i18n.t("timeline.copyMessage", { ns: "conversation" })}
-        onClick={() => {
-          void copyMessage();
-        }}
-        tooltip={i18n.t("timeline.copyMessage", { ns: "conversation" })}
-      >
-        <Copy className="size-3.5" aria-hidden="true" />
-      </MessageAction>
+      {(["copyMarkdown", "copyHtml"] as const).map((format) => {
+        const label = i18n.t(`timeline.${format}`, { ns: "conversation" });
+        const markdown = format === "copyMarkdown";
+        const Icon = markdown ? Copy : MessageSquareCode;
+        return (
+          <MessageAction key={format} label={label} tooltip={label} onClick={() => { void copyMessage(markdown); }}>
+            <Icon className="size-3.5" aria-hidden="true" />
+          </MessageAction>
+        );
+      })}
       {lastTurnId === undefined || onForkTask === undefined ? null : (
         <MessageAction
           disabled={forkPending}

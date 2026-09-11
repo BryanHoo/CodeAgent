@@ -18,6 +18,7 @@ const taskStoreRegistry = createTaskStoreRegistry({ maxRetainedStores: 20 });
 const emptyTaskStore = createTaskStore({ projectId: "", taskId: "" });
 
 export type TaskRuntimeView = Readonly<{
+  writeAccess?: import("./task-store.js").TaskStoreState["writeAccess"];
   activeTurnId: string | undefined;
   connectionState: "closed" | "connected" | "connecting" | "reconnecting";
   error: Error | null;
@@ -53,6 +54,7 @@ export function useTaskRuntime(
   );
   const connectionState = useStore(subscribedStore, (state) => state.connectionState);
   const runtimeError = useStore(subscribedStore, (state) => state.error);
+  const writeAccess = useStore(subscribedStore, (state) => state.writeAccess);
   const metadata = useStore(subscribedStore, useShallow(selectTaskRuntimeMetadata));
   const itemStructureRevision = useStore(subscribedStore, (state) => state.itemStructureRevision);
   const turnsNextCursor = useStore(subscribedStore, (state) => state.turnsNextCursor);
@@ -156,7 +158,7 @@ export function useTaskRuntime(
   const error =
     activeRuntime === undefined || !hasHydratedSnapshot
       ? taskQueryError
-      : connectionState === "closed"
+      : connectionState === "closed" || writeAccess === "unavailable"
         ? runtimeError
         : null;
   const readSnapshot = useCallback(
@@ -172,6 +174,7 @@ export function useTaskRuntime(
 
   return useMemo(
     () => ({
+      writeAccess: activeRuntime === undefined ? "checking" : writeAccess,
       activeTurnId,
       connectionState: activeRuntime === undefined ? "connecting" : connectionState,
       error,
@@ -186,6 +189,7 @@ export function useTaskRuntime(
       store: activeRuntime,
     }),
     [
+      writeAccess,
       activeRuntime,
       activeTurnId,
       connectionState,

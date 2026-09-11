@@ -76,7 +76,7 @@ export function toPromptSubmissionError(
 ): Error {
   // Provider writer 冲突需要给出可操作提示，不能降级成无上下文的提交失败。
   if (error instanceof NativeCommandError && error.code === "CODEX_THREAD_BUSY") {
-    return new Error(t("composer.threadBusy"));
+    return new NativeCommandError(error.code, t("composer.threadBusy"), error.rpcCode);
   }
   return error instanceof Error ? error : new Error(t("composer.operationFailed"));
 }

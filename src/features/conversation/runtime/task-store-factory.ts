@@ -124,6 +124,8 @@ export function createTaskStore(
       }
     },
     connectionState: "connecting",
+    writeAccess: "checking",
+    setWriteAccess(writeAccess) { set({ writeAccess }); },
     error: null,
     hydrate(response) {
       if (

@@ -27,6 +27,7 @@ import type { ComposerMode } from "./workbench-composer-contracts.js";
 export type CommandAvailability = Readonly<{ available: boolean; reason?: string }>;
 
 export type WorkbenchComposerViewProps = Readonly<{
+  writeAccess?: import("../../conversation/runtime/use-task-runtime.js").TaskRuntimeView["writeAccess"];
   activeCommandIndex: number;
   activeCommandItemId: string | undefined;
   activeSettings: AgentTaskSettings;

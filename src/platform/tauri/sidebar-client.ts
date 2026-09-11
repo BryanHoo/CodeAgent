@@ -474,8 +474,8 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     await this.call("release_task_subscription", { projectId, taskId });
   }
 
-  public async retainTaskSubscription(taskId: string): Promise<void> {
-    await this.call("retain_task_subscription", { taskId });
+  public async retainTaskSubscription(projectId: string, taskId: string): Promise<void> {
+    await this.call("retain_task_subscription", { projectId, taskId });
   }
 
   public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {

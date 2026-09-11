@@ -14,6 +14,7 @@ import {
 } from "../../../shared/components/core/dropdown-menu.js";
 import { formatTaskAge } from "../../projects/project-data.js";
 import type { TaskAttention } from "../../conversation/runtime/task-activity.js";
+import { useTaskInteractionBlocked } from "../task-interaction-context.js";
 
 type TaskLinkProps = Readonly<{
   active: boolean;
@@ -39,7 +40,7 @@ export function TaskLink({
   active,
   attention,
   icon,
-  isActionPending,
+  isActionPending: actionPending,
   isAwaitingApproval,
   isRunning,
   onArchive,
@@ -50,6 +51,7 @@ export function TaskLink({
 }: TaskLinkProps) {
   const { t } = useTranslation("workbench");
   const taskRoute = getTaskRoute(task.projectId, task.id);
+  const isActionPending = useTaskInteractionBlocked(task.projectId, task.id) || actionPending;
 
   return (
     <div className="group relative mr-1 min-w-0">
@@ -195,7 +197,7 @@ function copyTaskId(taskId: string): void {
 }
 
 export function TaskActionMenu({
-  isPending,
+  isPending: actionPending,
   onArchive,
   onDelete,
   onPin,
@@ -203,6 +205,7 @@ export function TaskActionMenu({
   task,
 }: TaskActionMenuProps) {
   const { t } = useTranslation("workbench");
+  const isPending = useTaskInteractionBlocked(task.projectId, task.id) || actionPending;
   return (
     <DropdownMenuContent
       align="start"

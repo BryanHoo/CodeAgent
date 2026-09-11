@@ -44,6 +44,8 @@ export interface TaskStoreIdentity {
 }
 
 export interface TaskStoreState {
+  writeAccess: "checking" | "writable" | "external" | "unavailable";
+  setWriteAccess: (access: TaskStoreState["writeAccess"]) => void;
   applyEvents: (events: readonly AgentEvent[]) => void;
   checkpoint: EventCheckpoint | null;
   commandOutputAccessByItemKey: Map<string, number>;

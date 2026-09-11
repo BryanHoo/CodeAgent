@@ -125,7 +125,7 @@ describe("TauriSidebarClient", () => {
     await client.steerTurn("project-a", "thread-a", "turn-a", input);
     await client.interruptTurn("project-a", "thread-a", "turn-a");
     await expect(client.releaseTaskSubscription("project-a", "thread-a")).resolves.toBeUndefined();
-    await expect(client.retainTaskSubscription("thread-a")).resolves.toBeUndefined();
+    await expect(client.retainTaskSubscription("project-a", "thread-a")).resolves.toBeUndefined();
 
     expect(invoke).toHaveBeenNthCalledWith(1, "start_task", { projectId: "project-a" });
     expect(invoke).toHaveBeenNthCalledWith(2, "start_turn", {
@@ -150,6 +150,7 @@ describe("TauriSidebarClient", () => {
       taskId: "thread-a",
     });
     expect(invoke).toHaveBeenNthCalledWith(6, "retain_task_subscription", {
+      projectId: "project-a",
       taskId: "thread-a",
     });
 

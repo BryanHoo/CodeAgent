@@ -196,6 +196,29 @@ async fn private_codex_should_install_and_complete_real_app_server_lifecycle() {
     )
     .await
     .expect("CodeAgent temporary task should start");
+    super::super::retain_task_writer(&connection, "temporary", &task.task.id)
+        .await
+        .expect("opening a newly created task should retain its writer without a turn");
+    // 仅测试触发空线程持久化；154 本地构建随后可能拒绝 list_turns，以下跨进程断言验证物化结果。
+    let _: Result<Value, _> = connection
+        .request(
+            "thread/read",
+            &json!({"includeTurns": true, "threadId": task.task.id}),
+            Duration::from_secs(10),
+        )
+        .await;
+    let other_process = CodexProcess::start(&app_data)
+        .await
+        .expect("second client should start");
+    let conflict =
+        super::super::retain_task_writer(&other_process.connection(), "temporary", &task.task.id)
+            .await
+            .expect_err("another client must not take the active writer");
+    assert!(matches!(
+        crate::application::error::AppError::from(conflict),
+        crate::application::error::AppError::CodexThreadBusy
+    ));
+    drop(other_process);
     let deleted = tasks::delete_task(&connection, "temporary".to_owned(), task.task.id)
         .await
         .expect("CodeAgent temporary task should be removable");

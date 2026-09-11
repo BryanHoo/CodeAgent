@@ -5,14 +5,20 @@ use crate::infrastructure::codex;
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn retain_task_subscription(
+    project_id: String,
     task_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    if task_id.is_empty() || task_id.len() > 128 {
+    if project_id.is_empty() || project_id.len() > 128 || task_id.is_empty() || task_id.len() > 128
+    {
         return Err(AppError::CodexRequestFailed);
     }
     state.retain_task_subscription(&task_id).await;
-    Ok(())
+    let connection = state.codex_connection().await?;
+    // 挂载时只恢复线程元数据以确认写入权；历史仍走分页，冲突交给前端只读展示。
+    codex::retain_task_writer(&connection, &project_id, &task_id)
+        .await
+        .map_err(AppError::from)
 }
 
 #[tauri::command(rename_all = "camelCase")]

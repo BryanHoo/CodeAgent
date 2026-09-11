@@ -131,7 +131,7 @@ export function useComposerSession({
   const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null);
   const [composerModeState, setComposerModeState] =
     useState<Readonly<{ mode: ComposerMode; scope: string }>>();
-  const composerController = useWorkbenchComposerController(routeScope, onSubmissionStateChange);
+  const composerController = useWorkbenchComposerController(routeScope, onSubmissionStateChange, runtime?.store);
   const {
     isSubmitting,
     mutationError,
@@ -202,7 +202,7 @@ export function useComposerSession({
   );
   const attachmentCount = attachments.length;
   const { attachmentsDisabled, draftInputDisabled, turnControlsDisabled } =
-    deriveComposerInputAvailability(state);
+    deriveComposerInputAvailability(state, runtime?.writeAccess !== undefined && runtime.writeAccess !== "writable");
   const fileSearch = useProjectFileSearch(
     client,
     projectId,

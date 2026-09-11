@@ -5,6 +5,8 @@ import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.j
 import { notifyActionError } from "../../notifications/action-notifications.js";
 import type { PromptCommandAction } from "../components/prompt-command.js";
 import type { IdempotencyAttempt } from "../composer-state.js";
+import { NativeCommandError } from "../../../platform/tauri/native-client.js";
+import type { TaskStore } from "../../conversation/runtime/task-store.js";
 
 export function isComposerControllerScopeCurrent(
   activeScope: string,
@@ -16,6 +18,7 @@ export function isComposerControllerScopeCurrent(
 export function useWorkbenchComposerController(
   routeScope: string,
   onSubmissionStateChange?: (submitting: boolean) => void,
+  taskStore?: TaskStore,
 ) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationErrorState] = useState<Error | null>(null);
@@ -62,10 +65,14 @@ export function useWorkbenchComposerController(
 
   const setMutationError = useCallback((error: Error | null) => {
     setMutationErrorState(error);
+    if (error instanceof NativeCommandError && error.code === "CODEX_THREAD_BUSY") {
+      taskStore?.getState().setWriteAccess("external");
+      return;
+    }
     if (error !== null) {
       notifyActionError(error);
     }
-  }, []);
+  }, [taskStore]);
 
   const reset = useCallback(
     (clearTaskState: boolean) => {

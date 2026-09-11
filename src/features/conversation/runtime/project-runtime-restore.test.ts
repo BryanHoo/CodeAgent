@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { NativeRuntimeClient } from "../../projects/project-queries.js";
 import { createProjectRuntimeManager } from "./project-runtime.js";
+import { createTaskStore } from "./task-store.js";
+import { NativeCommandError } from "../../../platform/tauri/native-client.js";
+
+function deferred() {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 function createSnapshot(projectId: string, taskId: string): AgentTaskSnapshotResponse {
   return {
@@ -33,6 +45,59 @@ function createSnapshot(projectId: string, taskId: string): AgentTaskSnapshotRes
 }
 
 describe("ProjectRuntimeManager task activity restoration", () => {
+  it("ignores a late ownership failure and releases only after the pending resume settles", async () => {
+    const first = deferred();
+    const second = deferred();
+    const response = createSnapshot("project-1", "task-1");
+    const client: NativeRuntimeClient = {
+      readTask: vi.fn(async () => response),
+      retainTaskSubscription: vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise),
+      releaseTaskSubscription: vi.fn(async () => undefined),
+      subscribeEvents: vi.fn(() => () => undefined),
+    };
+    const runtime = createProjectRuntimeManager(client);
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" });
+    const detach = runtime.attachTaskStore(response, store, async () => response);
+    detach();
+    expect(client.releaseTaskSubscription).not.toHaveBeenCalled();
+    const detachAgain = runtime.attachTaskStore(response, store, async () => response);
+    second.resolve();
+    await vi.waitFor(() => expect(store.getState().writeAccess).toBe("writable"));
+    first.reject(new NativeCommandError("CODEX_THREAD_BUSY", "busy"));
+    await first.promise.catch(() => undefined);
+    await Promise.resolve();
+    expect(store.getState().writeAccess).toBe("writable");
+    expect(client.releaseTaskSubscription).not.toHaveBeenCalled();
+    detachAgain();
+    await vi.waitFor(() => expect(client.releaseTaskSubscription).toHaveBeenCalledExactlyOnceWith("project-1", "task-1"));
+    runtime.dispose();
+  });
+
+  it("keeps an externally owned task locked across snapshots and checks again on reopen", async () => {
+    const retainTaskSubscription = vi.fn()
+      .mockRejectedValueOnce(new NativeCommandError("CODEX_THREAD_BUSY", "busy"))
+      .mockResolvedValue(undefined);
+    const response = createSnapshot("project-1", "task-1");
+    const client = {
+      readTask: vi.fn(async () => response), retainTaskSubscription,
+      releaseTaskSubscription: vi.fn(async () => undefined),
+      subscribeEvents: vi.fn(() => () => undefined),
+    } as NativeRuntimeClient;
+    const runtime = createProjectRuntimeManager(client);
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" });
+    const detach = runtime.attachTaskStore(response, store, client.readTask.bind(client, "project-1", "task-1"));
+    try {
+      await vi.waitFor(() => expect(store.getState().writeAccess).toBe("external"));
+      store.getState().hydrate(response);
+      expect(store.getState().writeAccess).toBe("external");
+      expect(retainTaskSubscription).toHaveBeenCalledExactlyOnceWith("project-1", "task-1");
+      detach();
+      const detachAgain = runtime.attachTaskStore(response, store, async () => response);
+      await vi.waitFor(() => expect(store.getState().writeAccess).toBe("writable"));
+      detachAgain();
+    } finally { detach(); runtime.dispose(); }
+  });
+
   it("reconnects after synchronous replay reports an evicted event", async () => {
     const cleanup = vi.fn();
     const subscribeEvents = vi.fn((options: SubscribeAgentEventsOptions) => {
