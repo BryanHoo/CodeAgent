@@ -5,6 +5,26 @@
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-09-11
+
+### Added
+
+- 添加 Modern Intel 与 Legacy Intel 独立 macOS 构建，Legacy 最低构建目标为 macOS 12.4。
+- 添加旧 WebKit 兼容渲染、Intel Codex 运行时与隔离更新清单。
+
+### Fixed
+
+- 修复 Legacy 版本打开任务时因正则后行断言不受支持而出现的路由错误。
+- 修复文件链接、流式 Markdown 与邮箱自动识别的旧 WebKit 兼容问题，并添加构建产物回归测试。
+
+### Changed
+
+- 精简中英文 README，将安装、更新、卸载及源码构建步骤迁移至独立文档。
+
+### Notes
+
+- 安装包尚未配置操作系统代码签名与 macOS 公证；macOS 12.4 最低构建目标仍需真机验收。
+
 ## [0.1.11-beta.3] - 2026-09-11
 
 ### Fixed
@@ -171,7 +191,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.7...v0.1.8

@@ -1,5 +1,7 @@
 # 跨平台发布
 
+面向用户的安装、更新与卸载步骤见[安装指南](./installation.md)，本页面向维护发布的开发者。源码环境准备见[开发指南](./development.md)。
+
 当前发布不配置 Apple Developer ID、Windows Authenticode 代码签名证书或 Linux GPG 密钥。
 自动更新产物使用独立的 Tauri updater 私钥签名，产物仅应从本仓库的 GitHub Releases 获取。
 
@@ -44,7 +46,7 @@ chmod +x CodeAgent.AppImage
 
 - `Quality`：在 Ubuntu 上执行 Web 和 Rust 的 lint、测试与构建。
 - `Platform Build`：Pull Request 上验证 Windows、Ubuntu、macOS 的原生编译。
-- `Release`：`v*` 标签或手动触发后，从 `CHANGELOG.md` 提取对应版本日志，通过全部质量门禁，构建各平台安装包并直接创建正式 GitHub Release。
+- `Release`：`v*` 标签或手动触发后，从 `CHANGELOG.md` 提取对应版本日志，通过全部质量门禁并构建各平台安装包。稳定版本创建正式 GitHub Release，带 `-` 的版本号创建 prerelease。
 
 Windows portable 构建显式使用 `--no-sign` 且不进入自动更新链路；Windows NSIS、Ubuntu 与
 macOS Modern 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。macOS Legacy 单独上传
