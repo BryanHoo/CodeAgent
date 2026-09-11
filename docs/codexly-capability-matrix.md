@@ -48,12 +48,12 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 任务设置 | `getTaskSettings`, `updateTaskSettings` | 应用私有原子 JSON；启动回合前持久化并同步线程设置 | 已实现 |
 | 排队提交 | `list/add/update/delete/reorder/startQueuedSubmission` | 原生 `thread/queue/*`，保留顺序和编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
-| 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；单调序号、缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
+| 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；消费 ACK、1 MiB 在途预算、4 MiB 待发送预算和控制预留；单调序号、显式缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
 | 小窗访问 | Task 只读输出 | 440×220 横向透明无外框置顶小窗，最多 3 个且同任务复用；工作台同源样式的 12px Markdown 与 160 字符操作标题；仅挂载可视块，支持滚动查看最近输出，置底时跟随新输出；独立入口与受限 Channel，单窗最多一个未确认包、12 项、每项 4 KiB；仅读取最近回合一页；双击恢复对应普通/临时任务路由后销毁，主窗口销毁不影响输出 | 已实现 |
 | 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
 | 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |
 | Item 映射 | 消息、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.154.0 官方可见 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；推理 Item 在适配层过滤，未知类型降级为可见活动 | 已实现 |
-| 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；实时输出由前端有界缓冲 | 已实现 |
+| 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；上游通知队列与缓冲分别限制 8 MiB，WebView 消费 ACK 释放在途额度；普通输出不能占用审批控制预留，超预算副本触发快照恢复，事实缓冲耗尽显式失败 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 0.152 `command`/`writeStdin`；终端输入保留 callback、会话、stdin 与 cwd 并提供独立审批界面；Guardian `writeStdin` 进入自动审批时间线；文件变更、权限、用户输入、MCP elicitation 原生回写 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | 文件预览、读取与操作支持项目外绝对路径及父目录跳转；保留文件树过滤、ignore 缓存索引、会话取消和结果上限；源码与图片支持轻量原生独立窗口预览 | 已实现 |
 | 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.152 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
@@ -95,7 +95,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ## 传输与性能证据
 
 - `AppServerConnection` 使用请求 ID 匹配乱序响应，`-32001` 过载有限重试。
-- stdout 按 JSONL 增量读取，stderr 独立排水，通知队列容量为 256。
+- stdout 按 JSONL 增量读取，stderr 独立排水，通知队列容量为 256 且最多 8 MiB；溢出缓冲同样有条数/字节硬预算，不能无限积压事实通知。
 - 普通 JSONL 帧继续使用 `RawValue` 快路；仅 `imageGeneration` 帧定向解析，图片正文不进入 WebView。
 - 前端只保留 1,024 条近期事件，流式文本按动画帧批量提交。
 - 历史页每次读取 10 个 Turn，每个 Turn 的 Item 每页 100 条，同页 Turn 并发补全。

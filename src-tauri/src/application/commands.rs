@@ -7,15 +7,27 @@ use super::app_update::{
 use super::state::performance_metrics::RuntimePerformanceMetricsSnapshot;
 use super::{error::AppError, state::AppState};
 use crate::domain::runtime::{
-    AppEvent, CodexRuntimeAvailability, CodexRuntimeInstallProgress, RuntimeSnapshot,
+    CodexRuntimeAvailability, CodexRuntimeInstallProgress, RuntimeSnapshot,
 };
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn connect_runtime(
-    on_event: Channel<AppEvent>,
+    on_event: Channel,
     state: State<'_, AppState>,
 ) -> Result<RuntimeSnapshot, AppError> {
     Ok(state.connect(on_event).await)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn acknowledge_runtime_events(
+    stream_id: u64,
+    delivery_ids: Vec<u64>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state
+        .acknowledge_runtime_events(stream_id, &delivery_ids)
+        .await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -121,6 +133,7 @@ mod tests {
         let permissions = include_str!("../../permissions/window-command-sets.toml");
 
         for permission in [
+            "allow-acknowledge-runtime-events",
             "allow-inspect-codex-runtime",
             "allow-install-codex-runtime",
             "allow-install-app-update",
@@ -130,6 +143,12 @@ mod tests {
                 "main-window-commands must include {permission}"
             );
         }
+    }
+
+    #[test]
+    fn runtime_ack_should_be_registered() {
+        assert!(include_str!("../../build.rs").contains("\"acknowledge_runtime_events\""));
+        assert!(include_str!("../lib.rs").contains("acknowledge_runtime_events,"));
     }
 
     #[test]

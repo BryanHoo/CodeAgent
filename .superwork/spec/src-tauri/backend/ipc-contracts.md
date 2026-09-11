@@ -17,6 +17,10 @@
 - Tauri 框架以字符串拒绝参数或 ACL 错误时，WebView 客户端必须包装为 `Error` 并保留原始消息，不得在 Composer 中退化为无上下文兜底文案
 - IPC 结构变化时同步修改 `src/domain/` 中对应的 TypeScript 类型
 - Channel 事件保持单调递增序号，前端据此忽略陈旧事件
+- 主 Runtime Channel 增加独立的 `streamId` / `deliveryId`，前端同步分发到 Store 后，通过 `acknowledge_runtime_events` 批量确认；`Channel.send()` 成功不能释放额度。每连接最多 64 个、合计 1 MiB 未确认包，其中为审批与控制流保留 8 个槽位和 128 KiB；待发送副本最多 256 条、4 MiB。重复、未来和旧连接 ACK 不得增加额度，前端最多一个 ACK invoke 在途，失败保留原标识低频重试。
+- WebView 过载不得阻塞 Rust 原生事实投影、审批注册和 RPC 应答；传输副本超预算时显式发送 `resyncRequired`，`projectId: "*"` 表示所有已订阅项目恢复权威快照。审批使用控制预留，不能被普通输出占满；单个超大事件或控制队列过载也必须要求快照恢复，不能静默丢失。重建连接须停止旧队列，旧 ACK 不得释放新连接额度。
+- app-server 通知 Channel 和溢出缓冲分别受 8 MiB 字节预算及条数上限约束；可恢复 delta 被淘汰后，重同步信号仅保留 `threadId`，信号自身最多 256 条、64 KiB。事实通知耗尽硬预算时必须显式失败并走 Runtime 恢复，禁止无限越过容量，也不能等待 WebView 而阻塞同一 stdio 上的 RPC。
+- 验证必须覆盖不 ACK、精确/重复/未来/跨连接 ACK、控制预留、字节先于条数耗尽、重同步信号体积和全链路工具输出洪峰；区分队列高水位、Rust 测试进程 RSS 与真实 WebView 峰值，不得用前两者宣称后者已验证。
 - 为序列化结果编写精确 JSON 断言，防止字段名或标签漂移
 
 ## 本地终端关闭确认

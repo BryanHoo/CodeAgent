@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let channelHandler: ((event: unknown) => void) | undefined;
 vi.mock("@tauri-apps/api/core", () => ({
   Channel: class {
-    public constructor(handler: (event: unknown) => void) { channelHandler = handler; }
+    public constructor(handler: (event: unknown) => void) {
+      let deliveryId = 0;
+      channelHandler = (event) => handler({ ...(event as object), streamId: 1, deliveryId: ++deliveryId });
+    }
   },
   invoke: vi.fn(async () => ({ lastSeq: 1, provider: "codex", status: "ready" })),
 }));

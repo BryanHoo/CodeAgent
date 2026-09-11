@@ -7,6 +7,7 @@ import {
 
 import { invoke } from "./native-invoke.js";
 import { RuntimeEventHistory, type ReplayGap } from "./runtime-event-history.js";
+import { createRuntimeEventAcknowledger, type RuntimeDelivery } from "./runtime-event-ack.js";
 
 export type RuntimeStatus = "failed" | "idle" | "ready" | "starting";
 export type RuntimeSnapshot = Readonly<{
@@ -72,7 +73,8 @@ export function ensureCodexRuntime(): Promise<RuntimeSnapshot> {
 
 export function connectCodexRuntime(): Promise<RuntimeSnapshot> {
   connectionPromise ??= (async () => {
-    const channel = new Channel<RuntimeEvent>((event) => {
+    const acknowledge = createRuntimeEventAcknowledger();
+    const consume = (event: RuntimeEvent) => {
       if (event.type === "runtimeStatus") {
         connectionPromise = event.data.status === "failed"
           ? undefined
@@ -97,6 +99,10 @@ export function connectCodexRuntime(): Promise<RuntimeSnapshot> {
         applicationPerformanceMetrics.recordIpcEvent(recentAgentEvents.size, performance.now());
       }
       for (const subscription of agentEventSubscriptions) subscription.onEvent(event.data.event);
+    };
+    const channel = new Channel<RuntimeEvent & RuntimeDelivery>((event) => {
+      consume(event);
+      acknowledge(event);
     });
     return invoke<RuntimeSnapshot>("connect_runtime", { onEvent: channel });
   })().catch((error: unknown) => {

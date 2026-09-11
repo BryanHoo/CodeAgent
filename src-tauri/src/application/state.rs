@@ -3,10 +3,7 @@ use std::{collections::HashMap, future::Future, sync::Arc};
 
 use serde_json::{Value, json};
 use tauri::{AppHandle, ipc::Channel};
-use tokio::{
-    sync::{Mutex, mpsc},
-    task::JoinHandle,
-};
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use super::error::AppError;
 use super::model_turn_waiters::ModelTurnWaiters;
@@ -14,6 +11,9 @@ use super::request_cancellation::RequestCancellationRegistry;
 use super::turn_waiters::TurnStartedWaiters;
 #[path = "state_event_delivery.rs"]
 mod event_delivery;
+#[path = "state_event_stream.rs"]
+mod event_stream;
+use event_stream::RuntimeEventStream;
 #[path = "state_event_delta_batcher.rs"]
 mod event_delta_batcher;
 #[path = "state_event_forwarder.rs"]
@@ -51,8 +51,6 @@ use runtime_supervisor::{
     schedule_runtime_restart,
 };
 
-const EVENT_QUEUE_CAPACITY: usize = 256;
-
 #[derive(Default)]
 pub struct AppState {
     pub terminals: crate::infrastructure::terminal::TerminalManager,
@@ -66,7 +64,8 @@ pub struct AppState {
 #[derive(Default)]
 struct RuntimeSession {
     task_windows: Arc<super::task_window_runtime::TaskWindowRuntime>,
-    event_sender: Option<mpsc::Sender<AppEvent>>,
+    event_sender: Option<Arc<RuntimeEventStream>>,
+    event_generation: u64,
     event_order: Arc<Mutex<()>>,
     snapshot: RuntimeSnapshot,
     codex_process: Option<CodexProcess>,
@@ -159,12 +158,19 @@ impl AppState {
             })
     }
 
-    pub async fn connect(&self, event_channel: Channel<AppEvent>) -> RuntimeSnapshot {
+    pub async fn connect(&self, event_channel: Channel) -> RuntimeSnapshot {
         let mut runtime = self.runtime.lock().await;
 
-        // 独立发布任务承担序列化和 WebView 调用，状态锁内只执行有界队列入队。
+        // 只替换通道；事件序列化和 WebView 投递在状态锁外执行。
         runtime.set_event_channel(event_channel);
         runtime.snapshot
+    }
+
+    pub async fn acknowledge_runtime_events(&self, stream_id: u64, delivery_ids: &[u64]) {
+        let sender = self.runtime.lock().await.event_sender.clone();
+        if let Some(sender) = sender {
+            sender.acknowledge(stream_id, delivery_ids);
+        }
     }
 
     pub async fn codex_connection(&self) -> Result<Arc<AppServerConnection>, AppError> {
@@ -375,16 +381,15 @@ impl RuntimeSession {
         }
     }
 
-    fn set_event_channel(&mut self, channel: Channel<AppEvent>) {
-        let (sender, mut receiver) = mpsc::channel(EVENT_QUEUE_CAPACITY);
-        tokio::spawn(async move {
-            while let Some(event) = receiver.recv().await {
-                if channel.send(event).is_err() {
-                    break;
-                }
-            }
-        });
-        self.event_sender = Some(sender);
+    fn set_event_channel(&mut self, channel: Channel) {
+        if let Some(previous) = self.event_sender.take() {
+            previous.close();
+        }
+        self.event_generation += 1;
+        self.event_sender = Some(Arc::new(RuntimeEventStream::new(
+            channel,
+            self.event_generation,
+        )));
     }
 }
 
@@ -395,3 +400,7 @@ mod tests;
 #[cfg(test)]
 #[path = "state_reliability_tests.rs"]
 mod reliability_tests;
+
+#[cfg(test)]
+#[path = "state_stream_tests.rs"]
+mod stream_tests;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::{Mutex, OwnedMutexGuard, mpsc::Sender};
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::RuntimeSession;
 use crate::domain::runtime::AppEvent;
@@ -8,15 +8,15 @@ use crate::domain::runtime::AppEvent;
 pub(super) struct EventDelivery {
     task_windows: Arc<super::super::task_window_runtime::TaskWindowRuntime>,
     _order: OwnedMutexGuard<()>,
-    sender: Option<Sender<AppEvent>>,
+    sender: Option<Arc<super::event_stream::RuntimeEventStream>>,
 }
 
 impl EventDelivery {
     pub(super) async fn send(self, event: AppEvent) {
         self.task_windows.observe(&event);
         if let Some(sender) = self.sender {
-            // 原生状态已更新；等待容量时不占用状态锁，窗口销毁后继续原生流程。
-            let _ = sender.send(event).await;
+            // ACK 只约束 WebView 在途数据，不阻塞原生事实、审批登记或 RPC 应答。
+            sender.publish(event);
         }
     }
 }

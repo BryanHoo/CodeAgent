@@ -22,6 +22,9 @@ use tokio::{
 use crate::infrastructure::diagnostics;
 
 use super::connection_event_buffer::NotificationBuffer;
+use super::connection_message_channel::{
+    ServerMessageReceiver, ServerMessageSender, server_message_channel,
+};
 use super::generated_image_store::GeneratedImageStore;
 use super::model_cache::ModelCatalogCache;
 use super::protocol::{
@@ -69,7 +72,7 @@ pub struct AppServerConnection {
     pub(super) model_catalog: Arc<ModelCatalogCache>,
     writer: AsyncMutex<AsyncWriter>,
     pending: PendingRequests,
-    server_messages: AsyncMutex<Option<mpsc::Receiver<ServerMessage>>>,
+    server_messages: AsyncMutex<Option<ServerMessageReceiver>>,
     next_id: AtomicU64,
     reader_task: JoinHandle<()>,
 }
@@ -106,7 +109,7 @@ impl AppServerConnection {
     {
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let reader_pending = Arc::clone(&pending);
-        let (message_sender, message_receiver) = mpsc::channel(256);
+        let (message_sender, message_receiver) = server_message_channel(256);
         let model_catalog = Arc::new(ModelCatalogCache::default());
         let reader_task = tokio::spawn(read_responses(
             reader,
@@ -126,9 +129,7 @@ impl AppServerConnection {
         }
     }
 
-    pub async fn take_server_messages(
-        &self,
-    ) -> Result<mpsc::Receiver<ServerMessage>, ConnectionError> {
+    pub async fn take_server_messages(&self) -> Result<ServerMessageReceiver, ConnectionError> {
         self.server_messages
             .lock()
             .await
@@ -328,7 +329,7 @@ where
 async fn read_responses<R>(
     reader: R,
     pending: PendingRequests,
-    server_messages: mpsc::Sender<ServerMessage>,
+    server_messages: ServerMessageSender,
     image_store: Option<GeneratedImageStore>,
     model_catalog: Arc<ModelCatalogCache>,
 ) where
@@ -353,7 +354,7 @@ async fn read_responses<R>(
                 tokio::select! {
                     biased;
                     result = &mut read => break result,
-                    permit = server_messages.reserve(), if !queued_notifications.is_empty() => {
+                    permit = server_messages.reserve(queued_notifications.next_bytes()), if !queued_notifications.is_empty() => {
                         let Ok(permit) = permit else {
                             queued_notifications.clear();
                             continue;
@@ -436,8 +437,15 @@ async fn read_responses<R>(
                     Err(mpsc::error::TrySendError::Closed(_)) => continue,
                 }
             }
-            // channel 满时只淘汰可恢复 delta；生命周期与审批事实流必须完整保留。
-            queued_notifications.push(notification);
+            // 不等待通知消费，继续读取 RPC；事实流触达硬预算时显式失败，由 Runtime 恢复。
+            if !queued_notifications.push(notification) {
+                diagnostics::record_error(
+                    "codex_notification_budget_exceeded",
+                    "notification fact buffer exhausted",
+                );
+                fail_pending(&pending, PendingError::InvalidMessage);
+                return;
+            }
             continue;
         }
         route_response(&pending, message);

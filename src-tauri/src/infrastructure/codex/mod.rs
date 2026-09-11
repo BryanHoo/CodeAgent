@@ -7,6 +7,10 @@ mod commit_message;
 mod config;
 mod connection;
 mod connection_event_buffer;
+mod connection_message_channel;
+pub(crate) use connection_message_channel::ServerMessageReceiver;
+#[cfg(test)]
+pub(crate) use connection_message_channel::server_message_channel;
 mod conversation;
 mod conversation_advanced;
 mod conversation_background;

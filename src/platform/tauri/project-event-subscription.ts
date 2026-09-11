@@ -48,7 +48,7 @@ export function subscribeProjectEvents(
       options.onEvent(event);
     },
     onResyncRequired: (message) => {
-      if (!active || message.projectId !== options.projectId) return;
+      if (!active || (message.projectId !== "*" && message.projectId !== options.projectId)) return;
       if (message.sessionId !== options.sessionId) return;
       active = false;
       const { projectId: _projectId, ...resync } = message;

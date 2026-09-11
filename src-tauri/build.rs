@@ -41,6 +41,7 @@ fn main() {
         "read_custom_background",
         "update_custom_backgrounds",
         "connect_runtime",
+        "acknowledge_runtime_events",
         "start_runtime",
         "inspect_codex_runtime",
         "install_codex_runtime",

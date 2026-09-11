@@ -18,6 +18,7 @@ permissions = [
   "allow-read-custom-background",
   "allow-update-custom-backgrounds",
   "allow-connect-runtime",
+  "allow-acknowledge-runtime-events",
   "allow-start-runtime",
   "allow-inspect-codex-runtime",
   "allow-install-codex-runtime",

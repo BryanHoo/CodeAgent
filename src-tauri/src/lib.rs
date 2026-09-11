@@ -25,8 +25,9 @@ use application::{
         update_project_defaults,
     },
     commands::{
-        cancel_native_request, connect_runtime, get_app_info, get_runtime_performance_metrics,
-        inspect_codex_runtime, install_app_update, install_codex_runtime, start_runtime,
+        acknowledge_runtime_events, cancel_native_request, connect_runtime, get_app_info,
+        get_runtime_performance_metrics, inspect_codex_runtime, install_app_update,
+        install_codex_runtime, start_runtime,
     },
     desktop_pet_commands::{
         DesktopPetRuntime, configure_desktop_pet, get_desktop_pet_drag_strategy,
@@ -163,6 +164,7 @@ pub fn run() {
             read_custom_background,
             update_custom_backgrounds,
             connect_runtime,
+            acknowledge_runtime_events,
             start_runtime,
             inspect_codex_runtime,
             install_codex_runtime,

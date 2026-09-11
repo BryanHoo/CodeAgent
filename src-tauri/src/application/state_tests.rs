@@ -6,14 +6,21 @@ use std::sync::{
 use serde_json::{Value, json, value::to_raw_value};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tokio::{
-    sync::{Mutex, mpsc},
+    sync::Mutex,
     time::{Duration, sleep, timeout},
 };
 
 use super::runtime_supervisor::runtime_restart_plan;
 use super::{RuntimePerformanceMetrics, RuntimeSession, spawn_event_forwarder};
 use crate::domain::runtime::{AppEvent, ProviderKind, RuntimeStatus};
-use crate::infrastructure::codex::ServerMessage;
+use crate::infrastructure::codex::{ServerMessage, server_message_channel};
+
+fn strip_transport_metadata(json: String) -> String {
+    let mut event: Value = serde_json::from_str(&json).unwrap();
+    event.as_object_mut().unwrap().remove("streamId");
+    event.as_object_mut().unwrap().remove("deliveryId");
+    serde_json::to_string(&event).unwrap()
+}
 
 #[test]
 fn runtime_status_should_advance_monotonic_sequence() {
@@ -70,7 +77,7 @@ async fn closed_app_server_stream_should_mark_runtime_failed() {
         session.snapshot.status = RuntimeStatus::Ready;
         session.snapshot.provider = Some(ProviderKind::Codex);
     }
-    let (sender, receiver) = mpsc::channel(1);
+    let (sender, receiver) = server_message_channel(1);
     let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     drop(sender);
     task.await.expect("event forwarder should stop cleanly");
@@ -86,7 +93,10 @@ async fn task_scoped_mcp_status_should_be_forwarded() {
     let published_for_channel = Arc::clone(&published);
     let channel = Channel::new(move |body| {
         if let InvokeResponseBody::Json(value) = body {
-            published_for_channel.lock().unwrap().push(value);
+            published_for_channel
+                .lock()
+                .unwrap()
+                .push(strip_transport_metadata(value));
         }
         Ok(())
     });
@@ -98,7 +108,7 @@ async fn task_scoped_mcp_status_should_be_forwarded() {
             .task_projects
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
-    let (sender, receiver) = mpsc::channel(1);
+    let (sender, receiver) = server_message_channel(1);
     let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     sender
         .send(ServerMessage {
@@ -136,7 +146,10 @@ async fn dropped_delta_signal_should_request_project_resync() {
     let published_for_channel = Arc::clone(&published);
     let channel = Channel::new(move |body| {
         if let InvokeResponseBody::Json(value) = body {
-            published_for_channel.lock().unwrap().push(value);
+            published_for_channel
+                .lock()
+                .unwrap()
+                .push(strip_transport_metadata(value));
         }
         Ok(())
     });
@@ -149,7 +162,7 @@ async fn dropped_delta_signal_should_request_project_resync() {
             .insert("thread-a".to_owned(), "project-a".to_owned());
         session.project_sequences.insert("project-a".to_owned(), 17);
     }
-    let (sender, receiver) = mpsc::channel(1);
+    let (sender, receiver) = server_message_channel(1);
     let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     sender
         .send(ServerMessage {
@@ -209,7 +222,7 @@ async fn event_channel_should_run_without_holding_runtime_lock() {
             .task_projects
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
-    let (sender, receiver) = mpsc::channel(1);
+    let (sender, receiver) = server_message_channel(1);
     let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     sender
         .send(ServerMessage {
@@ -244,7 +257,7 @@ async fn missing_webview_channel_should_not_stop_event_forwarder() {
             .task_projects
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
-    let (sender, receiver) = mpsc::channel(2);
+    let (sender, receiver) = server_message_channel(2);
     let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     for name in ["context7", "filesystem"] {
         sender
@@ -283,7 +296,10 @@ async fn consecutive_deltas_should_merge_before_crossing_the_channel() {
     let published_for_channel = Arc::clone(&published);
     let channel = Channel::new(move |body| {
         if let InvokeResponseBody::Json(value) = body {
-            published_for_channel.lock().unwrap().push(value);
+            published_for_channel
+                .lock()
+                .unwrap()
+                .push(strip_transport_metadata(value));
         }
         Ok(())
     });
@@ -295,7 +311,7 @@ async fn consecutive_deltas_should_merge_before_crossing_the_channel() {
             .task_projects
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
-    let (sender, receiver) = mpsc::channel(4);
+    let (sender, receiver) = server_message_channel(4);
     let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     for delta in ["a", "b", "c"] {
         sender
@@ -356,17 +372,15 @@ fn runtime_performance_metrics_should_report_merge_rate_and_queue_high_watermark
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn saturated_event_channel_should_preserve_every_sequence() {
+async fn saturated_event_channel_should_preserve_native_progress_and_report_resync() {
     let published = Arc::new(StdMutex::new(Vec::new()));
     let published_for_channel = Arc::clone(&published);
-    let release_channel = Arc::new(AtomicBool::new(false));
-    let release_channel_callback = Arc::clone(&release_channel);
     let channel = Channel::new(move |body| {
-        while !release_channel_callback.load(Ordering::Acquire) {
-            std::thread::yield_now();
-        }
         if let InvokeResponseBody::Json(value) = body {
-            published_for_channel.lock().unwrap().push(value);
+            published_for_channel
+                .lock()
+                .unwrap()
+                .push(strip_transport_metadata(value));
         }
         Ok(())
     });
@@ -378,7 +392,7 @@ async fn saturated_event_channel_should_preserve_every_sequence() {
             .task_projects
             .insert("thread-a".to_owned(), "project-a".to_owned());
     }
-    let (sender, receiver) = mpsc::channel(300);
+    let (sender, receiver) = server_message_channel(300);
     let task = spawn_event_forwarder(Arc::clone(&runtime), receiver, None);
     for index in 0..300 {
         sender
@@ -407,15 +421,7 @@ async fn saturated_event_channel_should_preserve_every_sequence() {
         }
     })
     .await;
-    release_channel.store(true, Ordering::Release);
     task.await.expect("event forwarder should stop cleanly");
-    timeout(Duration::from_secs(2), async {
-        while published.lock().unwrap().len() < 300 {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("channel should receive every sequenced event");
 
     let sequences = published
         .lock()
@@ -428,7 +434,15 @@ async fn saturated_event_channel_should_preserve_every_sequence() {
                 .and_then(Value::as_u64)
         })
         .collect::<Vec<_>>();
-    assert_eq!(sequences, (1..=300).collect::<Vec<_>>());
+    assert!(sequences.len() <= 56);
+    assert_eq!(runtime.lock().await.project_sequences["project-a"], 300);
+    assert!(
+        published
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|body| body.contains("resyncRequired"))
+    );
 }
 #[tokio::test]
 async fn task_window_receives_output_without_main_channel_and_prevents_early_unsubscribe() {

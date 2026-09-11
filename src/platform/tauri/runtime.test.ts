@@ -10,7 +10,8 @@ const invoke = vi.fn(async (command: string) => ({
 vi.mock("@tauri-apps/api/core", () => ({
   Channel: class {
     public constructor(handler: (event: unknown) => void) {
-      channelHandler = handler;
+      let deliveryId = 0;
+      channelHandler = (event) => handler({ ...(event as object), streamId: 1, deliveryId: ++deliveryId });
     }
   },
   invoke,
@@ -90,5 +91,18 @@ describe("Tauri runtime recovery", () => {
     expect(onResyncRequired).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: "project-a", type: "resync.required" }),
     );
+  });
+
+  it("acknowledges a packet only after synchronous subscribers consume it", async () => {
+    const runtime = await import("./runtime.js");
+    await runtime.ensureCodexRuntime();
+    invoke.mockClear();
+    runtime.subscribeAgentEvents({ afterSequence: 0, onEvent: () => {
+      expect(invoke).not.toHaveBeenCalled();
+    } });
+    channelHandler?.({ type: "agentEvent", data: { event: { sequence: 1 } } });
+    expect(invoke).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(invoke).toHaveBeenCalledWith("acknowledge_runtime_events", { streamId: 1, deliveryIds: [1] });
   });
 });

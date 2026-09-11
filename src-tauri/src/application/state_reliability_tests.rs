@@ -1,9 +1,10 @@
 use super::{AppState, RuntimeSession, spawn_event_forwarder};
 use crate::domain::runtime::{AppEvent, ProviderKind, RuntimeStatus};
-use crate::infrastructure::codex::{ServerMessage, map_server_request_now};
-use serde_json::{json, value::to_raw_value};
-use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc, oneshot};
+use crate::infrastructure::codex::{ServerMessage, map_server_request_now, server_message_channel};
+use serde_json::{Value, json, value::to_raw_value};
+use std::sync::{Arc, Mutex as StdMutex};
+use tauri::ipc::{Channel, InvokeResponseBody};
+use tokio::sync::{Mutex, oneshot};
 use tokio::time::{Duration, timeout};
 
 #[tokio::test]
@@ -33,66 +34,71 @@ async fn concurrent_start_should_wait_for_the_same_ready_runtime() {
     assert!(
         timeout(Duration::from_millis(30), &mut second)
             .await
-            .is_err(),
-        "concurrent caller returned before readiness"
+            .is_err()
     );
     ready_tx.send(()).unwrap();
     assert_eq!(first.await.unwrap().unwrap().status, RuntimeStatus::Ready);
     assert_eq!(second.await.unwrap().unwrap().status, RuntimeStatus::Ready);
 }
 
+async fn saturated_stream(runtime: &Arc<Mutex<RuntimeSession>>) -> Arc<StdMutex<Vec<Value>>> {
+    let output = Arc::new(StdMutex::new(Vec::new()));
+    let received = Arc::clone(&output);
+    runtime
+        .lock()
+        .await
+        .set_event_channel(Channel::new(move |body| {
+            if let InvokeResponseBody::Json(body) = body {
+                received
+                    .lock()
+                    .unwrap()
+                    .push(serde_json::from_str(&body).unwrap());
+            }
+            Ok(())
+        }));
+    let sender = runtime.lock().await.event_sender.clone().unwrap();
+    for sequence in 0..100 {
+        sender.publish(AppEvent::AgentEvent {
+            event: json!({
+                "type":"command.output_delta", "sequence":sequence, "taskId":"thread-a",
+                "payload":{"delta":"x".repeat(65_536)}
+            })
+            .into(),
+        });
+    }
+    output
+}
+
 #[tokio::test]
 async fn saturated_channel_should_preserve_the_final_failed_status() {
     let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
-    let (sender, mut receiver) = mpsc::channel(1);
-    sender
-        .send(AppEvent::RuntimeStatus {
-            seq: 0,
-            provider: None,
-            status: RuntimeStatus::Starting,
-        })
-        .await
-        .unwrap();
-    runtime.lock().await.event_sender = Some(sender);
-    let (source, messages) = mpsc::channel(1);
-    let forwarder = spawn_event_forwarder(Arc::clone(&runtime), messages, None);
+    let output = saturated_stream(&runtime).await;
+    let (source, messages) = server_message_channel(1);
     drop(source);
-    tokio::time::sleep(Duration::from_millis(20)).await;
+    timeout(
+        Duration::from_millis(200),
+        spawn_event_forwarder(Arc::clone(&runtime), messages, None),
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert!(
-        timeout(Duration::from_millis(50), runtime.lock())
-            .await
-            .is_ok(),
-        "backpressure must not hold runtime lock"
+        output
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event["data"]["status"] == "failed")
     );
-    receiver.recv().await.unwrap();
-    let event = timeout(Duration::from_millis(200), receiver.recv())
-        .await
-        .expect("final status was lost")
-        .unwrap();
-    assert!(matches!(
-        event,
-        AppEvent::RuntimeStatus {
-            status: RuntimeStatus::Failed,
-            ..
-        }
-    ));
-    forwarder.await.unwrap();
 }
 
 #[tokio::test]
 async fn waiting_publishers_should_not_hold_runtime_lock_or_reorder_events() {
     let runtime = Arc::new(Mutex::new(RuntimeSession::default()));
-    let (sender, mut receiver) = mpsc::channel(2);
-    runtime.lock().await.event_sender = Some(sender);
+    let output = saturated_stream(&runtime).await;
     let first = super::prepare_event_delivery(&runtime).await;
     let next_runtime = Arc::clone(&runtime);
     let second = tokio::spawn(async move { super::prepare_event_delivery(&next_runtime).await });
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    assert!(
-        timeout(Duration::from_millis(50), runtime.lock())
-            .await
-            .is_ok()
-    );
+    assert!(runtime.try_lock().is_ok());
     first
         .send(AppEvent::RuntimeStatus {
             seq: 1,
@@ -109,88 +115,76 @@ async fn waiting_publishers_should_not_hold_runtime_lock_or_reorder_events() {
             status: RuntimeStatus::Ready,
         })
         .await;
-    assert!(matches!(
-        receiver.recv().await,
-        Some(AppEvent::RuntimeStatus { seq: 1, .. })
-    ));
-    assert!(matches!(
-        receiver.recv().await,
-        Some(AppEvent::RuntimeStatus { seq: 2, .. })
-    ));
+    let sequences: Vec<_> = output
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| event["type"] == "runtimeStatus")
+        .map(|event| event["data"]["seq"].as_u64().unwrap())
+        .collect();
+    assert_eq!(sequences, vec![1, 2]);
 }
 
 #[tokio::test]
 async fn saturated_channel_should_deliver_resolved_and_expired_approvals() {
     for resolved in [true, false] {
         let state = Arc::new(AppState::default());
-        let (sender, mut receiver) = mpsc::channel(1);
-        sender
-            .send(AppEvent::RuntimeStatus {
-                seq: 0,
-                provider: None,
-                status: RuntimeStatus::Starting,
-            })
-            .await
-            .unwrap();
-        state.runtime.lock().await.event_sender = Some(sender);
-        let mut pending = map_server_request_now(ServerMessage {
-            id: Some(9),
-            method: "item/commandExecution/requestApproval".to_owned(),
-            params: to_raw_value(&json!({
-                "threadId": "thread-a", "turnId": "turn-a", "itemId": "item-a", "kind": "command",
-                "startedAtMs": 1735689600000_i64, "command": "pnpm check", "cwd": "/work/a",
-                "availableDecisions": ["accept", "decline"]
-            })).unwrap(),
-        }, 0).unwrap().unwrap().pending;
+        let output = saturated_stream(&state.runtime).await;
+        let mut pending = map_server_request_now(
+            ServerMessage {
+                id: Some(9),
+                method: "item/commandExecution/requestApproval".to_owned(),
+                params: to_raw_value(&json!({
+                    "threadId":"thread-a", "turnId":"turn-a", "itemId":"item-a", "kind":"command",
+                    "startedAtMs":1735689600000_i64, "command":"pnpm check", "cwd":"/work/a",
+                    "availableDecisions":["accept", "decline"]
+                }))
+                .unwrap(),
+            },
+            0,
+        )
+        .unwrap()
+        .unwrap()
+        .pending;
         pending.request["projectId"] = json!("project-a");
-        let task_state = Arc::clone(&state);
-        let task = tokio::spawn(async move {
+        timeout(Duration::from_millis(200), async {
             if resolved {
-                task_state.publish_resolved_request(&pending).await.unwrap();
+                state.publish_resolved_request(&pending).await.unwrap();
             } else {
-                task_state
+                state
                     .runtime
                     .lock()
                     .await
                     .pending_requests
                     .insert("number:9".to_owned(), pending);
-                let (source, messages) = mpsc::channel(1);
+                let (source, messages) = server_message_channel(1);
                 source
                     .send(ServerMessage {
                         id: None,
                         method: "serverRequest/resolved".to_owned(),
-                        params: to_raw_value(&json!({"requestId": 9})).unwrap(),
+                        params: to_raw_value(&json!({"requestId":9})).unwrap(),
                     })
                     .await
                     .unwrap();
                 drop(source);
-                spawn_event_forwarder(Arc::clone(&task_state.runtime), messages, None)
+                spawn_event_forwarder(Arc::clone(&state.runtime), messages, None)
                     .await
                     .unwrap();
             }
-        });
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        assert!(
-            timeout(Duration::from_millis(50), state.runtime.lock())
-                .await
-                .is_ok()
-        );
-        receiver.recv().await.unwrap();
-        let event = timeout(Duration::from_millis(200), receiver.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        let AppEvent::AgentEvent { event } = event else {
-            panic!("approval event required")
+        })
+        .await
+        .expect("approval must not wait for output ACK");
+        let kind = if resolved {
+            "pending_request.resolved"
+        } else {
+            "pending_request.expired"
         };
-        assert_eq!(
-            event.event_type(),
-            Some(if resolved {
-                "pending_request.resolved"
-            } else {
-                "pending_request.expired"
-            })
+        assert!(
+            output
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| event["data"]["event"]["type"] == kind)
         );
-        task.await.unwrap();
     }
 }

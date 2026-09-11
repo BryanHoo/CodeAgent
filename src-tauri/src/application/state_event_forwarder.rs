@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::AppHandle;
 use tokio::{
-    sync::{Mutex, mpsc},
+    sync::Mutex,
     task::JoinHandle,
     time::{Instant, sleep_until},
 };
@@ -27,13 +27,13 @@ use crate::{
     domain::runtime::{AgentEvent, AppEvent, ProviderKind, RuntimeStatus},
     infrastructure::codex::{
         EVENT_RETENTION_EXCEEDED_METHOD, MappedServerRequest, PendingServerRequest,
-        RUNTIME_SESSION_ID, ServerMessage,
+        RUNTIME_SESSION_ID, ServerMessage, ServerMessageReceiver,
     },
 };
 
 pub(super) fn spawn_event_forwarder(
     runtime: Arc<Mutex<RuntimeSession>>,
-    mut messages: mpsc::Receiver<ServerMessage>,
+    mut messages: ServerMessageReceiver,
     app: Option<AppHandle>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
@@ -223,13 +223,13 @@ async fn publish_mapped_event(
         };
         session.pending_requests.insert(request_id, pending);
     }
-    // WebView 消费变慢时使用有界队列背压，Sequence 已分配后禁止静默丢弃事件。
+    // 原生登记不等待 WebView ACK；传输预算耗尽时显式通知快照恢复。
     let pet_event = event.clone();
     let provider_event_count = event.source_event_count();
     let event_sender = session.event_sender.clone();
-    let queue_depth = event_sender.as_ref().map_or(0, |sender| {
-        (sender.max_capacity().saturating_sub(sender.capacity()) + 1).min(sender.max_capacity())
-    });
+    let queue_depth = event_sender
+        .as_ref()
+        .map_or(0, |sender| sender.queue_depth());
     session
         .performance_metrics
         .record_delivery(&project_id, provider_event_count, 1, queue_depth);
