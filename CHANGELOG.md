@@ -5,10 +5,21 @@
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-09-11
+
+### Added
+
+- 添加 Modern Intel 与 Legacy Intel 独立 macOS 安装包和更新通道，Legacy 最低支持 macOS 12.4。
+
 ### Fixed
 
+- 修复 Legacy 打开任务时因旧 WebKit 不支持正则后行断言而出现的路由错误。
 - 修复 Legacy 回车无法发送消息及 Native WebView 真实运行时初始化超时。
 - 取消本机文件打开、预览及文件操作的项目目录限制，修复任务回复中项目外 Office 文件无法打开的问题，并区分文件访问和应用启动错误。
+
+### Changed
+
+- 精简中英文 README，将安装、更新、卸载及源码构建步骤移至独立文档。
 
 ## [0.1.11] - 2026-09-11
 
@@ -196,7 +207,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.12
 [0.1.11]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.8...v0.1.9
