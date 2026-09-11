@@ -40,7 +40,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 归档与删除 | `archiveTask`, `unarchiveTask`, `deleteTask`, `unsubscribeTask` | 原生 thread 生命周期；删除临时任务后仅清理验证为受控直接子目录的工作区；Rust lease 管理器在终态触发释放，活跃任务保持 busy 并有界退避重试，WebView 只声明消费者挂载/卸载 | 已实现 |
 | 会话快照 | `readTask` | `thread/read(includeTurns:false)` + `thread/turns/list` | 已实现 |
 | 跨客户端占用 | `retainTaskSubscription` | 以 `thread/resume(excludeTurns:true)` 确认写入权并恢复订阅，无 rollout 新线程经本进程载入状态确认后复用；冲突保留历史和草稿，锁定当前任务操作并覆盖输入区；重新进入任务时重新检查，不轮询 | 已实现 |
-| 保留格式复制 | 独立的 Markdown 与 HTML 复制按钮 | Markdown 直接复制原文；HTML 点击时按需转换并通过 `ClipboardItem` 写入安全 HTML，不增加流式解析或渲染成本 | 已实现 |
+| 回答复制 | Markdown 复制按钮 | 点击时通过 Tauri 原生剪贴板复制原始 Markdown，避免 WebView 权限限制；不进行格式转换，不增加流式解析或渲染成本 | 已实现 |
 | 长历史分页 | `readTask` cursor | `legacy` 使用 `full`；`paginated` 使用 `notLoaded` + 并发 `thread/items/list` | 已实现 |
 | 回合控制 | `startTurn`, `steerTurn`, `interruptTurn` | 原生 `turn/start`, `turn/steer`, `turn/interrupt` | 已实现 |
 | Goal 模式 | `updateTaskGoal`, `clearTaskGoal` | 原生 `thread/goal/*`；Goal 启动等待真实 `turn/started` | 已实现 |

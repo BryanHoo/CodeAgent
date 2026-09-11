@@ -1,6 +1,7 @@
 import type { AgentItem, AgentItemStatus, AgentTurn, Project } from "@/protocol/index.js";
 import { ChevronRight, Copy, GitFork, MessageSquareCode } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { copyText } from "../../../platform/tauri/clipboard.js";
 import { v4 as createUuid } from "uuid";
 
 import { getCurrentLanguage, i18n } from "../../../i18n/i18n.js";
@@ -9,7 +10,6 @@ import {
   runDetailViewInterval,
 } from "../../../shared/lifecycle/application-visibility.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { copyFormattedMessage } from "../../../shared/components/agent/copy-formatted-message.js";
 import {
   notifyActionError,
   notifyActionSuccess,
@@ -313,11 +313,11 @@ export function MessageMetadata({
   const locale = getCurrentLanguage();
   const dateFormatters = messageDate === undefined ? undefined : getMessageDateFormatters(locale);
 
-  const copyMessage = (markdown: boolean) =>
+  const copyMessage = () =>
     messageActionLockRef.current.run(async () => {
       try {
-        // Markdown 直接复制原文；仅 HTML 按钮按需加载转换器，不增加渲染成本。
-        await (markdown ? navigator.clipboard.writeText(text) : copyFormattedMessage(text));
+        // 仅在点击时复制原始 Markdown，不进行格式转换或增加渲染成本。
+        await copyText(text);
         notifyActionSuccess();
       } catch (error) {
         notifyActionError(error);
@@ -344,16 +344,13 @@ export function MessageMetadata({
 
   return (
     <MessageActions className="mt-2 text-label text-muted-foreground">
-      {(["copyMarkdown", "copyHtml"] as const).map((format) => {
-        const label = i18n.t(`timeline.${format}`, { ns: "conversation" });
-        const markdown = format === "copyMarkdown";
-        const Icon = markdown ? Copy : MessageSquareCode;
-        return (
-          <MessageAction key={format} label={label} tooltip={label} onClick={() => { void copyMessage(markdown); }}>
-            <Icon className="size-3.5" aria-hidden="true" />
-          </MessageAction>
-        );
-      })}
+      <MessageAction
+        label={i18n.t("timeline.copyMarkdown", { ns: "conversation" })}
+        tooltip={i18n.t("timeline.copyMarkdown", { ns: "conversation" })}
+        onClick={() => { void copyMessage(); }}
+      >
+        <Copy className="size-3.5" aria-hidden="true" />
+      </MessageAction>
       {lastTurnId === undefined || onForkTask === undefined ? null : (
         <MessageAction
           disabled={forkPending}

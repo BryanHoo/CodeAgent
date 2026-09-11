@@ -258,7 +258,6 @@ export const conversation = {
     conversation: "Conversation",
     copied: "Copied",
     copyMarkdown: "Copy Markdown",
-    copyHtml: "Copy HTML",
     downloadAttachment: "Download attachment {{name}}",
     openAttachment: "Open attachment {{name}}",
     emptyAfter: "?",

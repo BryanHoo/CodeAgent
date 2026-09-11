@@ -49,6 +49,6 @@ export const config: Options.Testrunner = {
     ? ["./tests/webview/performance.spec.ts"]
     : realRuntimeEnabled
       ? ["./tests/webview/real-codex-runtime.spec.ts"]
-      : ["./tests/webview/critical-flows.spec.ts"],
+      : ["./tests/webview/critical-flows.spec.ts", "./tests/webview/clipboard.spec.ts"],
   waitforTimeout: 10_000,
 };

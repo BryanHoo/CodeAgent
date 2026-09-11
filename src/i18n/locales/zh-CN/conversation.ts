@@ -258,7 +258,6 @@ export const conversation = {
     conversation: "会话内容",
     copied: "已复制",
     copyMarkdown: "复制 Markdown",
-    copyHtml: "复制 HTML",
     downloadAttachment: "下载附件 {{name}}",
     openAttachment: "打开附件 {{name}}",
     emptyAfter: "中做些什么？",

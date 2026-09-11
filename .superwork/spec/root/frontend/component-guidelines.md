@@ -56,7 +56,7 @@
 - Composer 必须按 `model/list.inputModalities` 禁止模型不支持的图片或音频提交；图片固定使用 `detail: auto`，浏览器附件走 raw IPC，宿主选择走路径导入，不提供逐图档位选择
 - 宿主附件选择器底栏必须限制路径显示宽度并单行省略，操作按钮使用不可收缩的独立布局列；中文长路径必须在 Chromium 与 WebKit 浏览器测试中验证无裁切和溢出
 - Composer 必须将 `CODEX_THREAD_BUSY` 投影为当前任务的写入锁：保留正文和附件草稿，使用禁用控件、`inert` 与捕获事件阻止输入、菜单和 Portal 操作，在输入区覆盖“当前任务正在其他客户端进行”；命令式提交、异步问答、计划执行、任务菜单及标题重命名必须遵守同一任务身份边界，不影响切换到其他任务。检查中也禁用写入，只有重新挂载后的权威检查成功才能解除占用锁，历史快照和普通消息事件不得自行解锁。
-- 回答复制提供独立的 Markdown 与 HTML 按钮：Markdown 直接以 `writeText` 复制原文，HTML 仅在点击时按需加载转换器并写入 `text/html`。在点击栈内调用 Clipboard API，将 HTML 作为 Promise 传给 `ClipboardItem`，避免 WebKit 丢失用户激活。HTML 不携带原始脚本、危险链接或外部图片资源；覆盖两个按钮的独立行为、标题、列表、表格、代码块与双引擎真实剪贴板写入。
+- 回答仅提供原始 Markdown 复制按钮，通过 `src/platform/tauri/clipboard.ts` 调用原生剪贴板，不依赖 WebView 用户手势权限，不进行 HTML 转换。主窗口仅授予 `clipboard-manager:allow-write-text`；读取权限仅用于原生测试构建。覆盖网页权限拒绝时的按钮行为和真实原生窗口到系统剪贴板的写入链路。
 - Composer 捕获模式中的 Mutation 失败必须只有一个通知所有者；由 Composer 展示错误时必须关闭根级 `MutationCache` 的重复错误 Toast
 - 仅在多个调用方确有一致需求时提取通用组件
 - 应用入口必须通过 React 根回调、`window.error` 与 `unhandledrejection` 上报结构化诊断；后台失败使用同一诊断入口且不得影响主流程。关于页必须提供诊断 ZIP 导出按钮，并明确展示导出中禁用状态和完成/失败通知

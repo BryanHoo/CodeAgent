@@ -10,7 +10,7 @@
           "identifier": "webview-tests",
           "description": "Test-only WebdriverIO access for native WebView tests",
           "windows": ["main", "desktop-pet"],
-          "permissions": ["wdio:default", "wdio-webdriver:default"]
+          "permissions": ["wdio:default", "wdio-webdriver:default", "clipboard-manager:allow-read-text"]
         },
         {
           "identifier": "terminal-protocol-tests",
