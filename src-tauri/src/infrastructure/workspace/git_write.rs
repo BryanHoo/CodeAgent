@@ -398,7 +398,7 @@ pub(super) async fn validate_snapshot(
     if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(WorkspaceError::InvalidPath);
     }
-    let status = get_git_status(root, repository, false).await?;
+    let status = super::git_read::read_git_status(root, repository, false, true).await?;
     if status.snapshot != expected {
         return Err(WorkspaceError::SnapshotMismatch);
     }

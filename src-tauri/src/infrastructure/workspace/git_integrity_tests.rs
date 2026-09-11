@@ -7,10 +7,10 @@ use std::{
 
 use super::{WorkspaceError, commit_changes, get_git_status};
 
-struct Repository(PathBuf);
+pub(super) struct Repository(pub(super) PathBuf);
 
 impl Repository {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()

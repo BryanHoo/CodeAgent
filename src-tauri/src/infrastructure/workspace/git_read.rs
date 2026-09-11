@@ -87,6 +87,15 @@ pub async fn get_git_status(
     repository: Option<&str>,
     include_diff: bool,
 ) -> Result<GitStatus, WorkspaceError> {
+    read_git_status(root, repository, include_diff, false).await
+}
+
+pub(super) async fn read_git_status(
+    root: &Path,
+    repository: Option<&str>,
+    include_diff: bool,
+    strict: bool,
+) -> Result<GitStatus, WorkspaceError> {
     let selected = select_repository(root, repository).await?;
     let Some(repo) = selected.path else {
         return Ok(GitStatus {
@@ -128,7 +137,7 @@ pub async fn get_git_status(
     let mut snapshot_parts = vec![String::from_utf8_lossy(&status_output).into_owned()];
     snapshot_parts.push(head.unwrap_or_default());
     snapshot_parts.push(branch.clone().unwrap_or_default());
-    snapshot_parts.push(super::git_snapshot::content_fingerprint(&repo, &unstaged).await?);
+    snapshot_parts.push(super::git_snapshot::content_fingerprint(&repo, &unstaged, strict).await?);
     Ok(GitStatus {
         base_branches,
         branch,
