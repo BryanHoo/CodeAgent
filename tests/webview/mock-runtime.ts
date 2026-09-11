@@ -137,7 +137,9 @@ export async function installWebviewMocks(): Promise<WebviewMocks> {
         list_skills: { data: [], nextCursor: null },
         list_workbench_pets: { data: [] },
         read_task: null,
+        release_task_subscription: null,
         reorder_queued_submissions: { status: "reordered" },
+        retain_task_subscription: null,
         resolve_pending_request: {
           request: { ...approvalRequest, status: "resolved" },
         },

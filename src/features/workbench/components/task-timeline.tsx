@@ -187,7 +187,9 @@ function ActiveTaskTimeline({
         </div>
       ) : null}
       <TaskStoreTimeline
-        connected={runtime.connectionState === "connected"}
+        // 等待任务写入权确认后再启用审批，确保 inert 解除时重新触发主操作聚焦。
+        connected={runtime.connectionState === "connected"
+          && (runtime.writeAccess === undefined || runtime.writeAccess === "writable")}
         hasOlderHistory={runtime.hasOlderHistory}
         isLoadingOlderHistory={runtime.isLoadingOlderHistory}
         olderHistoryError={runtime.olderHistoryError}

@@ -18,6 +18,16 @@ async function clipboard(command: "read_text" | "write_text", text?: string): Pr
   return result.content;
 }
 
+async function readClipboardOrEmpty(): Promise<string> {
+  try {
+    return await clipboard("read_text");
+  } catch (error) {
+    // CI 的全新桌面会话可能没有剪贴板格式，等价于空文本而不是插件故障。
+    if (String(error).includes("clipboard contents were not available")) return "";
+    throw error;
+  }
+}
+
 describe("原生 Markdown 剪贴板", () => {
   before(async () => {
     const mocks = await installWebviewMocks();
@@ -47,7 +57,7 @@ describe("原生 Markdown 剪贴板", () => {
   });
 
   it("网页剪贴板拒绝权限时仍从任务按钮写入系统剪贴板", async () => {
-    const previousText = await clipboard("read_text");
+    const previousText = await readClipboardOrEmpty();
     try {
       // 强制复现网页权限拒绝；插件 IPC 保持真实，验证注册、权限与系统写入整条链路。
       await browser.execute(() => {
