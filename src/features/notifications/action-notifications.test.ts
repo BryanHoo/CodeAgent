@@ -5,6 +5,14 @@ import { NativeCommandError } from "../../platform/tauri/native-client.js";
 import { actionErrorMessage } from "./action-notifications.js";
 
 describe("actionErrorMessage", () => {
+  it.each([
+    ["FILE_OPEN_TARGET_UNAVAILABLE", "fileOpenTargetUnavailable"],
+    ["FILE_OPEN_APPLICATION_FAILED", "fileOpenApplicationFailed"],
+  ] as const)("localizes %s", (code, key) => {
+    expect(actionErrorMessage(new NativeCommandError(code, "backend fallback"))).toBe(
+      i18n.t(`errors.${key}`, { ns: "common" }),
+    );
+  });
   it("localizes the missing Git dependency error", () => {
     const error = new NativeCommandError("GIT_NOT_FOUND", "backend fallback");
 

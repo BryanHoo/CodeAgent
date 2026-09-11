@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-use super::path_guard::{
-    WorkspaceError, relative_string, resolve_destination, resolve_existing, valid_relative,
-};
+use super::path_guard::{WorkspaceError, relative_string, resolve_destination, resolve_existing};
 
 const SOURCE_CHUNK_BYTES: usize = 256 * 1024;
 
@@ -94,7 +92,7 @@ pub async fn rename_project_file(
     if source == root {
         return Err(WorkspaceError::InvalidPath);
     }
-    let parent_relative = valid_relative(relative)?
+    let parent_relative = Path::new(relative)
         .parent()
         .map_or_else(|| PathBuf::from(name), |parent| parent.join(name));
     let destination = resolve_destination(root, &parent_relative).await?;
@@ -161,7 +159,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn file_operations_should_stay_inside_workspace_root() {
+    async fn file_operations_should_support_project_relative_paths() {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -189,5 +187,27 @@ mod tests {
         assert!(!root.join("src/lib.rs").exists());
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn file_operations_should_read_and_rename_outside_project_root() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("codeagent-external-files-{unique}"));
+        let root = directory.join("project");
+        fs::create_dir_all(&root).unwrap();
+        let file = directory.join("中文 文档.txt");
+        fs::write(&file, "external document").unwrap();
+        let result = async {
+            let source = read_source_file(&root, file.to_str().unwrap(), None).await?;
+            assert_eq!(source.content, "external document");
+            let renamed = rename_project_file(&root, "../中文 文档.txt", "新文档.txt").await?;
+            delete_project_file(&root, &renamed.path).await
+        }
+        .await;
+        fs::remove_dir_all(directory).unwrap();
+        assert!(result.is_ok(), "{result:?}");
     }
 }

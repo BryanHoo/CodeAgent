@@ -145,23 +145,28 @@ pub(crate) async fn remove_deleted_workspace(
 }
 
 pub(crate) async fn resolve_preview_root(
-    app: &AppHandle,
     state: &AppState,
     project_id: &str,
     task_id: Option<&str>,
     root_path: Option<&str>,
     path: &str,
 ) -> Result<PathBuf, AppError> {
+    // 绝对文件路径已经包含定位信息；无需连接运行时或验证项目归属。
+    if Path::new(path).is_absolute() {
+        let path = Path::new(path);
+        return Ok(path.parent().unwrap_or(path).to_path_buf());
+    }
+    if let Some(root_path) = root_path {
+        return workspace::canonical_root(root_path)
+            .await
+            .map_err(|_| AppError::FilesystemRequestFailed);
+    }
     let connection = state.codex_connection().await?;
-    if project_id == TEMPORARY_PROJECT_ID {
-        if root_path.is_some() {
-            return Err(AppError::FilesystemRequestFailed);
-        }
-        let task_id = task_id.ok_or(AppError::FilesystemRequestFailed)?;
+    if let Some(task_id) = task_id {
         let cwd = codex::task_working_directory(&connection, project_id, task_id)
             .await
             .map_err(AppError::from)?;
-        return temporary_workspace::canonical_workspace(&app_data_dir(app)?, &cwd)
+        return workspace::canonical_root(cwd.to_str().ok_or(AppError::FilesystemRequestFailed)?)
             .await
             .map_err(|_| AppError::FilesystemRequestFailed);
     }
@@ -169,17 +174,10 @@ pub(crate) async fn resolve_preview_root(
     let project = codex::read_project(&connection, project_id)
         .await
         .map_err(AppError::from)?;
-    let configured_root = match root_path {
-        Some(root_path) => project
-            .roots
-            .into_iter()
-            .find(|root| root.path == root_path),
-        None => project
-            .roots
-            .into_iter()
-            .find(|root| PathBuf::from(path).starts_with(&root.path)),
-    }
-    .ok_or(AppError::FilesystemRequestFailed)?;
+    let configured_root = project
+        .roots
+        .first()
+        .ok_or(AppError::FilesystemRequestFailed)?;
     workspace::canonical_root(&configured_root.path)
         .await
         .map_err(|_| AppError::FilesystemRequestFailed)
@@ -190,14 +188,38 @@ pub(crate) fn relative_preview_path(root: &Path, path: &str) -> Result<String, A
     if !candidate.is_absolute() {
         return Ok(path.to_owned());
     }
-    candidate
+    Ok(candidate
         .strip_prefix(root)
-        .map(|relative| relative.to_string_lossy().into_owned())
-        .map_err(|_| AppError::FilesystemRequestFailed)
+        .unwrap_or(candidate)
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn app_data_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
     app.path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn absolute_preview_should_not_require_a_project_or_running_codex() {
+        let path = std::env::temp_dir().join("中文 报告.docx");
+        let root = resolve_preview_root(
+            &AppState::default(),
+            TEMPORARY_PROJECT_ID,
+            None,
+            Some("missing-project-root"),
+            path.to_str().unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            root.join(relative_preview_path(&root, path.to_str().unwrap()).unwrap()),
+            path
+        );
+    }
 }

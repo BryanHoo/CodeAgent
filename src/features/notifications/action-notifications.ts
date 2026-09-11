@@ -31,6 +31,12 @@ function readNotificationOptions(
 }
 
 export function actionErrorMessage(error: unknown): string {
+  if (error instanceof Error && "code" in error && error.code === "FILE_OPEN_TARGET_UNAVAILABLE") {
+    return i18n.t("errors.fileOpenTargetUnavailable", { ns: "common" });
+  }
+  if (error instanceof Error && "code" in error && error.code === "FILE_OPEN_APPLICATION_FAILED") {
+    return i18n.t("errors.fileOpenApplicationFailed", { ns: "common" });
+  }
   if (error instanceof Error && "code" in error && error.code === "ATTACHMENT_TOO_LARGE") {
     return i18n.t("errors.attachmentTooLarge", { ns: "common" });
   }

@@ -4,12 +4,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, State};
 
-use super::{
-    error::AppError,
-    state::AppState,
-    task_workspace::{self, TEMPORARY_PROJECT_ID},
-    workspace_commands::project_root,
-};
+use super::{error::AppError, state::AppState, task_workspace};
 use crate::infrastructure::{codex, workspace};
 
 #[derive(Deserialize)]
@@ -29,7 +24,6 @@ pub async fn get_project_open_capabilities() -> Result<Value, AppError> {
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn open_project(
-    app: AppHandle,
     project_id: String,
     root_path: Option<String>,
     input: OpenProjectInput,
@@ -41,79 +35,46 @@ pub async fn open_project(
         path,
         task_id,
     } = input;
-    let root = if project_id == TEMPORARY_PROJECT_ID {
-        // 临时任务没有 Project root，必须通过线程 cwd 回到受控工作区。
-        task_workspace::resolve_preview_root(
-            &app,
-            &state,
-            &project_id,
-            task_id.as_deref(),
-            root_path.as_deref(),
-            path.as_deref().unwrap_or_default(),
-        )
-        .await?
-    } else {
-        match root_path {
-            Some(root_path) => project_root(&state, &project_id, &root_path).await?.1,
-            None => {
-                let connection = state.codex_connection().await?;
-                let project = codex::read_project(&connection, &project_id)
-                    .await
-                    .map_err(AppError::from)?;
-                let root = project
-                    .roots
-                    .first()
-                    .ok_or(AppError::FilesystemRequestFailed)?;
-                workspace::canonical_root(&root.path)
-                    .await
-                    .map_err(|_| AppError::FilesystemRequestFailed)?
-            }
-        }
-    };
-    let target = match path {
-        Some(path) => {
-            let candidate = if Path::new(&path).is_absolute() {
-                PathBuf::from(path)
-            } else {
-                root.join(path)
-            };
-            resolve_open_target(
-                &root,
-                candidate,
-                fallback_to_existing_ancestor.unwrap_or(false),
-            )
-            .await?
-        }
-        None => root,
-    };
+    // 绝对路径不依赖项目；相对路径由当前目录或任务 cwd 定位。
+    let root = task_workspace::resolve_preview_root(
+        &state,
+        &project_id,
+        task_id.as_deref(),
+        root_path.as_deref(),
+        path.as_deref().unwrap_or_default(),
+    )
+    .await?;
+    let candidate = path
+        .as_deref()
+        .map_or_else(|| root.clone(), |path| root.join(path));
+    let target =
+        resolve_open_target(candidate, fallback_to_existing_ancestor.unwrap_or(false)).await?;
     workspace::open_path(&app_id, &target)
         .await
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
+        .map_err(|_| AppError::FileOpenApplicationFailed)?;
     Ok(json!({"appId": app_id, "path": target.to_string_lossy()}))
 }
 
 async fn resolve_open_target(
-    root: &Path,
     candidate: PathBuf,
     fallback_to_existing_ancestor: bool,
 ) -> Result<PathBuf, AppError> {
     let mut current = candidate;
     loop {
         match tokio::fs::canonicalize(&current).await {
-            Ok(resolved) if resolved.starts_with(root) => return Ok(resolved),
-            Ok(_) => return Err(AppError::FilesystemRequestFailed),
+            Ok(resolved) => return Ok(resolved),
             Err(error)
                 if fallback_to_existing_ancestor
                     && error.kind() == std::io::ErrorKind::NotFound =>
             {
-                // 生成失败可能连目标目录都未创建，只回退到受控根内最近存在的祖先。
+                // 生成失败可能连目标目录都未创建，回退到最近存在的祖先。
                 current = current
                     .parent()
                     .filter(|parent| *parent != current)
                     .map(Path::to_path_buf)
-                    .ok_or(AppError::FilesystemRequestFailed)?;
+                    .ok_or(AppError::FileOpenTargetUnavailable)?;
             }
-            Err(_) => return Err(AppError::FilesystemRequestFailed),
+            Err(_) => return Err(AppError::FileOpenTargetUnavailable),
         }
     }
 }
@@ -162,6 +123,29 @@ mod tests {
 
     use super::resolve_open_target;
 
+    #[tokio::test]
+    async fn missing_open_target_should_return_an_actionable_error() {
+        let error = resolve_open_target(test_directory("missing-file"), false)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            serde_json::to_value(error).unwrap()["code"],
+            "FILE_OPEN_TARGET_UNAVAILABLE"
+        );
+    }
+
+    #[tokio::test]
+    async fn system_default_should_resolve_office_files_without_a_project_root() {
+        let directory = test_directory("office-external");
+        tokio::fs::create_dir_all(&directory).await.unwrap();
+        let file = directory.join("中文 报表.xlsx");
+        tokio::fs::write(&file, b"PK\x03\x04").await.unwrap();
+        let result = resolve_open_target(file.clone(), false).await;
+        let expected = tokio::fs::canonicalize(file).await.unwrap();
+        tokio::fs::remove_dir_all(directory).await.unwrap();
+        assert_eq!(result.unwrap(), expected);
+    }
+
     fn test_directory(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -180,7 +164,7 @@ mod tests {
             .await
             .expect("test root should resolve");
 
-        let target = resolve_open_target(&root, root.join("missing/output"), true)
+        let target = resolve_open_target(root.join("missing/output"), true)
             .await
             .expect("missing folder should fall back to the managed workspace");
 

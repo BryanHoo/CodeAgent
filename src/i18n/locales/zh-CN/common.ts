@@ -13,6 +13,8 @@ export const common = {
   errors: {
     attachmentTooLarge: "附件超过大小限制：普通文件最多 50 MiB，图片最多 512 MiB。",
     gitNotFound: "未检测到 Git，请安装 Git 并重启 CodeAgent。",
+    fileOpenTargetUnavailable: "文件不存在或无法访问，请确认文件是否已移动、删除，或检查访问权限。",
+    fileOpenApplicationFailed: "系统默认应用未能打开文件，请在 Finder 或文件管理器中检查默认打开方式。",
     notFoundDescription: "当前地址不属于已注册的应用路由。",
     notFoundTitle: "页面不存在",
     routeErrorLabel: "路由错误",

@@ -50,23 +50,17 @@ pub async fn resolve_existing(
     relative: Option<&str>,
 ) -> Result<PathBuf, WorkspaceError> {
     let candidate = match relative {
-        Some(relative) => root.join(valid_relative(relative)?),
+        // 文件访问使用本机路径语义，绝对路径和父目录跳转不受项目边界限制。
+        Some(relative) => root.join(relative),
         None => root.to_path_buf(),
     };
-    let resolved = tokio::fs::canonicalize(candidate).await?;
-    if !resolved.starts_with(root) {
-        return Err(WorkspaceError::InvalidPath);
-    }
-    Ok(resolved)
+    Ok(tokio::fs::canonicalize(candidate).await?)
 }
 
 pub async fn resolve_destination(root: &Path, relative: &Path) -> Result<PathBuf, WorkspaceError> {
-    let candidate = root.join(normalize_relative(relative)?);
+    let candidate = root.join(relative);
     let parent = candidate.parent().ok_or(WorkspaceError::InvalidPath)?;
     let resolved_parent = tokio::fs::canonicalize(parent).await?;
-    if !resolved_parent.starts_with(root) {
-        return Err(WorkspaceError::InvalidPath);
-    }
     let name = candidate.file_name().ok_or(WorkspaceError::InvalidPath)?;
     Ok(resolved_parent.join(name))
 }
@@ -93,8 +87,9 @@ fn normalize_relative(path: &Path) -> Result<PathBuf, WorkspaceError> {
 }
 
 pub fn relative_string(root: &Path, path: &Path) -> Result<String, WorkspaceError> {
+    // 项目内继续返回相对路径，项目外保留绝对路径，避免调用方再次拼错位置。
     path.strip_prefix(root)
-        .map_err(|_| WorkspaceError::InvalidPath)?
+        .unwrap_or(path)
         .to_str()
         .filter(|value| !value.is_empty())
         .map(|value| value.replace(std::path::MAIN_SEPARATOR, "/"))

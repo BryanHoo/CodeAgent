@@ -165,7 +165,6 @@ pub async fn delete_project_file(
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn read_project_source_file(
-    app: AppHandle,
     project_id: String,
     root_path: Option<String>,
     task_id: Option<String>,
@@ -174,7 +173,6 @@ pub async fn read_project_source_file(
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let root = task_workspace::resolve_preview_root(
-        &app,
         &state,
         &project_id,
         task_id.as_deref(),

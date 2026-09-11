@@ -13,6 +13,8 @@ export const common = {
   errors: {
     attachmentTooLarge: "The attachment is too large. Files support up to 50 MiB and images up to 512 MiB.",
     gitNotFound: "Git was not found. Install Git and restart CodeAgent.",
+    fileOpenTargetUnavailable: "The file does not exist or cannot be accessed. Check whether it was moved or deleted, and check access permissions.",
+    fileOpenApplicationFailed: "The system default application could not open the file. Check its default application in Finder or your file manager.",
     notFoundDescription: "This address does not match a registered application route.",
     notFoundTitle: "Page not found",
     routeErrorLabel: "Route error",

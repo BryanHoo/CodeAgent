@@ -141,7 +141,6 @@ pub async fn cache_project_image(
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let canonical_root = task_workspace::resolve_preview_root(
-        &app,
         &state,
         &project_id,
         task_id.as_deref(),
