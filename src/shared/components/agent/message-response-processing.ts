@@ -8,11 +8,11 @@ import {
 } from "./code-comments.js";
 
 const WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()(?:[a-z]:[\\/]|\\\\)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+  /\]\(((?:[a-z]:[\\/]|\\\\)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?)(?=\))/gi;
 const RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()(?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+  /\]\(((?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?)(?=\))/gi;
 const LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()\/(?!\/)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+  /\]\((\/(?!\/)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?)(?=\))/gi;
 const WHITESPACE_OR_TEXT_PATTERN = /\s+|\S+/gu;
 const WHITESPACE_PATTERN = /^\s+$/u;
 const EXCESSIVE_NEWLINES_PATTERN = /\n{3,}/g;
@@ -22,20 +22,21 @@ export const RELATIVE_FILE_REFERENCE_PREFIX = "/__codeagent_relative__/";
 
 export function normalizeMarkdownFileReferences(markdown: string): string {
   // 路径目标不会跨行；该约束允许流式处理只保留尚未结束的当前行。
+  // 消费并还原链接前缀，避免旧 WebKit 在加载模块时因后行断言直接报错。
   return markdown
-    .replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) => {
+    .replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (_match, reference: string) => {
       const normalizedReference = reference.replaceAll("\\", "/");
       if (/^[a-z]:/i.test(normalizedReference)) {
-        return `/${normalizedReference}`;
+        return `](/${normalizedReference}`;
       }
-      return `${UNC_FILE_REFERENCE_PREFIX}${normalizedReference.slice(2)}`;
+      return `](${UNC_FILE_REFERENCE_PREFIX}${normalizedReference.slice(2)}`;
     })
     .replace(
       RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN,
-      (reference) => `${RELATIVE_FILE_REFERENCE_PREFIX}${reference}`,
+      (_match, reference: string) => `](${RELATIVE_FILE_REFERENCE_PREFIX}${reference}`,
     )
-    .replace(LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) =>
-      reference.replaceAll(" ", "%20").replaceAll("\t", "%09"),
+    .replace(LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN, (_match, reference: string) =>
+      `](${reference.replaceAll(" ", "%20").replaceAll("\t", "%09")}`,
     );
 }
 

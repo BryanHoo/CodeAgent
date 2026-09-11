@@ -1,7 +1,7 @@
 {
   "name": "codeagent",
   "private": true,
-  "version": "0.1.11-beta.2",
+  "version": "0.1.11-beta.3",
   "description": "A local-first desktop client for coding agents",
   "type": "module",
   "packageManager": "pnpm@11.22.0",
@@ -14,7 +14,7 @@
     "build": "tsc -b && vite build",
     "build:legacy": "tsc -b && cross-env VITE_MACOS_LEGACY=true vite build",
     "tauri:legacy": "cross-env CODEAGENT_MACOS_PROFILE=legacy node scripts/run-tauri.mjs build",
-    "test:legacy": "node --test scripts/legacy-css.test.mjs scripts/legacy-release.test.mjs",
+    "test:legacy": "node --test scripts/legacy-css.test.mjs scripts/legacy-release.test.mjs scripts/legacy-regexp.test.mjs",
     "test:macos-build-output": "node --test scripts/macos-build-output.test.mjs",
     "check": "pnpm version:check && pnpm supply-chain:policy:test && pnpm check:web && pnpm check:rust",
     "codex:protocol:check": "node scripts/codex-protocol-contract.mjs",

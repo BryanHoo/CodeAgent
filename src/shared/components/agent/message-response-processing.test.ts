@@ -2,7 +2,21 @@ import { parseMarkdownIntoBlocks } from "streamdown";
 import { describe, expect, it, vi } from "vitest";
 import { AppendOnlyTextBuffer } from "../../lib/append-only-text.js";
 import { createIncrementalMarkdownBlockParser as createTreeParser, type MarkdownBlockTree } from "./incremental-markdown-blocks.js";
-import { IncrementalMessageResponseProcessor, preprocessMessageResponse } from "./message-response-processing.js";
+import { IncrementalMessageResponseProcessor, normalizeMarkdownFileReferences, preprocessMessageResponse } from "./message-response-processing.js";
+
+describe("Markdown 文件链接规范化", () => {
+  it.each([
+    ["[win](C:\\work\\main.ts:4)", "[win](/C:/work/main.ts:4)"],
+    ["[unc](\\\\server\\share\\main.ts)", "[unc](/__codeagent_unc__/server/share/main.ts)"],
+    ["[relative](src/main.ts:12:3)", "[relative](/__codeagent_relative__/src/main.ts:12:3)"],
+    ["[space](/a b/main.ts) [tab](/a\tb/test.ts)", "[space](/a%20b/main.ts) [tab](/a%09b/test.ts)"],
+    ["[a](src/a.ts)[b](src/b.ts)", "[a](/__codeagent_relative__/src/a.ts)[b](/__codeagent_relative__/src/b.ts)"],
+    ["[web](https://example.com/a.ts) [anchor](#a.ts) [cdn](//host/a.ts)", "[web](https://example.com/a.ts) [anchor](#a.ts) [cdn](//host/a.ts)"],
+    ["plain src/a.ts [unfinished](src/a.ts", "plain src/a.ts [unfinished](src/a.ts"],
+  ])("保留前缀、行号与非文件链接：%s", (source, expected) => {
+    expect(normalizeMarkdownFileReferences(source)).toBe(expected);
+  });
+});
 
 function flattenBlocks(tree: MarkdownBlockTree): string[] {
   if (tree === null) return [];
