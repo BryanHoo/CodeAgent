@@ -36,7 +36,6 @@ import {
   TurnProcessingTime,
   getMessageTimestamp,
 } from "./task-timeline-status.js";
-
 const getTurnIdKey = (turnId: string) => turnId;
 export function StoredAssistantGroup({
   itemKeys,
@@ -155,7 +154,7 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
   taskId,
   turnId,
   turnIndex,
-  suppressEmptyRunningStatus,
+  pendingSubmission,
 }: Readonly<{
   onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
@@ -167,7 +166,7 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
   taskId: string;
   turnId: string;
   turnIndex: number;
-  suppressEmptyRunningStatus: boolean;
+  pendingSubmission: boolean;
 }>) {
   const turn = useStore(store, (state) => state.turnsById[turnId]);
   const itemKeys = useStore(store, (state) => state.itemKeysByTurnId[turnId] ?? []);
@@ -203,7 +202,7 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
 
   return (
     <section
-      aria-label={`Turn ${String(turnIndex + 1)}`}
+      aria-label={`Turn ${turnIndex + 1}`}
       className="space-y-4"
       data-status={turn.status}
     >
@@ -211,7 +210,8 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
         group.type === "user" ? (
           <StoredUserMessage
             itemKey={group.itemKey}
-            key={group.itemKey}
+            // 首条输入从本地占位切换为权威 ID 时保留气泡节点，避免重新挂载 Markdown。
+            key={groupIndex === 0 ? turn.id : group.itemKey}
             latestSnapshotTimestamp={latestSnapshotTimestamp}
             onOpenFileDiff={onOpenFileDiff}
             onOpenSourceFile={onOpenSourceFile}
@@ -248,12 +248,10 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
           />
         ),
       )}
-      {turn.status === "running" && !hasAssistantItems && !suppressEmptyRunningStatus ? (
+      {((turn.status === "running" && itemKeys.length > 0) || pendingSubmission) && !hasAssistantItems ? (
         <Message from="assistant">
-          <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
-          <div className="w-full space-y-4">
-            <RunningReplyStatus />
-          </div>
+          <TurnProcessingTime completedAt={null} startedAt={turn.startedAt} />
+          <RunningReplyStatus />
         </Message>
       ) : null}
       {turn.error === null ? null : (
@@ -393,28 +391,26 @@ export function TaskStoreTimeline({
   const estimateTurnSize = useTurnSizeEstimate(store, itemStructureRevision);
   const submissionHandoffState = useStore(store, (state) => {
     if (submissionTurnId === undefined) {
-      return "awaiting-turn";
+      return "footer";
     }
     const turn = state.turnsById[submissionTurnId];
-    if (turn === undefined) {
-      return "awaiting-turn";
+    if (turn === undefined || !state.itemKeysByTurnId[submissionTurnId]?.length) {
+      return "footer";
     }
     const groups = groupStoredTurnTimelineItems(
       state.itemKeysByTurnId[submissionTurnId] ?? [],
       state.itemStoresByKey,
     );
-    if (groups.some((group) => group.type === "assistant")) {
-      return "assistant-started";
-    }
     // completed Snapshot 可能先于 Assistant Item 落盘，只有失败或中断才能提前结束本地提交态。
-    return turn.status === "failed" || turn.status === "interrupted"
-      ? "finished"
-      : "awaiting-assistant";
+    return groups.some((group) => group.type === "assistant") || turn.status === "failed" || turn.status === "interrupted"
+      ? undefined
+      : "turn";
   });
-  // HTTP 返回不代表回复已经可见；首个 Assistant Item 到达前由稳定尾部持续承载运行态。
+  // 已知回合内同时布局输入、时间与运行态，避免独立虚拟尾部二次测量将输入顶走。
   const showPendingSubmission =
     submissionStartedAt !== undefined &&
-    (submissionHandoffState === "awaiting-turn" || submissionHandoffState === "awaiting-assistant");
+    submissionHandoffState !== undefined;
+  const showPendingFooter = showPendingSubmission && submissionHandoffState === "footer";
   const hasNotices = notices.length > 0;
   if (
     turnIds.length === 0 &&
@@ -432,7 +428,7 @@ export function TaskStoreTimeline({
       aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
       conversationId={`${projectId}:${taskId}`}
       estimateItemSize={estimateTurnSize}
-      {...(hasVisiblePendingRequest || showPendingSubmission || hasNotices
+      {...(hasVisiblePendingRequest || showPendingFooter || hasNotices
         ? {
             footer: (
               <>
@@ -444,7 +440,7 @@ export function TaskStoreTimeline({
                     store={store}
                   />
                 ) : null}
-                {showPendingSubmission ? (
+                {showPendingFooter ? (
                   <Message from="assistant">
                     <TurnProcessingTime completedAt={null} startedAt={submissionStartedAt} />
                     <RunningReplyStatus />
@@ -491,7 +487,7 @@ export function TaskStoreTimeline({
           taskId={taskId}
           turnId={turnId}
           turnIndex={turnIndex}
-          suppressEmptyRunningStatus={showPendingSubmission && turnId === submissionTurnId}
+          pendingSubmission={!showPendingFooter && showPendingSubmission && turnId === submissionTurnId}
         />
       )}
       {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}

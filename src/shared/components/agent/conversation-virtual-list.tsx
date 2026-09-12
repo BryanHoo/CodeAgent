@@ -114,10 +114,8 @@ export function ConversationVirtualList<TItem>({
       if (header !== undefined && virtualIndex === 0) return `${conversationId}:header`;
       const itemIndex = virtualIndex - headerOffset;
       if (itemIndex >= items.length) {
-        const lastItemIndex = items.length - 1;
-        const lastItemKey =
-          lastItemIndex < 0 ? "empty" : getItemKey(items[lastItemIndex] as TItem, lastItemIndex);
-        return `${conversationId}:footer:${typeof lastItemKey}:${String(lastItemKey)}`;
+        // 追加 Turn 时复用待处理尾部及其测量缓存，避免重挂后退回估算高度。
+        return `${conversationId}:footer`;
       }
       const itemKey = getItemKey(items[itemIndex] as TItem, itemIndex);
       return `${conversationId}:item:${typeof itemKey}:${String(itemKey)}`;
@@ -145,6 +143,8 @@ export function ConversationVirtualList<TItem>({
     getItemKey: getVirtualKey,
     getScrollElement: () => scrollContainerRef.current,
     overscan: TURN_OVERSCAN,
+    // 留白属于列表而非末行，追加消息时不能改变已测量历史行的高度。
+    paddingEnd: VERTICAL_PADDING_PX,
     paddingStart: VERTICAL_PADDING_PX,
     scrollEndThreshold: SCROLL_END_THRESHOLD_PX,
     useAnimationFrameWithResizeObserver: true,
@@ -161,6 +161,22 @@ export function ConversationVirtualList<TItem>({
     },
     [virtualizer],
   );
+
+  useLayoutEffect(() => {
+    // Item 结构变化会更新估算函数；绘制前同步已挂载行，避免正文先出现、尾部下一帧才让位。
+    // 先批量读取再更新 Virtualizer，不扫描历史全文，也不参与普通文本 Delta。
+    const measurements = Array.from(virtualizer.elementsCache.values(), (element) =>
+      [virtualizer.indexFromElement(element), element.offsetHeight] as const,
+    );
+    for (const [index, height] of measurements) virtualizer.resizeItem(index, height);
+    const viewport = scrollContainerRef.current;
+    if (viewport && (initialEndFollowRef.current || pinnedToEndRef.current)) {
+      // 同次提交完成真实高度和置底，不能等下一帧的 ResizeObserver 再将新输入上移。
+      const content = viewport.querySelector<HTMLElement>("[data-virtual-container]");
+      if (content) content.style.height = `${virtualizer.getTotalSize()}px`;
+      virtualizer.scrollToOffset(viewport.scrollHeight - viewport.clientHeight);
+    }
+  }, [estimateSize, virtualizer]);
 
   useLayoutEffect(() => {
     const snapshot = prependScrollSnapshotRef.current;
@@ -192,7 +208,7 @@ export function ConversationVirtualList<TItem>({
     // 会话首次呈现时从最新 Turn 开始，后续追加和流式增长交给 end anchor。
     if (initialScrolledConversationId === conversationId) return;
     initialEndFollowRef.current = true;
-    virtualizer.scrollToEnd({ behavior: "auto" });
+    virtualizer.scrollToEnd();
     setInitialScrolledConversationId(conversationId);
     setAtBottom(true);
   }, [conversationId, initialScrolledConversationId, virtualizer]);
@@ -205,7 +221,7 @@ export function ConversationVirtualList<TItem>({
     }
     previousScrollToBottomSignalRef.current = scrollToBottomSignal;
     initialEndFollowRef.current = true;
-    virtualizer.scrollToEnd({ behavior: "auto" });
+    virtualizer.scrollToEnd();
   }, [scrollToBottomSignal, virtualizer]);
   useEffect(() => {
     const scrollElement = scrollContainerRef.current;
@@ -218,15 +234,9 @@ export function ConversationVirtualList<TItem>({
       resizeTimer = window.setTimeout(() => {
         resizeTimer = null;
         if (initialEndFollowRef.current || pinnedToEndRef.current) {
-          virtualizer.scrollToEnd({ behavior: "auto" });
-          const maxScrollOffset = Math.max(
-            0,
-            scrollElement.scrollHeight - scrollElement.clientHeight,
-          );
-          if (Math.abs(scrollElement.scrollTop - maxScrollOffset) >= 1) {
-            // 动态 Turn 的最终尺寸可能晚于估算值，按真实容器范围收敛到末尾。
-            virtualizer.scrollToOffset(maxScrollOffset, { behavior: "auto" });
-          }
+          virtualizer.scrollToEnd();
+          // 异步富文本仍按真实范围收敛，浏览器会将不足一屏的负偏移截为零。
+          virtualizer.scrollToOffset(scrollElement.scrollHeight - scrollElement.clientHeight);
         }
       });
     };
@@ -345,7 +355,6 @@ export function ConversationVirtualList<TItem>({
       >
         <div
           data-virtual-container=""
-          className="relative w-full"
           ref={virtualizer.containerRef}
           style={{ position: "relative", width: "100%" }}
         >
@@ -353,10 +362,8 @@ export function ConversationVirtualList<TItem>({
             const itemIndex = virtualItem.index - headerOffset;
             const isHeader = header !== undefined && virtualItem.index === 0;
             const isFooter = itemIndex >= items.length;
-            const isLastRow = virtualItem.index === count - 1;
             return (
               <div
-                className="absolute left-0 w-full"
                 data-conversation-turn={isHeader || isFooter ? undefined : ""}
                 data-index={virtualItem.index}
                 data-virtual-row={isHeader ? "header" : isFooter ? "footer" : "turn"}
@@ -369,25 +376,27 @@ export function ConversationVirtualList<TItem>({
                   : isFooter
                     ? <div className="space-y-6">{footer}</div>
                     : renderItem(items[itemIndex] as TItem, itemIndex)}
-                {isLastRow ? <div aria-hidden="true" style={{ height: VERTICAL_PADDING_PX }} /> : null}
               </div>
             );
           })}
         </div>
       </div>
       {atBottom ? null : (
-        <Button
-          variant="ghost"
-          className="sticky bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-pill bg-raised text-muted-foreground shadow-floating transition-colors hover:bg-control-hover hover:text-foreground"
-          onClick={() => {
-            virtualizer.scrollToEnd({ behavior: "smooth" });
-          }}
-          title={t("agentComponents.scrollToBottom")}
-          type="button"
-        >
-          <ArrowDown className="size-4" aria-hidden="true" />
-          <span className="sr-only">{t("agentComponents.scrollToBottom")}</span>
-        </Button>
+        // 悬浮按钮不参与滚动高度，避免显隐时产生 32px 的置底回弹。
+        <div className="sticky bottom-3 z-10 h-0">
+          <Button
+            variant="ghost"
+            className="absolute bottom-0 left-1/2 grid size-8 -translate-x-1/2 place-items-center rounded-pill bg-raised shadow-floating"
+            onClick={() => {
+              virtualizer.scrollToEnd({ behavior: "smooth" });
+            }}
+            title={t("agentComponents.scrollToBottom")}
+            type="button"
+          >
+            <ArrowDown className="size-4" aria-hidden="true" />
+            <span className="sr-only">{t("agentComponents.scrollToBottom")}</span>
+          </Button>
+        </div>
       )}
     </div>
   );

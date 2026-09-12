@@ -134,8 +134,9 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   const submittedPrompt =
     submittedPromptState.taskScope === taskScope ? submittedPromptState.prompt : startingPrompt;
   const retainedSubmissionStartedAt = submissionStartedAt ?? submittedPrompt?.submissionStartedAt;
+  // turn.started 可先于提交响应到达，立即绑定实时回合，避免回合与尾部重复显示运行态。
   const retainedSubmissionTurnId =
-    submissionStartedAt === undefined ? submittedPrompt?.turn.id : undefined;
+    submissionStartedAt === undefined ? submittedPrompt?.turn.id : runtime.activeTurnId;
   useEffect(() => {
     const store = runtime.store;
     if (store === undefined || submittedPrompt === undefined) {

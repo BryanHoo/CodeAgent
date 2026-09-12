@@ -164,7 +164,10 @@ export function applyAcceptedEvent(
       const { items, ...normalizedTurn } = event.payload.turn;
       return {
         checkpoint,
-        ...replaceTurnItems(state, event.turnId, items, changedItemStores),
+        // 空启动事件可能晚于提交响应；保留已展示 Item，直到权威实体到达后原子接管。
+        ...(items.length === 0 && state.turnsById[event.turnId] !== undefined
+          ? {}
+          : replaceTurnItems(state, event.turnId, items, changedItemStores)),
         snapshotMetadata: {
           ...snapshotMetadata,
           status: "running",
@@ -363,11 +366,11 @@ export function applyAcceptedEvent(
         event.payload.item.role === "user" &&
         currentItemIds.includes(submittedUserItemKey);
       const nextItemIds = replacesSubmittedUserItem
-        ? currentItemIds
-            .filter((candidateKey) => candidateKey !== submittedUserItemKey)
-            .concat(itemAlreadyExists ? [] : itemKey)
+        ? currentItemIds.flatMap((candidateKey) =>
+            candidateKey === itemKey ? [] : candidateKey === submittedUserItemKey ? itemKey : candidateKey,
+          )
         : itemAlreadyExists ? currentItemIds : [...currentItemIds, itemKey];
-      // Provider 用户项到达后原子移除提交占位，避免同一输入重复展示。
+      // 权威用户项原位接管提交占位，不能移到已到达的回复之后，否则气泡会重排并重挂。
       if (replacesSubmittedUserItem) {
         state.itemStoresByKey.delete(submittedUserItemKey);
       }
