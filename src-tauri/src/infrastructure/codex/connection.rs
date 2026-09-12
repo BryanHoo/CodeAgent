@@ -16,7 +16,7 @@ use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     sync::{Mutex as AsyncMutex, mpsc, oneshot},
     task::JoinHandle,
-    time::{sleep, timeout},
+    time::{Instant, sleep, timeout_at},
 };
 
 use crate::infrastructure::diagnostics;
@@ -32,6 +32,10 @@ use super::protocol::{
     InitializeParams, InitializeResponse, RpcError, encode_notification, encode_request,
     encode_response,
 };
+
+#[path = "connection_lifecycle.rs"]
+mod lifecycle;
+use lifecycle::PendingRegistration;
 
 type PendingResult = Result<Box<RawValue>, PendingError>;
 type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<PendingResult>>>>;
@@ -70,7 +74,7 @@ pub enum ConnectionError {
 
 pub struct AppServerConnection {
     pub(super) model_catalog: Arc<ModelCatalogCache>,
-    writer: AsyncMutex<AsyncWriter>,
+    writer: AsyncMutex<Option<AsyncWriter>>,
     pending: PendingRequests,
     server_messages: AsyncMutex<Option<ServerMessageReceiver>>,
     next_id: AtomicU64,
@@ -121,7 +125,7 @@ impl AppServerConnection {
 
         Self {
             model_catalog,
-            writer: AsyncMutex::new(Box::pin(writer)),
+            writer: AsyncMutex::new(Some(Box::pin(writer))),
             pending,
             server_messages: AsyncMutex::new(Some(message_receiver)),
             next_id: AtomicU64::new(1),
@@ -167,26 +171,24 @@ impl AppServerConnection {
         P: Serialize,
         R: DeserializeOwned,
     {
-        for delay in OVERLOAD_RETRY_DELAYS {
-            match self.request_once(method, params, request_timeout).await {
-                Err(ConnectionError::Request { code: -32001, .. }) => sleep(delay).await,
-                result => {
-                    record_rpc_error(method, &result);
-                    return result;
+        // 一次调用共享总截止时间，排队、写入、响应以及过载退避均消耗同一预算。
+        let deadline = Instant::now() + request_timeout;
+        let result = timeout_at(deadline, async {
+            for delay in OVERLOAD_RETRY_DELAYS {
+                match self.request_once(method, params).await {
+                    Err(ConnectionError::Request { code: -32001, .. }) => sleep(delay).await,
+                    result => return result,
                 }
             }
-        }
-        let result = self.request_once(method, params, request_timeout).await;
+            self.request_once(method, params).await
+        })
+        .await
+        .unwrap_or(Err(ConnectionError::Timeout));
         record_rpc_error(method, &result);
         result
     }
 
-    async fn request_once<P, R>(
-        &self,
-        method: &str,
-        params: &P,
-        request_timeout: Duration,
-    ) -> Result<R, ConnectionError>
+    async fn request_once<P, R>(&self, method: &str, params: &P) -> Result<R, ConnectionError>
     where
         P: Serialize,
         R: DeserializeOwned,
@@ -196,24 +198,11 @@ impl AppServerConnection {
         let message = encode_request(id, method, params)?;
         let (sender, receiver) = oneshot::channel();
 
-        self.pending
-            .lock()
-            .map_err(|_| ConnectionError::StateUnavailable)?
-            .insert(id, sender);
-
-        if let Err(error) = self.write_message(&message).await {
-            self.remove_pending(id)?;
-            return Err(error);
-        }
-
-        let response = match timeout(request_timeout, receiver).await {
-            Ok(Ok(response)) => response,
-            Ok(Err(_)) => return Err(ConnectionError::ConnectionClosed),
-            Err(_) => {
-                self.remove_pending(id)?;
-                return Err(ConnectionError::Timeout);
-            }
-        };
+        let _registration = PendingRegistration::new(&self.pending, id, sender)?;
+        self.write_message(&message).await?;
+        let response = receiver
+            .await
+            .map_err(|_| ConnectionError::ConnectionClosed)?;
 
         match response {
             Ok(result) => serde_json::from_str(result.get()).map_err(ConnectionError::Json),
@@ -234,21 +223,6 @@ impl AppServerConnection {
     pub async fn respond<R: Serialize>(&self, id: u64, result: &R) -> Result<(), ConnectionError> {
         let message = encode_response(id, result)?;
         self.write_message(&message).await
-    }
-
-    async fn write_message(&self, message: &[u8]) -> Result<(), ConnectionError> {
-        let mut writer = self.writer.lock().await;
-        writer.write_all(message).await?;
-        writer.flush().await?;
-        Ok(())
-    }
-
-    fn remove_pending(&self, id: u64) -> Result<(), ConnectionError> {
-        self.pending
-            .lock()
-            .map_err(|_| ConnectionError::StateUnavailable)?
-            .remove(&id);
-        Ok(())
     }
 }
 
@@ -488,3 +462,7 @@ fn fail_pending(pending: &PendingRequests, error: PendingError) {
 #[cfg(test)]
 #[path = "connection_frame_cancellation_tests.rs"]
 mod frame_cancellation_tests;
+
+#[cfg(test)]
+#[path = "connection_request_lifecycle_tests.rs"]
+mod request_lifecycle_tests;

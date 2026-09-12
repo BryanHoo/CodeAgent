@@ -1,9 +1,6 @@
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, path::PathBuf};
 
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, mpsc, watch};
 
 use super::error::AppError;
 use crate::infrastructure::app_storage;
@@ -16,7 +13,14 @@ type PreferenceUpdates = BTreeMap<String, Option<String>>;
 
 #[derive(Default)]
 pub(crate) struct AppStorageRuntime {
-    sender: Mutex<Option<mpsc::Sender<PreferenceUpdates>>>,
+    state: Mutex<StorageWriterState>,
+}
+
+#[derive(Default)]
+struct StorageWriterState {
+    closing: bool,
+    sender: Option<mpsc::Sender<PreferenceUpdates>>,
+    completion: Option<watch::Receiver<bool>>,
 }
 
 #[derive(Default)]
@@ -51,49 +55,63 @@ impl AppStorageRuntime {
         app_data: PathBuf,
         updates: PreferenceUpdates,
     ) -> Result<(), AppError> {
-        let sender = self.sender(&app_data).await;
-        if sender.send(updates.clone()).await.is_ok() {
-            return Ok(());
+        // 入队和关闭共享同一把锁，确保屏障不会越过已经接受的写入。
+        let mut state = self.state.lock().await;
+        if state.closing {
+            return Err(AppError::FilesystemRequestFailed);
         }
-
-        // actor 异常退出后只重建一次，避免让 WebView 接管重试职责。
-        let sender = self.replace_sender(app_data).await;
-        sender
+        if state.sender.is_none() {
+            let (sender, completion) = spawn_preference_writer(app_data);
+            state.sender = Some(sender);
+            state.completion = Some(completion);
+        }
+        // writer 异常退出时拒绝新写入，不能重建并掩盖已接收数据的丢失。
+        state
+            .sender
+            .as_ref()
+            .ok_or(AppError::FilesystemRequestFailed)?
             .send(updates)
             .await
             .map_err(|_| AppError::FilesystemRequestFailed)
     }
 
-    async fn sender(&self, app_data: &Path) -> mpsc::Sender<PreferenceUpdates> {
-        let mut sender = self.sender.lock().await;
-        if let Some(existing) = sender.as_ref()
-            && !existing.is_closed()
-        {
-            return existing.clone();
+    pub(crate) async fn shutdown(&self) -> Result<(), AppError> {
+        let completion = {
+            let mut state = self.state.lock().await;
+            state.closing = true;
+            // 丢弃唯一发送端：writer 排空队列后才发布完成信号。
+            state.sender.take();
+            state.completion.clone()
+        };
+        if let Some(mut completion) = completion {
+            while !*completion.borrow_and_update() {
+                completion
+                    .changed()
+                    .await
+                    .map_err(|_| AppError::FilesystemRequestFailed)?;
+            }
         }
-        let created = spawn_preference_writer(app_data.to_path_buf());
-        *sender = Some(created.clone());
-        created
-    }
-
-    async fn replace_sender(&self, app_data: PathBuf) -> mpsc::Sender<PreferenceUpdates> {
-        let created = spawn_preference_writer(app_data);
-        *self.sender.lock().await = Some(created.clone());
-        created
+        Ok(())
     }
 }
 
-fn spawn_preference_writer(app_data: PathBuf) -> mpsc::Sender<PreferenceUpdates> {
+fn spawn_preference_writer(
+    app_data: PathBuf,
+) -> (mpsc::Sender<PreferenceUpdates>, watch::Receiver<bool>) {
     let (sender, receiver) = mpsc::channel(PREFERENCE_QUEUE_CAPACITY);
-    tauri::async_runtime::spawn(run_preference_writer(app_data, receiver));
-    sender
+    let (completed, completion) = watch::channel(false);
+    tauri::async_runtime::spawn(async move {
+        run_preference_writer(app_data, receiver).await;
+        let _ = completed.send(true);
+    });
+    (sender, completion)
 }
 
 async fn run_preference_writer(app_data: PathBuf, mut receiver: mpsc::Receiver<PreferenceUpdates>) {
     let mut buffer = PreferenceWriteBuffer::default();
     while let Some(updates) = receiver.recv().await {
         buffer.merge(updates);
-        collect_until_deadline(&mut buffer, &mut receiver, PREFERENCE_WRITE_DELAY).await;
+        collect_until_deadline(&mut buffer, &mut receiver, PREFERENCE_WRITE_DELAY, false).await;
 
         while !buffer.is_empty() {
             let updates = buffer.take();
@@ -103,7 +121,8 @@ async fn run_preference_writer(app_data: PathBuf, mut receiver: mpsc::Receiver<P
                     error,
                 );
                 buffer.restore_failed(updates);
-                collect_until_deadline(&mut buffer, &mut receiver, PREFERENCE_RETRY_DELAY).await;
+                collect_until_deadline(&mut buffer, &mut receiver, PREFERENCE_RETRY_DELAY, true)
+                    .await;
                 continue;
             }
         }
@@ -114,6 +133,7 @@ async fn collect_until_deadline(
     buffer: &mut PreferenceWriteBuffer,
     receiver: &mut mpsc::Receiver<PreferenceUpdates>,
     delay: std::time::Duration,
+    retrying: bool,
 ) {
     let deadline = tokio::time::sleep(delay);
     tokio::pin!(deadline);
@@ -122,7 +142,13 @@ async fn collect_until_deadline(
             () = &mut deadline => return,
             update = receiver.recv() => match update {
                 Some(update) => buffer.merge(update),
-                None => return,
+                None => {
+                    // 关闭时跳过合并窗口，但失败重试仍须退避，避免持续写盘失败造成忙循环。
+                    if retrying {
+                        deadline.await;
+                    }
+                    return;
+                },
             },
         }
     }

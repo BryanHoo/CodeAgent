@@ -1,5 +1,8 @@
 use std::{
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -22,6 +25,8 @@ const HOLD_TO_QUIT_MENU_ID: &str = "hold-to-quit-app";
 #[derive(Default)]
 pub(crate) struct MainWindowLifecycle {
     inner: Mutex<MainWindowLifecycleState>,
+    storage_exit_pending: AtomicBool,
+    storage_exit_ready: AtomicBool,
 }
 
 #[derive(Default)]
@@ -150,10 +155,43 @@ pub(crate) fn handle_run_event(app: &AppHandle, event: RunEvent) {
     // 销毁最后一个隐藏窗口只释放 WebView 资源，后台运行时和托盘必须继续存活。
     if should_keep_background_runtime_alive(code) {
         api.prevent_exit();
-    } else if let Some(code) = code
-        && super::terminal_lifecycle::request_exit(app, code)
-    {
+    } else if let Some(code) = code {
+        let lifecycle = app.state::<MainWindowLifecycle>();
+        if lifecycle.storage_exit_ready.load(Ordering::Acquire) {
+            return;
+        }
         api.prevent_exit();
+        // 先完成终端清理；失败时保持存储可写，成功后再次请求退出进入落盘屏障。
+        if super::terminal_lifecycle::request_exit(app, code)
+            || lifecycle.storage_exit_pending.swap(true, Ordering::AcqRel)
+        {
+            return;
+        }
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            match app
+                .state::<super::app_storage_runtime::AppStorageRuntime>()
+                .shutdown()
+                .await
+            {
+                Ok(()) => {
+                    app.state::<MainWindowLifecycle>()
+                        .storage_exit_ready
+                        .store(true, Ordering::Release);
+                    app.exit(code);
+                }
+                Err(error) => {
+                    crate::infrastructure::diagnostics::record_error(
+                        "app_storage_shutdown_failed",
+                        error,
+                    );
+                    // writer 异常退出时保持应用存活，不能把未完成的落盘当作成功。
+                    app.state::<MainWindowLifecycle>()
+                        .storage_exit_pending
+                        .store(false, Ordering::Release);
+                }
+            }
+        });
     }
 }
 
