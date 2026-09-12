@@ -129,7 +129,8 @@ export function GitCommitReview({
     [filesQuery.data?.pages],
   );
   const changes = useMemo<readonly AgentFileChange[]>(
-    () => files.map((file) => ({ ...file, diff: "" })),
+    // 提交文件清单只用于导航且不展示行数；正文仍按选中文件懒加载。
+    () => files.map((file) => ({ ...file, diff: "", stats: { additions: 0, removals: 0 } })),
     [files],
   );
 

@@ -395,14 +395,17 @@ fn map_file_changes(item: &Map<String, Value>) -> Result<Vec<AgentFileChange>, C
                 .and_then(|kind| kind.get("type"))
                 .and_then(Value::as_str)
                 .ok_or(ConnectionError::InvalidMessage)?;
+            let kind = match kind {
+                "add" => "create",
+                "delete" => "delete",
+                "update" => "update",
+                _ => return Err(ConnectionError::InvalidMessage),
+            };
+            let diff = required_string(change, "diff")?;
             Ok(AgentFileChange {
-                diff: required_string(change, "diff")?.to_owned(),
-                kind: match kind {
-                    "add" => "create",
-                    "delete" => "delete",
-                    "update" => "update",
-                    _ => return Err(ConnectionError::InvalidMessage),
-                },
+                stats: crate::domain::file_change::FileChangeStats::codex(kind, diff),
+                diff: diff.to_owned(),
+                kind,
                 path: required_string(change, "path")?.to_owned(),
             })
         })

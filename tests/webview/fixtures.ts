@@ -117,6 +117,7 @@ export const gitStatus = {
   unstaged: [
     {
       diff: "--- a/src/main.tsx\n+++ b/src/main.tsx\n@@ -1 +1 @@\n-old\n+new",
+      stats: { additions: 1, removals: 1 },
       kind: "update",
       path: "src/main.tsx",
     },
@@ -224,7 +225,7 @@ export const gitTaskResponse = {
         id: "turn-git",
         items: [
           { id: "user-git", role: "user", text: "更新入口", type: "message" },
-          { changes: [{ diff: gitStatus.unstaged[0].diff, kind: "update", path: "/workspace/CodeAgent/src/main.tsx" }], id: "change-git", status: "completed", type: "file_change" },
+          { changes: [{ ...gitStatus.unstaged[0], path: "/workspace/CodeAgent/src/main.tsx" }], id: "change-git", status: "completed", type: "file_change" },
         ],
         startedAt: "2026-08-30T01:55:00.000Z",
         status: "completed",

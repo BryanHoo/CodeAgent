@@ -8,9 +8,15 @@ import {
 } from "./project-files.js";
 import { ProjectRootPathSchema } from "./project-root.js";
 
+const FileChangeStatsSchema = Type.Object({
+  additions: Type.Integer({ minimum: 0 }),
+  removals: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+
 export const AgentFileChangeSchema = Type.Object(
   {
     diff: Type.String(),
+    stats: FileChangeStatsSchema,
     kind: Type.Union([Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")]),
     // Provider 历史可能保留绝对路径；只有 Project Git API 收紧为相对路径。
     path: Type.String({ minLength: 1 }),
@@ -34,6 +40,7 @@ const CommitMessageSchema = Type.String({ maxLength: 10_000, minLength: 1, patte
 const ProjectGitFileChangeSchema = Type.Object(
   {
     diff: Type.String(),
+    stats: FileChangeStatsSchema,
     kind: Type.Union([Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")]),
     path: ProjectRelativePathSchema,
   },

@@ -340,12 +340,16 @@ fn file_change_updated_event(
             .ok_or(ConnectionError::InvalidMessage)?;
         let diff = truncate_utf8(required_string(change, "diff")?, remaining);
         remaining = remaining.saturating_sub(diff.len());
+        let kind = match kind {
+            "add" => "create",
+            "delete" => "delete",
+            "update" => "update",
+            _ => return Err(ConnectionError::InvalidMessage),
+        };
         changes.push(json!({
             "diff": diff,
-            "kind": match kind {
-                "add" => "create", "delete" => "delete", "update" => "update",
-                _ => return Err(ConnectionError::InvalidMessage),
-            },
+            "kind": kind,
+            "stats": crate::domain::file_change::FileChangeStats::codex(kind, diff),
             "path": required_string(change, "path")?,
         }));
     }

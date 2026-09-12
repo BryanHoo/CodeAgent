@@ -28,6 +28,7 @@ pub struct GitStatus {
 
 #[derive(Debug, Serialize)]
 pub struct GitChange {
+    pub stats: crate::domain::file_change::FileChangeStats,
     pub diff: String,
     pub kind: &'static str,
     pub path: String,
@@ -327,6 +328,7 @@ fn parse_status(output: &[u8]) -> Result<(Vec<GitChange>, Vec<GitChange>), Works
             None
         };
         let change = |code| GitChange {
+            stats: Default::default(),
             diff: String::new(),
             kind: change_kind(code),
             path: path.to_owned(),

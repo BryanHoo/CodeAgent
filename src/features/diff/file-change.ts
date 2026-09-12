@@ -17,32 +17,9 @@ export function getFileName(filePath: string): string {
   return filePath.split(/[\\/]/).at(-1) ?? filePath;
 }
 
-export function countFileChangeLines(change: AgentFileChange): FileChangeStats {
-  if (change.kind === "create" || change.kind === "delete") {
-    // Codex 的新增、删除事件携带原始文件内容；末尾换行不额外算一行。
-    let lines = change.diff.length > 0 && !change.diff.endsWith("\n") ? 1 : 0;
-    for (let index = 0; index < change.diff.length; index += 1) {
-      if (change.diff.charCodeAt(index) === 10) lines += 1;
-    }
-    return {
-      additions: change.kind === "create" ? lines : 0,
-      removals: change.kind === "delete" ? lines : 0,
-    };
-  }
-
-  let additions = 0;
-  let removals = 0;
-
-  // 只统计补丁正文，避免把 Unified Diff 的文件头误计为代码变更。
-  for (const line of change.diff.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      additions += 1;
-    } else if (line.startsWith("-") && !line.startsWith("---")) {
-      removals += 1;
-    }
-  }
-
-  return { additions, removals };
+export function getFileChangeStats(change: AgentFileChange): FileChangeStats {
+  // Rust 已按来源格式统计；渲染和汇总只读取固定大小元数据。
+  return change.stats;
 }
 
 export function summarizeFileChanges(changes: readonly AgentFileChange[]): FileChangeSummary {
@@ -64,7 +41,7 @@ export function summarizeFileChanges(changes: readonly AgentFileChange[]): FileC
   let additions = 0;
   let removals = 0;
   for (const change of uniqueChanges) {
-    const statistics = countFileChangeLines(change);
+    const statistics = getFileChangeStats(change);
     additions += statistics.additions;
     removals += statistics.removals;
   }

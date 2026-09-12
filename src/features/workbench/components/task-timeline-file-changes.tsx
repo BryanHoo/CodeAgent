@@ -5,7 +5,7 @@ import { i18n } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
 
 import {
-  countFileChangeLines,
+  getFileChangeStats,
   getFileName,
   summarizeFileChanges,
   type AgentFileChange,
@@ -19,7 +19,7 @@ export function FileChangeButton({
   const operationLabel = i18n.t(`timeline.fileOperation.${change.kind}`, {
     ns: "conversation",
   });
-  const { additions, removals } = countFileChangeLines(change);
+  const { additions, removals } = getFileChangeStats(change);
 
   return (
     <Button

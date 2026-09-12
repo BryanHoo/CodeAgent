@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { FileTree, FileTreeFile, FileTreeFolder } from "../../shared/components/agent/file-tree.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
-import { countFileChangeLines } from "./file-change.js";
+import { getFileChangeStats } from "./file-change.js";
 import type { FileNavigationViewMode } from "./file-navigation-view-preference.js";
 
 export type ReviewFileTreeFile = Readonly<{
@@ -91,7 +91,7 @@ export function buildReviewFileTree(
       directory = child;
     }
 
-    const { additions, removals } = countFileChangeLines(change);
+    const { additions, removals } = getFileChangeStats(change);
     directory.files.push({
       additions,
       changeIndex,

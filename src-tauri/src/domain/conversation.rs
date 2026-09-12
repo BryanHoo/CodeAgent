@@ -283,6 +283,7 @@ pub struct AgentCommandOutputOmission {
 
 #[derive(Debug, Serialize)]
 pub struct AgentFileChange {
+    pub stats: super::file_change::FileChangeStats,
     pub diff: String,
     pub kind: &'static str,
     pub path: String,

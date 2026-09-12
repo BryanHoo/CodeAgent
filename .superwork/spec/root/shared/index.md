@@ -28,6 +28,8 @@
 
 ## 性能观测契约
 
+- Codex 文件变更与 Project Git 状态必须携带原生 `stats: { additions, removals }` 非负整数；WebView 只能读取和汇总，禁止为显示行数再次扫描 Diff。Codex 新增/删除按原始内容计行，Git 按补丁正文计行；hunk 内的 `+++`/`---` 不得误判为文件头。统计范围与实际返回的正文一致，不能将截断结果宣称为完整文件统计。
+
 - Rust 映射实时 Delta 时写入 Unix 毫秒字段 `receivedAtUnixMs`；合并 Delta 保留该合并组首个事件的接收时间，前端只对实际进入可见 Task Store 的事件计算 React commit 延迟
 - `get_runtime_performance_metrics` 按项目返回 Provider 接收数、IPC 发布数、最近 1 秒 events/s、合并率与有界事件队列高水位
 - App-server 背压缓冲只允许淘汰可由快照恢复的 Delta；`turn/*`、`item/*` 生命周期、服务端请求与终态通知不得丢弃。发生淘汰时必须按 Project 发送 `resync.required`，原因固定为 `event_retention_exceeded`

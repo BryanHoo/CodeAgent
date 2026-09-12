@@ -40,8 +40,8 @@ const gitStatus = {
   snapshot: "a".repeat(64),
   staged: [],
   unstaged: [
-    { diff: "+provider", kind: "update", path: "src/provider.ts" },
-    { diff: "+queue", kind: "create", path: "src/queue.ts" },
+    { diff: "+provider", kind: "update", path: "src/provider.ts", stats: { additions: 1, removals: 0 } },
+    { diff: "+queue", kind: "create", path: "src/queue.ts", stats: { additions: 1, removals: 0 } },
   ],
 } as const satisfies ProjectGitStatus;
 

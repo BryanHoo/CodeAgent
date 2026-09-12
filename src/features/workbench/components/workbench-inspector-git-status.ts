@@ -1,6 +1,6 @@
 import type { ProjectGitStatus } from "@/protocol/index.js";
 
-import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
+import { getFileChangeStats, type AgentFileChange } from "../../diff/file-change.js";
 
 export type InspectorGitChangeState = Readonly<{
   changeStats: Readonly<{ additions: number; removals: number }> | undefined;
@@ -18,6 +18,10 @@ function mergeDisplayChanges(changes: readonly AgentFileChange[]): readonly Agen
     }
     // staged 与 unstaged 可能同时包含同一路径，合并后只计为一个变更文件。
     mergedChanges.set(change.path, {
+      stats: {
+        additions: existing.stats.additions + change.stats.additions,
+        removals: existing.stats.removals + change.stats.removals,
+      },
       diff: [existing.diff, change.diff].filter((value) => value !== "").join("\n"),
       kind: existing.kind === change.kind ? existing.kind : "update",
       path: change.path,
@@ -40,7 +44,7 @@ export function deriveInspectorGitChangeState(
         : undefined;
   const changeStats = statsChanges?.reduce(
     (total, change) => {
-      const stats = countFileChangeLines(change);
+      const stats = getFileChangeStats(change);
       return {
         additions: total.additions + stats.additions,
         removals: total.removals + stats.removals,

@@ -1,5 +1,5 @@
 import { i18n } from "../../../i18n/i18n.js";
-import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
+import { getFileChangeStats, type AgentFileChange } from "../../diff/file-change.js";
 import type { ProjectFileTreeItem } from "./project-file-tree-model.js";
 
 const PROJECT_FILE_TREE_OVERSCAN = 8;
@@ -49,7 +49,7 @@ export function collectVisibleProjectFileTreeChangeStats(
     if (target === undefined) continue;
 
     const current = statsByPath.get(target.path);
-    const stats = countFileChangeLines(change);
+    const stats = getFileChangeStats(change);
     statsByPath.set(target.path, {
       additions: (current?.additions ?? 0) + stats.additions,
       removals: (current?.removals ?? 0) + stats.removals,

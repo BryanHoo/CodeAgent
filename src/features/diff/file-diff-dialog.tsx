@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "../../shared/components/core
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
-import { countFileChangeLines, getFileName } from "./file-change.js";
+import { getFileChangeStats, getFileName } from "./file-change.js";
 
 const PatchDiffViewer = lazy(() => import("./patch-diff-viewer.js"));
 
@@ -23,7 +23,7 @@ export function FileDiffDialog({ change, onClose }: FileDiffDialogProps) {
   }
 
   const fileName = getFileName(change.path);
-  const { additions, removals } = countFileChangeLines(change);
+  const { additions, removals } = getFileChangeStats(change);
   const titleId = "file-diff-dialog-title";
 
   return (

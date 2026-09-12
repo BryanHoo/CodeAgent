@@ -84,6 +84,11 @@ async fn add_untracked_diffs(repo: &Path, changes: &mut [GitChange]) -> Result<(
             diff.push_str(line);
         }
         remaining_bytes = remaining_bytes.saturating_sub(diff.len());
+        // 未跟踪文件的补丁是逐行添加前缀，正文中的 +++ 不能被误当作文件头。
+        change.stats = crate::domain::file_change::FileChangeStats {
+            additions: crate::domain::file_change::content_lines(&diff),
+            removals: 0,
+        };
         change.diff = diff;
     }
     Ok(())
@@ -132,6 +137,8 @@ fn apply_combined_diff(output: &[u8], changes: &mut [GitChange]) -> Result<(), W
         };
         let patch = &patch[..patch.len().min(MAX_DIFF_BYTES)];
         changes[index].diff = String::from_utf8_lossy(patch).into_owned();
+        changes[index].stats =
+            crate::domain::file_change::FileChangeStats::patch(&changes[index].diff);
     }
     Ok(())
 }

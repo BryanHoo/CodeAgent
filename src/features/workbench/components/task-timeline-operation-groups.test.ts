@@ -33,9 +33,9 @@ const mcpTool: AgentItem = {
 };
 const fileChange: AgentItem = {
   changes: [
-    { diff: "+created", kind: "create", path: "src/created.ts" },
-    { diff: "-before\n+after", kind: "update", path: "src/updated.ts" },
-    { diff: "-deleted", kind: "delete", path: "src/deleted.ts" },
+    { diff: "+created", kind: "create", path: "src/created.ts", stats: { additions: 1, removals: 0 } },
+    { diff: "-before\n+after", kind: "update", path: "src/updated.ts", stats: { additions: 1, removals: 1 } },
+    { diff: "-deleted", kind: "delete", path: "src/deleted.ts", stats: { additions: 0, removals: 1 } },
   ],
   id: "file-change-1",
   status: "completed",

@@ -50,6 +50,16 @@ Rust 在统一事件发布入口关联同项目、同任务、同回合内的相
 - 窗口重连保留投影，任务/项目删除及 Provider 重启释放；delta 不复制正文，用户输入准备在 Runtime 锁外完成，不新增历史 RPC。
 - 回归覆盖无 WebView 恢复、原生 Channel 补丁、迟到生命周期事件、重复事件、跨项目/回合隔离、缓存预算、快照读取竞态和前端 Store/附件/顺序保留。
 
+## 已实施：Diff 行数统计
+
+`AgentFileChange` 和 Project Git 状态中的文件变更现在必须携带 `stats: { additions, removals }`。Rust 在 Codex 历史/回合项映射、`file_change.updated` 以及 Git 详情读取时统一计算；前端删除逐行扫描，`getFileChangeStats` 只读取这两个数字。
+
+- Codex 新增/删除携带原始内容，空行与末尾换行按实际内容计数；更新及 Git 已跟踪文件按补丁统计。Git 未跟踪文件按实际生成的添加行计数，不能将补丁头计入新增文件行数。
+- hunk 内以 `+++`、`---` 开头的代码行正常计入，文件头、模式变更和二进制提示不计入。
+- Rust 借用正文逐行处理，不创建行数组，不新增常驻缓存或 IPC 请求；传输只增加固定数量字段。
+- 统计只覆盖本次返回正文。实时/Git 既有截断预算保留，不推测省略内容；轻量 Git 查询仍不加载正文，详情只在 snapshot 匹配时展示。提交历史的文件导航不展示行数，正文仍按选中文件加载。
+- 前端保留按展示分组求和、同路径保留最终项以及 staged/unstaged 合并；Diff 补丁规范化和预览解析尚未迁移。
+
 ## 后续迁移边界
 
 | 顺序 | 待迁移职责 | 验收重点 |
@@ -57,10 +67,10 @@ Rust 在统一事件发布入口关联同项目、同任务、同回合内的相
 | 1 | 完整消息投影、终态归并、快照与实时事件对账 | 原生消息身份稳定；读取快照期间发生的 delta 不丢失、不重复；历史分页不回滚 |
 | 2 | 提交、建任务、启动/steer/排队编排及幂等 | 部分成功可恢复；重复请求不重复建任务或执行 |
 | 3 | 异步问题回答关联、队列确认状态 | 按协议身份关联，多个窗口不独立推断业务结果 |
-| 4 | Diff 统计/规范化与调度规则 | 摘要和正文分离；RRULE、时区和有效性统一由 Rust 判定 |
+| 4 | Diff 补丁规范化与调度规则 | 行数统计已迁移；继续分离摘要和正文，RRULE、时区和有效性统一由 Rust 判定 |
 | 5 | 图片软件加工和结果缓存 | 真实 WebView 主线程负担下降，IPC 字节量与总内存不恶化 |
 
-当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
+当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
 快照元数据和 checkpoint 在同一 Rust 临界区读取，但这不代表上游多个历史 RPC 与实时正文事件已经形成原子快照。
 
 ## 验证
@@ -72,12 +82,15 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib conversation_ --locked
 pnpm exec vitest run src/features/conversation/runtime/task-store-context-usage.test.ts
 pnpm exec vitest run src/features/conversation/runtime/task-store-terminal-error.test.ts
 cargo test --manifest-path src-tauri/Cargo.toml --lib skill --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib file_change_stats_should --locked
 pnpm exec vitest run src/features/conversation/runtime/task-store-skill-update.test.ts src/features/conversation/runtime/task-runtime-submission.test.ts
+pnpm exec vitest run src/features/diff/file-change.test.ts src/features/workbench/components/workbench-inspector-git-status.test.ts
 pnpm check
 ```
 
 原生回归覆盖没有 WebView 时恢复元数据、项目/任务隔离、审批解决、任务删除、窗口重连、Provider 重启、任务数量/字节预算与超大字段。
 前端回归验证原生用量覆盖旧值，以及原生 `null` 清除过期用量。
 失败终态回归覆盖事件补齐、明确终态错误优先、成功/重试清理、延迟启动、新轮隔离、无 WebView 的快照恢复、身份隔离和数量/字节预算；前端验证不再从旧 Store 推断终态错误。
-2026-09-12 四批迁移后的验证：`pnpm check` 全部通过。共 335 项前端测试、439 项 Rust 库测试（7 项按设计忽略）、6 项协议/PTY 集成测试及 3 项显式性能基线；供应链检查、格式、Clippy、类型检查、Modern/Legacy 构建和体积预算通过。前端删除旧归并测试，改为验证原生补丁契约。
+2026-09-12 五批迁移后的验证：`pnpm check` 的前端及供应链阶段通过；Rust 阶段一项未改动的符号链接删除测试首次失败，单独重跑及完整 `pnpm check:rust` 复跑均通过，未据此修改文件删除逻辑。最终 332 项前端测试、444 项 Rust 库测试（7 项默认忽略）、6 项协议/PTY 集成测试及 3 项显式性能基线通过；格式、Clippy、类型检查、Modern/Legacy 构建和体积预算通过。
+额外验证 Chromium/WebKit 下相关操作分组和关键操作共 8 项浏览器测试，以及真实 Codex 0.154.0 私有安装与 app-server 生命周期测试。原前端行数计算用例已迁到 Rust，前端改测统计字段校验、无正文扫描、去重和暂存/工作区汇总。
 真实原生 WebView 的完整销毁重建交互和性能对比需要另行实测，不能以单元测试代替。

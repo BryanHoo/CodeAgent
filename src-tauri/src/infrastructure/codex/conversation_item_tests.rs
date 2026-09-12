@@ -13,6 +13,40 @@ fn absolute_test_path(name: &str) -> String {
 }
 
 #[test]
+fn file_change_stats_should_be_native_for_history_and_realtime() {
+    let changes = json!([
+        {"path":"new.txt", "kind":{"type":"add"}, "diff":"+++ content\n\nlast"},
+        {"path":"old.txt", "kind":{"type":"delete"}, "diff":"old\r\n"},
+        {"path":"edit.txt", "kind":{"type":"update", "move_path":null},
+         "diff":"--- a/edit.txt\n+++ b/edit.txt\n@@ -1 +1 @@\n---old\n+++new\n"}
+    ]);
+    let item = json!({"id":"files", "type":"fileChange", "status":"completed", "changes":changes});
+    let history = to_value(map_item(item).unwrap()).unwrap();
+    assert_eq!(
+        history["changes"][0]["stats"],
+        json!({"additions":3,"removals":0})
+    );
+    assert_eq!(
+        history["changes"][1]["stats"],
+        json!({"additions":0,"removals":1})
+    );
+    assert_eq!(
+        history["changes"][2]["stats"],
+        json!({"additions":1,"removals":1})
+    );
+    let params = json!({"threadId":"task", "turnId":"turn", "itemId":"files", "changes":changes});
+    let message = ServerMessage {
+        id: None,
+        method: "item/fileChange/patchUpdated".into(),
+        params: to_raw_value(&params).unwrap(),
+    };
+    let event = map_server_message(message, 1, "2026-09-12T00:00:00Z")
+        .unwrap()
+        .unwrap();
+    assert_eq!(event["payload"]["changes"], history["changes"]);
+}
+
+#[test]
 fn reasoning_notifications_should_be_ignored() {
     let reasoning = json!({
         "id": "reasoning-a", "type": "reasoning", "summary": ["hidden"], "content": []
