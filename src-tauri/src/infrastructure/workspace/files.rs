@@ -88,16 +88,13 @@ pub async fn rename_project_file(
     {
         return Err(WorkspaceError::InvalidPath);
     }
-    let source = resolve_existing(root, Some(relative)).await?;
-    if source == root {
-        return Err(WorkspaceError::InvalidPath);
-    }
-    let parent_relative = Path::new(relative)
-        .parent()
-        .map_or_else(|| PathBuf::from(name), |parent| parent.join(name));
-    let destination = resolve_destination(root, &parent_relative).await?;
-    if tokio::fs::try_exists(&destination).await? {
-        return Err(WorkspaceError::InvalidPath);
+    let (source, _) = resolve_mutation_target(root, relative).await?;
+    // 使用已解析的同一个父目录，避免再次解析用户路径时重定向到其他位置。
+    let destination = source.with_file_name(name);
+    match tokio::fs::symlink_metadata(&destination).await {
+        Ok(_) => return Err(WorkspaceError::InvalidPath),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
     }
     tokio::fs::rename(source, &destination).await?;
     Ok(RenameFileResponse {
@@ -109,11 +106,9 @@ pub async fn delete_project_file(
     root: &Path,
     relative: &str,
 ) -> Result<DeleteFileResponse, WorkspaceError> {
-    let target = resolve_existing(root, Some(relative)).await?;
-    if target == root {
-        return Err(WorkspaceError::InvalidPath);
-    }
-    if tokio::fs::metadata(&target).await?.is_dir() {
+    let (target, file_type) = resolve_mutation_target(root, relative).await?;
+    if file_type.is_dir() {
+        // 保留末级目录项；检查后即使被替换为链接，remove_dir_all 也不会递归其目标。
         tokio::fs::remove_dir_all(&target).await?;
     } else {
         tokio::fs::remove_file(&target).await?;
@@ -122,6 +117,29 @@ pub async fn delete_project_file(
         path: relative.to_owned(),
         status: "deleted",
     })
+}
+
+async fn resolve_mutation_target(
+    root: &Path,
+    relative: &str,
+) -> Result<(PathBuf, std::fs::FileType), WorkspaceError> {
+    // 拒绝末尾分隔符和点目录，防止路径语义强制解析末级符号链接。
+    if matches!(
+        relative.rsplit(std::path::is_separator).next(),
+        Some("" | "." | "..")
+    ) {
+        return Err(WorkspaceError::InvalidPath);
+    }
+    // 只 canonicalize 父目录，绝不把待删除或重命名的末级目录项替换为链接目标。
+    let target = resolve_destination(root, Path::new(relative)).await?;
+    if target == tokio::fs::canonicalize(root).await? {
+        return Err(WorkspaceError::InvalidPath);
+    }
+    let metadata = tokio::fs::symlink_metadata(&target).await?;
+    if metadata.is_symlink() {
+        return Err(WorkspaceError::InvalidPath);
+    }
+    Ok((target, metadata.file_type()))
 }
 
 pub async fn read_source_file(
@@ -151,6 +169,10 @@ pub async fn read_source_file(
         path: relative.to_owned(),
     })
 }
+
+#[cfg(test)]
+#[path = "files_symlink_tests.rs"]
+mod symlink_tests;
 
 #[cfg(test)]
 mod tests {
