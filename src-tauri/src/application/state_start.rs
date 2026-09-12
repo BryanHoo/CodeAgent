@@ -38,6 +38,10 @@ impl AppState {
         {
             let mut runtime = self.runtime.lock().await;
             invalidate_runtime_restart(&mut runtime);
+            // Provider 重启后旧用量和计划不再属于当前运行时；窗口重连不走此分支。
+            runtime.task_snapshot_metadata.clear();
+            runtime.task_failure_projection.clear();
+            runtime.task_skill_projection.clear();
             let event = runtime.transition(RuntimeStatus::Starting, Some(ProviderKind::Codex));
             drop(runtime);
             delivery.send(event).await;

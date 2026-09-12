@@ -10,7 +10,6 @@ import {
   type TaskItemStore,
   type TaskStoreState,
 } from "./task-store-core.js";
-import { mergeRealtimeExpandedSkill } from "./task-store-skill.js";
 export function getTouchedCommandOutputItemKeys(
   previousState: TaskStoreState,
   nextState: TaskStoreState,
@@ -342,23 +341,6 @@ export function applyAcceptedEvent(
       const currentItemStore = state.itemStoresByKey.get(itemKey);
       const itemAlreadyExists = currentItemStore !== undefined;
       const currentItemIds = state.itemKeysByTurnId[event.turnId] ?? [];
-      const previousItemId = currentItemIds.at(-1);
-      const previousItemStore =
-        previousItemId === undefined ? undefined : state.itemStoresByKey.get(previousItemId);
-      const mergedExpandedSkill = mergeRealtimeExpandedSkill(
-        previousItemStore?.read(),
-        event.payload.item,
-      );
-      if (mergedExpandedSkill !== undefined && previousItemStore !== undefined) {
-        // Codex 将 Skill 展开为紧邻用户项；实时链路原位合并，避免产生第二个用户气泡。
-        previousItemStore.replace(mergedExpandedSkill);
-        changedItemStores.add(previousItemStore);
-        return {
-          checkpoint,
-          itemStructureRevision: state.itemStructureRevision + 1,
-          snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
-        };
-      }
       const submittedUserItemId = `submitted-user-${event.turnId}`;
       const submittedUserItemKey = createTaskItemKey(event.turnId, submittedUserItemId);
       const replacesSubmittedUserItem =
@@ -390,14 +372,20 @@ export function applyAcceptedEvent(
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
       };
     }
+    case "message.skills_updated": {
+      const itemStore = state.itemStoresByKey.get(createTaskItemKey(event.turnId, event.itemId));
+      const item = itemStore?.read();
+      if (itemStore !== undefined && item?.type === "message" && item.role === "user") {
+        // 关联与正文加工由 Rust 完成；原位应用指定字段，附件和时间线顺序保持原样。
+        itemStore.replace({ ...item, text: event.payload.text, skills: event.payload.skills });
+        changedItemStores.add(itemStore);
+      }
+      return { checkpoint, snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp } };
+    }
     case "turn.completed": {
       const currentTurn = state.turnsById[event.turnId];
-      const nonRetryingProviderError = currentTurn?.status === "failed" ? currentTurn.error : null;
-      // 失败终态缺少错误时，保留此前不可重试的 Provider 错误。
-      const completedTurn =
-        event.payload.turn.error === null && nonRetryingProviderError !== null
-          ? { ...event.payload.turn, error: nonRetryingProviderError }
-          : event.payload.turn;
+      // Rust 已归并终态错误；null 同样是有效结果，不能用窗口旧状态覆盖。
+      const completedTurn = event.payload.turn;
       const { items: terminalItems, ...normalizedTurn } = completedTurn;
       const items = mergeTerminalTurnItems(state, event.turnId, terminalItems);
       return {

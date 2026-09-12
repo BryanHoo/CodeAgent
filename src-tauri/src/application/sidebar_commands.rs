@@ -135,6 +135,7 @@ pub async fn read_task(
         .run_cancellable(request_id.as_deref(), async {
             let connection = state.codex_connection().await?;
             state.remember_tasks(&project_id, [task_id.as_str()]).await;
+            let baseline = state.task_snapshot_baseline(&project_id).await;
             let mut response = codex::read_task_snapshot(
                 &connection,
                 project_id.clone(),
@@ -146,7 +147,9 @@ pub async fn read_task(
             response.snapshot.settings =
                 effective_task_settings(&app, &project_id, &task_id).await?;
             task_workspace::allow_attachment_assets(&app, &project_id, &task_id).await?;
-            response.checkpoint.sequence = state.project_sequence(&project_id).await;
+            state
+                .complete_task_snapshot_at(&mut response, Some(baseline))
+                .await;
             state.remember_task_snapshot(&response.snapshot).await;
             Ok(response)
         })

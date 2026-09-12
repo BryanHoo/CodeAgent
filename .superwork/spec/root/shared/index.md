@@ -2,6 +2,8 @@
 
 ## 附件契约
 
+- Skill 用户消息的开头引用清理由 Rust 统一执行，历史和回合事件中的相邻纯展开项须保留前一用户消息的 ID、附件与顺序。`skillExpansion: true` 只由原生根据清理前的纯 Skill 内容生成，普通消息省略；前端不得从清理后的空正文推断展开身份，也不得再次扫描提交响应规范化正文。跨事件关联由 Rust 发布 `message.skills_updated`，前端只更新明确目标的正文和 Skill，不推断归并对象。新关联不得跨活动项或吞掉有正文/附件的独立输入；无法可靠关联的项原样保留。
+
 - `AgentMessageAttachment` 是提交、队列编辑和历史恢复共用的完整附件身份，必须保留 `id`、`kind`、`name`、`mediaType`、`size`，图片固定保留 `detail: auto`
 - Codex 原生媒体必须分别映射为 `localImage` 与 `localAudio`；普通文件通过 `codexly-file:` `text_elements.placeholder` 携带固定大小元数据，关联的 `text` 仅保存本地缓存路径，不得作为可见正文渲染
 - 浏览器附件必须通过 raw IPC 上传，宿主文件必须单遍流式缓存；不得把二进制转换为 JSON `number[]` 或 Base64

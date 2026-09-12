@@ -217,6 +217,8 @@ pub enum AgentItem {
         #[serde(skip_serializing_if = "Option::is_none")]
         questions: Option<Vec<AgentAsyncQuestion>>,
         role: &'static str,
+        #[serde(rename = "skillExpansion", skip_serializing_if = "is_false")]
+        skill_expansion: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         skills: Option<Vec<Value>>,
         text: String,

@@ -83,7 +83,8 @@ async fn read_task_snapshot_should_map_native_thread_history() {
             {"turnId": "turn-a", "item": {"id": "command-a", "type": "commandExecution", "command": "pnpm check", "cwd": "/work/a", "status": "completed", "aggregatedOutput": "ok\n", "exitCode": 0}},
             {"turnId": "turn-a", "item": {"id": "reason-a", "type": "reasoning", "summary": ["摘要"], "content": ["推理"]}},
             {"turnId": "turn-a", "item": {"id": "agent-a", "type": "agentMessage", "text": "已完成", "phase": "final_answer", "delivery": null}},
-            {"turnId": "turn-a", "item": {"id": "user-a", "type": "userMessage", "content": [{"type": "text", "text": "检查代码", "textElements": []}]}}
+            {"turnId": "turn-a", "item": {"id": "expanded-skill", "type": "userMessage", "content": [{"type": "skill", "name": "rust", "path": "/skills/rust"}]}},
+            {"turnId": "turn-a", "item": {"id": "user-a", "type": "userMessage", "content": [{"type": "text", "text": "$rust 检查代码", "textElements": []}]}}
         ]);
         server_writer
             .write_all(
@@ -125,6 +126,14 @@ async fn read_task_snapshot_should_map_native_thread_history() {
     assert_eq!(value["snapshot"]["status"], "idle");
     assert_eq!(value["snapshot"]["turnsNextCursor"], "older-a");
     assert_eq!(value["snapshot"]["turns"][0]["items"][0]["type"], "message");
+    assert_eq!(
+        value["snapshot"]["turns"][0]["items"][0]["text"],
+        "检查代码"
+    );
+    assert_eq!(
+        value["snapshot"]["turns"][0]["items"][0]["skills"],
+        json!([{"name":"rust"}])
+    );
     assert_eq!(
         value["snapshot"]["turns"][0]["items"][1]["phase"],
         "final_answer"

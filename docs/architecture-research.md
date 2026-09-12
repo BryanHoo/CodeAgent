@@ -23,6 +23,7 @@ stdio JSONL
 - 底层使用官方 `codex app-server`，不解析终端文本，也不模拟 `codex exec` 交互。
 - Rust 直接管理 `codex app-server` 子进程，通过 `stdin/stdout` JSONL 通信。
 - Rust 到 WebView 使用长生命周期 Tauri `Channel`，WebView 到 Rust 使用窄接口 `invoke`。
+- Rust 职责下沉的实施进度与剩余边界见 [Rust 职责迁移](./rust-responsibility-migration.md)。
 - UI 使用 AI Elements 的源码组件，但不使用 Next.js、`useChat` 或 AI SDK HTTP 传输层。
 - Web 层只维护面向渲染的状态投影，线程、审批、认证和执行状态仍以 `app-server` 为准。
 - Codex 和 Claude Code 使用独立进程与应用缓存；Codex 继承官方 `CODEX_HOME`，与 CLI 共享项目、会话、认证和配置。

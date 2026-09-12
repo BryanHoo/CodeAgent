@@ -9,6 +9,7 @@ import {
   AgentGoalSchema,
   AgentFileChangeSchema,
   AgentItemSchema,
+  AgentMessageSkillSchema,
   AgentMcpServerFailureReasonSchema,
   AgentMcpServerStartupStatusSchema,
   AgentPlanSchema,
@@ -58,6 +59,16 @@ export const MessageDeltaEventSchema = createEventSchema({
   payload: Type.Object({ delta: Type.String() }, { additionalProperties: false }),
   turnId: Type.String({ minLength: 1 }),
   type: Type.Literal("message.delta"),
+});
+
+export const MessageSkillsUpdatedEventSchema = createEventSchema({
+  itemId: Type.String({ minLength: 1, maxLength: 1_024 }),
+  payload: Type.Object({
+    text: Type.String({ maxLength: 1_100_000 }),
+    skills: Type.Array(AgentMessageSkillSchema, { maxItems: 128 }),
+  }, { additionalProperties: false }),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("message.skills_updated"),
 });
 
 export const PlanDeltaEventSchema = createEventSchema({
@@ -271,6 +282,7 @@ export const PendingRequestExpiredEventSchema = createPendingRequestEventSchema(
 export const AgentEventSchema = Type.Union([
   TurnStartedEventSchema,
   MessageDeltaEventSchema,
+  MessageSkillsUpdatedEventSchema,
   CommandOutputDeltaEventSchema,
   PlanDeltaEventSchema,
   ToolProgressEventSchema,

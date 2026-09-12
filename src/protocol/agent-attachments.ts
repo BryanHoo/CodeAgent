@@ -197,6 +197,8 @@ export const AgentMessageItemSchema = Type.Object(
     phase: Type.Optional(AgentMessagePhaseSchema),
     questions: Type.Optional(Type.Array(AgentAsyncQuestionSchema, { minItems: 1, maxItems: 16 })),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+    // 原生按规范化前的内容分类；省略表示普通消息，不能从空正文反推。
+    skillExpansion: Type.Optional(Type.Literal(true)),
     skills: Type.Optional(Type.Array(AgentMessageSkillSchema)),
     text: Type.String(),
     type: Type.Literal("message"),

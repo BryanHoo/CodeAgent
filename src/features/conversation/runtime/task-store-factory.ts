@@ -321,11 +321,6 @@ function getEventItemKeys(state: TaskStoreState, event: AgentEvent): readonly st
   }
   const itemKeys = [createTaskItemKey(event.turnId, event.itemId)];
   if (event.type === "item.started" || event.type === "item.completed") {
-    const currentItemKeys = state.itemKeysByTurnId[event.turnId] ?? [];
-    const previousItemKey = currentItemKeys.at(-1);
-    if (previousItemKey !== undefined) {
-      itemKeys.push(previousItemKey);
-    }
     itemKeys.push(createTaskItemKey(event.turnId, `submitted-user-${event.turnId}`));
   }
   return itemKeys;

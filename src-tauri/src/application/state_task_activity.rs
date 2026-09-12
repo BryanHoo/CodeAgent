@@ -26,11 +26,11 @@ impl AppState {
     }
 
     pub async fn forget_project_activity(&self, project_id: &str) {
-        self.runtime
-            .lock()
-            .await
-            .task_activity
-            .forget_project(project_id);
+        let mut runtime = self.runtime.lock().await;
+        runtime.task_snapshot_metadata.forget_project(project_id);
+        runtime.task_failure_projection.forget_project(project_id);
+        runtime.task_skill_projection.forget_project(project_id);
+        runtime.task_activity.forget_project(project_id);
     }
 
     pub async fn remember_task_metadata<'a>(

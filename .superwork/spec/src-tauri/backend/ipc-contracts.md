@@ -9,6 +9,8 @@
 
 ## 数据契约
 
+- 失败 `turn.completed` 缺失错误正文时，由 Rust 复用同项目/任务/回合的不可重试错误；快照仅补齐同轮失败且没有明确错误的字段，不推断上游状态。保留缓存必须受任务数、单条及总字节预算约束，重试/新轮/删除/运行时重启释放过期记录；不得依赖 WebView 旧状态补齐。
+
 - 个性化说明直接使用当前运行时报告的 `CODEX_HOME/AGENTS.md`，不得复制到应用设置文件；原文保存前校验读取基线并原子替换，冲突返回 `GLOBAL_INSTRUCTIONS_CHANGED`，不得覆盖外部修改。记忆选项只通过官方配置 API 读写；删除调用 `memory/reset` 同时清理文件与数据库，禁止自行递归删除 Codex 目录。能力仅授权主窗口，验证使用隔离的 Codex home。
 
 - 对外结构使用 `serde(rename_all = "camelCase")`；带标签枚举的变体字段必须同时使用 `rename_all_fields = "camelCase"`，防止嵌套字段退化为 snake_case
@@ -17,6 +19,7 @@
 - Tauri 框架以字符串拒绝参数或 ACL 错误时，WebView 客户端必须包装为 `Error` 并保留原始消息，不得在 Composer 中退化为无上下文兜底文案
 - IPC 结构变化时同步修改 `src/domain/` 中对应的 TypeScript 类型
 - Channel 事件保持单调递增序号，前端据此忽略陈旧事件
+- `read_task` 必须从 Rust 原生投影补齐计划/用量，并从同项目、同任务的审批注册表恢复可操作请求；不依赖主 WebView 是否消费过事件。计划/用量缓存最多 256 个任务、4 MiB 编码字节，单字段最多 256 KiB，按最近更新/读取淘汰；超大字段清除旧值。WebView 重连保留缓存，Provider 重启清空，项目/任务删除回收对应项。缓存不复制正文和事件历史，预算不等同于进程 RSS 上限。
 - 主 Runtime Channel 增加独立的 `streamId` / `deliveryId`，前端同步分发到 Store 后，通过 `acknowledge_runtime_events` 批量确认；`Channel.send()` 成功不能释放额度。每连接最多 64 个、合计 1 MiB 未确认包，其中为审批与控制流保留 8 个槽位和 128 KiB；待发送副本最多 256 条、4 MiB。重复、未来和旧连接 ACK 不得增加额度，前端最多一个 ACK invoke 在途，失败保留原标识低频重试。
 - WebView 过载不得阻塞 Rust 原生事实投影、审批注册和 RPC 应答；传输副本超预算时显式发送 `resyncRequired`，`projectId: "*"` 表示所有已订阅项目恢复权威快照。审批使用控制预留，不能被普通输出占满；单个超大事件或控制队列过载也必须要求快照恢复，不能静默丢失。重建连接须停止旧队列，旧 ACK 不得释放新连接额度。
 - app-server 通知 Channel 和溢出缓冲分别受 8 MiB 字节预算及条数上限约束；可恢复 delta 被淘汰后，重同步信号仅保留 `threadId`，信号自身最多 256 条、64 KiB。事实通知耗尽硬预算时必须显式失败并走 Runtime 恢复，禁止无限越过容量，也不能等待 WebView 而阻塞同一 stdio 上的 RPC。
@@ -65,6 +68,7 @@
 - 工作台协议基线与精确版本门禁遵循 [Codex 运行时契约](./codex-runtime-contract.md)，外部运行时必须完成初始化握手；应用私有回退包固定版本和完整性摘要
 - React 到 Codex 的运行链路必须保持 `Tauri invoke/Channel -> Rust -> stdio JSONL`，不得重新引入 HTTP、WebSocket 或 mock 运行时
 - app-server 只维持一个长生命周期 Channel；事件序号、通知队列、历史页、命令输出和附件必须保持有界
+- 跨事件 Skill 关联必须在原生统一事件发布入口完成；`message.skills_updated` 携带明确目标和完整 `text`、`skills` 字段值，不重传附件。投影按项目/任务/回合隔离并限制任务数、字节、Skill 和别名数；未知身份的迟到完成不得推断新目标。快照只按精确身份恢复，且仅在读取期间项目序号、Channel 代次与 Provider 重启代次均未变化时补种关联。
 - 分页历史使用 `thread/turns/list(itemsView: "notLoaded")`，再并发调用 `thread/items/list` 补全同页 Turn；必须拒绝空游标、重复游标和错误 `turnId`
 - 用户本机文件的打开、预览、读取及文件操作不限制项目目录；绝对路径直接定位，相对路径按当前根目录或任务 `thread/read.cwd` 解析，允许父目录跳转和符号链接。项目外响应保留绝对路径，禁止错误拼接为项目内路径。操作系统权限、文件格式和有界读取规则仍生效；Git 相对路径、内部附件标识及自动清理的资源归属校验不属于文件访问目录限制。
 - 临时任务必须在 `app_data_dir()/temporary-workspaces/` 分配独立 `cwd`；绝对文件链接无需运行时即可定位，相对文件链接通过 `thread/read.cwd` 定位；删除任务只能清理通过受控工作区归属验证的目录。

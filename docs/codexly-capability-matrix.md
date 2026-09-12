@@ -49,6 +49,9 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 排队提交 | `list/add/update/delete/reorder/startQueuedSubmission` | 原生 `thread/queue/*`，保留顺序和编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；消费 ACK、1 MiB 在途预算、4 MiB 待发送预算和控制预留；单调序号、显式缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
+| 会话元数据恢复 | `readTask` | Rust 补齐最近计划/用量及同任务待审批请求；计划/用量最多 256 任务、4 MiB 编码字节，单字段 256 KiB；WebView 重建复用，Provider 重启清空 | 已实现 |
+| 失败终态归并 | `turn.completed`, `readTask` | Rust 补齐同回合不可重试错误，明确终态错误优先；保留最近一轮、最多 128 任务/1 MiB，单条 64 KiB；前端直接展示原生终态 | 已实现 |
+| Skill 消息规范化 | `readTask`, 回合响应与事件 | Rust 清理开头引用、归并相邻展开项并保留身份/附件；有界原生投影关联跨事件目标，通过 `message.skills_updated` 原位更新；快照按精确身份恢复，未知迟到完成原样保留 | 已实现规范化及有界跨事件关联 |
 | 小窗访问 | Task 只读输出 | 440×220 横向透明无外框置顶小窗，最多 3 个且同任务复用；工作台同源样式的 12px Markdown 与 160 字符操作标题；仅挂载可视块，支持滚动查看最近输出，置底时跟随新输出；独立入口与受限 Channel，单窗最多一个未确认包、12 项、每项 4 KiB；仅读取最近回合一页；双击恢复对应普通/临时任务路由后销毁，主窗口销毁不影响输出 | 已实现 |
 | 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
 | 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |

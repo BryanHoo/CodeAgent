@@ -401,12 +401,13 @@ fn map_thread_status(status: &NativeThreadStatus) -> Result<&'static str, Connec
 
 pub(super) fn map_turn(turn: NativeTurn) -> Result<AgentTurn, ConnectionError> {
     let status = map_status(&turn.status, true)?;
-    let items = turn
+    let mut items = turn
         .items
         .into_iter()
         .filter(|item| !is_reasoning_item(item))
-        .map(map_item)
+        .map(super::conversation_items::map_item_without_skill_normalization)
         .collect::<Result<Vec<_>, _>>()?;
+    crate::domain::conversation_skills::normalize_turn_skills(&mut items);
     Ok(AgentTurn {
         completed_at: turn.completed_at.map(unix_seconds_to_rfc3339),
         error: turn.error.map(|error| error.message),

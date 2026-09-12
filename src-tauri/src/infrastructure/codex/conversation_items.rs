@@ -16,6 +16,14 @@ pub(super) fn is_reasoning_item(value: &Value) -> bool {
 }
 
 pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
+    let mut item = map_item_without_skill_normalization(value)?;
+    crate::domain::conversation_skills::normalize_user_skill_text(&mut item);
+    Ok(item)
+}
+
+pub(super) fn map_item_without_skill_normalization(
+    value: Value,
+) -> Result<AgentItem, ConnectionError> {
     let item = value.as_object().ok_or(ConnectionError::InvalidMessage)?;
     let id = required_string(item, "id")?.to_owned();
     let item_type = required_string(item, "type")?;
@@ -24,6 +32,8 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
         "userMessage" => {
             let (text, attachments, skills) = map_user_message(item)?;
             Ok(AgentItem::Message {
+                // 在正文规范化前识别纯展开项，不能把清理后变空的普通输入误分类。
+                skill_expansion: text.is_empty() && attachments.is_empty() && !skills.is_empty(),
                 attachments: (!attachments.is_empty()).then_some(attachments),
                 id,
                 phase: None,
@@ -39,6 +49,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
             phase: optional_string(item, "phase")?.map(str::to_owned),
             questions: map_questions(item)?,
             role: "assistant",
+            skill_expansion: false,
             skills: None,
             text: required_string(item, "text")?.to_owned(),
         }),
@@ -124,6 +135,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
                     phase: None,
                     questions: None,
                     role: "assistant",
+                    skill_expansion: false,
                     skills: None,
                     text: String::new(),
                 })
@@ -194,6 +206,7 @@ pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
             phase: None,
             questions: None,
             role: "assistant",
+            skill_expansion: false,
             skills: None,
             text: required_string(item, "review")?.to_owned(),
         }),

@@ -29,7 +29,7 @@ const baseSnapshot: AgentTaskSnapshotResponse = {
 };
 
 describe("TaskStore context usage reconciliation", () => {
-  it("keeps the latest event usage when a later snapshot has no usage", () => {
+  it("uses native snapshot usage instead of retaining a second frontend authority", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, baseSnapshot);
     const usageEvent: AgentEvent = {
       payload: { usage: { contextWindow: 200_000, usedTokens: 48_000 } },
@@ -48,6 +48,7 @@ describe("TaskStore context usage reconciliation", () => {
       checkpoint: { sequence: 1, sessionId: "session-1" },
       snapshot: {
         ...baseSnapshot.snapshot,
+        contextUsage: { contextWindow: 200_000, usedTokens: 49_000 },
         status: "idle",
         updatedAt: "2026-08-30T00:00:02.000Z",
       },
@@ -55,7 +56,7 @@ describe("TaskStore context usage reconciliation", () => {
 
     expect(store.getState().snapshotMetadata?.contextUsage).toEqual({
       contextWindow: 200_000,
-      usedTokens: 48_000,
+      usedTokens: 49_000,
     });
 
     store.getState().applyEvents([
@@ -72,5 +73,20 @@ describe("TaskStore context usage reconciliation", () => {
       contextWindow: 200_000,
       usedTokens: 62_000,
     });
+  });
+
+  it("clears stale usage when the native projection no longer has it", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, {
+      ...baseSnapshot,
+      snapshot: {
+        ...baseSnapshot.snapshot,
+        contextUsage: { contextWindow: 200_000, usedTokens: 48_000 },
+      },
+    });
+    store.getState().reconcile({
+      ...baseSnapshot,
+      checkpoint: { sequence: 1, sessionId: "session-1" },
+    });
+    expect(store.getState().snapshotMetadata?.contextUsage).toBeNull();
   });
 });

@@ -18,6 +18,8 @@ use event_stream::RuntimeEventStream;
 mod event_delta_batcher;
 #[path = "state_event_forwarder.rs"]
 mod event_forwarder;
+#[path = "state_event_publisher.rs"]
+mod event_publisher;
 #[path = "state_start.rs"]
 mod runtime_start;
 use event_delivery::prepare_event_delivery;
@@ -27,6 +29,16 @@ pub(super) mod performance_metrics;
 mod runtime_supervisor;
 #[path = "state_task_activity.rs"]
 mod task_activity_state;
+#[path = "task_failure_projection.rs"]
+mod task_failure_projection;
+#[path = "task_skill_message.rs"]
+mod task_skill_message;
+#[path = "task_skill_projection.rs"]
+mod task_skill_projection;
+#[path = "task_snapshot_metadata.rs"]
+mod task_snapshot_metadata;
+#[path = "state_task_snapshot.rs"]
+mod task_snapshot_state;
 #[path = "state_task_subscriptions.rs"]
 mod task_subscriptions;
 use super::task_activity::TaskActivityState;
@@ -73,6 +85,9 @@ struct RuntimeSession {
     project_sequences: HashMap<String, u64>,
     task_projects: HashMap<String, String>,
     task_activity: TaskActivityState,
+    task_snapshot_metadata: task_snapshot_metadata::TaskSnapshotMetadata,
+    task_failure_projection: task_failure_projection::TaskFailureProjection,
+    task_skill_projection: task_skill_projection::TaskSkillProjection,
     task_subscription_leases: TaskSubscriptionLeases,
     pending_requests: HashMap<String, PendingServerRequest>,
     provider_login: Option<Value>,
@@ -404,3 +419,10 @@ mod reliability_tests;
 #[cfg(test)]
 #[path = "state_stream_tests.rs"]
 mod stream_tests;
+
+#[cfg(test)]
+#[path = "state_skill_snapshot_tests.rs"]
+mod skill_snapshot_tests;
+#[cfg(test)]
+#[path = "state_snapshot_tests.rs"]
+mod snapshot_tests;
