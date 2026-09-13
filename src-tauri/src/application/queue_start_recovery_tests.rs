@@ -6,6 +6,44 @@ fn item(id: &str, text: &str) -> Value {
     json!({"id":id,"clientUserMessageId":format!("message-{id}"),"input":[{"type":"text","text":text,"text_elements":[]}]})
 }
 
+#[tokio::test]
+async fn queue_consumption_should_block_steer_after_idle_selection() {
+    let registry = Arc::new(QueuedSteerRegistry::default());
+    let (connection, server) = peer(vec![]);
+    let selected = select(
+        &registry,
+        &connection,
+        "project",
+        "task",
+        Some("queue".into()),
+    )
+    .await
+    .unwrap();
+    // RPC 结果可能丢失；释放等待租约不能让新键再次消费同一项。
+    drop(selected);
+    let result = super::super::queued_steer::run(
+        registry,
+        &super::super::prompt_submission::SubmissionBudget::default(),
+        super::super::queued_steer::QueuedSteerRequest {
+            project_id: "project".into(),
+            task_id: "task".into(),
+            turn_id: "turn".into(),
+            input: AgentPromptInput::text("hello"),
+            idempotency_key: "new-steer".into(),
+            queued_submission_id: "queue".into(),
+        },
+        |_| async { Ok(json!({"status":"accepted"})) },
+        || async { Ok(()) },
+    )
+    .await;
+    assert!(
+        result.is_err(),
+        "idle selection must reserve this item against steer"
+    );
+    drop(connection);
+    server.await.unwrap();
+}
+
 fn peer(
     responses: Vec<(&'static str, Value)>,
 ) -> (codex::AppServerConnection, tokio::task::JoinHandle<()>) {
@@ -136,7 +174,7 @@ async fn idle_recovery_should_pin_an_unaccepted_first_item_for_start() {
         json!({"data":[item("new","new prompt"),item("queue","hello")],"nextCursor":null}),
     )]);
     assert!(
-        matches!(select(&registry,&connection,"project","task",None).await.unwrap(), Selection::Start(id) if id == "new")
+        matches!(select(&registry,&connection,"project","task",None).await.unwrap(), Selection::Start(id, _) if id == "new")
     );
     drop(connection);
     server.await.unwrap();
@@ -204,7 +242,7 @@ async fn idle_recovery_should_block_unknown_acceptance_and_keep_scope_isolation(
         )
         .await
         .unwrap(),
-        Selection::Start(_)
+        Selection::Start(_, _)
     ));
     assert!(matches!(
         select(
@@ -216,7 +254,7 @@ async fn idle_recovery_should_block_unknown_acceptance_and_keep_scope_isolation(
         )
         .await
         .unwrap(),
-        Selection::Start(_)
+        Selection::Start(_, _)
     ));
     drop(connection);
     server.await.unwrap();

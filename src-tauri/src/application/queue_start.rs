@@ -43,10 +43,10 @@ pub async fn start_queued_submission(
             )
             .await
             .map_err(AppError::from)?;
-            let selected = match super::queue_start_recovery::select(
+            let (selected, _consumption_lease) = match super::queue_start_recovery::select(
                 &state.queued_steers, &connection, &worker_project, &worker_task, worker_submission,
             ).await? {
-                super::queue_start_recovery::Selection::Start(id) => id,
+                super::queue_start_recovery::Selection::Start(id, lease) => (id, lease),
                 super::queue_start_recovery::Selection::Cleanup(id) => {
                     return Ok(serde_json::json!({"cleanupOnly":true, "taskId":worker_task, "queuedSubmissionId":id}));
                 }

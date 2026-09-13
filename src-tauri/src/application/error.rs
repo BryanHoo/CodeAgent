@@ -7,6 +7,8 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("queue recovery capacity is exhausted; retry later")]
+    QueueRecoveryCapacityExceeded,
     #[error("the task queue is empty")]
     QueueEmpty,
     #[error("queued prompt acceptance is unconfirmed; inspect the task before retrying")]
@@ -86,6 +88,9 @@ impl Serialize for AppError {
             return payload.end();
         }
         let structured_error = match self {
+            Self::QueueRecoveryCapacityExceeded => {
+                Some(("IDEMPOTENCY_CAPACITY_EXCEEDED", self.to_string()))
+            }
             Self::QueueEmpty => Some(("QUEUE_EMPTY", self.to_string())),
             Self::QueueRecoveryUncertain => Some(("TURN_START_UNCERTAIN", self.to_string())),
             Self::QueuedContentChanged => Some(("IDEMPOTENCY_CONFLICT", self.to_string())),

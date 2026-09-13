@@ -3,7 +3,7 @@ use crate::{domain::conversation::AgentPromptInput, infrastructure::codex};
 use serde_json::{Value, json};
 
 pub(super) enum Selection {
-    Start(String),
+    Start(String, super::queued_steer::IdleStartLease),
     Cleanup(String),
 }
 
@@ -26,14 +26,13 @@ pub(super) async fn select(
             .map(|item| item.id)
             .ok_or(AppError::QueueEmpty)?,
     };
-    if registry
-        .accepted_for_queue(project, task, &selected)
+    match registry
+        .reserve_idle_start(project, task, &selected)
         .await?
-        .is_some()
     {
-        return Ok(Selection::Cleanup(selected));
+        Some(lease) => Ok(Selection::Start(selected, lease)),
+        None => Ok(Selection::Cleanup(selected)),
     }
-    Ok(Selection::Start(selected))
 }
 
 pub(super) async fn cleanup(

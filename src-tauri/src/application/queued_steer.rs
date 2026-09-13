@@ -5,7 +5,7 @@ use std::{future::Future, sync::Arc};
 
 #[path = "queued_steer_recovery.rs"]
 mod recovery;
-pub(crate) use recovery::QueuedSteerRegistry;
+pub(crate) use recovery::{IdleStartLease, QueuedSteerRegistry};
 
 pub(super) struct QueuedSteerRequest {
     pub project_id: String,
@@ -53,12 +53,15 @@ where
         &request.input,
     )?
     .digest();
-    let slot = registry.acquire(queue_identity)?;
+    let slot = registry
+        .acquire(queue_identity)
+        .map_err(|error| serde_json::json!(error))?;
     // 协调任务持有入口预算；调用方取消等待不能中断已接受追加后的清理。
     tokio::spawn(async move {
         let _admission = admission;
         let mut state = tokio::time::timeout(std::time::Duration::from_secs(120), slot.lock())
             .await.map_err(|_| recovery::uncertain())?;
+        if state.idle_start_attempted { return Err(recovery::uncertain()); }
         let result = if let Some(accepted) = &state.accepted {
             if accepted.content != content {
                 return Err(serde_json::json!({"code":"IDEMPOTENCY_CONFLICT", "message":"Queued item content differs from the accepted prompt; inspect it before cleanup"}));

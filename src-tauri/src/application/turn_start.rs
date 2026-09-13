@@ -140,9 +140,13 @@ impl TurnStartRegistry {
                 // 登记先于任何副作用；WebView 取消等待不取消已经开始的启动或 Goal 等待。
                 tokio::spawn(async move {
                     let result = start.await;
-                    // 只允许尚未取得连接的失败重试；执行后的传输/RPC 错误仍重放原结果。
+                    // 仅重试可证明尚未消费的原生失败；传输/RPC 错误仍重放原结果。
                     retry_allowed.store(
-                        matches!(&result, Err(AppError::CodexRuntimeUnavailable)),
+                        matches!(
+                            &result,
+                            Err(AppError::CodexRuntimeUnavailable
+                                | AppError::QueueRecoveryCapacityExceeded)
+                        ),
                         Ordering::Release,
                     );
                     let result = result.map_err(|error| {
