@@ -13,8 +13,8 @@ use tokio::sync::watch;
 
 #[path = "turn_start_payload.rs"]
 mod payload;
-pub use payload::fingerprint;
 use payload::{TurnStartIdentity, encode_result};
+pub use payload::{fingerprint, fingerprint_review};
 
 pub type TurnStartResult = Result<Value, Value>;
 type StoredResult = Arc<[u8]>;

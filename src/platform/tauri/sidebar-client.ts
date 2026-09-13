@@ -35,8 +35,6 @@ import type {
   ProjectPage,
   RemoveProjectResponse,
   ResolvePendingRequestResponse,
-  ReviewAgentTaskRequest,
-  ReviewAgentTaskResponse,
   RenameAgentTaskResponse,
   RenameProjectResponse,
   ReorderProjectsResponse,
@@ -61,6 +59,7 @@ import type { TauriClientOptions } from "./native-client.js";
 import { subscribeProjectEvents } from "./project-event-subscription.js";
 import { TauriRuntimeClient } from "./runtime-client.js";
 import type { SubmitPromptOptions } from "./prompt-submission.js";
+import type { SubmitReviewOptions } from "./review-submission.js";
 
 export type { InvokeImplementation } from "./native-client.js";
 
@@ -384,13 +383,12 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     });
   }
 
-  public async startReview(
-    projectId: string,
-    taskId: string,
-    input: ReviewAgentTaskRequest,
-    _options: MutationOptions = {},
-  ): Promise<ReviewAgentTaskResponse> {
-    return this.call("start_review", { input, projectId, taskId });
+  public async submitReview(options: SubmitReviewOptions) {
+    const { submitReview } = await import("./review-submission.js");
+    return submitReview(this.call.bind(this), { ...options, onTaskCreated: (task) => {
+      this.taskProjects.set(task.id, options.projectId);
+      options.onTaskCreated?.(task);
+    } });
   }
 
   public async getTaskSettings(

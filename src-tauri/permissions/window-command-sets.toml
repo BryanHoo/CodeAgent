@@ -84,7 +84,7 @@ permissions = [
   "allow-steer-turn",
   "allow-interrupt-turn",
   "allow-resolve-pending-request",
-  "allow-start-review",
+  "allow-submit-review",
   "allow-compact-task",
   "allow-fork-task",
   "allow-get-task-settings",

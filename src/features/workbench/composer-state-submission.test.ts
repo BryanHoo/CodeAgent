@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentPromptInput, AgentTask, AgentTurnOptions } from "@/protocol/index.js";
 import type { NativeMutationClient } from "../projects/project-queries.js";
 
-import { startPromptTurn } from "./composer-state.js";
+import { startPromptTurn, startTaskReview } from "./composer-state.js";
 
 const task: AgentTask = {
   id: "thread-a",
@@ -58,4 +58,20 @@ describe("startPromptTurn", () => {
     expect(startTask).not.toHaveBeenCalled();
     expect(startTurn).not.toHaveBeenCalled();
   });
+});
+
+it("delegates Review creation and start to one native submission", async () => {
+  const response = { taskId: task.id, turn: {
+    id: "review-a", status: "running" as const, items: [],
+    startedAt: "2026-09-13T00:00:00Z", completedAt: null, error: null,
+  } };
+  const startTask = vi.fn(async () => ({ task }));
+  const startReview = vi.fn(async () => response);
+  const submitReview = vi.fn(async () => response);
+  const options = { projectId: "project-a", target: { type: "uncommitted_changes" as const }, idempotencyKey: "review-key" };
+  const client = { startTask, startReview, submitReview };
+  await startTaskReview(client, options);
+  expect(submitReview).toHaveBeenCalledWith(options);
+  expect(startTask).not.toHaveBeenCalled();
+  expect(startReview).not.toHaveBeenCalled();
 });

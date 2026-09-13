@@ -24,6 +24,7 @@ pub mod pet_commands;
 pub mod project_file_window_commands;
 pub mod prompt_submission;
 mod request_cancellation;
+pub mod review_submission;
 pub mod scheduled_task_commands;
 mod scheduled_task_runner;
 pub mod scheduled_task_runtime;

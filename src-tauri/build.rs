@@ -114,7 +114,7 @@ fn main() {
         "steer_turn",
         "interrupt_turn",
         "resolve_pending_request",
-        "start_review",
+        "submit_review",
         "compact_task",
         "fork_task",
         "get_task_settings",

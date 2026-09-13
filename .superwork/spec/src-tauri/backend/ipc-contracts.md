@@ -8,6 +8,9 @@
 
 ## 命令边界
 
+- Review 只通过主窗口 `submit_review` 提交，移除旧 `start_review` 命令；创建前校验目标类型、必需非空字符串、字段白名单及幂等键。创建/失败摘要遵循普通提交 envelope，两个入口共享 16 个在途调用和 8 MiB 编码输入预算。
+- Review 使用独立启动登记表，完整项目/任务/目标指纹参与同键校验；沿用 Turn 登记的数量、编码、保留窗口、取消等待与原生运行时未就绪重试规则。重复键重放原启动结果，不能用于重新审查已经变化的仓库状态。
+
 - Tauri 命令按职责拆分在 `src-tauri/src/application/*_commands.rs`
 - 命令通过 `AppState` 编排行为，不在入口中堆叠领域逻辑
 - Web 端对应调用集中在 `src/platform/tauri/`

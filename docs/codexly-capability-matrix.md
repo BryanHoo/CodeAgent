@@ -49,7 +49,8 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 长历史分页 | `readTask` cursor | `legacy` 使用 `full`；`paginated` 使用 `notLoaded` + 并发 `thread/items/list` | 已实现 |
 | 回合控制 | `startTurn`, `steerTurn`, `interruptTurn` | 原生 `turn/start`, `turn/steer`, `turn/interrupt` | 已实现 |
 | Goal 模式 | `updateTaskGoal`, `clearTaskGoal` | 原生 `thread/goal/*`；Goal 启动等待真实 `turn/started` | 已实现 |
-| 高级会话 | `startReview`, `compactTask`, `forkTask` | 原生 `review/start`, `thread/compact/start`, `thread/fork` | 已实现 |
+| Review 提交 | `submitReview` | Rust 创建后执行 `review/start`，保留部分成功摘要；独立有界启动登记合并同键请求，取消等待不取消 worker；不提供跨重启整体恢复 | 已实现 |
+| 高级会话 | `compactTask`, `forkTask` | 原生 `thread/compact/start`, `thread/fork` | 已实现 |
 | 任务设置 | `getTaskSettings`, `updateTaskSettings` | 应用私有原子 JSON；启动回合前持久化并同步线程设置 | 已实现 |
 | 排队提交 | `list/add/update/delete/reorder/startQueuedSubmission` | 原生 `thread/queue/*`，保留顺序和编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |

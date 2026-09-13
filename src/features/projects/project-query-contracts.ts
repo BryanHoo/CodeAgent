@@ -110,7 +110,7 @@ export type NativeMutationClient = Pick<
   | "renameTask"
   | "moveQueuedSubmission"
   | "reorderProjects"
-  | "startReview"
+  | "submitReview"
   | "startQueuedSubmission"
   | "startTask"
   | "startTurn"

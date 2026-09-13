@@ -6,7 +6,6 @@ import type {
   AgentTask,
   AgentTaskSettings,
   AgentTaskSnapshot,
-  AgentTurn,
   AgentTurnOptions,
 } from "@/protocol/index.js";
 import { v4 as createUuid } from "uuid";
@@ -192,30 +191,10 @@ type StartTaskReviewOptions = Readonly<{
 }>;
 
 export async function startTaskReview(
-  client: Pick<NativeMutationClient, "startReview" | "startTask">,
+  client: Pick<NativeMutationClient, "submitReview">,
   options: StartTaskReviewOptions,
-): Promise<Readonly<{ createdTask?: AgentTask; taskId: string; turn: AgentTurn }>> {
-  let taskId = options.taskId;
-  let createdTask: AgentTask | undefined;
-  if (taskId === undefined) {
-    const response = await client.startTask(options.projectId, {
-      idempotencyKey: options.idempotencyKey,
-    });
-    createdTask = response.task;
-    taskId = response.task.id;
-    options.onTaskCreated?.(response.task);
-  }
-  const response = await client.startReview(
-    options.projectId,
-    taskId,
-    { target: options.target },
-    { idempotencyKey: options.idempotencyKey },
-  );
-  return {
-    ...(createdTask === undefined ? {} : { createdTask }),
-    taskId,
-    turn: response.turn,
-  };
+) {
+  return client.submitReview(options);
 }
 
 export function interruptPromptTurn(

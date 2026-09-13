@@ -11,6 +11,18 @@ void test("prompt submission command is registered and granted only to main", ()
   }
 });
 
+void test("review submission replaces the unguarded start command and remains main-only", () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  assert.ok(read("src-tauri/build.rs").includes('"submit_review"'));
+  assert.ok(!read("src-tauri/build.rs").includes('"start_review"'));
+  assert.ok(read("src-tauri/src/lib.rs").includes("submit_review,"));
+  const permissions = read("src-tauri/permissions/window-command-sets.toml");
+  assert.ok(!permissions.includes('"allow-start-review"'));
+  for (const set of permissions.split("[[set]]").slice(1)) {
+    assert.equal(set.includes('"allow-submit-review"'), set.includes('identifier = "main-window-commands"'));
+  }
+});
+
 void test("queue move command replaces raw reorder and is granted only to the main window", () => {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   const manifest = read("src-tauri/build.rs");

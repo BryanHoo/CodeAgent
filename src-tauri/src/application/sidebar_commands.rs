@@ -352,21 +352,6 @@ pub async fn resolve_pending_request(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn start_review(
-    project_id: String,
-    task_id: String,
-    input: Value,
-    state: State<'_, AppState>,
-) -> Result<Value, AppError> {
-    let connection = state.codex_connection().await?;
-    let target = input.get("target").ok_or(AppError::CodexRequestFailed)?;
-    let response = codex::start_review(&connection, &project_id, &task_id, target)
-        .await
-        .map_err(AppError::from)?;
-    serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
-}
-
-#[tauri::command(rename_all = "camelCase")]
 pub async fn compact_task(
     project_id: String,
     task_id: String,

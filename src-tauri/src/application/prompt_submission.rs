@@ -24,8 +24,11 @@ impl Default for SubmissionBudget {
 }
 
 impl SubmissionBudget {
-    fn reserve(&self, bytes: usize) -> Result<(OwnedSemaphorePermit, OwnedSemaphorePermit), Value> {
-        let exhausted = || json!({"code": "IDEMPOTENCY_CAPACITY_EXCEEDED", "message": "Prompt submission capacity is exhausted; retry later"});
+    pub(super) fn reserve(
+        &self,
+        bytes: usize,
+    ) -> Result<(OwnedSemaphorePermit, OwnedSemaphorePermit), Value> {
+        let exhausted = || json!({"code": "IDEMPOTENCY_CAPACITY_EXCEEDED", "message": "Task submission capacity is exhausted; retry later"});
         let bytes = u32::try_from(bytes).map_err(|_| exhausted())?;
         // 不排队保留输入；任一预算不足立即拒绝，已取得的许可自动释放。
         let request = Arc::clone(&self.requests)
@@ -89,7 +92,7 @@ pub async fn submit_prompt(
 ) -> Result<SubmissionResponse, Value> {
     let bytes = request.validate()?;
     // 覆盖创建等待阶段，直到提交返回才释放；阶段内部另有各自的有界登记表。
-    let _admission = app.state::<AppState>().prompt_submissions.reserve(bytes)?;
+    let _admission = app.state::<AppState>().submission_budget.reserve(bytes)?;
     let creation_app = app.clone();
     let creation_project = request.project_id.clone();
     submit(
@@ -144,7 +147,7 @@ enum SubmissionOutcome {
     Failed { error: Value },
 }
 
-async fn submit<C, N, S, F>(
+pub(super) async fn submit<C, N, S, F>(
     task_id: Option<String>,
     create: C,
     notify: N,

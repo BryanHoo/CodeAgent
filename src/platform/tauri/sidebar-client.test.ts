@@ -346,7 +346,7 @@ describe("TauriSidebarClient", () => {
     });
   });
 
-  it("routes review, compact, and fork through native Tauri commands", async () => {
+  it("routes compact and fork through native Tauri commands", async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === "compact_task") return { status: "compacting", taskId: "thread-a" };
       if (command === "fork_task") {
@@ -377,9 +377,6 @@ describe("TauriSidebarClient", () => {
       invoke: invoke as InvokeImplementation,
     });
 
-    await client.startReview("project-a", "thread-a", {
-      target: { type: "uncommitted_changes" },
-    });
     await client.compactTask("project-a", "thread-a");
     await client.forkTask("project-a", "thread-a", { lastTurnId: "turn-a" });
     const settings = {
@@ -396,43 +393,38 @@ describe("TauriSidebarClient", () => {
     await client.listBackgroundTerminals("project-a", "thread-a");
     await client.terminateBackgroundTerminal("project-a", "thread-a", "42");
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "start_review", {
-      input: { target: { type: "uncommitted_changes" } },
+    expect(invoke).toHaveBeenNthCalledWith(1, "compact_task", {
       projectId: "project-a",
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(2, "compact_task", {
-      projectId: "project-a",
-      taskId: "thread-a",
-    });
-    expect(invoke).toHaveBeenNthCalledWith(3, "fork_task", {
+    expect(invoke).toHaveBeenNthCalledWith(2, "fork_task", {
       lastTurnId: "turn-a",
       projectId: "project-a",
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(4, "get_task_settings", {
+    expect(invoke).toHaveBeenNthCalledWith(3, "get_task_settings", {
       projectId: "project-a",
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(5, "update_task_settings", {
+    expect(invoke).toHaveBeenNthCalledWith(4, "update_task_settings", {
       projectId: "project-a",
       settings,
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(6, "update_task_goal", {
+    expect(invoke).toHaveBeenNthCalledWith(5, "update_task_goal", {
       projectId: "project-a",
       status: "paused",
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(7, "clear_task_goal", {
+    expect(invoke).toHaveBeenNthCalledWith(6, "clear_task_goal", {
       projectId: "project-a",
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(8, "list_background_terminals", {
+    expect(invoke).toHaveBeenNthCalledWith(7, "list_background_terminals", {
       projectId: "project-a",
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(9, "terminate_background_terminal", {
+    expect(invoke).toHaveBeenNthCalledWith(8, "terminate_background_terminal", {
       projectId: "project-a",
       taskId: "thread-a",
       terminalId: "42",

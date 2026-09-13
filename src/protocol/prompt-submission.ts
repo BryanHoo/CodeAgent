@@ -1,5 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
-import { AgentTaskSchema } from "./agent-attachments.js";
+import { taskSubmissionResponseSchema } from "./task-submission.js";
 import { AgentPromptInputSchema } from "./agent-task.js";
 import { AgentTurnOptionsSchema } from "./project-settings.js";
 import { StartAgentTurnResponseSchema } from "./agent-actions.js";
@@ -14,11 +14,5 @@ export const SubmitPromptRequestSchema = Type.Object({
 }, { additionalProperties: false });
 export type SubmitPromptRequest = Readonly<Static<typeof SubmitPromptRequestSchema>>;
 
-export const SubmitPromptResponseSchema = Type.Object({
-  createdTask: Type.Union([AgentTaskSchema, Type.Null()]),
-  outcome: Type.Union([
-    Type.Object({ type: Type.Literal("started"), result: StartAgentTurnResponseSchema }, { additionalProperties: false }),
-    Type.Object({ type: Type.Literal("failed"), error: Type.Unknown() }, { additionalProperties: false }),
-  ]),
-}, { additionalProperties: false });
+export const SubmitPromptResponseSchema = taskSubmissionResponseSchema(StartAgentTurnResponseSchema);
 export type SubmitPromptResponse = Readonly<Static<typeof SubmitPromptResponseSchema>>;

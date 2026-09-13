@@ -1,5 +1,6 @@
 use super::{StoredResult, TurnStartResult, error};
 use crate::domain::conversation::{AgentPromptInput, AgentTurnOptions};
+use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::io::{self, Write};
@@ -25,6 +26,26 @@ pub fn fingerprint(
     input: &AgentPromptInput,
     options: &AgentTurnOptions,
 ) -> Result<TurnStartIdentity, Value> {
+    fingerprint_payload(project_id, task_id, &(project_id, task_id, input, options))
+}
+
+pub fn fingerprint_review(
+    project_id: &str,
+    task_id: &str,
+    target: &Value,
+) -> Result<TurnStartIdentity, Value> {
+    fingerprint_payload(
+        project_id,
+        task_id,
+        &(project_id, task_id, "review", target),
+    )
+}
+
+fn fingerprint_payload(
+    project_id: &str,
+    task_id: &str,
+    payload: &impl Serialize,
+) -> Result<TurnStartIdentity, Value> {
     if [project_id, task_id]
         .iter()
         .any(|id| id.is_empty() || id.len() > 1024)
@@ -40,7 +61,7 @@ pub fn fingerprint(
         limit: MAX_REQUEST_BYTES,
     };
     // 对原生反序列化后的完整输入流式取摘要；不创建或保留第二份提示词正文。
-    serde_json::to_writer(&mut writer, &(project_id, task_id, input, options)).map_err(|_| {
+    serde_json::to_writer(&mut writer, payload).map_err(|_| {
         error(
             "INVALID_REQUEST",
             "Turn start request exceeds the encoding budget",
