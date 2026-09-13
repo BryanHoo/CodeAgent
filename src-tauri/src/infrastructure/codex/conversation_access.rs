@@ -12,8 +12,18 @@ pub async fn retain_task_writer(
     task_id: &str,
 ) -> Result<(), ConnectionError> {
     let settings = read_agent_runtime_settings(connection).await?;
+    ensure_task_writer(connection, project_id, task_id, &settings).await
+}
+
+/// 以当前 Provider 状态确认写入权；调用方可复用已读取的偏好，避免重复配置 RPC。
+pub async fn ensure_task_writer(
+    connection: &AppServerConnection,
+    project_id: &str,
+    task_id: &str,
+    settings: &crate::domain::agent_configuration::AgentRuntimeSettings,
+) -> Result<(), ConnectionError> {
     // 已载入的线程也必须 resume，重新建立被 unsubscribe 释放的服务端通知订阅。
-    match resume_task(connection, project_id, task_id, &settings).await {
+    match resume_task(connection, project_id, task_id, settings).await {
         Err(error)
             if matches!(&error, ConnectionError::Request { code: -32600, message }
             if message == &format!("no rollout found for thread id {task_id}")) =>

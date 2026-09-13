@@ -95,6 +95,12 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 - 每次调用最多等待 120 秒，超时或调用方取消只结束等待，创建与工作区收尾继续；后续同键可取得最终结果。工作异常退出保留不确定记录，不接管重跑。
 - 失败在保留窗口内也会重放，不能通过同键自动重试创建；新尝试需要新键，并先核对任务列表以避免重复。完整失败重试交互、创建后启动首轮的恢复编排及 Turn 幂等尚未迁移。
 
+## 已实施：启动前线程恢复
+
+本批补齐启动前的原生线程恢复决策：删除前端 `threadAlreadyLoaded` 和 IPC `resumeTask`，普通提交、Goal 与定时任务由 Rust 按当前 Provider 状态确认写入权，复用打开任务时的同一规则与本次已读取偏好。先调用 `thread/resume(excludeTurns:true)` 恢复订阅；只有精确的目标线程缺少 rollout 错误才回退读取轻量线程元数据，验证项目、线程和载入状态。失败不启动 Turn，不额外重试业务操作；现有传输层对过载错误的有界重试保持不变。
+
+这消除了创建结果重放或前端状态过期导致的恢复判断，但尚未合并“创建并启动”事务，也没有实现 Turn 幂等或部分成功后的完整恢复。未新增常驻缓存或 WebView 请求；无 rollout 新线程相比此前跳过恢复的路径增加一次失败恢复 RPC 和一次轻量读取，真实端到端延迟尚未测量。
+
 ## 后续迁移边界
 
 | 顺序 | 待迁移职责 | 验收重点 |
@@ -110,6 +116,8 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 
 ## 验证
 
+2026-09-13 第十批启动前线程恢复迁移的 `pnpm check` 通过：333 项前端测试、481 项 Rust 单元测试、6 项集成测试与 3 项既有性能基线通过，7 项默认忽略；构建、类型检查、格式检查、Clippy 和体积预算通过。原生回归验证无 rollout 新线程继续启动、未载入线程拒绝、项目/线程身份隔离及写入占用错误保留；前端 10 项定向测试通过。真实 Codex 0.154.0 生命周期测试通过，其中验证共用恢复规则的新线程与跨进程占用路径；未实测真实模型 Turn 执行、Goal/定时任务端到端恢复或新增 RPC 的延迟。
+
 2026-09-13 第九批任务创建幂等迁移的 `pnpm check` 通过：333 项前端测试、476 项 Rust 单元测试、6 项集成测试和 3 项既有性能基线通过，另有 7 项测试默认忽略；Modern/Legacy 构建、类型检查、格式检查、Clippy 和体积预算通过。新增 8 项原生回归覆盖重放、并发及取消等待、失败、身份校验、容量与过期、超大结果和工作异常退出；前端协议、客户端与提交定向测试共 11 项通过。真实 Codex 0.154.0 私有安装与 app-server 生命周期测试通过，但该生命周期测试不经过新增注册表；未实测 120 秒等待超时、应用重启恢复或真实 WebView 端到端创建幂等。
 
 ```sh
@@ -124,6 +132,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib file_patch_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib native_queue_move_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib queue_snapshot_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib task_creation_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib turn_readiness_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib conversation_command --locked
 pnpm exec vitest run src/protocol/task-creation.test.ts src/platform/tauri/sidebar-client.test.ts src/features/workbench/composer-state-submission.test.ts
 pnpm exec vitest run src/features/conversation/runtime/task-store-skill-update.test.ts src/features/conversation/runtime/task-runtime-submission.test.ts
 pnpm exec vitest run src/features/diff/file-change.test.ts src/features/workbench/components/workbench-inspector-git-status.test.ts

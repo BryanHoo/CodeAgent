@@ -239,13 +239,11 @@ pub async fn start_turn(
     task_id: String,
     input: AgentPromptInput,
     options: AgentTurnOptions,
-    resume_task_before_turn: bool,
     settings: &AgentRuntimeSettings,
 ) -> Result<StartAgentTurnResponse, ConnectionError> {
-    // 新线程已由 thread/start 载入，但首个 Turn 前尚无 rollout，不能立即 resume。
-    if resume_task_before_turn {
-        resume_task(connection, &project_id, &task_id, settings).await?;
-    }
+    // 不信任 WebView 的创建时状态；恢复订阅或确认无 rollout 新线程仍由当前进程载入。
+    super::conversation_access::ensure_task_writer(connection, &project_id, &task_id, settings)
+        .await?;
 
     let response: NativeTurnResponse = connection
         .request(

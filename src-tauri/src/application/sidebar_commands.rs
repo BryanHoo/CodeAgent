@@ -189,19 +189,9 @@ pub async fn start_turn(
     task_id: String,
     input: AgentPromptInput,
     options: AgentTurnOptions,
-    resume_task: bool,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
-    start_turn_for_task(
-        &app,
-        &project_id,
-        &task_id,
-        input,
-        options,
-        resume_task,
-        &state,
-    )
-    .await
+    start_turn_for_task(&app, &project_id, &task_id, input, options, &state).await
 }
 
 #[tauri::command(rename_all = "camelCase")]

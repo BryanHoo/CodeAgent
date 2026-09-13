@@ -22,7 +22,7 @@ const turnOptions: AgentTurnOptions = {
 };
 
 describe("startPromptTurn", () => {
-  it("marks a newly created thread as already loaded for its first turn", async () => {
+  it("leaves thread readiness to Rust after task creation", async () => {
     const startTask = vi.fn(async () => ({ task }));
     const startTurn = vi.fn(async () => ({
       checkpoint: { sequence: 1, sessionId: "runtime-a" },
@@ -50,7 +50,6 @@ describe("startPromptTurn", () => {
 
     expect(startTurn).toHaveBeenCalledWith("project-a", task.id, input, turnOptions, {
       idempotencyKey: "turn-key",
-      threadAlreadyLoaded: true,
     });
   });
 });

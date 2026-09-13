@@ -20,7 +20,6 @@ pub(crate) async fn start_turn_for_task(
     task_id: &str,
     mut input: AgentPromptInput,
     options: AgentTurnOptions,
-    resume_task: bool,
     state: &AppState,
 ) -> Result<Value, AppError> {
     let app_data = app
@@ -52,11 +51,9 @@ pub(crate) async fn start_turn_for_task(
     .await
     .map_err(|_| AppError::FilesystemRequestFailed)?;
     if options.goal_mode {
-        if resume_task {
-            codex::resume_task(&connection, project_id, task_id, &settings)
-                .await
-                .map_err(AppError::from)?;
-        }
+        codex::ensure_task_writer(&connection, project_id, task_id, &settings)
+            .await
+            .map_err(AppError::from)?;
         return start_goal_turn(&connection, project_id, task_id, input, options, state).await;
     }
     let mut response = codex::start_turn(
@@ -65,7 +62,6 @@ pub(crate) async fn start_turn_for_task(
         task_id.to_owned(),
         input,
         options,
-        resume_task,
         &settings,
     )
     .await
@@ -150,7 +146,6 @@ pub(crate) async fn start_scheduled_task_turn(
         task_id,
         scheduled.prompt.clone(),
         scheduled.turn_options.clone(),
-        false,
         &state,
     )
     .await;

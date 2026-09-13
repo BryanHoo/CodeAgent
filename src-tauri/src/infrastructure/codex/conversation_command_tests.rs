@@ -117,7 +117,6 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
         "thread-a".to_owned(),
         AgentPromptInput::text("修复测试"),
         options,
-        true,
         &settings,
     )
     .await
@@ -140,7 +139,7 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
 }
 
 #[tokio::test]
-async fn new_task_first_turn_should_skip_thread_resume() {
+async fn new_task_first_turn_should_confirm_loaded_state_after_missing_rollout() {
     let (client, server) = duplex(32 * 1024);
     let (client_reader, client_writer) = split(client);
     let (server_reader, mut server_writer) = split(server);
@@ -158,14 +157,20 @@ async fn new_task_first_turn_should_skip_thread_resume() {
                 json!({"thread": {"id": "thread-a", "name": null, "preview": "", "projectId": "project-a", "section": null, "updatedAt": 1735689600}}),
             ),
             (
-                "turn/start",
-                json!({"turn": {"id": "turn-a", "status": "inProgress", "startedAt": 1735689600, "completedAt": null, "error": null, "items": []}}),
+                "thread/resume",
+                json!({"code": -32600, "message": "no rollout found for thread id thread-a"}),
             ),
+            ("thread/read", json!({"thread": native_task("thread-a")})),
+            ("turn/start", json!({"turn": native_turn("turn-a")})),
         ] {
             let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap())
                 .expect("request should be JSON");
             assert_eq!(request["method"], method);
-            let response = json!({"id": request["id"].clone(), "result": result});
+            let response = if method == "thread/resume" {
+                json!({"id": request["id"], "error": result})
+            } else {
+                json!({"id": request["id"], "result": result})
+            };
             server_writer
                 .write_all(format!("{}\n", serde_json::to_string(&response).unwrap()).as_bytes())
                 .await
@@ -187,11 +192,10 @@ async fn new_task_first_turn_should_skip_thread_resume() {
         task.task.id,
         AgentPromptInput::text("首条消息"),
         AgentTurnOptions::default(),
-        false,
         &Default::default(),
     )
     .await
-    .expect("first turn should start without resuming the new thread");
+    .expect("first turn should reuse only a natively confirmed loaded thread");
 
     assert_eq!(turn.turn.id, "turn-a");
     server_task.await.unwrap();

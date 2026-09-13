@@ -39,6 +39,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 任务列表 | `listTasks`, `startTask`, `renameTask`, `pinTask` | 原生 `thread/list`, `thread/start`, `thread/name/set`, `thread/section/set`；临时任务在 `appData/temporary-workspaces/` 分配独立 `cwd`；`thread/start`、`thread/resume`、`thread/fork` 均以线程配置覆盖启用 `tools.update_plan.enabled`，恢复时不覆盖已保存的 `cwd` | 已实现 |
 | 归档与删除 | `archiveTask`, `unarchiveTask`, `deleteTask`, `unsubscribeTask` | 原生 thread 生命周期；删除临时任务后仅清理验证为受控直接子目录的工作区；Rust lease 管理器在终态触发释放，活跃任务保持 busy 并有界退避重试，WebView 只声明消费者挂载/卸载 | 已实现 |
 | 会话快照 | `readTask` | `thread/read(includeTurns:false)` + `thread/turns/list` | 已实现 |
+| 启动前线程恢复 | `startTurn` | 普通、Goal 和定时任务在 Rust 恢复订阅；无 rollout 新线程仅经当前 Provider 的身份及载入状态校验后继续，前端不传恢复标志 | 已实现 |
 | 任务创建幂等 | `startTask` | 前端显式传入键；Rust 合并同键并发并在注册后 15 分钟内重放结果，最多 128 条记录。等待取消或超时不取消创建；不覆盖应用重启及 Turn 启动 | 已实现 |
 | 跨客户端占用 | `retainTaskSubscription` | 以 `thread/resume(excludeTurns:true)` 确认写入权并恢复订阅，无 rollout 新线程经本进程载入状态确认后复用；冲突保留历史和草稿，锁定当前任务操作并覆盖输入区；重新进入任务时重新检查，不轮询 | 已实现 |
 | 回答复制 | Markdown 复制按钮 | 点击时通过 Tauri 原生剪贴板复制原始 Markdown，避免 WebView 权限限制；不进行格式转换，不增加流式解析或渲染成本 | 已实现 |

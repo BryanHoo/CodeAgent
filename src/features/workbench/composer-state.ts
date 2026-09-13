@@ -209,7 +209,6 @@ export async function startPromptTurn(
     options.turnOptions,
     {
       idempotencyKey: options.idempotencyKeys.startTurn,
-      threadAlreadyLoaded: createdTask !== undefined,
     },
   );
   return {

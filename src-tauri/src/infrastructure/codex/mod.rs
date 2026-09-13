@@ -128,7 +128,7 @@ pub use conversation_advanced::{
 };
 pub use conversation_background::{list_background_terminals, terminate_background_terminal};
 pub use conversation_commands::{
-    interrupt_turn, resume_task, start_task, start_turn, steer_turn, update_thread_settings,
+    interrupt_turn, start_task, start_turn, steer_turn, update_thread_settings,
 };
 pub use conversation_events::map_server_event_now;
 pub use conversation_queue::{
@@ -156,6 +156,8 @@ pub use tasks::{
 };
 mod conversation_access;
 mod model_cache;
-pub use conversation_access::retain_task_writer;
+#[cfg(test)]
+mod turn_readiness_tests;
+pub use conversation_access::{ensure_task_writer, retain_task_writer};
 #[cfg(test)]
 mod model_cache_tests;
