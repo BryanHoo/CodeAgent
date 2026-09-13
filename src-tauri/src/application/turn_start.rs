@@ -15,8 +15,8 @@ use tokio::sync::watch;
 mod payload;
 use payload::{TurnStartIdentity, encode_result};
 pub use payload::{
-    fingerprint, fingerprint_queue_content, fingerprint_queue_start, fingerprint_queued_steer,
-    fingerprint_review, fingerprint_steer,
+    fingerprint, fingerprint_pending_resolution, fingerprint_queue_content,
+    fingerprint_queue_start, fingerprint_queued_steer, fingerprint_review, fingerprint_steer,
 };
 
 pub type TurnStartResult = Result<Value, Value>;

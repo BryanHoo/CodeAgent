@@ -274,59 +274,12 @@ pub async fn interrupt_turn(
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn resolve_pending_request(
-    request_id: String,
+    app: AppHandle,
+    request: super::pending_resolution::PendingResolutionReference,
     resolution: Value,
-    state: State<'_, AppState>,
-) -> Result<Value, AppError> {
-    let connection = state.codex_connection().await?;
-    let pending = state
-        .take_pending_request(&request_id)
-        .await
-        .ok_or(AppError::CodexRequestFailed)?;
-    if pending.request.get("type").and_then(Value::as_str) == Some("plugin_install_suggestion")
-        && resolution.get("action").and_then(Value::as_str) == Some("accept")
-        && pending.request.get("toolType").and_then(Value::as_str) == Some("plugin")
-    {
-        let marketplace_name = pending
-            .request
-            .get("remoteMarketplaceName")
-            .and_then(Value::as_str);
-        let remote_plugin_id = pending
-            .request
-            .get("remotePluginId")
-            .and_then(Value::as_str);
-        let suggestion_id = pending.request.get("suggestionId").and_then(Value::as_str);
-        let install_result = match (marketplace_name, remote_plugin_id) {
-            (Some(marketplace_name), Some(remote_plugin_id)) => {
-                codex::install_official_plugin(
-                    &connection,
-                    marketplace_name,
-                    None,
-                    remote_plugin_id,
-                    suggestion_id,
-                )
-                .await
-            }
-            _ => Err(codex::ConnectionError::InvalidMessage),
-        };
-        if let Err(error) = install_result {
-            state.restore_pending_request(pending).await;
-            return Err(AppError::from(error));
-        }
-    }
-    let result = match codex::response_for_resolution(&pending, &resolution) {
-        Ok(result) => result,
-        Err(_) => {
-            state.restore_pending_request(pending).await;
-            return Err(AppError::CodexRequestFailed);
-        }
-    };
-    if connection.respond(pending.rpc_id, &result).await.is_err() {
-        state.restore_pending_request(pending).await;
-        return Err(AppError::CodexRequestFailed);
-    }
-    let request = state.publish_resolved_request(&pending).await?;
-    Ok(json!({"request": request}))
+    idempotency_key: String,
+) -> Result<Value, Value> {
+    super::pending_resolution::resolve(app, request, resolution, idempotency_key).await
 }
 
 #[tauri::command(rename_all = "camelCase")]

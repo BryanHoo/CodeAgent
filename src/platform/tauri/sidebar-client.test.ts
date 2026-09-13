@@ -349,11 +349,15 @@ describe("TauriSidebarClient", () => {
       invoke: invoke as InvokeImplementation,
     });
 
-    await expect(client.resolvePendingRequest(request, { decision: "allow" })).resolves.toEqual(
+    await expect(client.resolvePendingRequest(request, { decision: "allow" }, { idempotencyKey: "approval-key" })).resolves.toEqual(
       response,
     );
     expect(invoke).toHaveBeenCalledWith("resolve_pending_request", {
-      requestId: "number:9",
+      request: {
+        projectId: "project-a", taskId: "thread-a", turnId: "turn-a", itemId: "item-a",
+        requestId: "number:9", createdAt: "2025-01-01T00:00:00Z",
+      },
+      idempotencyKey: "approval-key",
       resolution: { decision: "allow" },
     });
   });

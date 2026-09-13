@@ -23,6 +23,8 @@ mod event_publisher;
 #[path = "state_start.rs"]
 mod runtime_start;
 use event_delivery::prepare_event_delivery;
+#[path = "state_pending_resolution.rs"]
+mod pending_resolution_state;
 #[path = "state_performance_metrics.rs"]
 pub(super) mod performance_metrics;
 #[path = "state_runtime_supervisor.rs"]
@@ -65,6 +67,8 @@ use runtime_supervisor::{
 
 #[derive(Default)]
 pub struct AppState {
+    pub(super) pending_resolutions: super::turn_start::TurnStartRegistry,
+    pub(super) pending_resolution_budget: super::prompt_submission::SubmissionBudget,
     pub(super) submission_budget: super::prompt_submission::SubmissionBudget,
     pub(super) review_starts: super::turn_start::TurnStartRegistry,
     pub(super) steer_submissions: super::turn_start::TurnStartRegistry,
@@ -340,28 +344,13 @@ impl AppState {
             .cancel(thread_id);
     }
 
+    #[cfg(test)]
     pub async fn take_pending_request(&self, request_id: &str) -> Option<PendingServerRequest> {
         self.runtime
             .lock()
             .await
             .pending_requests
             .remove(request_id)
-    }
-
-    pub async fn restore_pending_request(&self, pending: PendingServerRequest) {
-        let Some(request_id) = pending
-            .request
-            .get("requestId")
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-        else {
-            return;
-        };
-        self.runtime
-            .lock()
-            .await
-            .pending_requests
-            .insert(request_id, pending);
     }
 
     pub async fn provider_login(&self) -> Option<Value> {
@@ -372,9 +361,26 @@ impl AppState {
         self.runtime.lock().await.provider_login = pending;
     }
 
+    #[cfg(test)]
     pub async fn publish_resolved_request(
         &self,
         pending: &PendingServerRequest,
+    ) -> Result<Value, AppError> {
+        self.publish_resolution(pending, None).await
+    }
+
+    pub(crate) async fn publish_pending_resolution(
+        &self,
+        connection: &Arc<AppServerConnection>,
+        pending: &PendingServerRequest,
+    ) -> Result<Value, AppError> {
+        self.publish_resolution(pending, Some(connection)).await
+    }
+
+    async fn publish_resolution(
+        &self,
+        pending: &PendingServerRequest,
+        connection: Option<&Arc<AppServerConnection>>,
     ) -> Result<Value, AppError> {
         let mut request = pending.request.clone();
         request["status"] = json!("resolved");
@@ -385,6 +391,9 @@ impl AppState {
         let timestamp = required_event_string(&request, "createdAt")?;
         let delivery = prepare_event_delivery(&self.runtime).await;
         let mut runtime = self.runtime.lock().await;
+        if connection.is_some_and(|connection| !runtime.owns_connection(connection)) {
+            return Err(AppError::PendingRequestUnavailable);
+        }
         let sequence = runtime.project_sequences.entry(project_id).or_default();
         *sequence += 1;
         let event = json!({

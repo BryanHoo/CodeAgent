@@ -2,6 +2,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value, json};
 
+#[cfg(test)]
+#[path = "conversation_user_input_tests.rs"]
+mod user_input_tests;
+
 use super::{
     connection::{ConnectionError, ServerMessage},
     conversation::RUNTIME_SESSION_ID,
@@ -115,6 +119,7 @@ pub fn response_for_resolution(
                 .get("answers")
                 .and_then(Value::as_object)
                 .ok_or(ConnectionError::InvalidMessage)?;
+            validate_user_input_answers(&pending.request, answers)?;
             Ok(json!({"answers": answers.iter().map(|(id, answers)| {
                 (id.clone(), json!({"answers": answers}))
             }).collect::<Map<_, _>>()}))
@@ -263,6 +268,43 @@ fn map_permission_request(
         "status": "pending", "taskId": task_id, "turnId": required_string(params, "turnId")?,
         "type": "permissions_approval",
     }))
+}
+
+fn validate_user_input_answers(
+    request: &Value,
+    answers: &Map<String, Value>,
+) -> Result<(), ConnectionError> {
+    let questions = request["questions"]
+        .as_array()
+        .ok_or(ConnectionError::InvalidMessage)?;
+    if questions.is_empty() || questions.len() > 3 || questions.len() != answers.len() {
+        return Err(ConnectionError::InvalidMessage);
+    }
+    // 原生题目决定回答集合；先借用校验，避免为非法输入复制答案正文。
+    for (index, question) in questions.iter().enumerate() {
+        let id = question["id"]
+            .as_str()
+            .ok_or(ConnectionError::InvalidMessage)?;
+        if questions[..index]
+            .iter()
+            .any(|previous| previous["id"] == id)
+        {
+            return Err(ConnectionError::InvalidMessage);
+        }
+        let values = answers
+            .get(id)
+            .and_then(Value::as_array)
+            .ok_or(ConnectionError::InvalidMessage)?;
+        if values.len() != 1
+            || !values[0]
+                .as_str()
+                .is_some_and(|text| !text.trim().is_empty())
+        {
+            return Err(ConnectionError::InvalidMessage);
+        }
+    }
+    // 只检查非空，不修剪有效正文或强制匹配选项，以保留自由输入和秘密值。
+    Ok(())
 }
 
 fn map_user_input_request(

@@ -7,6 +7,8 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("pending request is unavailable or its identity has changed")]
+    PendingRequestUnavailable,
     #[error(transparent)]
     GoalInput(#[from] crate::domain::goal_input::GoalInputError),
     #[error("queue recovery capacity is exhausted; retry later")]
@@ -90,6 +92,9 @@ impl Serialize for AppError {
             return payload.end();
         }
         let structured_error = match self {
+            Self::PendingRequestUnavailable => {
+                Some(("PENDING_REQUEST_UNAVAILABLE", self.to_string()))
+            }
             Self::GoalInput(error) => Some((error.code(), error.to_string())),
             Self::QueueRecoveryCapacityExceeded => {
                 Some(("IDEMPOTENCY_CAPACITY_EXCEEDED", self.to_string()))

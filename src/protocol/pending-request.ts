@@ -46,6 +46,10 @@ const PendingRequestResolutionIdentityProperties = {
   turnId: Type.String({ minLength: 1 }),
 };
 
+export type PendingResolutionReference = Readonly<Pick<PendingRequest,
+  "projectId" | "taskId" | "turnId" | "itemId" | "requestId" | "createdAt"
+>>;
+
 export const PendingUserInputOptionSchema = Type.Object(
   {
     description: Type.String(),

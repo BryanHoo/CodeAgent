@@ -24,6 +24,12 @@
 - `StartAgentQueuedSubmissionRequest` 必须传入有界项目、任务及显式幂等键，可选队列项省略或 `null` 表示下一项。Rust 按这些身份独立登记；同键重放原 Turn，不能再次消费下一项，也不能重新清除编辑状态。指定项变化必须换键，失败和不确定结果遵循 Turn 登记规则；仅原生运行时未就绪允许同键重试。
 - 队列启动和普通提交、Review、Steer 共用入口预算；队列启动不自动切换为 Steer，不包含“追加 → 删除”整体事务或跨进程恢复。
 
+## 待处理请求回答契约
+
+待处理请求的回答必须透传显式幂等键，以及 `PendingResolutionReference` 的 `projectId`、`taskId`、`turnId`、`itemId`、`requestId`、`createdAt`。Rust 校验原生记录并以完整回答登记，前端不生成传输层替代键；改回答或目标不能复用旧键。`PENDING_REQUEST_UNAVAILABLE` 表示记录不可操作或身份变化；`TURN_START_UNCERTAIN` 在此表示回答结果未知，不能自动换键重发。此入口的预算独立于普通提交，具体数量及恢复边界见 [IPC 契约](../../src-tauri/backend/ipc-contracts.md)。
+
+`user_input` 回答由 Rust 对照原生题目校验：题目 ID 必须唯一，答案键集合必须精确覆盖全部题目，每题仅一个非空白字符串。合法自由文本原样保留，不增加选项标签白名单。前端禁用按钮仅提供即时提示，不能替代原生校验。
+
 ## 附件契约
 
 - Skill 用户消息的开头引用清理由 Rust 统一执行，历史和回合事件中的相邻纯展开项须保留前一用户消息的 ID、附件与顺序。`skillExpansion: true` 只由原生根据清理前的纯 Skill 内容生成，普通消息省略；前端不得从清理后的空正文推断展开身份，也不得再次扫描提交响应规范化正文。跨事件关联由 Rust 发布 `message.skills_updated`，前端只更新明确目标的正文和 Skill，不推断归并对象。新关联不得跨活动项或吞掉有正文/附件的独立输入；无法可靠关联的项原样保留。

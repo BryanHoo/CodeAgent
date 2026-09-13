@@ -56,6 +56,7 @@ import type {
 } from "@/protocol/index.js";
 
 import type { TauriClientOptions } from "./native-client.js";
+import type { PendingResolutionReference } from "@/protocol/pending-request.js";
 import { subscribeProjectEvents } from "./project-event-subscription.js";
 import { TauriRuntimeClient } from "./runtime-client.js";
 import type { SubmitPromptOptions } from "./prompt-submission.js";
@@ -378,10 +379,14 @@ export class TauriSidebarClient extends TauriRuntimeClient {
   public async resolvePendingRequest<T extends PendingRequest>(
     request: T,
     resolution: PendingRequestResolution<T>,
-    _options: MutationOptions = {},
+    options: Readonly<{ idempotencyKey: string }>,
   ): Promise<ResolvePendingRequestResponse> {
     return this.call("resolve_pending_request", {
-      requestId: request.requestId,
+      request: {
+        projectId: request.projectId, taskId: request.taskId, turnId: request.turnId,
+        itemId: request.itemId, requestId: request.requestId, createdAt: request.createdAt,
+      } satisfies PendingResolutionReference,
+      idempotencyKey: options.idempotencyKey,
       resolution,
     });
   }

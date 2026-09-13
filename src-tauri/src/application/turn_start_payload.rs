@@ -48,6 +48,25 @@ pub fn fingerprint_review(
     )
 }
 
+pub fn fingerprint_pending_resolution(
+    project_id: &str,
+    task_id: &str,
+    reference: &impl Serialize,
+    resolution: &Value,
+) -> Result<TurnStartIdentity, Value> {
+    fingerprint_payload(
+        project_id,
+        task_id,
+        &(
+            project_id,
+            task_id,
+            "pending-resolution",
+            reference,
+            resolution,
+        ),
+    )
+}
+
 fn fingerprint_payload(
     project_id: &str,
     task_id: &str,
