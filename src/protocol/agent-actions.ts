@@ -169,6 +169,7 @@ export type SteerAgentTurnRequest = Readonly<Static<typeof SteerAgentTurnRequest
 
 export const SteerAgentTurnResponseSchema = Type.Object(
   {
+    cleanupOnly: Type.Optional(Type.Literal(true)),
     status: Type.Literal("accepted"),
     taskId: Type.String({ minLength: 1 }),
     turnId: Type.String({ minLength: 1 }),

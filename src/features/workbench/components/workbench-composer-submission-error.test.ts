@@ -69,10 +69,11 @@ describe("findUnsupportedInputModality", () => {
 });
 
 describe("createComposerSubmission", () => {
-  it("clears an image-only steer after pending task scope becomes the real task scope", async () => {
+  it.each([false, true])("clears an image-only steer without duplicating its projection (cleanupOnly: %s)", async (cleanupOnly) => {
     const clearComposerInput = vi.fn();
     const onSteerAccepted = vi.fn();
     const steerTurn = vi.fn(async () => ({
+      ...(cleanupOnly ? { cleanupOnly: true } : {}),
       status: "accepted" as const,
       taskId: "task-a",
       turnId: "turn-a",
@@ -99,7 +100,7 @@ describe("createComposerSubmission", () => {
         actionLock: { run: async (action: () => Promise<unknown>) => action() },
         attachmentUploadPromises: { current: new Map() },
         interruptAttempt: { current: undefined },
-        isCurrentScope: () => false,
+        isCurrentScope: () => cleanupOnly,
         setIsSubmitting: vi.fn(),
         setMutationError: vi.fn(),
         setPendingTaskState: vi.fn(),

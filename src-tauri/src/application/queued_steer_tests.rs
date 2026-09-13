@@ -14,6 +14,164 @@ fn request() -> QueuedSteerRequest {
 }
 
 #[tokio::test]
+async fn queued_steer_should_reject_changed_content_even_with_a_new_key() {
+    let registry = Arc::new(QueuedSteerRegistry::default());
+    let budget = SubmissionBudget::default();
+    run(
+        registry.clone(),
+        &budget,
+        request(),
+        |_| async { Ok(json!({})) },
+        || async { Ok(()) },
+    )
+    .await
+    .unwrap();
+    let mut changed = request();
+    changed.idempotency_key = "new-key".into();
+    changed.input = AgentPromptInput::text("edited");
+    let error = run(
+        registry,
+        &budget,
+        changed,
+        |_| async { panic!("accepted queue item must not steer") },
+        || async { panic!("edited queue item must not be deleted") },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error["code"], "IDEMPOTENCY_CONFLICT");
+}
+
+#[tokio::test]
+async fn queued_steer_should_not_replace_an_unconfirmed_attempt_with_a_new_key() {
+    let registry = Arc::new(QueuedSteerRegistry::default());
+    let budget = SubmissionBudget::default();
+    run(
+        registry.clone(),
+        &budget,
+        request(),
+        |_| async { Err(AppError::CodexRequestFailed) },
+        || async { panic!("unconfirmed input must remain queued") },
+    )
+    .await
+    .unwrap_err();
+    let mut retry = request();
+    retry.idempotency_key = "new-key".into();
+    let error = run(
+        registry,
+        &budget,
+        retry,
+        |_| async { panic!("unknown acceptance must not be retried with a new key") },
+        || async { panic!("unknown acceptance must not delete") },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error["code"], "TURN_START_UNCERTAIN");
+}
+
+#[tokio::test]
+async fn queued_steer_should_serialize_different_keys_for_the_same_queue_item() {
+    let registry = Arc::new(QueuedSteerRegistry::default());
+    let budget = SubmissionBudget::default();
+    let mut second = request();
+    second.idempotency_key = "second-key".into();
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let worker_entered = entered.clone();
+    let first = run(
+        registry.clone(),
+        &budget,
+        request(),
+        move |_| async move {
+            worker_entered.notify_one();
+            tokio::task::yield_now().await;
+            Ok(json!({"status":"accepted"}))
+        },
+        || async { Ok(()) },
+    );
+    let second = async {
+        entered.notified().await;
+        run(
+            registry,
+            &budget,
+            second,
+            |_| async { panic!("concurrent retry must not steer twice") },
+            || async { Ok(()) },
+        )
+        .await
+    };
+    let (first, second) = tokio::join!(first, second);
+    assert!(first.is_ok());
+    assert!(second.is_ok());
+}
+
+#[tokio::test]
+async fn queued_steer_should_isolate_recovery_by_project_and_task() {
+    let registry = Arc::new(QueuedSteerRegistry::default());
+    let budget = SubmissionBudget::default();
+    let calls = Arc::new(AtomicUsize::new(0));
+    for index in 0..3 {
+        let mut input = request();
+        input.idempotency_key = format!("key-{index}");
+        if index == 1 {
+            input.project_id = "other-project".into();
+        }
+        if index == 2 {
+            input.task_id = "other-task".into();
+        }
+        let calls = calls.clone();
+        run(
+            registry.clone(),
+            &budget,
+            input,
+            move |_| async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(json!({}))
+            },
+            || async { Ok(()) },
+        )
+        .await
+        .unwrap();
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn queued_steer_should_recover_cleanup_after_key_and_turn_change() {
+    let registry = Arc::new(QueuedSteerRegistry::default());
+    let budget = SubmissionBudget::default();
+    let calls = Arc::new(AtomicUsize::new(0));
+    for attempt in 0..2 {
+        let mut input = request();
+        if attempt == 1 {
+            input.idempotency_key = "new-ui-key".into();
+            input.turn_id = "next-turn".into();
+        }
+        let calls = calls.clone();
+        let result = run(
+            registry.clone(),
+            &budget,
+            input,
+            move |_| async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(json!({"status":"accepted"}))
+            },
+            move || async move {
+                if attempt == 0 {
+                    Err(AppError::CodexRequestFailed)
+                } else {
+                    Ok(())
+                }
+            },
+        )
+        .await;
+        assert_eq!(result.is_ok(), attempt == 1);
+        if attempt == 1 {
+            assert_eq!(result.unwrap()["cleanupOnly"], true);
+        }
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn queued_steer_should_retry_only_delete_on_native_transport() {
     use crate::infrastructure::codex;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
@@ -47,7 +205,7 @@ async fn queued_steer_should_retry_only_delete_on_native_transport() {
         }
         assert!(lines.next_line().await.unwrap().is_none());
     });
-    let registry = Arc::new(TurnStartRegistry::default());
+    let registry = Arc::new(QueuedSteerRegistry::default());
     let budget = SubmissionBudget::default();
     for attempt in 0..2 {
         let steer_connection = connection.clone();
@@ -79,7 +237,7 @@ async fn queued_steer_should_retry_only_delete_on_native_transport() {
 
 #[tokio::test]
 async fn queued_steer_should_retry_cleanup_without_repeating_accepted_steer() {
-    let registry = Arc::new(TurnStartRegistry::default());
+    let registry = Arc::new(QueuedSteerRegistry::default());
     let budget = SubmissionBudget::default();
     let steers = Arc::new(AtomicUsize::new(0));
     for attempt in 0..2 {
@@ -124,7 +282,7 @@ async fn queued_steer_should_not_cleanup_rejected_input() {
 
 #[tokio::test]
 async fn queued_steer_should_bind_queue_turn_and_input_to_key() {
-    let registry = Arc::new(TurnStartRegistry::default());
+    let registry = Arc::new(QueuedSteerRegistry::default());
     let budget = SubmissionBudget::default();
     run(
         registry.clone(),

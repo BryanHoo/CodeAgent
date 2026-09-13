@@ -15,6 +15,10 @@ pub struct TurnStartIdentity {
 }
 
 impl TurnStartIdentity {
+    pub(crate) fn digest(&self) -> [u8; 32] {
+        self.digest
+    }
+
     pub(crate) fn encoded_bytes(&self) -> usize {
         self.bytes
     }
@@ -138,6 +142,19 @@ pub fn fingerprint_queued_steer(
             submission_id,
             input,
         ),
+    )
+}
+
+pub fn fingerprint_queue_content(
+    project_id: &str,
+    task_id: &str,
+    submission_id: &str,
+    input: &AgentPromptInput,
+) -> Result<TurnStartIdentity, Value> {
+    fingerprint_payload(
+        project_id,
+        task_id,
+        &(project_id, task_id, submission_id, input),
     )
 }
 

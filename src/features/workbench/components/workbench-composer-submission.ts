@@ -341,7 +341,7 @@ export function createComposerSubmission({
       );
       steerTurnAttempt.current = steerAttempt;
       try {
-        await steerPromptTurn(
+        const response = await steerPromptTurn(
           client,
           projectId,
           activeTaskId,
@@ -352,7 +352,8 @@ export function createComposerSubmission({
         );
         const isCurrentScopeAfterSteer = isCurrentScope(requestScope);
         const isCurrentTargetAfterSteer = isCurrentSubmissionTarget(projectId, activeTaskId);
-        if (isCurrentScopeAfterSteer) {
+        // 清理重放没有产生新输入，不能把旧消息再次挂到当前回合。
+        if (isCurrentScopeAfterSteer && response.cleanupOnly !== true) {
           onSteerAccepted({
             files: message.files,
             ...(options.queuedPromptId === undefined ? {} : { id: options.queuedPromptId }),
