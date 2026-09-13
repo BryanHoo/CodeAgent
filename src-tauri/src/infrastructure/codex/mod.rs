@@ -27,6 +27,8 @@ mod conversation_plugin_install;
 mod conversation_prompt;
 mod conversation_questions;
 mod conversation_queue;
+mod conversation_queue_move;
+mod conversation_queue_snapshot;
 mod conversation_request_fields;
 mod conversation_requests;
 mod conversation_runtime_events;
@@ -130,9 +132,11 @@ pub use conversation_commands::{
 };
 pub use conversation_events::map_server_event_now;
 pub use conversation_queue::{
-    add_queued_submission, delete_queued_submission, list_queued_submissions,
-    reorder_queued_submissions, start_queued_submission, update_queued_submission,
+    add_queued_submission, delete_queued_submission, start_queued_submission,
+    update_queued_submission,
 };
+pub use conversation_queue_move::move_queued_submission;
+pub use conversation_queue_snapshot::{QueueSnapshot, read_queued_submissions};
 pub(crate) use conversation_requests::MappedServerRequest;
 pub use conversation_requests::{
     PendingServerRequest, map_server_request_now, resolved_request_id, response_for_resolution,

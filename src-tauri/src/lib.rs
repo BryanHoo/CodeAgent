@@ -75,7 +75,7 @@ use application::{
     tray_commands::setup_tray,
     workflow_commands::{
         add_queued_submission, clear_task_goal, delete_queued_submission,
-        list_background_terminals, list_queued_submissions, reorder_queued_submissions,
+        list_background_terminals, list_queued_submissions, move_queued_submission,
         start_queued_submission, terminate_background_terminal, update_queued_submission,
         update_task_goal, upload_feedback,
     },
@@ -260,7 +260,7 @@ pub fn run() {
             add_queued_submission,
             update_queued_submission,
             delete_queued_submission,
-            reorder_queued_submissions,
+            move_queued_submission,
             start_queued_submission,
             list_project_files,
             search_project_files,

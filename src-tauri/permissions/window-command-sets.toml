@@ -97,7 +97,7 @@ permissions = [
   "allow-add-queued-submission",
   "allow-update-queued-submission",
   "allow-delete-queued-submission",
-  "allow-reorder-queued-submissions",
+  "allow-move-queued-submission",
   "allow-start-queued-submission",
   "allow-list-project-files",
   "allow-search-project-files",

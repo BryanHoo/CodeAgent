@@ -254,6 +254,24 @@ impl AppState {
             .cloned()
     }
 
+    pub async fn complete_queue_snapshot(
+        &self,
+        task_id: &str,
+        editing_at_read: Option<&str>,
+        snapshot: &mut crate::infrastructure::codex::QueueSnapshot,
+    ) {
+        let mut runtime = self.runtime.lock().await;
+        let Some(editing_id) = runtime.queue_editing_by_task.get(task_id) else {
+            return;
+        };
+        if let Some(item) = snapshot.data.iter_mut().find(|item| item.id == *editing_id) {
+            item.status = "editing";
+        } else if editing_at_read == Some(editing_id.as_str()) {
+            // 仅完整快照可清理缺失项；读取期间切换到其他编辑项时不能误清新状态。
+            runtime.queue_editing_by_task.remove(task_id);
+        }
+    }
+
     pub async fn update_queue_editing(&self, task_id: &str, submission_id: &str, editing: bool) {
         let mut runtime = self.runtime.lock().await;
         if editing {
@@ -420,6 +438,9 @@ mod reliability_tests;
 #[path = "state_stream_tests.rs"]
 mod stream_tests;
 
+#[cfg(test)]
+#[path = "state_queue_snapshot_tests.rs"]
+mod queue_snapshot_tests;
 #[cfg(test)]
 #[path = "state_skill_snapshot_tests.rs"]
 mod skill_snapshot_tests;

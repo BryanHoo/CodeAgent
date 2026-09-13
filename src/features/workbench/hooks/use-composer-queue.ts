@@ -1,4 +1,4 @@
-import type { AgentPromptInput, AgentQueuedSubmission, AgentSkill } from "@/protocol/index.js";
+import type { AgentPromptInput, AgentSkill } from "@/protocol/index.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { v4 as createUuid } from "uuid";
@@ -45,27 +45,6 @@ type ComposerQueueOptions = Readonly<{
   taskId: string | undefined;
 }>;
 
-async function listAllQueuedSubmissions(
-  client: NativeMutationClient,
-  projectId: string,
-  taskId: string,
-  signal: AbortSignal,
-): Promise<readonly AgentQueuedSubmission[]> {
-  const submissions: AgentQueuedSubmission[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await client.listQueuedSubmissions(
-      projectId,
-      taskId,
-      { ...(cursor === undefined ? {} : { cursor }), limit: 100 },
-      { signal },
-    );
-    submissions.push(...page.data);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor !== undefined);
-  return submissions;
-}
-
 export function useComposerQueue({
   activeTurnId,
   client,
@@ -84,7 +63,7 @@ export function useComposerQueue({
   // oxlint-disable-next-line @tanstack/query/exhaustive-deps
   const queueQuery = useQuery({
     enabled: taskId !== undefined,
-    queryFn: ({ signal }) => listAllQueuedSubmissions(client, projectId, taskId ?? "", signal),
+    queryFn: async ({ signal }) => (await client.listQueuedSubmissions(projectId, taskId ?? "", { signal })).data,
     queryKey,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -255,23 +234,12 @@ export function useComposerQueue({
     if (taskId === undefined) {
       return;
     }
-    const ids = serverPrompts.map((prompt) => prompt.id);
-    const index = ids.indexOf(queuedPromptId);
-    const target = index + offset;
-    if (index < 0 || target < 0 || target >= ids.length) {
-      return;
+    // 顺序和边界由 Rust 按当前队列判定；失败后也刷新，避免继续操作过期列表。
+    try {
+      await client.moveQueuedSubmission(projectId, taskId, queuedPromptId, offset);
+    } finally {
+      await invalidateQueue();
     }
-    const currentId = ids[index];
-    const targetId = ids[target];
-    if (currentId === undefined || targetId === undefined) {
-      return;
-    }
-    ids[index] = targetId;
-    ids[target] = currentId;
-    await client.reorderQueuedSubmissions(projectId, taskId, ids, {
-      idempotencyKey: createUuid(),
-    });
-    await invalidateQueue();
   };
 
   return {

@@ -161,14 +161,14 @@ describe("TauriSidebarClient", () => {
   });
 
   it("routes queued submissions through native Tauri commands", async () => {
-    const invoke = vi.fn(async () => ({ data: [], nextCursor: null }));
+    const invoke = vi.fn(async () => ({ data: [] }));
     const client = new TauriSidebarClient({
       ensureRuntime: vi.fn(async () => undefined),
       invoke: invoke as InvokeImplementation,
     });
     const input = { attachments: [], skills: [], text: "继续修复", type: "prompt" as const };
 
-    await client.listQueuedSubmissions("project-a", "thread-a", { cursor: "next-a", limit: 20 });
+    await client.listQueuedSubmissions("project-a", "thread-a");
     await client.addQueuedSubmission("project-a", "thread-a", input, "message-a");
     await client.updateQueuedSubmission(
       "project-a",
@@ -178,12 +178,10 @@ describe("TauriSidebarClient", () => {
       "editing",
     );
     await client.deleteQueuedSubmission("project-a", "thread-a", "queue-a");
-    await client.reorderQueuedSubmissions("project-a", "thread-a", ["queue-b", "queue-a"]);
+    await client.moveQueuedSubmission("project-a", "thread-a", "queue-b", -1);
     await client.startQueuedSubmission("project-a", "thread-a", "queue-a");
 
     expect(invoke).toHaveBeenNthCalledWith(1, "list_queued_submissions", {
-      cursor: "next-a",
-      limit: 20,
       projectId: "project-a",
       taskId: "thread-a",
     });
@@ -205,9 +203,10 @@ describe("TauriSidebarClient", () => {
       queuedSubmissionId: "queue-a",
       taskId: "thread-a",
     });
-    expect(invoke).toHaveBeenNthCalledWith(5, "reorder_queued_submissions", {
+    expect(invoke).toHaveBeenNthCalledWith(5, "move_queued_submission", {
       projectId: "project-a",
-      queuedSubmissionIds: ["queue-b", "queue-a"],
+      queuedSubmissionId: "queue-b",
+      offset: -1,
       taskId: "thread-a",
     });
     expect(invoke).toHaveBeenNthCalledWith(6, "start_queued_submission", {

@@ -6,6 +6,10 @@
 
 ## 规则
 
+- 队列 Query 直接消费原生 `{ data }`，不维护 Cursor 循环或拼接页面；读取失败保留查询错误，不把截断、部分成功或失败当成空队列。
+
+- 队列移动只提交条目身份和方向，顺序及边界由 Rust 判断；成功、无变化和失败后均失效对应任务的队列 Query，失败继续交给现有错误入口。前端不得从缓存构造重排列表，也不得对相对移动使用自动重试。
+
 - 每个项目 Runtime 只维持一条事件订阅，并使用 checkpoint/session 信息恢复连接
 - 运行、等待、完成和失败的任务活动事实来源是 Rust `TaskActivityState`；WebView 只保留侧栏渲染投影，重建时必须读取 `get_task_activities` 完整快照
 - 任务看板必须复用 `ProjectDraftStore` 待办与 Rust 任务活动投影；运行中、待处理只遍历有界 Activity Map，已完成由 Rust 过滤 `idle/notLoaded` 后按更新时间提供 10 条一页的跨项目 Cursor，WebView 仅维护项目过滤和 Infinite Query 页面，不提供手动拖拽改写；已完成查询失败只能降级对应列并提供重试，不得替换为全局 Runtime 不可用页面

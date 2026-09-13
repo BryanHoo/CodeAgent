@@ -392,12 +392,11 @@ export const AgentQueuedSubmissionSchema = Type.Object(
 
 export type AgentQueuedSubmission = Readonly<Static<typeof AgentQueuedSubmissionSchema>>;
 
-export const AgentQueuedSubmissionPageSchema = Type.Object(
+export const AgentQueuedSubmissionSnapshotSchema = Type.Object(
   {
-    data: Type.Array(AgentQueuedSubmissionSchema),
-    nextCursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    data: Type.Array(AgentQueuedSubmissionSchema, { maxItems: 10_000 }),
   },
   { additionalProperties: false },
 );
 
-export type AgentQueuedSubmissionPage = Readonly<Static<typeof AgentQueuedSubmissionPageSchema>>;
+export type AgentQueuedSubmissionSnapshot = Readonly<Static<typeof AgentQueuedSubmissionSnapshotSchema>>;

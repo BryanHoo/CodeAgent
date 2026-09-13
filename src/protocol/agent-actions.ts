@@ -207,24 +207,23 @@ export type DeleteAgentQueuedSubmissionResponse = Readonly<
   Static<typeof DeleteAgentQueuedSubmissionResponseSchema>
 >;
 
-export const ReorderAgentQueuedSubmissionsRequestSchema = Type.Object(
+export const MoveAgentQueuedSubmissionRequestSchema = Type.Object(
   {
-    queuedSubmissionIds: Type.Array(Type.String({ minLength: 1 }), {
-      uniqueItems: true,
-    }),
+    queuedSubmissionId: Type.String({ minLength: 1, maxLength: 4096 }),
+    offset: Type.Union([Type.Literal(-1), Type.Literal(1)]),
   },
   { additionalProperties: false },
 );
-export type ReorderAgentQueuedSubmissionsRequest = Readonly<
-  Static<typeof ReorderAgentQueuedSubmissionsRequestSchema>
+export type MoveAgentQueuedSubmissionRequest = Readonly<
+  Static<typeof MoveAgentQueuedSubmissionRequestSchema>
 >;
 
-export const ReorderAgentQueuedSubmissionsResponseSchema = Type.Object(
-  { status: Type.Literal("reordered") },
+export const MoveAgentQueuedSubmissionResponseSchema = Type.Object(
+  { moved: Type.Boolean() },
   { additionalProperties: false },
 );
-export type ReorderAgentQueuedSubmissionsResponse = Readonly<
-  Static<typeof ReorderAgentQueuedSubmissionsResponseSchema>
+export type MoveAgentQueuedSubmissionResponse = Readonly<
+  Static<typeof MoveAgentQueuedSubmissionResponseSchema>
 >;
 
 export const StartAgentQueuedSubmissionRequestSchema = Type.Object(

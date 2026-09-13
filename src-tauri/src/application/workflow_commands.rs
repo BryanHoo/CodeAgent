@@ -102,22 +102,16 @@ pub async fn terminate_background_terminal(
 pub async fn list_queued_submissions(
     project_id: String,
     task_id: String,
-    cursor: Option<String>,
-    limit: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let connection = validate_task(&state, project_id, &task_id).await?;
-    let mut response =
-        codex::list_queued_submissions(&connection, &task_id, cursor.as_deref(), limit)
-            .await
-            .map_err(AppError::from)?;
-    if let Some(editing_id) = state.queue_editing_submission(&task_id).await {
-        if let Some(submission) = response.data.iter_mut().find(|item| item.id == editing_id) {
-            submission.status = "editing";
-        } else {
-            state.clear_queue_editing(&task_id).await;
-        }
-    }
+    let editing_at_read = state.queue_editing_submission(&task_id).await;
+    let mut response = codex::read_queued_submissions(&connection, &task_id)
+        .await
+        .map_err(AppError::from)?;
+    state
+        .complete_queue_snapshot(&task_id, editing_at_read.as_deref(), &mut response)
+        .await;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -205,17 +199,18 @@ pub async fn delete_queued_submission(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn reorder_queued_submissions(
+pub async fn move_queued_submission(
     project_id: String,
     task_id: String,
-    queued_submission_ids: Vec<String>,
+    queued_submission_id: String,
+    offset: i8,
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let connection = validate_task(&state, project_id, &task_id).await?;
-    let response = codex::reorder_queued_submissions(&connection, &task_id, &queued_submission_ids)
+    let moved = codex::move_queued_submission(&connection, &task_id, &queued_submission_id, offset)
         .await
         .map_err(AppError::from)?;
-    serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
+    Ok(serde_json::json!({ "moved": moved }))
 }
 
 #[tauri::command(rename_all = "camelCase")]

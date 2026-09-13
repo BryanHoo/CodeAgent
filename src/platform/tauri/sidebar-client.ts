@@ -13,7 +13,7 @@ import type {
   AddProjectResponse,
   AgentBackgroundTerminalPage,
   AgentPromptInput,
-  AgentQueuedSubmissionPage,
+  AgentQueuedSubmissionSnapshot,
   AgentQueuedSubmissionStatus,
   AgentTaskSnapshotResponse,
   AgentTaskPage,
@@ -40,7 +40,7 @@ import type {
   RenameAgentTaskResponse,
   RenameProjectResponse,
   ReorderProjectsResponse,
-  ReorderAgentQueuedSubmissionsResponse,
+  MoveAgentQueuedSubmissionResponse,
   StartAgentTaskResponse,
   StartAgentTurnResponse,
   StartAgentQueuedSubmissionResponse,
@@ -257,12 +257,9 @@ export class TauriSidebarClient extends TauriRuntimeClient {
   public async listQueuedSubmissions(
     projectId: string,
     taskId: string,
-    input: Readonly<{ cursor?: string; limit?: number }> = {},
     _options: ReadOptions = {},
-  ): Promise<AgentQueuedSubmissionPage> {
+  ): Promise<AgentQueuedSubmissionSnapshot> {
     return this.call("list_queued_submissions", {
-      cursor: input.cursor ?? null,
-      limit: input.limit ?? null,
       projectId,
       taskId,
     });
@@ -309,15 +306,16 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     return this.call("delete_queued_submission", { projectId, queuedSubmissionId, taskId });
   }
 
-  public async reorderQueuedSubmissions(
+  public async moveQueuedSubmission(
     projectId: string,
     taskId: string,
-    queuedSubmissionIds: readonly string[],
-    _options: MutationOptions = {},
-  ): Promise<ReorderAgentQueuedSubmissionsResponse> {
-    return this.call("reorder_queued_submissions", {
+    queuedSubmissionId: string,
+    offset: -1 | 1,
+  ): Promise<MoveAgentQueuedSubmissionResponse> {
+    return this.call("move_queued_submission", {
       projectId,
-      queuedSubmissionIds: [...queuedSubmissionIds],
+      queuedSubmissionId,
+      offset,
       taskId,
     });
   }

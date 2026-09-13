@@ -31,6 +31,54 @@ const queuedSubmission: AgentQueuedSubmission = {
   text: "检查引导信息",
 };
 
+test.each(["moved", "unchanged", "failed"])("sends a move intent and refreshes stale cache after %s", async (outcome) => {
+  let attempted = false;
+  const error = new Error("queue changed");
+  const onError = vi.fn();
+  const moveQueuedSubmission = vi.fn(async () => {
+    attempted = true;
+    if (outcome === "failed") throw error;
+    return { moved: outcome === "moved" };
+  });
+  const listQueuedSubmissions = vi.fn(async () => ({
+    data: attempted ? [] : [queuedSubmission],
+  }));
+  const client = {
+    getTaskAttachmentUrl: () => "asset:attachment",
+    listQueuedSubmissions,
+    moveQueuedSubmission,
+  } as unknown as NativeMutationClient;
+  function Harness() {
+    const queue = useComposerQueue({
+      activeTurnId: undefined,
+      client,
+      handleAttachmentsChange: vi.fn(),
+      projectId: "project-a",
+      replacePromptContent: vi.fn(),
+      routeScope: "project-a:task-a:/work",
+      runtime: undefined,
+      skillEditorRef: { current: null },
+      skills: [],
+      taskId: "task-a",
+    });
+    return queue.queuedPrompts.map((prompt) => (
+      <button key={prompt.id} onClick={() => void queue.moveQueuedPrompt(prompt.id, -1).catch(onError)}>
+        移动排队消息
+      </button>
+    ));
+  }
+  const screen = await render(
+    <QueryClientProvider client={new QueryClient()}><Harness /></QueryClientProvider>,
+  );
+  await screen.getByRole("button", { name: "移动排队消息" }).click();
+  await vi.waitFor(() => expect(moveQueuedSubmission).toHaveBeenCalledWith(
+    "project-a", "task-a", "queue-a", -1,
+  ));
+  await vi.waitFor(() => expect(listQueuedSubmissions).toHaveBeenCalledTimes(2));
+  expect(listQueuedSubmissions).toHaveBeenNthCalledWith(1, "project-a", "task-a", { signal: expect.any(AbortSignal) });
+  await vi.waitFor(() => expect(onError.mock.calls).toEqual(outcome === "failed" ? [[error]] : []));
+});
+
 test("withdraws the complete queued message into the composer before editing", async () => {
   let deleted = false;
   const deleteQueuedSubmission = vi.fn(async () => {
@@ -44,7 +92,6 @@ test("withdraws the complete queued message into the composer before editing", a
       `asset:${attachmentId}`,
     listQueuedSubmissions: vi.fn(async () => ({
       data: deleted ? [] : [queuedSubmission],
-      nextCursor: null,
     })),
     updateQueuedSubmission,
   } as unknown as NativeMutationClient;

@@ -69,6 +69,23 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 - 合成 hunk 截断时只保留完整行，并按保留内容重建行数；连文件头都无法容纳时返回空正文。完整上游补丁仍可能被既有预算截断，预览器继续承担不完整补丁的容错；统计不推测省略内容。
 - 实时 `originalByteLength` 表示上游原文大小，生成头部使结果超限也设置 `truncated`。语法高亮、预览解析和虚拟行布局继续由渲染器处理。
 
+## 已实施：队列相邻移动
+
+`move_queued_submission` 替代 WebView 的全量重排命令；前端只提交 `queuedSubmissionId` 和 `offset: -1 | 1`。Rust 根据当前队列计算相邻交换，条目已出队或无相邻项返回 `{ moved: false }`，不执行写入。前端删除列表复制、索引查找和交换逻辑，三种结果（移动、无变化、失败）均刷新该任务的队列查询，错误继续向调用方传播。
+
+- 读取最多 100 页、每页 100 项，累计 ID 正文最多 256 KiB，单个 ID/游标最多 4096 字节；拒绝重复 ID、空或重复游标、超限页面。读取与重排共用 30 秒超时，不因分页倍增等待时间。
+- 原生只反序列化 ID，不再映射队列提示正文、附件和 Skill；不新增常驻队列副本。WebView 写请求由全量 ID 数组变为固定字段，但新增了按需原生分页读取，Codex 的 list 响应仍含正文，不能宣称端到端延迟或 Provider 传输量下降。
+- Codex 0.154.0 的 `state/src/runtime/queued_items.rs::reorder` 在事务内校验完整 ID 集合。读取后发生增删会被拒绝，本应用不额外重试；该接口没有顺序版本或 CAS，同一集合的外部并发重排仍可能后写覆盖前写。
+- 新命令只授权主窗口，旧 WebView 重排入口、客户端方法和协议 Schema 已移除。相对移动不提供虚假的幂等键参数；完整提交幂等与队列确认状态仍待迁移。
+
+## 已实施：队列完整读取
+
+`list_queued_submissions` 只接受任务作用域，响应改为 `{ data }`；Rust 在一次任务校验后完成分页。前端删除 `listAllQueuedSubmissions` 循环，直接消费 `AgentQueuedSubmissionSnapshot`，旧分页 Schema 和 Cursor 参数同步移除。N 页队列的 WebView 读取由 N 次 invoke 降为一次；Provider 仍需 N 次分页请求，但任务归属校验不再逐页重复。
+
+- 最多 100 页、每页 100 项；分页共用 30 秒超时。按序列化后的 JSON 字节限制完整结果为 4 MiB，包括转义、信封、逗号和编辑状态补齐；计数不分配第二份 JSON 正文。拒绝重复 ID、空/重复游标、超过 4096 字节的游标和超大页，任何失败都丢弃部分结果。
+- 编辑状态在全部页面读取完成后补齐，避免第二页的编辑项被第一页误清。只有与读取前相同且仍缺失的编辑项才清理，读取期间切换到其他条目的新编辑状态保留。
+- 未新增常驻快照缓存；这里的完整结果仅表示已遍历所有页面，并非 Provider 原子快照。外部并发增删导致的分页一致性仍受官方接口约束；实际端到端延迟和真实 WebView 内存尚未测量。
+
 ## 后续迁移边界
 
 | 顺序 | 待迁移职责 | 验收重点 |
@@ -79,7 +96,7 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 | 4 | Diff 摘要/正文按需读取与剩余调度规则 | 统计与补丁规范化已迁移；继续减少未打开详情的正文传输 |
 | 5 | 图片软件加工和结果缓存 | 真实 WebView 主线程负担下降，IPC 字节量与总内存不恶化 |
 
-当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计与补丁规范化，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
+当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计与补丁规范化、队列相邻移动及完整读取，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
 快照元数据和 checkpoint 在同一 Rust 临界区读取，但这不代表上游多个历史 RPC 与实时正文事件已经形成原子快照。
 
 ## 验证
@@ -93,8 +110,12 @@ pnpm exec vitest run src/features/conversation/runtime/task-store-terminal-error
 cargo test --manifest-path src-tauri/Cargo.toml --lib skill --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib file_change_stats_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib file_patch_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib native_queue_move_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib queue_snapshot_should --locked
 pnpm exec vitest run src/features/conversation/runtime/task-store-skill-update.test.ts src/features/conversation/runtime/task-runtime-submission.test.ts
 pnpm exec vitest run src/features/diff/file-change.test.ts src/features/workbench/components/workbench-inspector-git-status.test.ts
+pnpm exec vitest run src/platform/tauri/queue-command-contract.test.ts src/platform/tauri/sidebar-client.test.ts
+pnpm exec vitest run --config vitest.browser.config.ts src/features/workbench/hooks/use-composer-queue.browser.test.tsx
 pnpm check
 ```
 
@@ -104,3 +125,7 @@ pnpm check
 2026-09-12 第六批迁移的前端及供应链检查通过：330 项前端测试、Modern/Legacy 构建、类型检查和体积预算通过。合成补丁截断及反斜杠正文回归修正后，Rust 再次完整验证：454 项单元测试、6 项集成测试通过，7 项默认忽略；格式检查与 Clippy 通过。
 额外验证 Chromium/WebKit 下补丁直传、Legacy 实际解析渲染、操作分组及关键操作共 12 项浏览器测试，以及真实 Codex 0.154.0 私有安装与 app-server 生命周期测试。Modern 渲染器使用替身核对接收到的完整正文，另以真实 `@pierre/diffs` 解析器核对新增、删除和无 hunk 片段的 3 份规范化样例；这些结果不等于真实 WebView 性能实测。
 既有 3 项 Rust 性能基线通过，但未测量本次 Diff 迁移的性能收益。真实原生 WebView 的完整销毁重建交互和性能对比需要另行实测，不能以单元测试代替。
+
+2026-09-13 第七批队列移动迁移的 `pnpm check` 通过：331 项前端测试、Modern/Legacy 构建、类型检查、体积预算及命令授权检查通过；461 项 Rust 单元测试、6 项集成测试、3 项既有性能基线、格式检查与 Clippy 通过，另有 7 项测试默认忽略。定向回归覆盖 7 项原生队列移动测试，以及 Chromium/WebKit 共 8 项队列交互测试。真实 Codex 0.154.0 私有安装和 app-server 生命周期测试通过，但未执行真实队列并发交互或测量本次移动延迟。
+
+2026-09-13 第八批队列读取迁移的 `pnpm check` 通过：332 项前端测试、468 项 Rust 单元测试、6 项集成测试和 3 项既有性能基线通过，另有 7 项测试默认忽略；Modern/Legacy 构建、类型检查、格式检查、Clippy 和体积预算通过。新增 7 项 Rust 队列读取与编辑状态回归，协议及客户端定向测试共 11 项通过，Chromium/WebKit 队列交互共 8 项通过。真实 Codex 0.154.0 生命周期测试通过；完整读取的并发一致性与真实 WebView 性能仍未实测。

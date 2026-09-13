@@ -127,7 +127,7 @@ fn main() {
         "add_queued_submission",
         "update_queued_submission",
         "delete_queued_submission",
-        "reorder_queued_submissions",
+        "move_queued_submission",
         "start_queued_submission",
         "list_project_files",
         "search_project_files",
