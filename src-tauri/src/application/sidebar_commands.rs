@@ -261,28 +261,6 @@ pub async fn update_task_settings(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn steer_turn(
-    app: AppHandle,
-    project_id: String,
-    task_id: String,
-    turn_id: String,
-    mut input: AgentPromptInput,
-    state: State<'_, AppState>,
-) -> Result<AgentTurnActionResponse, AppError> {
-    super::attachment_commands::resolve_prompt_attachments(
-        &app_data_dir(&app)?,
-        &project_id,
-        &task_id,
-        &mut input,
-    )
-    .await?;
-    let connection = state.codex_connection().await?;
-    codex::steer_turn(&connection, task_id, turn_id, input)
-        .await
-        .map_err(AppError::from)
-}
-
-#[tauri::command(rename_all = "camelCase")]
 pub async fn interrupt_turn(
     task_id: String,
     turn_id: String,

@@ -11,7 +11,13 @@
 
 ## Turn 启动契约
 
-- `StartAgentTurnRequest` 必须包含显式非空 `idempotencyKey`，客户端透传原键。Rust 对项目、任务、输入及全部启动选项计算指纹；同键同内容重放原结果（上述运行时未就绪情况可重试），内容改变返回 `IDEMPOTENCY_CONFLICT`。`TURN_START_UNCERTAIN` 不代表执行失败，不得自动换键重跑；其他失败结果保留，新尝试前须核对任务状态。创建与启动是两份独立记录，不是原子提交；steer 和队列操作不受此保证覆盖。
+- `StartAgentTurnRequest` 必须包含显式非空 `idempotencyKey`，客户端透传原键。Rust 对项目、任务、输入及全部启动选项计算指纹；同键同内容重放原结果（上述运行时未就绪情况可重试），内容改变返回 `IDEMPOTENCY_CONFLICT`。`TURN_START_UNCERTAIN` 不代表执行失败，不得自动换键重跑；其他失败结果保留，新尝试前须核对任务状态。创建与启动是两份独立记录，不是原子提交；Steer 使用下节的独立登记，队列操作不受此保证覆盖。
+
+## Steer 提交契约
+
+- `SteerAgentTurnRequest` 必须包含有界非空 Project、Task、Turn 身份及显式幂等键，客户端必须透传调用方原键。Rust 指纹包含完整输入（正文、附件、Skill）与目标 Turn，同键改变任一内容返回 `IDEMPOTENCY_CONFLICT`。
+- Steer 使用独立的有界登记表，在登记后才解析附件与发送 `turn/steer`；重复请求重放原结果。与普通提交、Review 共享 16 个在途调用和 8 MiB 编码输入预算，单项输入上限 4 MiB。取消等待不取消已登记 worker。
+- 仅原生 `CodexRuntimeUnavailable` 允许后续同键重试；其他失败与不确定结果继续重放。`TURN_START_UNCERTAIN` 在此表示 Steer 结果无法确认，不能自动换键追加。上游 `expectedTurnId` 校验必须保留；这不包含前端 start/steer/queue 决策和队列确认编排。
 
 ## 附件契约
 

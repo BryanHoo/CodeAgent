@@ -73,6 +73,26 @@ fn fingerprint_payload(
     })
 }
 
+pub fn fingerprint_steer(
+    project_id: &str,
+    task_id: &str,
+    turn_id: &str,
+    input: &AgentPromptInput,
+) -> Result<TurnStartIdentity, Value> {
+    if turn_id.is_empty() || turn_id.len() > 1024 {
+        return Err(error(
+            "INVALID_REQUEST",
+            "Steer requires a bounded target turn identity",
+        ));
+    }
+    // 目标 Turn 是身份的一部分；同一任务的新回合不能复用旧追加请求。
+    fingerprint_payload(
+        project_id,
+        task_id,
+        &(project_id, task_id, "steer", turn_id, input),
+    )
+}
+
 pub(super) fn encode_result(result: &TurnStartResult) -> StoredResult {
     let mut writer = LimitedWriter {
         inner: Vec::new(),

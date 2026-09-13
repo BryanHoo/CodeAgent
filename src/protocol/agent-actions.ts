@@ -156,8 +156,11 @@ export type StartAgentTurnResponse = Readonly<Static<typeof StartAgentTurnRespon
 
 export const SteerAgentTurnRequestSchema = Type.Object(
   {
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 128, pattern: "\\S" }),
     input: AgentPromptInputSchema,
-    taskId: Type.String({ minLength: 1 }),
+    projectId: Type.String({ minLength: 1, maxLength: 1024 }),
+    taskId: Type.String({ minLength: 1, maxLength: 1024 }),
+    turnId: Type.String({ minLength: 1, maxLength: 1024 }),
   },
   { additionalProperties: false },
 );

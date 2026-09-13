@@ -47,7 +47,8 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 跨客户端占用 | `retainTaskSubscription` | 以 `thread/resume(excludeTurns:true)` 确认写入权并恢复订阅，无 rollout 新线程经本进程载入状态确认后复用；冲突保留历史和草稿，锁定当前任务操作并覆盖输入区；重新进入任务时重新检查，不轮询 | 已实现 |
 | 回答复制 | Markdown 复制按钮 | 点击时通过 Tauri 原生剪贴板复制原始 Markdown，避免 WebView 权限限制；不进行格式转换，不增加流式解析或渲染成本 | 已实现 |
 | 长历史分页 | `readTask` cursor | `legacy` 使用 `full`；`paginated` 使用 `notLoaded` + 并发 `thread/items/list` | 已实现 |
-| 回合控制 | `startTurn`, `steerTurn`, `interruptTurn` | 原生 `turn/start`, `turn/steer`, `turn/interrupt` | 已实现 |
+| Steer 幂等 | `steerTurn` | 原生按项目/任务/目标 Turn/完整输入去重，再解析附件和发送 `turn/steer`；同键重放、取消等待不取消 worker，不覆盖队列确认或跨重启恢复 | 已实现 |
+| 回合控制 | `startTurn`, `interruptTurn` | 原生 `turn/start`, `turn/interrupt` | 已实现 |
 | Goal 模式 | `updateTaskGoal`, `clearTaskGoal` | 原生 `thread/goal/*`；Goal 启动等待真实 `turn/started` | 已实现 |
 | Review 提交 | `submitReview` | Rust 创建后执行 `review/start`，保留部分成功摘要；独立有界启动登记合并同键请求，取消等待不取消 worker；不提供跨重启整体恢复 | 已实现 |
 | 高级会话 | `compactTask`, `forkTask` | 原生 `thread/compact/start`, `thread/fork` | 已实现 |

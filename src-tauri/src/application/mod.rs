@@ -36,6 +36,7 @@ mod sidebar_prompt_title;
 mod sidebar_task_settings;
 pub mod skills_market_commands;
 pub mod state;
+pub mod steer_submission;
 mod task_activity;
 pub mod task_activity_commands;
 #[cfg(test)]
