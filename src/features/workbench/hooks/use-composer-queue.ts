@@ -1,11 +1,12 @@
 import type { AgentPromptInput, AgentSkill } from "@/protocol/index.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { v4 as createUuid } from "uuid";
 
 import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import { taskQueueQueryKey, type NativeMutationClient } from "../../projects/project-queries.js";
+import { resolveIdempotencyAttempt, type IdempotencyAttempt } from "../composer-state.js";
 import {
   hasQueuedPromptFinishedInStore,
   mapAgentQueuedSubmission,
@@ -58,6 +59,7 @@ export function useComposerQueue({
   taskId,
 }: ComposerQueueOptions) {
   const queryClient = useQueryClient();
+  const queueStartAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const queryKey = taskQueueQueryKey(projectId, taskId ?? "");
   // client 是稳定的传输实现，不参与队列缓存身份，缓存仍按 projectId 与 taskId 共享。
   // oxlint-disable-next-line @tanstack/query/exhaustive-deps
@@ -116,6 +118,15 @@ export function useComposerQueue({
   const invalidateQueue = async () => {
     await queryClient.invalidateQueries({ exact: true, queryKey });
   };
+  const startQueued = async (targetTaskId: string, queuedSubmissionId: string) => {
+    const attempt = resolveIdempotencyAttempt(queueStartAttempt.current,
+      JSON.stringify({ projectId, taskId: targetTaskId, queuedSubmissionId }));
+    queueStartAttempt.current = attempt;
+    // 失败保留当前尝试；旧请求成功不能清除另一个目标的新尝试。
+    const response = await client.startQueuedSubmission(projectId, targetTaskId, queuedSubmissionId, { idempotencyKey: attempt.key });
+    if (queueStartAttempt.current === attempt) queueStartAttempt.current = undefined;
+    return response;
+  };
   const saveQueuedSubmission = async (
     input: AgentPromptInput,
     clientUserMessageId: string,
@@ -131,10 +142,9 @@ export function useComposerQueue({
       await client.updateQueuedSubmission(projectId, taskId, editingId, input, "queued", {
         idempotencyKey: createUuid(),
       });
+      queueStartAttempt.current = undefined;
       if (activeTurnId === undefined) {
-        await client.startQueuedSubmission(projectId, taskId, editingId, {
-          idempotencyKey: createUuid(),
-        });
+        await startQueued(taskId, editingId);
       }
     }
     await invalidateQueue();
@@ -216,9 +226,7 @@ export function useComposerQueue({
       await removeQueuedPrompt(queuedPrompt.id);
       return;
     }
-    const response = await client.startQueuedSubmission(projectId, taskId, queuedPrompt.id, {
-      idempotencyKey: createUuid(),
-    });
+    const response = await startQueued(taskId, queuedPrompt.id);
     onSteerAccepted({
       files: queuedPrompt.files,
       id: queuedPrompt.id,

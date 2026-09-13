@@ -178,7 +178,7 @@ describe("TauriSidebarClient", () => {
     );
     await client.deleteQueuedSubmission("project-a", "thread-a", "queue-a");
     await client.moveQueuedSubmission("project-a", "thread-a", "queue-b", -1);
-    await client.startQueuedSubmission("project-a", "thread-a", "queue-a");
+    await client.startQueuedSubmission("project-a", "thread-a", "queue-a", { idempotencyKey: "queue-start-a" });
 
     expect(invoke).toHaveBeenNthCalledWith(1, "list_queued_submissions", {
       projectId: "project-a",
@@ -209,6 +209,7 @@ describe("TauriSidebarClient", () => {
       taskId: "thread-a",
     });
     expect(invoke).toHaveBeenNthCalledWith(6, "start_queued_submission", {
+      idempotencyKey: "queue-start-a",
       projectId: "project-a",
       queuedSubmissionId: "queue-a",
       taskId: "thread-a",

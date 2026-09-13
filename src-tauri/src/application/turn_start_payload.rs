@@ -73,6 +73,24 @@ fn fingerprint_payload(
     })
 }
 
+pub fn fingerprint_queue_start(
+    project_id: &str,
+    task_id: &str,
+    submission_id: Option<&str>,
+) -> Result<TurnStartIdentity, Value> {
+    if submission_id.is_some_and(|id| id.is_empty() || id.len() > 1024) {
+        return Err(error(
+            "INVALID_REQUEST",
+            "Queue start requires a bounded submission identity",
+        ));
+    }
+    fingerprint_payload(
+        project_id,
+        task_id,
+        &(project_id, task_id, "queue-start", submission_id),
+    )
+}
+
 pub fn fingerprint_steer(
     project_id: &str,
     task_id: &str,

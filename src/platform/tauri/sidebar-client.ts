@@ -327,10 +327,11 @@ export class TauriSidebarClient extends TauriRuntimeClient {
   public async startQueuedSubmission(
     projectId: string,
     taskId: string,
-    queuedSubmissionId?: string,
-    _options: MutationOptions = {},
+    queuedSubmissionId: string | undefined,
+    options: Readonly<{ idempotencyKey: string }>,
   ): Promise<StartAgentQueuedSubmissionResponse> {
     return this.call("start_queued_submission", {
+      idempotencyKey: options.idempotencyKey,
       projectId,
       queuedSubmissionId: queuedSubmissionId ?? null,
       taskId,

@@ -212,19 +212,3 @@ pub async fn move_queued_submission(
         .map_err(AppError::from)?;
     Ok(serde_json::json!({ "moved": moved }))
 }
-
-#[tauri::command(rename_all = "camelCase")]
-pub async fn start_queued_submission(
-    project_id: String,
-    task_id: String,
-    queued_submission_id: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Value, AppError> {
-    let connection = validate_task(&state, project_id, &task_id).await?;
-    let response =
-        codex::start_queued_submission(&connection, &task_id, queued_submission_id.as_deref())
-            .await
-            .map_err(AppError::from)?;
-    state.clear_queue_editing(&task_id).await;
-    serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
-}

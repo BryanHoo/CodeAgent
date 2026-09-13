@@ -23,6 +23,7 @@ mod pet_assets;
 pub mod pet_commands;
 pub mod project_file_window_commands;
 pub mod prompt_submission;
+pub mod queue_start;
 mod request_cancellation;
 pub mod review_submission;
 pub mod scheduled_task_commands;

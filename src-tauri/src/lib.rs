@@ -77,8 +77,7 @@ use application::{
     workflow_commands::{
         add_queued_submission, clear_task_goal, delete_queued_submission,
         list_background_terminals, list_queued_submissions, move_queued_submission,
-        start_queued_submission, terminate_background_terminal, update_queued_submission,
-        update_task_goal, upload_feedback,
+        terminate_background_terminal, update_queued_submission, update_task_goal, upload_feedback,
     },
     workspace_commands::{
         commit_project_changes, create_project_branch, create_project_worktree,
@@ -263,7 +262,7 @@ pub fn run() {
             update_queued_submission,
             delete_queued_submission,
             move_queued_submission,
-            start_queued_submission,
+            application::queue_start::start_queued_submission,
             list_project_files,
             search_project_files,
             stop_project_file_search,

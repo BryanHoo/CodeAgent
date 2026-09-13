@@ -31,6 +31,32 @@ const queuedSubmission: AgentQueuedSubmission = {
   text: "检查引导信息",
 };
 
+test("reuses the queue start key after a lost response", async () => {
+  const onError = vi.fn();
+  const startQueuedSubmission = vi.fn()
+    .mockRejectedValueOnce(new Error("response lost"))
+    .mockResolvedValue({ taskId:"task-a", turn:{ id:"turn-a" } });
+  const client = {
+    getTaskAttachmentUrl: () => "asset:attachment",
+    listQueuedSubmissions: async () => ({ data:[queuedSubmission] }),
+    startQueuedSubmission,
+  } as unknown as NativeMutationClient;
+  function Harness() {
+    const queue = useComposerQueue({ activeTurnId:undefined, client,
+      handleAttachmentsChange:vi.fn(), projectId:"project-a", replacePromptContent:vi.fn(),
+      routeScope:"project-a:task-a", runtime:undefined, skillEditorRef:{current:null}, skills:[], taskId:"task-a" });
+    return queue.queuedPrompts.map((prompt) => <button key={prompt.id}
+      onClick={() => void queue.sendQueuedPrompt(prompt, async () => false).catch(onError)}>启动排队消息</button>);
+  }
+  const screen = await render(<QueryClientProvider client={new QueryClient()}><Harness /></QueryClientProvider>);
+  await screen.getByRole("button", {name:"启动排队消息"}).click();
+  await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+  await screen.getByRole("button", {name:"启动排队消息"}).click();
+  await vi.waitFor(() => expect(startQueuedSubmission).toHaveBeenCalledTimes(2));
+  expect(startQueuedSubmission.mock.calls[0]).toEqual(startQueuedSubmission.mock.calls[1]);
+  expect(startQueuedSubmission.mock.calls[0]?.[3]).toEqual({idempotencyKey:expect.any(String)});
+});
+
 test.each(["moved", "unchanged", "failed"])("sends a move intent and refreshes stale cache after %s", async (outcome) => {
   let attempted = false;
   const error = new Error("queue changed");

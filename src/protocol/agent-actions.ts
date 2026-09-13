@@ -237,7 +237,12 @@ export type MoveAgentQueuedSubmissionResponse = Readonly<
 >;
 
 export const StartAgentQueuedSubmissionRequestSchema = Type.Object(
-  { queuedSubmissionId: Type.Optional(Type.String({ minLength: 1 })) },
+  {
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 128, pattern: "\\S" }),
+    projectId: Type.String({ minLength: 1, maxLength: 1024 }),
+    taskId: Type.String({ minLength: 1, maxLength: 1024 }),
+    queuedSubmissionId: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 1024 }), Type.Null()])),
+  },
   { additionalProperties: false },
 );
 export type StartAgentQueuedSubmissionRequest = Readonly<

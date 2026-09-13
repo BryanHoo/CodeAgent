@@ -75,6 +75,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Diff 补丁规范化 | Codex 历史/实时变更、Git 未跟踪文本 | Rust 生成文件头、hunk 和行前缀，保留空白及缺失尾换行标记；已有 Git 补丁原样保留；前端仅解析和渲染 | 已迁入 Rust |
 | 队列相邻移动 | `moveQueuedSubmission` → `thread/queue/list`、`thread/queue/reorder` | 前端仅提交 ID 与方向；Rust 有界读取当前顺序并交换相邻项；出队或边界返回无变化，冲突不重试；不保证外部并发重排的顺序 CAS | 已迁入 Rust |
 | 队列完整读取 | `listQueuedSubmissions` → `thread/queue/list` | Rust 单次校验任务后有界读取全部页，并补齐编辑状态；WebView 只接收 `{ data }`，不传游标；失败不返回部分数据 | 已迁入 Rust |
+| 队列启动幂等 | `startQueuedSubmission` → `thread/queue/start` | 原生登记有界项目/任务/可选队列项身份；同键重放原 Turn，不再次消费下一项或清除编辑状态；按钮重试保留最近失败键，不覆盖运行中追加/删除及跨重启恢复 | 已迁入 Rust |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
 | 右栏检查器 | 文件、Sources、Changes、历史、MCP | MCP 按当前 Task 读取线程级权威快照并展示紧凑连接态与工具数 | 已实现 |
