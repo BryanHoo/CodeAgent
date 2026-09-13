@@ -38,6 +38,45 @@ pub(super) fn uncertain() -> Value {
 }
 
 impl QueuedSteerRegistry {
+    pub(crate) async fn accepted_for_queue(
+        &self,
+        project_id: &str,
+        task_id: &str,
+        submission_id: &str,
+    ) -> Result<Option<CleanupLease>, super::super::error::AppError> {
+        use super::super::{error::AppError, turn_start::fingerprint_queue_start};
+        let identity = fingerprint_queue_start(project_id, task_id, Some(submission_id))
+            .map_err(|_| AppError::QueueRecoveryUncertain)?
+            .digest();
+        let slot = {
+            let entries = self
+                .entries
+                .lock()
+                .map_err(|_| AppError::QueueRecoveryUncertain)?;
+            entries
+                .get(&identity)
+                .filter(|entry| {
+                    entry.created.elapsed() < RETENTION || Arc::strong_count(&entry.state) > 1
+                })
+                .map(|entry| Arc::clone(&entry.state))
+        };
+        let Some(slot) = slot else {
+            return Ok(None);
+        };
+        let guard = tokio::time::timeout(Duration::from_secs(120), slot.lock_owned())
+            .await
+            .map_err(|_| AppError::QueueRecoveryUncertain)?;
+        let content = guard
+            .accepted
+            .as_ref()
+            .ok_or(AppError::QueueRecoveryUncertain)?
+            .content;
+        Ok(Some(CleanupLease {
+            content,
+            _guard: guard,
+        }))
+    }
+
     pub(super) fn acquire(
         &self,
         identity: [u8; 32],
@@ -65,6 +104,12 @@ impl QueuedSteerRegistry {
         );
         Ok(state)
     }
+}
+
+pub(crate) struct CleanupLease {
+    pub content: [u8; 32],
+    // 持有同项协调锁与租约，核对内容和删除期间不能淘汰已接受事实。
+    _guard: tokio::sync::OwnedMutexGuard<RecoveryState>,
 }
 
 #[cfg(test)]

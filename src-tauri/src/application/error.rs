@@ -7,6 +7,12 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("the task queue is empty")]
+    QueueEmpty,
+    #[error("queued prompt acceptance is unconfirmed; inspect the task before retrying")]
+    QueueRecoveryUncertain,
+    #[error("queued content differs from the accepted prompt; inspect it before cleanup")]
+    QueuedContentChanged,
     #[error("global instructions changed; reload before saving")]
     GlobalInstructionsChanged,
     #[error("task window operation failed")]
@@ -80,6 +86,9 @@ impl Serialize for AppError {
             return payload.end();
         }
         let structured_error = match self {
+            Self::QueueEmpty => Some(("QUEUE_EMPTY", self.to_string())),
+            Self::QueueRecoveryUncertain => Some(("TURN_START_UNCERTAIN", self.to_string())),
+            Self::QueuedContentChanged => Some(("IDEMPOTENCY_CONFLICT", self.to_string())),
             Self::GlobalInstructionsChanged => {
                 Some(("GLOBAL_INSTRUCTIONS_CHANGED", self.to_string()))
             }

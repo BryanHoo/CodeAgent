@@ -14,9 +14,21 @@ fn request() -> QueueStartRequest {
     }
 }
 
+async fn run<F>(
+    registry: &Arc<TurnStartRegistry>,
+    budget: &SubmissionBudget,
+    request: QueueStartRequest,
+    execute: F,
+) -> Result<Value, Value>
+where
+    F: Future<Output = Result<Value, AppError>> + Send + 'static,
+{
+    super::run(registry, budget, request, execute, |_| async { Ok(()) }).await
+}
+
 #[tokio::test]
 async fn queue_start_should_not_consume_another_item_when_replaying_next_item_request() {
-    let registry = TurnStartRegistry::default();
+    let registry = Arc::new(TurnStartRegistry::default());
     let budget = SubmissionBudget::default();
     let consumed = Arc::new(AtomicUsize::new(0));
     for _ in 0..2 {
@@ -34,7 +46,7 @@ async fn queue_start_should_not_consume_another_item_when_replaying_next_item_re
 
 #[tokio::test]
 async fn queue_start_should_reject_changed_project_task_or_selected_item() {
-    let registry = TurnStartRegistry::default();
+    let registry = Arc::new(TurnStartRegistry::default());
     let budget = SubmissionBudget::default();
     run(&registry, &budget, request(), async { Ok(json!({})) })
         .await
@@ -64,7 +76,7 @@ async fn queue_start_should_reject_changed_project_task_or_selected_item() {
 
 #[tokio::test]
 async fn queue_start_should_validate_ids_and_keys_before_side_effects() {
-    let registry = TurnStartRegistry::default();
+    let registry = Arc::new(TurnStartRegistry::default());
     let budget = SubmissionBudget::default();
     for request in [
         QueueStartRequest {
@@ -105,7 +117,7 @@ async fn queue_start_should_validate_ids_and_keys_before_side_effects() {
 
 #[tokio::test]
 async fn queue_start_should_share_and_release_the_submission_budget() {
-    let registry = TurnStartRegistry::default();
+    let registry = Arc::new(TurnStartRegistry::default());
     let budget = SubmissionBudget::default();
     let occupied = budget.reserve(8 * 1024 * 1024).unwrap();
     assert_eq!(
@@ -125,7 +137,7 @@ async fn queue_start_should_share_and_release_the_submission_budget() {
 
 #[tokio::test]
 async fn queue_start_should_retry_runtime_unavailable_but_replay_provider_failure() {
-    let registry = TurnStartRegistry::default();
+    let registry = Arc::new(TurnStartRegistry::default());
     let budget = SubmissionBudget::default();
     assert!(
         run(&registry, &budget, request(), async {
@@ -205,7 +217,7 @@ async fn queue_start_should_send_one_native_start_and_replay_the_original_turn()
             "replay must not repeat queue/start"
         );
     });
-    let registry = TurnStartRegistry::default();
+    let registry = Arc::new(TurnStartRegistry::default());
     let budget = SubmissionBudget::default();
     for _ in 0..2 {
         let connection = Arc::clone(&connection);

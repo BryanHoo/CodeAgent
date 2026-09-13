@@ -1,6 +1,13 @@
 import { Value } from "@sinclair/typebox/value";
 import { expect, test } from "vitest";
-import { StartAgentQueuedSubmissionRequestSchema } from "./agent-actions.js";
+import { StartAgentQueuedSubmissionRequestSchema, StartAgentQueuedSubmissionResponseSchema } from "./agent-actions.js";
+
+test("queue cleanup response identifies the consumed item without inventing a turn", () => {
+  const response = { cleanupOnly:true, taskId:"task", queuedSubmissionId:"queue" };
+  expect(Value.Check(StartAgentQueuedSubmissionResponseSchema, response)).toBe(true);
+  expect(Value.Check(StartAgentQueuedSubmissionResponseSchema, { ...response, turn:{} })).toBe(false);
+  expect(Value.Check(StartAgentQueuedSubmissionResponseSchema, { cleanupOnly:true, taskId:"task" })).toBe(false);
+});
 
 test("queue start requires a key and scope while preserving next-item selection", () => {
   const request = { projectId:"project", taskId:"task", idempotencyKey:"key" };

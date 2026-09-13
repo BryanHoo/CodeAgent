@@ -251,13 +251,17 @@ export type StartAgentQueuedSubmissionRequest = Readonly<
   Static<typeof StartAgentQueuedSubmissionRequestSchema>
 >;
 
-export const StartAgentQueuedSubmissionResponseSchema = Type.Object(
+export const StartAgentQueuedSubmissionResponseSchema = Type.Union([Type.Object(
   {
     taskId: Type.String({ minLength: 1 }),
     turn: AgentTurnSchema,
   },
   { additionalProperties: false },
-);
+), Type.Object({
+  cleanupOnly: Type.Literal(true),
+  queuedSubmissionId: Type.String({ minLength: 1 }),
+  taskId: Type.String({ minLength: 1 }),
+}, { additionalProperties: false })]);
 export type StartAgentQueuedSubmissionResponse = Readonly<
   Static<typeof StartAgentQueuedSubmissionResponseSchema>
 >;

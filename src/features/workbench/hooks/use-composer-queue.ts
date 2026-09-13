@@ -228,6 +228,10 @@ export function useComposerQueue({
       return;
     }
     const response = await startQueued(taskId, queuedPrompt.id);
+    if ("cleanupOnly" in response) {
+      await invalidateQueue();
+      return;
+    }
     onSteerAccepted({
       files: queuedPrompt.files,
       id: queuedPrompt.id,

@@ -31,6 +31,25 @@ const queuedSubmission: AgentQueuedSubmission = {
   text: "检查引导信息",
 };
 
+test("idle cleanup refreshes the queue without inventing a new turn", async () => {
+  const onError = vi.fn();
+  const startQueuedSubmission = vi.fn(async () => ({cleanupOnly:true, taskId:"task-a", queuedSubmissionId:"queue-a"}));
+  const listQueuedSubmissions = vi.fn(async () => ({data:[queuedSubmission]}));
+  const client = { getTaskAttachmentUrl:()=>"asset:attachment", listQueuedSubmissions, startQueuedSubmission } as unknown as NativeMutationClient;
+  function Harness() {
+    const queue = useComposerQueue({activeTurnId:undefined, client, handleAttachmentsChange:vi.fn(),
+      projectId:"project-a", replacePromptContent:vi.fn(), routeScope:"project-a:task-a", runtime:undefined,
+      skillEditorRef:{current:null}, skills:[], taskId:"task-a"});
+    return queue.queuedPrompts.map((prompt)=><button key={prompt.id}
+      onClick={()=>void queue.sendQueuedPrompt(prompt, async()=>false).catch(onError)}>清理已发送消息</button>);
+  }
+  const screen = await render(<QueryClientProvider client={new QueryClient()}><Harness /></QueryClientProvider>);
+  await screen.getByRole("button", {name:"清理已发送消息"}).click();
+  await vi.waitFor(()=>expect(startQueuedSubmission).toHaveBeenCalledOnce());
+  await vi.waitFor(()=>expect(listQueuedSubmissions).toHaveBeenCalledTimes(2));
+  expect(onError).not.toHaveBeenCalled();
+});
+
 test("refreshes the running queue without a second frontend delete", async () => {
   const submit = vi.fn(async () => true);
   const deleteQueuedSubmission = vi.fn();
