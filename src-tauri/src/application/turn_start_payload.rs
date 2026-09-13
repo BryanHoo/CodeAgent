@@ -111,6 +111,36 @@ pub fn fingerprint_steer(
     )
 }
 
+pub fn fingerprint_queued_steer(
+    project_id: &str,
+    task_id: &str,
+    turn_id: &str,
+    submission_id: &str,
+    input: &AgentPromptInput,
+) -> Result<TurnStartIdentity, Value> {
+    if [turn_id, submission_id]
+        .iter()
+        .any(|id| id.is_empty() || id.len() > 1024)
+    {
+        return Err(error(
+            "INVALID_REQUEST",
+            "Queued steer requires bounded turn and submission identities",
+        ));
+    }
+    fingerprint_payload(
+        project_id,
+        task_id,
+        &(
+            project_id,
+            task_id,
+            "queued-steer",
+            turn_id,
+            submission_id,
+            input,
+        ),
+    )
+}
+
 pub(super) fn encode_result(result: &TurnStartResult) -> StoredResult {
     let mut writer = LimitedWriter {
         inner: Vec::new(),

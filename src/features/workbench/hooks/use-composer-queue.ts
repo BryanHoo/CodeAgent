@@ -223,7 +223,8 @@ export function useComposerQueue({
       if (!sent) {
         return;
       }
-      await removeQueuedPrompt(queuedPrompt.id);
+      // 原生端已完成追加及清理，界面只重新读取队列。
+      await invalidateQueue();
       return;
     }
     const response = await startQueued(taskId, queuedPrompt.id);

@@ -337,7 +337,7 @@ export function createComposerSubmission({
       }
       const steerAttempt = resolveIdempotencyAttempt(
         steerTurnAttempt.current,
-        JSON.stringify({ input, taskId: activeTaskId, turnId: activeTurnId }),
+        JSON.stringify({ input, taskId: activeTaskId, turnId: activeTurnId, queuedPromptId: options.queuedPromptId }),
       );
       steerTurnAttempt.current = steerAttempt;
       try {
@@ -348,6 +348,7 @@ export function createComposerSubmission({
           activeTurnId,
           input,
           steerAttempt.key,
+          options.queuedPromptId,
         );
         const isCurrentScopeAfterSteer = isCurrentScope(requestScope);
         const isCurrentTargetAfterSteer = isCurrentSubmissionTarget(projectId, activeTaskId);

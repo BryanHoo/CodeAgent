@@ -214,6 +214,10 @@ export function steerPromptTurn(
   turnId: string,
   input: AgentPromptInput,
   idempotencyKey: string,
+  queuedSubmissionId?: string,
 ) {
-  return client.steerTurn(projectId, taskId, turnId, input, { idempotencyKey });
+  return client.steerTurn(projectId, taskId, turnId, input, {
+    idempotencyKey,
+    ...(queuedSubmissionId === undefined ? {} : { queuedSubmissionId }),
+  });
 }

@@ -31,6 +31,26 @@ const queuedSubmission: AgentQueuedSubmission = {
   text: "检查引导信息",
 };
 
+test("refreshes the running queue without a second frontend delete", async () => {
+  const submit = vi.fn(async () => true);
+  const deleteQueuedSubmission = vi.fn();
+  const listQueuedSubmissions = vi.fn(async () => ({ data: [queuedSubmission] }));
+  const client = { getTaskAttachmentUrl: () => "asset:attachment", listQueuedSubmissions,
+    deleteQueuedSubmission } as unknown as NativeMutationClient;
+  function Harness() {
+    const queue = useComposerQueue({ activeTurnId:"turn-a", client,
+      handleAttachmentsChange:vi.fn(), projectId:"project-a", replacePromptContent:vi.fn(),
+      routeScope:"project-a:task-a", runtime:undefined, skillEditorRef:{current:null}, skills:[], taskId:"task-a" });
+    return queue.queuedPrompts.map((prompt) => <button key={prompt.id}
+      onClick={() => void queue.sendQueuedPrompt(prompt, submit)}>追加排队消息</button>);
+  }
+  const screen = await render(<QueryClientProvider client={new QueryClient()}><Harness /></QueryClientProvider>);
+  await screen.getByRole("button", {name:"追加排队消息"}).click();
+  await vi.waitFor(() => expect(listQueuedSubmissions).toHaveBeenCalledTimes(2));
+  expect(submit).toHaveBeenCalledWith(expect.anything(), [], expect.objectContaining({queuedPromptId:"queue-a"}));
+  expect(deleteQueuedSubmission).not.toHaveBeenCalled();
+});
+
 test("reuses the queue start key after a lost response", async () => {
   const onError = vi.fn();
   const startQueuedSubmission = vi.fn()

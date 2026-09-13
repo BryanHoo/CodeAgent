@@ -68,6 +68,7 @@ pub struct AppState {
     pub(super) submission_budget: super::prompt_submission::SubmissionBudget,
     pub(super) review_starts: super::turn_start::TurnStartRegistry,
     pub(super) steer_submissions: super::turn_start::TurnStartRegistry,
+    pub(super) queued_steers: Arc<super::turn_start::TurnStartRegistry>,
     pub(super) queue_starts: super::turn_start::TurnStartRegistry,
     pub(super) task_creations: super::task_creation::TaskCreationRegistry,
     pub(super) turn_starts: super::turn_start::TurnStartRegistry,

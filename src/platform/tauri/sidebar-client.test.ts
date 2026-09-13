@@ -95,6 +95,16 @@ describe("TauriSidebarClient", () => {
     });
   });
 
+  it("passes the queued item and retry key to native steer", async () => {
+    const invoke = vi.fn(async () => ({ status: "accepted" }));
+    const client = new TauriSidebarClient({ ensureRuntime: vi.fn(async () => undefined), invoke: invoke as InvokeImplementation });
+    const input = { attachments: [], skills: [], text: "hello", type: "prompt" as const };
+    await client.steerTurn("project", "task", "turn", input, { idempotencyKey: "retry", queuedSubmissionId: "queue" });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("steer_turn", {
+      projectId: "project", taskId: "task", turnId: "turn", input, idempotencyKey: "retry", queuedSubmissionId: "queue",
+    });
+  });
+
   it("routes task and turn lifecycle mutations through Tauri", async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === "start_task") {
