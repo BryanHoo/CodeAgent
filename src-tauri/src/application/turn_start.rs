@@ -3,7 +3,10 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     future::Future,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
@@ -29,6 +32,7 @@ struct Entry {
     identity: TurnStartIdentity,
     started: Instant,
     result: watch::Receiver<Option<StoredResult>>,
+    retry_allowed: Arc<AtomicBool>,
 }
 
 impl Entry {
@@ -63,21 +67,28 @@ impl TurnStartRegistry {
             let mut entries = self.entries.lock().map_err(|_| unavailable())?;
             // 未结束的执行不因保留窗口到期而允许重跑；只按需回收过期完成项。
             entries.retain(|_, entry| entry.started.elapsed() < RETENTION || entry.in_flight());
-            if let Some(entry) = entries.get(key) {
+            let retained = if let Some(entry) = entries.get(key) {
                 if entry.identity.digest != identity.digest {
                     return Err(error(
                         "IDEMPOTENCY_CONFLICT",
                         "Turn start key belongs to a different request",
                     ));
                 }
-                entry.result.clone()
+                // 即使允许重新取得连接，也不能复用键更改项目、任务或输入。
+                (!(entry.result.borrow().is_some() && entry.retry_allowed.load(Ordering::Acquire)))
+                    .then(|| entry.result.clone())
+            } else {
+                None
+            };
+            if let Some(receiver) = retained {
+                receiver
             } else {
                 let pending_bytes: usize = entries
                     .values()
                     .filter(|entry| entry.in_flight())
                     .map(|entry| entry.identity.bytes)
                     .sum();
-                if entries.len() >= CAPACITY
+                if (entries.len() >= CAPACITY && !entries.contains_key(key))
                     || identity.bytes > MAX_INFLIGHT_BYTES.saturating_sub(pending_bytes)
                 {
                     return Err(error(
@@ -86,17 +97,28 @@ impl TurnStartRegistry {
                     ));
                 }
                 let (sender, receiver) = watch::channel(None);
+                let retry_allowed = Arc::new(AtomicBool::new(false));
+                let started = entries
+                    .get(key)
+                    .map_or_else(Instant::now, |entry| entry.started);
                 entries.insert(
                     key.to_owned(),
                     Entry {
                         identity,
-                        started: Instant::now(),
+                        started,
                         result: receiver.clone(),
+                        retry_allowed: Arc::clone(&retry_allowed),
                     },
                 );
                 // 登记先于任何副作用；WebView 取消等待不取消已经开始的启动或 Goal 等待。
                 tokio::spawn(async move {
-                    let result = start.await.map_err(|error| {
+                    let result = start.await;
+                    // 只允许尚未取得连接的失败重试；执行后的传输/RPC 错误仍重放原结果。
+                    retry_allowed.store(
+                        matches!(&result, Err(AppError::CodexRuntimeUnavailable)),
+                        Ordering::Release,
+                    );
+                    let result = result.map_err(|error| {
                         serde_json::to_value(error).unwrap_or_else(|_| unavailable())
                     });
                     sender.send_replace(Some(encode_result(&result)));

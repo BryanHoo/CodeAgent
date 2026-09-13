@@ -6,6 +6,126 @@ use std::sync::{
 };
 
 #[tokio::test]
+async fn turn_start_should_retry_after_runtime_becomes_available() {
+    let registry = TurnStartRegistry::default();
+    let error = registry
+        .run("key", identity(1), async {
+            Err(AppError::CodexRuntimeUnavailable)
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error, json!("Codex runtime is unavailable"));
+    let result = registry
+        .run("key", identity(1), async { Ok(json!({"turn": "new"})) })
+        .await;
+    assert_eq!(result.unwrap(), json!({"turn": "new"}));
+}
+
+#[tokio::test]
+async fn turn_start_retry_should_preserve_identity_capacity_and_original_retention() {
+    let registry = TurnStartRegistry::default();
+    for index in 0..CAPACITY {
+        registry
+            .run(&index.to_string(), identity(1), async {
+                Err(AppError::CodexRuntimeUnavailable)
+            })
+            .await
+            .unwrap_err();
+    }
+    let registered = registry.entries.lock().unwrap()["0"].started;
+    let error = registry
+        .run("0", identity(2), async {
+            panic!("retry must not change input")
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error["code"], "IDEMPOTENCY_CONFLICT");
+    let error = registry
+        .run("extra", identity(1), async {
+            panic!("new keys must respect capacity")
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error["code"], "IDEMPOTENCY_CAPACITY_EXCEEDED");
+    registry
+        .run("0", identity(1), async { Ok(json!({"turn": "new"})) })
+        .await
+        .unwrap();
+    let entries = registry.entries.lock().unwrap();
+    assert_eq!(entries.len(), CAPACITY);
+    assert_eq!(entries["0"].started, registered);
+}
+
+#[tokio::test]
+async fn turn_start_retry_should_not_trust_rpc_error_text() {
+    let registry = TurnStartRegistry::default();
+    let error = registry
+        .run("key", identity(1), async {
+            Err(AppError::CodexRpc {
+                rpc_code: -32603,
+                message: "Codex runtime is unavailable".into(),
+            })
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(
+        registry
+            .run("key", identity(1), async {
+                panic!("RPC error must not permit repeated execution")
+            })
+            .await
+            .unwrap_err(),
+        error
+    );
+}
+
+#[tokio::test]
+async fn turn_start_retry_should_merge_concurrent_retries_and_preserve_old_waiters() {
+    let registry = TurnStartRegistry::default();
+    let error = registry
+        .run("key", identity(1), async {
+            Err(AppError::CodexRuntimeUnavailable)
+        })
+        .await
+        .unwrap_err();
+    let old = registry.entries.lock().unwrap()["key"].result.clone();
+    let release = Arc::new(tokio::sync::Notify::new());
+    let mut first = Box::pin(registry.run("key", identity(1), {
+        let release = Arc::clone(&release);
+        async move {
+            release.notified().await;
+            Ok(json!({"turn": "new"}))
+        }
+    }));
+    let mut second = Box::pin(registry.run("key", identity(1), async {
+        panic!("concurrent retry must share execution")
+    }));
+    std::future::poll_fn(|context| {
+        assert!(first.as_mut().poll(context).is_pending());
+        assert!(second.as_mut().poll(context).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    release.notify_one();
+    let (first, second) = tokio::join!(first, second);
+    assert_eq!(first.unwrap(), json!({"turn": "new"}));
+    assert_eq!(second.unwrap(), json!({"turn": "new"}));
+    assert_eq!(
+        wait_for_result(old, Duration::ZERO).await.unwrap_err(),
+        error
+    );
+    assert_eq!(
+        registry
+            .run("key", identity(1), async {
+                panic!("successful retry must replay")
+            })
+            .await
+            .unwrap(),
+        json!({"turn": "new"})
+    );
+}
+
+#[tokio::test]
 async fn turn_start_should_replay_without_executing_again() {
     let registry = TurnStartRegistry::default();
     let calls = Arc::new(AtomicUsize::new(0));

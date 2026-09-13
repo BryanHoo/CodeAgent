@@ -110,6 +110,12 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 - 每个调用最多等待 120 秒，取消或超时只结束等待，后台工作继续；后续同键可取得结果。工作异常退出及超大结果保留不确定记录，不接管重跑。原始 RPC 错误和字符串错误保留原结构。
 - 失败也会重放，完整失败恢复交互尚未迁移；用户开始新尝试前仍需核对任务状态并使用新键。响应是原启动结果及 checkpoint，不代表当前 Turn 状态；创建与启动尚未形成整体恢复流程。定时任务、steer、排队和 Review 不经过此注册表；未改变底层过载重试规则。
 
+## 已实施：运行时未就绪后的同键恢复
+
+原生创建和 Turn 启动原先将 `CodexRuntimeUnavailable` 当作永久结果重放，Provider 恢复后仍会卡在旧失败。本批仅对该原生类型开放下一次同键请求的重试：当前创建与启动路径在取得连接之前返回它，因此尚未发送创建或执行请求。前端继续提交原键，无需推断错误类别或生成替代键；没有增加后台自动重试。
+
+重试保留原项目、请求指纹和最初登记时间，在锁内替换已完成尝试；并发重试只启动一次，旧等待者仍收到原错误。满容量允许替换本键，但仍检查在途输入预算。RPC 即使返回相同文案也不能开启重试；其他错误、超时及不确定结果仍重放。此前各节的失败保留规则以此例外为准；尚未处理写入占用等其他执行前失败，也未完成“创建并启动”的整体恢复。
+
 ## 后续迁移边界
 
 | 顺序 | 待迁移职责 | 验收重点 |
@@ -124,6 +130,8 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 快照元数据和 checkpoint 在同一 Rust 临界区读取，但这不代表上游多个历史 RPC 与实时正文事件已经形成原子快照。
 
 ## 验证
+
+2026-09-13 第十二批运行时未就绪恢复的 `pnpm check` 通过：334 项前端测试、503 项 Rust 单元测试、6 项集成测试、3 项既有性能基线通过，7 项默认忽略；构建、类型检查、格式检查、Clippy 和体积预算通过。新增 8 项原生回归覆盖同键恢复、身份与容量约束、原登记时间、并发重试、旧等待者隔离及 RPC 错误文案不触发重试。真实 Codex 0.154.0 私有安装与生命周期测试通过，但未实测真实 WebView 在 Provider 恢复期间重新提交的端到端流程。
 
 2026-09-13 第十一批 Turn 启动幂等迁移的 `pnpm check` 通过：334 项前端测试、495 项 Rust 单元测试、6 项集成测试和 3 项既有性能基线通过，7 项默认忽略；Modern/Legacy 构建、类型检查、格式检查、Clippy 与体积预算通过。新增 14 项原生回归覆盖请求指纹、结果重放、并发及取消等待、零等待超时、容量、过期、编码预算和 worker 异常；原生协议替身验证重复提交只发送一次 `turn/start`。前端定向 11 项通过；真实 Codex 0.154.0 私有安装与生命周期测试通过，但不经过新注册表。未实测真实模型重复提交、Goal 端到端幂等或新增指纹计算的端到端延迟。
 
@@ -143,6 +151,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib file_patch_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib native_queue_move_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib queue_snapshot_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib task_creation_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib should_retry_after_runtime_becomes_available --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib retry_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib application::turn_start --locked
 pnpm exec vitest run src/protocol/turn-start.test.ts src/platform/tauri/sidebar-client.test.ts src/features/workbench/composer-state-submission.test.ts
 cargo test --manifest-path src-tauri/Cargo.toml --lib turn_readiness_should --locked

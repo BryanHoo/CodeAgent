@@ -4,7 +4,10 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     future::Future,
-    sync::Mutex,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
@@ -25,6 +28,7 @@ struct Entry {
     project_id: String,
     started: Instant,
     result: watch::Receiver<Option<CreationResult>>,
+    retry_allowed: Arc<AtomicBool>,
 }
 
 fn error(code: &str, message: &str) -> Value {
@@ -60,33 +64,51 @@ impl TaskCreationRegistry {
                 entry.started.elapsed() < RETENTION
                     || (entry.result.borrow().is_none() && entry.result.has_changed().is_ok())
             });
-            if let Some(entry) = entries.get(key) {
+            let retained = if let Some(entry) = entries.get(key) {
                 if entry.project_id != project_id {
                     return Err(error(
                         "IDEMPOTENCY_CONFLICT",
                         "Task creation key belongs to another project",
                     ));
                 }
-                entry.result.clone()
+                // 保留身份约束；只替换已完成且原生确认未取得运行时连接的尝试。
+                (!(entry.result.borrow().is_some() && entry.retry_allowed.load(Ordering::Acquire)))
+                    .then(|| entry.result.clone())
             } else {
-                if entries.len() >= CAPACITY {
+                None
+            };
+            if let Some(receiver) = retained {
+                receiver
+            } else {
+                if entries.len() >= CAPACITY && !entries.contains_key(key) {
                     return Err(error(
                         "IDEMPOTENCY_CAPACITY_EXCEEDED",
                         "Task creation request capacity is exhausted; retry later",
                     ));
                 }
                 let (sender, receiver) = watch::channel(None);
+                let retry_allowed = Arc::new(AtomicBool::new(false));
+                let started = entries
+                    .get(key)
+                    .map_or_else(Instant::now, |entry| entry.started);
                 entries.insert(
                     key.to_owned(),
                     Entry {
                         project_id: project_id.to_owned(),
-                        started: Instant::now(),
+                        started,
                         result: receiver.clone(),
+                        retry_allowed: Arc::clone(&retry_allowed),
                     },
                 );
                 // 工作独立于 WebView invoke 的等待者，取消等待不会使已开始的创建再次执行。
                 tokio::spawn(async move {
-                    let result = create.await.map_err(|error| {
+                    let result = create.await;
+                    // 此类型只由取得运行时之前的检查返回，不能按 RPC 错误文案推断安全重试。
+                    retry_allowed.store(
+                        matches!(&result, Err(AppError::CodexRuntimeUnavailable)),
+                        Ordering::Release,
+                    );
+                    let result = result.map_err(|error| {
                         serde_json::to_value(error).unwrap_or_else(|_| unavailable())
                     });
                     let bytes = match &result {
