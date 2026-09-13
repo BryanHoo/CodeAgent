@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { AgentFileChangeSchema } from "@/protocol/index.js";
-import { getFileChangeStats, normalizeFileChangePatch, summarizeFileChanges } from "./file-change.js";
+import { getFileChangeStats, summarizeFileChanges } from "./file-change.js";
 
 it("只读取原生统计，不扫描 Diff 正文", () => {
   const change = {
@@ -35,17 +35,5 @@ describe("原生统计汇总", () => {
       { path: "old.txt", kind: "delete", diff: "old\n", stats: { additions: 0, removals: 1 } },
       { path: "edit.txt", kind: "update", diff: "@@ -1 +1 @@\n-old\n+new\n", stats: { additions: 1, removals: 1 } },
     ])).toMatchObject({ additions: 3, removals: 2 });
-  });
-});
-
-describe("完整文件内容的差异预览", () => {
-  it.each(["create", "delete"] as const)("为 %s 生成完整补丁并保留空行和尾部空格", (kind) => {
-    const prefix = kind === "create" ? "+" : "-";
-    expect(normalizeFileChangePatch({ path: "sample.txt", kind, diff: "+++ text\n--- text\n@@ text\nlast  \n\n", stats: { additions: kind === "create" ? 5 : 0, removals: kind === "delete" ? 5 : 0 } })).toBe([
-      `--- ${kind === "create" ? "/dev/null" : "a/sample.txt"}`,
-      `+++ ${kind === "delete" ? "/dev/null" : "b/sample.txt"}`,
-      kind === "create" ? "@@ -0,0 +1,5 @@" : "@@ -1,5 +0,0 @@",
-      ...["+++ text", "--- text", "@@ text", "last  ", ""].map((line) => `${prefix}${line}`),
-    ].join("\n"));
   });
 });

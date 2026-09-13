@@ -23,6 +23,14 @@ fn file_change_stats_should_be_native_for_history_and_realtime() {
     let item = json!({"id":"files", "type":"fileChange", "status":"completed", "changes":changes});
     let history = to_value(map_item(item).unwrap()).unwrap();
     assert_eq!(
+        history["changes"][0]["diff"],
+        "--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1,3 @@\n++++ content\n+\n+last\n\\ No newline at end of file\n"
+    );
+    assert_eq!(
+        history["changes"][1]["diff"],
+        "--- a/old.txt\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-old\r\n"
+    );
+    assert_eq!(
         history["changes"][0]["stats"],
         json!({"additions":3,"removals":0})
     );
@@ -44,6 +52,46 @@ fn file_change_stats_should_be_native_for_history_and_realtime() {
         .unwrap()
         .unwrap();
     assert_eq!(event["payload"]["changes"], history["changes"]);
+}
+
+#[test]
+fn file_patch_should_budget_normalized_realtime_content_including_headers() {
+    let budget = 512 * 1024;
+    // 原始内容未超限，但行前缀和头部使规范化结果超限。
+    let source = "\n".repeat(budget / 2);
+    let params = json!({"threadId":"task", "turnId":"turn", "itemId":"files", "changes":[
+        {"path":"a", "kind":{"type":"add"}, "diff":source},
+        {"path":"b", "kind":{"type":"add"}, "diff":"🌍"},
+    ]});
+    let event = map_server_message(
+        ServerMessage {
+            id: None,
+            method: "item/fileChange/patchUpdated".into(),
+            params: to_raw_value(&params).unwrap(),
+        },
+        1,
+        "2026-09-12T00:00:00Z",
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(event["payload"]["truncated"], true);
+    assert_eq!(event["payload"]["originalByteLength"], source.len() + 4);
+    let changes = event["payload"]["changes"].as_array().unwrap();
+    assert!(
+        changes
+            .iter()
+            .map(|change| change["diff"].as_str().unwrap().len())
+            .sum::<usize>()
+            <= budget
+    );
+    assert!(
+        changes[0]["diff"]
+            .as_str()
+            .unwrap()
+            .starts_with("--- /dev/null\n+++ b/a\n@@ ")
+    );
+    assert_eq!(changes[1]["diff"], "");
+    assert_eq!(changes[1]["stats"], json!({"additions":0,"removals":0}));
 }
 
 #[test]

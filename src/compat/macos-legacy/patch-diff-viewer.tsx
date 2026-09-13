@@ -1,12 +1,11 @@
 import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { AgentFileChange } from "../../features/diff/file-change.js";
-import { normalizeFileChangePatch } from "../../features/diff/file-change.js";
 import { legacyDiffLines } from "./diff-lines.js";
 
 export default function PatchDiffViewer({ change }: Readonly<{ change: AgentFileChange }>) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const lines = useMemo(() => legacyDiffLines(normalizeFileChangePatch(change)), [change]);
+  const lines = useMemo(() => legacyDiffLines(change.diff), [change.diff]);
   const virtualizer = useVirtualizer({
     count: lines.length,
     getScrollElement: () => scrollRef.current,

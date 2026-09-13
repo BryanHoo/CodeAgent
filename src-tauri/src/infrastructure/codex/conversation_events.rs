@@ -329,6 +329,7 @@ fn file_change_updated_event(
         .map(str::len)
         .sum::<usize>();
     let mut remaining = MAX_REALTIME_DIFF_BYTES;
+    let mut normalized_truncated = false;
     let mut changes = Vec::with_capacity(native_changes.len().min(MAX_REALTIME_FILE_CHANGES));
     for change in native_changes.iter().take(MAX_REALTIME_FILE_CHANGES) {
         let change = change.as_object().ok_or(ConnectionError::InvalidMessage)?;
@@ -338,23 +339,27 @@ fn file_change_updated_event(
             .and_then(|kind| kind.get("type"))
             .and_then(Value::as_str)
             .ok_or(ConnectionError::InvalidMessage)?;
-        let diff = truncate_utf8(required_string(change, "diff")?, remaining);
-        remaining = remaining.saturating_sub(diff.len());
+        let source = required_string(change, "diff")?;
         let kind = match kind {
             "add" => "create",
             "delete" => "delete",
             "update" => "update",
             _ => return Err(ConnectionError::InvalidMessage),
         };
+        let path = required_string(change, "path")?;
+        let patch = crate::domain::file_patch::FilePatch::codex(path, kind, source, remaining);
+        normalized_truncated |= patch.truncated;
+        remaining = remaining.saturating_sub(patch.diff.len());
         changes.push(json!({
-            "diff": diff,
+            "stats": crate::domain::file_change::FileChangeStats::patch(&patch.diff),
+            "diff": patch.diff,
             "kind": kind,
-            "stats": crate::domain::file_change::FileChangeStats::codex(kind, diff),
-            "path": required_string(change, "path")?,
+            "path": path,
         }));
     }
-    let truncated =
-        native_changes.len() > changes.len() || original_byte_length > MAX_REALTIME_DIFF_BYTES;
+    let truncated = normalized_truncated
+        || native_changes.len() > changes.len()
+        || original_byte_length > MAX_REALTIME_DIFF_BYTES;
     Ok(envelope(
         sequence,
         timestamp,
@@ -387,17 +392,6 @@ fn task_notice_event(
             "type": "task.notice",
         }),
     ))
-}
-
-fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
-    if value.len() <= max_bytes {
-        return value;
-    }
-    let mut end = max_bytes;
-    while !value.is_char_boundary(end) {
-        end -= 1;
-    }
-    &value[..end]
 }
 
 pub fn map_server_event_now(

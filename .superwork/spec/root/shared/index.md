@@ -28,6 +28,8 @@
 
 ## 性能观测契约
 
+- `AgentFileChange.diff` 是 Rust 规范化后的补丁，Codex 原始新增/删除内容不得直接传给渲染器；完整 Git 补丁原样保留。Modern/Legacy 前端只能解析并渲染，禁止再次生成文件头、hunk 或增删行前缀。规范化不得修剪正文空白，实时字节预算必须包含补丁头和前缀；合成补丁被截断时只保留完整行，并重建匹配的 hunk。
+
 - Codex 文件变更与 Project Git 状态必须携带原生 `stats: { additions, removals }` 非负整数；WebView 只能读取和汇总，禁止为显示行数再次扫描 Diff。Codex 新增/删除按原始内容计行，Git 按补丁正文计行；hunk 内的 `+++`/`---` 不得误判为文件头。统计范围与实际返回的正文一致，不能将截断结果宣称为完整文件统计。
 
 - Rust 映射实时 Delta 时写入 Unix 毫秒字段 `receivedAtUnixMs`；合并 Delta 保留该合并组首个事件的接收时间，前端只对实际进入可见 Task Store 的事件计算 React commit 延迟

@@ -15,6 +15,7 @@ const FileChangeStatsSchema = Type.Object({
 
 export const AgentFileChangeSchema = Type.Object(
   {
+    // Rust 已规范化为补丁；不得再按 kind 将 create/delete 当作原始文件内容。
     diff: Type.String(),
     stats: FileChangeStatsSchema,
     kind: Type.Union([Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")]),

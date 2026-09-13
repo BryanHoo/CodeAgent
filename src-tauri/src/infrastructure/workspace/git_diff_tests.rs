@@ -29,6 +29,10 @@ async fn add_diffs_should_include_untracked_text_file_additions() {
 
     assert_eq!(addition_count, 3);
     assert_eq!(
+        changes[0].diff,
+        "--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1,3 @@\n+first\n+second\n+third\n"
+    );
+    assert_eq!(
         serde_json::to_value(&changes[0]).unwrap()["stats"],
         serde_json::json!({"additions":3,"removals":0})
     );

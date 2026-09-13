@@ -1,14 +1,13 @@
 import { getFiletypeFromFileName, preloadHighlighter, setCustomExtension } from "@pierre/diffs";
 import { PatchDiff, type PatchDiffProps } from "@pierre/diffs/react";
 import type { WheelEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   projectLanguageByExtension,
   projectLanguageByFileName,
 } from "../../shared/components/agent/code-languages.js";
 import type { AgentFileChange } from "./file-change.js";
-import { normalizeFileChangePatch } from "./file-change.js";
 
 const diffOptions = {
   diffIndicators: "bars",
@@ -63,7 +62,6 @@ function handleDiffWheel(event: WheelEvent<HTMLDivElement>) {
 }
 
 export default function PatchDiffViewer({ change }: Readonly<{ change: AgentFileChange }>) {
-  const patch = useMemo(() => normalizeFileChangePatch(change), [change]);
   const language = getFiletypeFromFileName(change.path);
   const [readyLanguage, setReadyLanguage] = useState<string | null>(null);
 
@@ -91,7 +89,7 @@ export default function PatchDiffViewer({ change }: Readonly<{ change: AgentFile
         className="file-diff-renderer"
         disableWorkerPool
         options={diffOptions}
-        patch={patch}
+        patch={change.diff}
       />
     </div>
   );

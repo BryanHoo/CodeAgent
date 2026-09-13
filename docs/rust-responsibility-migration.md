@@ -58,7 +58,16 @@ Rust 在统一事件发布入口关联同项目、同任务、同回合内的相
 - hunk 内以 `+++`、`---` 开头的代码行正常计入，文件头、模式变更和二进制提示不计入。
 - Rust 借用正文逐行处理，不创建行数组，不新增常驻缓存或 IPC 请求；传输只增加固定数量字段。
 - 统计只覆盖本次返回正文。实时/Git 既有截断预算保留，不推测省略内容；轻量 Git 查询仍不加载正文，详情只在 snapshot 匹配时展示。提交历史的文件导航不展示行数，正文仍按选中文件加载。
-- 前端保留按展示分组求和、同路径保留最终项以及 staged/unstaged 合并；Diff 补丁规范化和预览解析尚未迁移。
+- 前端保留按展示分组求和、同路径保留最终项以及 staged/unstaged 合并；补丁规范化已继续迁移，预览解析属于渲染器职责。
+
+## 已实施：Diff 补丁规范化
+
+Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以及 Git 未跟踪文本转换为补丁。`diff` 仅保存规范化结果，不另传原文；Git 已跟踪文件及提交历史已有完整补丁，继续原样传输。Modern 与 Legacy 删除 `normalizeFileChangePatch` 调用及实现，直接消费 `change.diff`。
+
+- 原始内容即使包含 `+++`、`---` 或 `@@` 也按正文处理；保留空行、CRLF、尾部空格，无末尾换行时生成标准标记。更新补丁不再执行前端 `trimEnd()`，已有上下文前缀不会重复添加。
+- 生成器借用逐行切片，按剩余预算写入；实时总正文仍不超过 512 KiB，Git 未跟踪文件保留单文件 512 KiB 和总量预算。补丁头和行前缀计入预算，不新增 IPC 或常驻缓存。
+- 合成 hunk 截断时只保留完整行，并按保留内容重建行数；连文件头都无法容纳时返回空正文。完整上游补丁仍可能被既有预算截断，预览器继续承担不完整补丁的容错；统计不推测省略内容。
+- 实时 `originalByteLength` 表示上游原文大小，生成头部使结果超限也设置 `truncated`。语法高亮、预览解析和虚拟行布局继续由渲染器处理。
 
 ## 后续迁移边界
 
@@ -67,10 +76,10 @@ Rust 在统一事件发布入口关联同项目、同任务、同回合内的相
 | 1 | 完整消息投影、终态归并、快照与实时事件对账 | 原生消息身份稳定；读取快照期间发生的 delta 不丢失、不重复；历史分页不回滚 |
 | 2 | 提交、建任务、启动/steer/排队编排及幂等 | 部分成功可恢复；重复请求不重复建任务或执行 |
 | 3 | 异步问题回答关联、队列确认状态 | 按协议身份关联，多个窗口不独立推断业务结果 |
-| 4 | Diff 补丁规范化与调度规则 | 行数统计已迁移；继续分离摘要和正文，RRULE、时区和有效性统一由 Rust 判定 |
+| 4 | Diff 摘要/正文按需读取与剩余调度规则 | 统计与补丁规范化已迁移；继续减少未打开详情的正文传输 |
 | 5 | 图片软件加工和结果缓存 | 真实 WebView 主线程负担下降，IPC 字节量与总内存不恶化 |
 
-当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
+当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计与补丁规范化，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
 快照元数据和 checkpoint 在同一 Rust 临界区读取，但这不代表上游多个历史 RPC 与实时正文事件已经形成原子快照。
 
 ## 验证
@@ -83,6 +92,7 @@ pnpm exec vitest run src/features/conversation/runtime/task-store-context-usage.
 pnpm exec vitest run src/features/conversation/runtime/task-store-terminal-error.test.ts
 cargo test --manifest-path src-tauri/Cargo.toml --lib skill --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib file_change_stats_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib file_patch_should --locked
 pnpm exec vitest run src/features/conversation/runtime/task-store-skill-update.test.ts src/features/conversation/runtime/task-runtime-submission.test.ts
 pnpm exec vitest run src/features/diff/file-change.test.ts src/features/workbench/components/workbench-inspector-git-status.test.ts
 pnpm check
@@ -91,6 +101,6 @@ pnpm check
 原生回归覆盖没有 WebView 时恢复元数据、项目/任务隔离、审批解决、任务删除、窗口重连、Provider 重启、任务数量/字节预算与超大字段。
 前端回归验证原生用量覆盖旧值，以及原生 `null` 清除过期用量。
 失败终态回归覆盖事件补齐、明确终态错误优先、成功/重试清理、延迟启动、新轮隔离、无 WebView 的快照恢复、身份隔离和数量/字节预算；前端验证不再从旧 Store 推断终态错误。
-2026-09-12 五批迁移后的验证：`pnpm check` 的前端及供应链阶段通过；Rust 阶段一项未改动的符号链接删除测试首次失败，单独重跑及完整 `pnpm check:rust` 复跑均通过，未据此修改文件删除逻辑。最终 332 项前端测试、444 项 Rust 库测试（7 项默认忽略）、6 项协议/PTY 集成测试及 3 项显式性能基线通过；格式、Clippy、类型检查、Modern/Legacy 构建和体积预算通过。
-额外验证 Chromium/WebKit 下相关操作分组和关键操作共 8 项浏览器测试，以及真实 Codex 0.154.0 私有安装与 app-server 生命周期测试。原前端行数计算用例已迁到 Rust，前端改测统计字段校验、无正文扫描、去重和暂存/工作区汇总。
-真实原生 WebView 的完整销毁重建交互和性能对比需要另行实测，不能以单元测试代替。
+2026-09-12 第六批迁移的前端及供应链检查通过：330 项前端测试、Modern/Legacy 构建、类型检查和体积预算通过。合成补丁截断及反斜杠正文回归修正后，Rust 再次完整验证：454 项单元测试、6 项集成测试通过，7 项默认忽略；格式检查与 Clippy 通过。
+额外验证 Chromium/WebKit 下补丁直传、Legacy 实际解析渲染、操作分组及关键操作共 12 项浏览器测试，以及真实 Codex 0.154.0 私有安装与 app-server 生命周期测试。Modern 渲染器使用替身核对接收到的完整正文，另以真实 `@pierre/diffs` 解析器核对新增、删除和无 hunk 片段的 3 份规范化样例；这些结果不等于真实 WebView 性能实测。
+既有 3 项 Rust 性能基线通过，但未测量本次 Diff 迁移的性能收益。真实原生 WebView 的完整销毁重建交互和性能对比需要另行实测，不能以单元测试代替。

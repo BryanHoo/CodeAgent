@@ -402,11 +402,13 @@ fn map_file_changes(item: &Map<String, Value>) -> Result<Vec<AgentFileChange>, C
                 _ => return Err(ConnectionError::InvalidMessage),
             };
             let diff = required_string(change, "diff")?;
+            let path = required_string(change, "path")?;
             Ok(AgentFileChange {
                 stats: crate::domain::file_change::FileChangeStats::codex(kind, diff),
-                diff: diff.to_owned(),
+                diff: crate::domain::file_patch::FilePatch::codex(path, kind, diff, usize::MAX)
+                    .diff,
                 kind,
-                path: required_string(change, "path")?.to_owned(),
+                path: path.to_owned(),
             })
         })
         .collect()

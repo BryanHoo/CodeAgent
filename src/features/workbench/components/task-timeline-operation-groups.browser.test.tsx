@@ -34,9 +34,9 @@ describe("TimelineOperationGroupDisclosure", () => {
       },
       {
         changes: [
-          { diff: "+created", kind: "create", path: "src/created.ts", stats: { additions: 1, removals: 0 } },
-          { diff: "-before\n+after", kind: "update", path: "src/updated.ts", stats: { additions: 1, removals: 1 } },
-          { diff: "-deleted", kind: "delete", path: "src/deleted.ts", stats: { additions: 0, removals: 1 } },
+          { diff: "--- /dev/null\n+++ b/src/created.ts\n@@ -0,0 +1,1 @@\n+created\n", kind: "create", path: "src/created.ts", stats: { additions: 1, removals: 0 } },
+          { diff: "--- a/src/updated.ts\n+++ b/src/updated.ts\n@@ -1,1 +1,1 @@\n-before\n+after\n", kind: "update", path: "src/updated.ts", stats: { additions: 1, removals: 1 } },
+          { diff: "--- a/src/deleted.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-deleted\n", kind: "delete", path: "src/deleted.ts", stats: { additions: 0, removals: 1 } },
         ],
         id: "file-change-1",
         status: "completed",

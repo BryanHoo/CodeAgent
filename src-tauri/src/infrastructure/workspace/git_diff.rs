@@ -75,20 +75,15 @@ async fn add_untracked_diffs(repo: &Path, changes: &mut [GitChange]) -> Result<(
         }
 
         let content = String::from_utf8_lossy(&content);
-        let mut diff = String::with_capacity(read_limit);
-        for line in content.split_inclusive('\n') {
-            if diff.len() + line.len() + 1 > read_limit {
-                break;
-            }
-            diff.push('+');
-            diff.push_str(line);
-        }
+        let diff = crate::domain::file_patch::FilePatch::codex(
+            &change.path,
+            "create",
+            &content,
+            read_limit,
+        )
+        .diff;
         remaining_bytes = remaining_bytes.saturating_sub(diff.len());
-        // 未跟踪文件的补丁是逐行添加前缀，正文中的 +++ 不能被误当作文件头。
-        change.stats = crate::domain::file_change::FileChangeStats {
-            additions: crate::domain::file_change::content_lines(&diff),
-            removals: 0,
-        };
+        change.stats = crate::domain::file_change::FileChangeStats::patch(&diff);
         change.diff = diff;
     }
     Ok(())
