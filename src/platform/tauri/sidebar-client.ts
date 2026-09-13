@@ -247,9 +247,9 @@ export class TauriSidebarClient extends TauriRuntimeClient {
 
   public async startTask(
     projectId: string,
-    _options: MutationOptions = {},
+    options: Readonly<{ idempotencyKey: string }>,
   ): Promise<StartAgentTaskResponse> {
-    const response = await this.call<StartAgentTaskResponse>("start_task", { projectId });
+    const response = await this.call<StartAgentTaskResponse>("start_task", { projectId, idempotencyKey: options.idempotencyKey });
     this.taskProjects.set(response.task.id, projectId);
     return response;
   }

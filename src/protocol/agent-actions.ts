@@ -10,7 +10,10 @@ import {
 } from "./agent-task.js";
 import { AgentTurnOptionsSchema } from "./project-settings.js";
 
-export const StartAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
+export const StartAgentTaskRequestSchema = Type.Object(
+  { idempotencyKey: Type.String({ minLength: 1, maxLength: 128, pattern: "\\S" }) },
+  { additionalProperties: false },
+);
 export type StartAgentTaskRequest = Readonly<Static<typeof StartAgentTaskRequestSchema>>;
 
 export const StartAgentTaskResponseSchema = Type.Object(
@@ -266,6 +269,7 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("IDEMPOTENCY_KEY_REQUIRED"),
   Type.Literal("IDEMPOTENCY_CONFLICT"),
   Type.Literal("IDEMPOTENCY_CAPACITY_EXCEEDED"),
+  Type.Literal("TASK_CREATION_UNCERTAIN"),
   Type.Literal("INVALID_REQUEST"),
   Type.Literal("PROJECT_NOT_FOUND"),
   Type.Literal("PROJECT_FILE_NOT_FOUND"),

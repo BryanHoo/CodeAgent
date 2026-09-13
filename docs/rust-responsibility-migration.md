@@ -86,20 +86,31 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 - 编辑状态在全部页面读取完成后补齐，避免第二页的编辑项被第一页误清。只有与读取前相同且仍缺失的编辑项才清理，读取期间切换到其他条目的新编辑状态保留。
 - 未新增常驻快照缓存；这里的完整结果仅表示已遍历所有页面，并非 Provider 原子快照。外部并发增删导致的分页一致性仍受官方接口约束；实际端到端延迟和真实 WebView 内存尚未测量。
 
+## 已实施：任务创建幂等
+
+前端原有任务创建键现在通过 `start_task` 传入 Rust。`TaskCreationRegistry` 在执行创建前登记身份，同项目同键共享一次创建及临时工作区绑定，返回同一成功摘要或原始错误；跨项目复用键直接拒绝。重放摘要不是任务当前状态，后续读取仍以 Provider 为准。
+
+- 记录位于 `AppState`，跨 WebView 重建和 Provider 重启保留，不跨应用重启。保留窗口从注册时起计算 15 分钟；在途记录即使过期也不淘汰。过期完成项在下次请求时清理，窗口外同键可能重新创建。
+- 最多保留 128 项，容量耗尽在执行副作用前拒绝。键和项目身份分别限制为 128、1024 字节；单项结果字符串正文或错误 JSON 最多 8 KiB，超大结果保留固定不确定错误，预算不代表进程 RSS 上限。
+- 每次调用最多等待 120 秒，超时或调用方取消只结束等待，创建与工作区收尾继续；后续同键可取得最终结果。工作异常退出保留不确定记录，不接管重跑。
+- 失败在保留窗口内也会重放，不能通过同键自动重试创建；新尝试需要新键，并先核对任务列表以避免重复。完整失败重试交互、创建后启动首轮的恢复编排及 Turn 幂等尚未迁移。
+
 ## 后续迁移边界
 
 | 顺序 | 待迁移职责 | 验收重点 |
 |---|---|---|
 | 1 | 完整消息投影、终态归并、快照与实时事件对账 | 原生消息身份稳定；读取快照期间发生的 delta 不丢失、不重复；历史分页不回滚 |
-| 2 | 提交、建任务、启动/steer/排队编排及幂等 | 部分成功可恢复；重复请求不重复建任务或执行 |
+| 2 | 提交、创建后启动/steer/排队编排及幂等 | 原生创建去重已完成；继续实现部分成功恢复、失败重试交互和执行幂等 |
 | 3 | 异步问题回答关联、队列确认状态 | 按协议身份关联，多个窗口不独立推断业务结果 |
 | 4 | Diff 摘要/正文按需读取与剩余调度规则 | 统计与补丁规范化已迁移；继续减少未打开详情的正文传输 |
 | 5 | 图片软件加工和结果缓存 | 真实 WebView 主线程负担下降，IPC 字节量与总内存不恶化 |
 
-当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计与补丁规范化、队列相邻移动及完整读取，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
+当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计与补丁规范化、队列相邻移动及完整读取、任务创建幂等，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
 快照元数据和 checkpoint 在同一 Rust 临界区读取，但这不代表上游多个历史 RPC 与实时正文事件已经形成原子快照。
 
 ## 验证
+
+2026-09-13 第九批任务创建幂等迁移的 `pnpm check` 通过：333 项前端测试、476 项 Rust 单元测试、6 项集成测试和 3 项既有性能基线通过，另有 7 项测试默认忽略；Modern/Legacy 构建、类型检查、格式检查、Clippy 和体积预算通过。新增 8 项原生回归覆盖重放、并发及取消等待、失败、身份校验、容量与过期、超大结果和工作异常退出；前端协议、客户端与提交定向测试共 11 项通过。真实 Codex 0.154.0 私有安装与 app-server 生命周期测试通过，但该生命周期测试不经过新增注册表；未实测 120 秒等待超时、应用重启恢复或真实 WebView 端到端创建幂等。
 
 ```sh
 cargo test --manifest-path src-tauri/Cargo.toml --lib snapshot --locked
@@ -112,6 +123,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib file_change_stats_should -
 cargo test --manifest-path src-tauri/Cargo.toml --lib file_patch_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib native_queue_move_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib queue_snapshot_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib task_creation_should --locked
+pnpm exec vitest run src/protocol/task-creation.test.ts src/platform/tauri/sidebar-client.test.ts src/features/workbench/composer-state-submission.test.ts
 pnpm exec vitest run src/features/conversation/runtime/task-store-skill-update.test.ts src/features/conversation/runtime/task-runtime-submission.test.ts
 pnpm exec vitest run src/features/diff/file-change.test.ts src/features/workbench/components/workbench-inspector-git-status.test.ts
 pnpm exec vitest run src/platform/tauri/queue-command-contract.test.ts src/platform/tauri/sidebar-client.test.ts

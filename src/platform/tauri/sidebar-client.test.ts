@@ -118,7 +118,7 @@ describe("TauriSidebarClient", () => {
       sandboxMode: "workspace-write",
     } as const;
 
-    await client.startTask("project-a");
+    await client.startTask("project-a", { idempotencyKey: "create-a" });
     await client.startTurn("project-a", "thread-a", input, options, {
       threadAlreadyLoaded: true,
     });
@@ -127,7 +127,7 @@ describe("TauriSidebarClient", () => {
     await expect(client.releaseTaskSubscription("project-a", "thread-a")).resolves.toBeUndefined();
     await expect(client.retainTaskSubscription("project-a", "thread-a")).resolves.toBeUndefined();
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "start_task", { projectId: "project-a" });
+    expect(invoke).toHaveBeenNthCalledWith(1, "start_task", { projectId: "project-a", idempotencyKey: "create-a" });
     expect(invoke).toHaveBeenNthCalledWith(2, "start_turn", {
       input,
       options,

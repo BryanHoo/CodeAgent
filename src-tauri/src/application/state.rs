@@ -65,6 +65,7 @@ use runtime_supervisor::{
 
 #[derive(Default)]
 pub struct AppState {
+    pub(super) task_creations: super::task_creation::TaskCreationRegistry,
     pub terminals: crate::infrastructure::terminal::TerminalManager,
     file_search: ProjectFileSearch,
     request_cancellations: RequestCancellationRegistry,

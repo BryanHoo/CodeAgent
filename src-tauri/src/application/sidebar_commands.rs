@@ -160,17 +160,26 @@ pub async fn read_task(
 pub async fn start_task(
     app: AppHandle,
     project_id: String,
+    idempotency_key: String,
     state: State<'_, AppState>,
-) -> Result<AgentTaskMutationResponse, AppError> {
-    let connection = state.codex_connection().await?;
-    let response = task_workspace::start_task(&app, &connection, project_id.clone()).await?;
+) -> super::task_creation::CreationResult {
+    let creation_project = project_id.clone();
     state
-        .remember_task_metadata(
-            &project_id,
-            [(response.task.id.as_str(), response.task.title.as_str())],
-        )
-        .await;
-    Ok(response)
+        .task_creations
+        .run(&project_id, &idempotency_key, async move {
+            let state = app.state::<AppState>();
+            let connection = state.codex_connection().await?;
+            let response =
+                task_workspace::start_task(&app, &connection, creation_project.clone()).await?;
+            state
+                .remember_task_metadata(
+                    &creation_project,
+                    [(response.task.id.as_str(), response.task.title.as_str())],
+                )
+                .await;
+            Ok(response)
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
