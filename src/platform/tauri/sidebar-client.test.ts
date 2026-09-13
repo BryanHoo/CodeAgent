@@ -119,7 +119,7 @@ describe("TauriSidebarClient", () => {
     } as const;
 
     await client.startTask("project-a", { idempotencyKey: "create-a" });
-    await client.startTurn("project-a", "thread-a", input, options);
+    await client.startTurn("project-a", "thread-a", input, options, { idempotencyKey: "turn-a" });
     await client.steerTurn("project-a", "thread-a", "turn-a", input);
     await client.interruptTurn("project-a", "thread-a", "turn-a");
     await expect(client.releaseTaskSubscription("project-a", "thread-a")).resolves.toBeUndefined();
@@ -127,6 +127,7 @@ describe("TauriSidebarClient", () => {
 
     expect(invoke).toHaveBeenNthCalledWith(1, "start_task", { projectId: "project-a", idempotencyKey: "create-a" });
     expect(invoke).toHaveBeenNthCalledWith(2, "start_turn", {
+      idempotencyKey: "turn-a",
       input,
       options,
       projectId: "project-a",

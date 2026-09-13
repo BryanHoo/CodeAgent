@@ -189,9 +189,17 @@ pub async fn start_turn(
     task_id: String,
     input: AgentPromptInput,
     options: AgentTurnOptions,
+    idempotency_key: String,
     state: State<'_, AppState>,
-) -> Result<Value, AppError> {
-    start_turn_for_task(&app, &project_id, &task_id, input, options, &state).await
+) -> super::turn_start::TurnStartResult {
+    let identity = super::turn_start::fingerprint(&project_id, &task_id, &input, &options)?;
+    state
+        .turn_starts
+        .run(&idempotency_key, identity, async move {
+            let state = app.state::<AppState>();
+            start_turn_for_task(&app, &project_id, &task_id, input, options, &state).await
+        })
+        .await
 }
 
 #[tauri::command(rename_all = "camelCase")]

@@ -93,28 +93,39 @@ Rust 将 Codex 原始新增/删除内容、缺少头部或 hunk 的更新，以�
 - 记录位于 `AppState`，跨 WebView 重建和 Provider 重启保留，不跨应用重启。保留窗口从注册时起计算 15 分钟；在途记录即使过期也不淘汰。过期完成项在下次请求时清理，窗口外同键可能重新创建。
 - 最多保留 128 项，容量耗尽在执行副作用前拒绝。键和项目身份分别限制为 128、1024 字节；单项结果字符串正文或错误 JSON 最多 8 KiB，超大结果保留固定不确定错误，预算不代表进程 RSS 上限。
 - 每次调用最多等待 120 秒，超时或调用方取消只结束等待，创建与工作区收尾继续；后续同键可取得最终结果。工作异常退出保留不确定记录，不接管重跑。
-- 失败在保留窗口内也会重放，不能通过同键自动重试创建；新尝试需要新键，并先核对任务列表以避免重复。完整失败重试交互、创建后启动首轮的恢复编排及 Turn 幂等尚未迁移。
+- 失败在保留窗口内也会重放，不能通过同键自动重试创建；新尝试需要新键，并先核对任务列表以避免重复。完整失败重试交互、创建后启动首轮的恢复编排尚未迁移；Turn 启动幂等见下文。
 
 ## 已实施：启动前线程恢复
 
 本批补齐启动前的原生线程恢复决策：删除前端 `threadAlreadyLoaded` 和 IPC `resumeTask`，普通提交、Goal 与定时任务由 Rust 按当前 Provider 状态确认写入权，复用打开任务时的同一规则与本次已读取偏好。先调用 `thread/resume(excludeTurns:true)` 恢复订阅；只有精确的目标线程缺少 rollout 错误才回退读取轻量线程元数据，验证项目、线程和载入状态。失败不启动 Turn，不额外重试业务操作；现有传输层对过载错误的有界重试保持不变。
 
-这消除了创建结果重放或前端状态过期导致的恢复判断，但尚未合并“创建并启动”事务，也没有实现 Turn 幂等或部分成功后的完整恢复。未新增常驻缓存或 WebView 请求；无 rollout 新线程相比此前跳过恢复的路径增加一次失败恢复 RPC 和一次轻量读取，真实端到端延迟尚未测量。
+这消除了创建结果重放或前端状态过期导致的恢复判断，但尚未合并“创建并启动”事务或实现部分成功后的完整恢复。此恢复步骤未新增常驻缓存或 WebView 请求；无 rollout 新线程相比此前跳过恢复的路径增加一次失败恢复 RPC 和一次轻量读取，真实端到端延迟尚未测量。
+
+## 已实施：Turn 启动幂等
+
+前端已有的启动键通过 `start_turn` 传入 Rust，普通与 Goal 提交在副作用前登记请求；同键同内容共享一次启动并重放结果，任务、项目、提示词、附件、Skill 或启动选项改变时拒绝复用键。以反序列化后的完整输入流式计算 SHA-256，不缓存提示词副本；重复请求仍需计算指纹，但不重复恢复线程、写入设置或启动 Turn。
+
+- `AppState` 内最多 128 条记录，从注册起保留 15 分钟，未结束工作即使过期也不淘汰；完成后按需回收。应用重启丢失记录，窗口外或不同键可能再次执行。
+- 单次输入 JSON 编码限制 4 MiB，在途输入合计限制 8 MiB；项目和任务身份分别最多 1024 字节，键最多 128 字节。缓存结果为共享编码字节，每项最多 64 KiB；超限立即停止编码并保留 `TURN_START_UNCERTAIN`。这些编码预算不是进程 RSS 上限。
+- 每个调用最多等待 120 秒，取消或超时只结束等待，后台工作继续；后续同键可取得结果。工作异常退出及超大结果保留不确定记录，不接管重跑。原始 RPC 错误和字符串错误保留原结构。
+- 失败也会重放，完整失败恢复交互尚未迁移；用户开始新尝试前仍需核对任务状态并使用新键。响应是原启动结果及 checkpoint，不代表当前 Turn 状态；创建与启动尚未形成整体恢复流程。定时任务、steer、排队和 Review 不经过此注册表；未改变底层过载重试规则。
 
 ## 后续迁移边界
 
 | 顺序 | 待迁移职责 | 验收重点 |
 |---|---|---|
 | 1 | 完整消息投影、终态归并、快照与实时事件对账 | 原生消息身份稳定；读取快照期间发生的 delta 不丢失、不重复；历史分页不回滚 |
-| 2 | 提交、创建后启动/steer/排队编排及幂等 | 原生创建去重已完成；继续实现部分成功恢复、失败重试交互和执行幂等 |
+| 2 | 提交、创建后启动/steer/排队编排及幂等 | 原生创建与 Turn 启动去重已完成；继续实现部分成功恢复、失败重试交互和其他执行幂等 |
 | 3 | 异步问题回答关联、队列确认状态 | 按协议身份关联，多个窗口不独立推断业务结果 |
 | 4 | Diff 摘要/正文按需读取与剩余调度规则 | 统计与补丁规范化已迁移；继续减少未打开详情的正文传输 |
 | 5 | 图片软件加工和结果缓存 | 真实 WebView 主线程负担下降，IPC 字节量与总内存不恶化 |
 
-当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计与补丁规范化、队列相邻移动及完整读取、任务创建幂等，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
+当前已迁移恢复元数据、失败终态错误规则、Skill 规范化及有界跨事件关联、Diff 行数统计与补丁规范化、队列相邻移动及完整读取、任务创建与 Turn 启动幂等、启动前线程恢复，没有迁移完整 `task-store-events.ts`、通用消息身份对账、前端事件历史和恢复重试器；不能视为主工作台已成为纯渲染层。
 快照元数据和 checkpoint 在同一 Rust 临界区读取，但这不代表上游多个历史 RPC 与实时正文事件已经形成原子快照。
 
 ## 验证
+
+2026-09-13 第十一批 Turn 启动幂等迁移的 `pnpm check` 通过：334 项前端测试、495 项 Rust 单元测试、6 项集成测试和 3 项既有性能基线通过，7 项默认忽略；Modern/Legacy 构建、类型检查、格式检查、Clippy 与体积预算通过。新增 14 项原生回归覆盖请求指纹、结果重放、并发及取消等待、零等待超时、容量、过期、编码预算和 worker 异常；原生协议替身验证重复提交只发送一次 `turn/start`。前端定向 11 项通过；真实 Codex 0.154.0 私有安装与生命周期测试通过，但不经过新注册表。未实测真实模型重复提交、Goal 端到端幂等或新增指纹计算的端到端延迟。
 
 2026-09-13 第十批启动前线程恢复迁移的 `pnpm check` 通过：333 项前端测试、481 项 Rust 单元测试、6 项集成测试与 3 项既有性能基线通过，7 项默认忽略；构建、类型检查、格式检查、Clippy 和体积预算通过。原生回归验证无 rollout 新线程继续启动、未载入线程拒绝、项目/线程身份隔离及写入占用错误保留；前端 10 项定向测试通过。真实 Codex 0.154.0 生命周期测试通过，其中验证共用恢复规则的新线程与跨进程占用路径；未实测真实模型 Turn 执行、Goal/定时任务端到端恢复或新增 RPC 的延迟。
 
@@ -132,6 +143,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib file_patch_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib native_queue_move_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib queue_snapshot_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib task_creation_should --locked
+cargo test --manifest-path src-tauri/Cargo.toml --lib application::turn_start --locked
+pnpm exec vitest run src/protocol/turn-start.test.ts src/platform/tauri/sidebar-client.test.ts src/features/workbench/composer-state-submission.test.ts
 cargo test --manifest-path src-tauri/Cargo.toml --lib turn_readiness_should --locked
 cargo test --manifest-path src-tauri/Cargo.toml --lib conversation_command --locked
 pnpm exec vitest run src/protocol/task-creation.test.ts src/platform/tauri/sidebar-client.test.ts src/features/workbench/composer-state-submission.test.ts

@@ -135,7 +135,11 @@ export type UploadAgentFeedbackResponse = Readonly<
 >;
 
 export const StartAgentTurnRequestSchema = Type.Object(
-  { input: AgentPromptInputSchema, options: AgentTurnOptionsSchema },
+  {
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 128, pattern: "\\S" }),
+    input: AgentPromptInputSchema,
+    options: AgentTurnOptionsSchema,
+  },
   { additionalProperties: false },
 );
 export type StartAgentTurnRequest = Readonly<Static<typeof StartAgentTurnRequestSchema>>;
@@ -270,6 +274,7 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("IDEMPOTENCY_CONFLICT"),
   Type.Literal("IDEMPOTENCY_CAPACITY_EXCEEDED"),
   Type.Literal("TASK_CREATION_UNCERTAIN"),
+  Type.Literal("TURN_START_UNCERTAIN"),
   Type.Literal("INVALID_REQUEST"),
   Type.Literal("PROJECT_NOT_FOUND"),
   Type.Literal("PROJECT_FILE_NOT_FOUND"),

@@ -60,6 +60,7 @@ mod terminal_project;
 pub mod tray_commands;
 #[cfg(test)]
 mod tray_commands_tests;
+mod turn_start;
 mod turn_waiters;
 pub mod workflow_commands;
 pub mod workspace_commands;

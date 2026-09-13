@@ -333,9 +333,10 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     taskId: string,
     input: AgentPromptInput,
     options: AgentTurnOptions,
-    _mutationOptions: MutationOptions = {},
+    mutationOptions: Readonly<{ idempotencyKey: string }>,
   ): Promise<StartAgentTurnResponse> {
     return this.call("start_turn", {
+      idempotencyKey: mutationOptions.idempotencyKey,
       input,
       options,
       projectId,
