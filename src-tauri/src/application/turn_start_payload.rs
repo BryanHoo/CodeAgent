@@ -30,6 +30,9 @@ pub fn fingerprint(
     input: &AgentPromptInput,
     options: &AgentTurnOptions,
 ) -> Result<TurnStartIdentity, Value> {
+    // 提交创建前和直接启动共用校验，不能等到 Goal RPC 前才发现无效输入。
+    crate::domain::goal_input::validate_turn_input(input, options)
+        .map_err(|error| serde_json::json!(super::super::error::AppError::from(error)))?;
     fingerprint_payload(project_id, task_id, &(project_id, task_id, input, options))
 }
 

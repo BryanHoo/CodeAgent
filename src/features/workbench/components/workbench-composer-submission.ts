@@ -74,9 +74,15 @@ export function toPromptSubmissionError(
   error: unknown,
   t: (key: string) => string,
 ): Error {
-  // Provider writer 冲突需要给出可操作提示，不能降级成无上下文的提交失败。
-  if (error instanceof NativeCommandError && error.code === "CODEX_THREAD_BUSY") {
-    return new NativeCommandError(error.code, t("composer.threadBusy"), error.rpcCode);
+  // 仅按原生错误码选择展示文案，业务校验统一由 Rust 执行。
+  if (error instanceof NativeCommandError) {
+    const key = ({
+      CODEX_THREAD_BUSY: "composer.threadBusy",
+      GOAL_OBJECTIVE_REQUIRED: "composer.goalObjectiveRequired",
+      GOAL_OBJECTIVE_TOO_LONG: "composer.goalObjectiveTooLong",
+      GOAL_STRUCTURED_INPUT_UNSUPPORTED: "composer.goalStructuredInputUnsupported",
+    } as Readonly<Record<string, string>>)[error.code];
+    if (key !== undefined) return new NativeCommandError(error.code, t(key), error.rpcCode);
   }
   return error instanceof Error ? error : new Error(t("composer.operationFailed"));
 }
@@ -174,19 +180,7 @@ export function createComposerSubmission({
     const text = (livePromptSubmission?.text ?? message.text).trim();
     const requestedComposerMode =
       options.composerMode === null ? undefined : (options.composerMode ?? composerMode);
-    if (requestedComposerMode === "goal" && (text.length === 0 || text.length > 4_000)) {
-      setMutationError(
-        new Error(
-          t(text.length === 0 ? "composer.goalObjectiveRequired" : "composer.goalObjectiveTooLong"),
-        ),
-      );
-      return false;
-    }
     const skills = promptSkills ?? livePromptSubmission?.skills ?? [];
-    if (requestedComposerMode === "goal" && (message.files.length > 0 || skills.length > 0)) {
-      setMutationError(new Error(t("composer.goalStructuredInputUnsupported")));
-      return false;
-    }
     const unsupportedModality =
       selectedModel === undefined
         ? undefined

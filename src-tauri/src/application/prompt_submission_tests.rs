@@ -118,6 +118,53 @@ fn prompt_submission_should_validate_keys_and_budget_before_creation() {
     assert!(request(Some("existing"), None, "turn").validate().is_ok());
 }
 
+#[test]
+fn goal_submission_should_reject_invalid_input_before_creation() {
+    for (text, attachment, skill, code) in [
+        (" \n\t".to_owned(), false, false, "GOAL_OBJECTIVE_REQUIRED"),
+        ("x".repeat(4001), false, false, "GOAL_OBJECTIVE_TOO_LONG"),
+        ("🦀".repeat(4001), false, false, "GOAL_OBJECTIVE_TOO_LONG"),
+        (
+            "目标".to_owned(),
+            true,
+            false,
+            "GOAL_STRUCTURED_INPUT_UNSUPPORTED",
+        ),
+        (
+            "目标".to_owned(),
+            false,
+            true,
+            "GOAL_STRUCTURED_INPUT_UNSUPPORTED",
+        ),
+    ] {
+        let mut request = request(None, Some("task"), "turn");
+        request.turn_options.goal_mode = true;
+        request.input.text = text;
+        if attachment {
+            request.input.attachments.push(json!({"id":"unresolved"}));
+        }
+        if skill {
+            request
+                .input
+                .skills
+                .push(json!({"id":"skill","name":"skill"}));
+        }
+        assert_eq!(request.validate().unwrap_err()["code"], code);
+    }
+}
+
+#[test]
+fn goal_submission_should_count_unicode_scalars_and_allow_ordinary_structured_prompts() {
+    let mut request = request(None, Some("task"), "turn");
+    request.turn_options.goal_mode = true;
+    request.input.text = format!("  {}\n", "🦀".repeat(4000));
+    assert!(request.validate().is_ok());
+    request.turn_options.goal_mode = false;
+    request.input.text = "x".repeat(4001);
+    request.input.attachments.push(json!({"id":"image"}));
+    assert!(request.validate().is_ok());
+}
+
 #[tokio::test]
 async fn prompt_submission_should_reuse_both_native_registries_on_retry() {
     use super::super::{

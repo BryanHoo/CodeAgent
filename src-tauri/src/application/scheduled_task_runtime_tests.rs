@@ -24,6 +24,52 @@ fn input(schedule: ScheduledTaskSchedule) -> ScheduledTaskInput {
 }
 
 #[test]
+fn scheduled_goal_should_reject_invalid_input_before_persistence() {
+    let mut request = input(ScheduledTaskSchedule::Once {
+        at_unix_ms: 2_000_000_000_000,
+    });
+    request.turn_options.goal_mode = true;
+    request.prompt.text = "x".repeat(4001);
+    let result = build_task("task".to_owned(), request, 1_000);
+    assert!(
+        result.is_err(),
+        "invalid Goal must not become a scheduled task"
+    );
+}
+
+#[tokio::test]
+async fn scheduled_goal_should_report_native_error_without_loading_storage() {
+    let root = std::env::temp_dir().join(format!(
+        "codeagent-goal-preflight-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let runtime = ScheduledTaskRuntime::default();
+    let mut request = input(ScheduledTaskSchedule::Once {
+        at_unix_ms: 2_000_000_000_000,
+    });
+    request.turn_options.goal_mode = true;
+    request
+        .prompt
+        .skills
+        .push(serde_json::json!({"id":"skill","name":"skill"}));
+    let error = runtime.create(&root, request.clone()).await.unwrap_err();
+    assert_eq!(
+        serde_json::to_value(error).unwrap()["code"],
+        "GOAL_STRUCTURED_INPUT_UNSUPPORTED"
+    );
+    let error = runtime.update(&root, "missing", request).await.unwrap_err();
+    assert_eq!(
+        serde_json::to_value(error).unwrap()["code"],
+        "GOAL_STRUCTURED_INPUT_UNSUPPORTED"
+    );
+    assert!(!root.exists(), "invalid Goal must not initialize storage");
+}
+
+#[test]
 fn exhausted_recurring_schedule_should_remain_valid_and_disabled() {
     let schedule = ScheduledTaskSchedule::Rrule {
         rrule: "FREQ=DAILY;COUNT=2".to_owned(),

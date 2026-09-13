@@ -2,6 +2,8 @@
 
 ## 普通提示词提交
 
+- Goal 输入规则统一由 Rust 领域校验：目标去除首尾空白后非空、最多 4000 个 Unicode 标量，禁止附件与 Skill。`submit_prompt` 创建前、`start_turn` 登记前、计划任务保存及执行前均须校验；执行校验先于附件解析、线程创建及设置写入。错误分别使用 `GOAL_OBJECTIVE_REQUIRED`、`GOAL_OBJECTIVE_TOO_LONG`、`GOAL_STRUCTURED_INPUT_UNSUPPORTED`，不得按错误文案判断。普通提示词不套用 Goal 限制，低层 `thread/goal/set` 复用同一目标规则。
+
 - `submit_prompt` 仅授权主窗口；请求包含 Project、可选 Task、输入、Turn 选项及创建/启动幂等键。创建前校验必需键与单请求 4 MiB 编码预算，最多 16 个在途调用及 8 MiB 编码输入，容量不足立即拒绝。
 - Rust 顺序复用创建与启动登记表；创建成功先通过 Channel 通知。最终响应包含可空 `createdTask` 及 `started` / `failed` outcome，启动失败仍保留创建摘要；创建失败直接返回错误。通知发送失败不能阻止启动。
 - 该入口不构成原子事务或跨进程恢复日志；两个阶段保留各自幂等身份与过期规则。Review、steer 和排队不在本入口迁移范围。

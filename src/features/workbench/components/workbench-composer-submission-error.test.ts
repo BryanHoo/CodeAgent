@@ -26,6 +26,15 @@ const selectedModel = {
 };
 
 describe("toPromptSubmissionError", () => {
+  it.each([
+    ["GOAL_OBJECTIVE_REQUIRED", "composer.goalObjectiveRequired"],
+    ["GOAL_OBJECTIVE_TOO_LONG", "composer.goalObjectiveTooLong"],
+    ["GOAL_STRUCTURED_INPUT_UNSUPPORTED", "composer.goalStructuredInputUnsupported"],
+  ])("renders the native Goal rejection %s", (code, key) => {
+    expect(toPromptSubmissionError(new NativeCommandError(code, "native rejection"), (value) => value))
+      .toMatchObject({ code, message: key });
+  });
+
   it("maps a busy Codex thread to an actionable localized message", () => {
     const error = toPromptSubmissionError(
       new NativeCommandError(
@@ -69,6 +78,34 @@ describe("findUnsupportedInputModality", () => {
 });
 
 describe("createComposerSubmission", () => {
+  it("passes Unicode Goal input to native validation without UTF-16 rejection", async () => {
+    const capture = vi.fn(async () => undefined);
+    const setMutationError = vi.fn();
+    const submit = createComposerSubmission({
+      activeSettings,
+      selectedModel,
+      selectedReasoningEffort: "high",
+      composerMode: "goal",
+      onCaptureSubmission: capture,
+      turnControlsDisabled: false,
+      fastMode: false,
+      controller: {
+        actionLock: { run: async (action: () => Promise<boolean>) => action() },
+        isCurrentScope: () => true,
+        setIsSubmitting: vi.fn(),
+        setMutationError,
+      },
+    } as unknown as Parameters<typeof createComposerSubmission>[0]);
+    const text = "🦀".repeat(4000);
+    await expect(submit({ files: [], text }, [], { forceAction: "start" })).resolves.toBe(true);
+    expect(capture).toHaveBeenCalledWith(
+      { attachments: [], skills: [], text, type: "prompt" },
+      expect.objectContaining({ goalMode: true }),
+      [],
+    );
+    expect(setMutationError).toHaveBeenCalledExactlyOnceWith(null);
+  });
+
   it.each([false, true])("clears an image-only steer without duplicating its projection (cleanupOnly: %s)", async (cleanupOnly) => {
     const clearComposerInput = vi.fn();
     const onSteerAccepted = vi.fn();

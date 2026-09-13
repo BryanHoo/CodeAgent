@@ -180,10 +180,8 @@ pub async fn set_goal_objective(
     task_id: &str,
     objective: &str,
 ) -> Result<GoalUpdateResponse, ConnectionError> {
-    let objective = objective.trim();
-    if objective.is_empty() || objective.chars().count() > 4_000 {
-        return Err(ConnectionError::InvalidMessage);
-    }
+    let objective = crate::domain::goal_input::validate_objective(objective)
+        .map_err(|_| ConnectionError::InvalidMessage)?;
     let response: NativeGoalUpdateResponse = connection
         .request(
             "thread/goal/set",

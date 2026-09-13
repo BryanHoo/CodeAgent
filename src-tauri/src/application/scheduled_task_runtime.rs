@@ -103,9 +103,9 @@ impl ScheduledTaskRuntime {
         app_data: &Path,
         input: ScheduledTaskInput,
     ) -> Result<ScheduledTask, AppError> {
-        self.ensure_loaded(app_data).await?;
         let now = now_unix_ms();
-        let task = build_task(new_id("schedule"), input, now).map_err(map_store_error)?;
+        let task = build_task(new_id("schedule"), input, now)?;
+        self.ensure_loaded(app_data).await?;
         let mut current = self.inner.lock().await;
         let mut state = current.clone();
         state.tasks.push(task.clone());
@@ -121,8 +121,9 @@ impl ScheduledTaskRuntime {
         id: &str,
         input: ScheduledTaskInput,
     ) -> Result<ScheduledTask, AppError> {
-        self.ensure_loaded(app_data).await?;
         let now = now_unix_ms();
+        let mut updated = build_task(id.to_owned(), input, now)?;
+        self.ensure_loaded(app_data).await?;
         let mut current = self.inner.lock().await;
         let mut state = current.clone();
         let existing = state
@@ -130,7 +131,6 @@ impl ScheduledTaskRuntime {
             .iter_mut()
             .find(|task| task.id == id)
             .ok_or(AppError::ScheduledTaskNotFound)?;
-        let mut updated = build_task(id.to_owned(), input, now).map_err(map_store_error)?;
         updated.created_at_unix_ms = existing.created_at_unix_ms;
         updated.last_run_at_unix_ms = existing.last_run_at_unix_ms;
         updated.last_run_status = existing.last_run_status.clone();
@@ -212,9 +212,11 @@ pub(super) fn build_task(
     id: String,
     input: ScheduledTaskInput,
     now: i64,
-) -> Result<ScheduledTask, ScheduledTaskStoreError> {
+) -> Result<ScheduledTask, AppError> {
+    crate::domain::goal_input::validate_turn_input(&input.prompt, &input.turn_options)?;
     // 停用也校验规则；有限计划用 None 表达自然结束，不把正常结束当作保存错误。
-    let next_run_at_unix_ms = resolve_schedule_runs(&input.schedule, now, 1)?
+    let next_run_at_unix_ms = resolve_schedule_runs(&input.schedule, now, 1)
+        .map_err(map_store_error)?
         .first()
         .copied();
     let task = ScheduledTask {
@@ -235,7 +237,7 @@ pub(super) fn build_task(
     };
     task.is_valid()
         .then_some(task)
-        .ok_or(ScheduledTaskStoreError::InvalidData)
+        .ok_or(AppError::ScheduledTaskInvalid)
 }
 
 pub(super) fn claim_due_tasks(

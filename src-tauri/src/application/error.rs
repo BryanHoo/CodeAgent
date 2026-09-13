@@ -7,6 +7,8 @@ use crate::infrastructure::{
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error(transparent)]
+    GoalInput(#[from] crate::domain::goal_input::GoalInputError),
     #[error("queue recovery capacity is exhausted; retry later")]
     QueueRecoveryCapacityExceeded,
     #[error("the task queue is empty")]
@@ -88,6 +90,7 @@ impl Serialize for AppError {
             return payload.end();
         }
         let structured_error = match self {
+            Self::GoalInput(error) => Some((error.code(), error.to_string())),
             Self::QueueRecoveryCapacityExceeded => {
                 Some(("IDEMPOTENCY_CAPACITY_EXCEEDED", self.to_string()))
             }

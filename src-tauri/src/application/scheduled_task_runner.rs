@@ -22,6 +22,8 @@ pub(crate) async fn start_turn_for_task(
     options: AgentTurnOptions,
     state: &AppState,
 ) -> Result<Value, AppError> {
+    // 计划任务直接进入此处；校验必须先于附件解析、设置写入及任何启动副作用。
+    crate::domain::goal_input::validate_turn_input(&input, &options)?;
     let app_data = app
         .path()
         .app_data_dir()
@@ -78,9 +80,6 @@ async fn start_goal_turn(
     options: AgentTurnOptions,
     state: &AppState,
 ) -> Result<Value, AppError> {
-    if !input.attachments.is_empty() || !input.skills.is_empty() {
-        return Err(AppError::CodexRequestFailed);
-    }
     let (waiter_id, turn_started) = state.register_turn_started(task_id).await;
     let result = async {
         codex::update_thread_settings(connection, task_id, &options)
@@ -116,6 +115,9 @@ pub(crate) async fn start_scheduled_task_turn(
     app: &AppHandle,
     scheduled: &ScheduledTask,
 ) -> Result<String, String> {
+    // 已保存的旧计划也在执行前核对，避免先创建线程再报告无效 Goal。
+    crate::domain::goal_input::validate_turn_input(&scheduled.prompt, &scheduled.turn_options)
+        .map_err(|error| error.to_string())?;
     let state = app.state::<AppState>();
     let app_data = app
         .path()
