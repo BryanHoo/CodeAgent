@@ -60,10 +60,20 @@ import type {
 import type { TauriClientOptions } from "./native-client.js";
 import { subscribeProjectEvents } from "./project-event-subscription.js";
 import { TauriRuntimeClient } from "./runtime-client.js";
+import type { SubmitPromptOptions } from "./prompt-submission.js";
 
 export type { InvokeImplementation } from "./native-client.js";
 
 export class TauriSidebarClient extends TauriRuntimeClient {
+  public async submitPrompt(options: SubmitPromptOptions) {
+    // 提交专用校验按需加载，避免增加工作台首次渲染的协议代码。
+    const { submitPrompt } = await import("./prompt-submission.js");
+    return submitPrompt(this.call.bind(this), { ...options, onTaskCreated: (task) => {
+      this.taskProjects.set(task.id, options.projectId);
+      options.onTaskCreated?.(task);
+    } });
+  }
+
   public constructor(options: TauriClientOptions = {}) {
     super(options);
   }

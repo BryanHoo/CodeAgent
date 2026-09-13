@@ -8,7 +8,6 @@ import type {
   AgentTaskSnapshot,
   AgentTurn,
   AgentTurnOptions,
-  EventCheckpoint,
 } from "@/protocol/index.js";
 import { v4 as createUuid } from "uuid";
 
@@ -178,45 +177,10 @@ type StartPromptTurnOptions = Readonly<{
 }>;
 
 export async function startPromptTurn(
-  client: Pick<NativeMutationClient, "startTask" | "startTurn">,
+  client: Pick<NativeMutationClient, "submitPrompt">,
   options: StartPromptTurnOptions,
-): Promise<
-  Readonly<{
-    checkpoint: EventCheckpoint;
-    createdTask?: AgentTask;
-    taskId: string;
-    turn: AgentTurn;
-  }>
-> {
-  let taskId = options.taskId;
-  let createdTask: AgentTask | undefined;
-  if (taskId === undefined) {
-    const startTaskKey = options.idempotencyKeys.startTask;
-    if (startTaskKey === undefined) {
-      throw new Error("Task creation requires an idempotency key");
-    }
-    const response = await client.startTask(options.projectId, {
-      idempotencyKey: startTaskKey,
-    });
-    createdTask = response.task;
-    taskId = response.task.id;
-    options.onTaskCreated?.(response.task);
-  }
-  const response = await client.startTurn(
-    options.projectId,
-    taskId,
-    options.input,
-    options.turnOptions,
-    {
-      idempotencyKey: options.idempotencyKeys.startTurn,
-    },
-  );
-  return {
-    checkpoint: response.checkpoint,
-    ...(createdTask === undefined ? {} : { createdTask }),
-    taskId,
-    turn: response.turn,
-  };
+) {
+  return client.submitPrompt(options);
 }
 
 type StartTaskReviewOptions = Readonly<{

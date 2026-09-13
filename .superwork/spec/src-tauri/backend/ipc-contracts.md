@@ -1,5 +1,11 @@
 # Tauri IPC 契约
 
+## 普通提示词提交
+
+- `submit_prompt` 仅授权主窗口；请求包含 Project、可选 Task、输入、Turn 选项及创建/启动幂等键。创建前校验必需键与单请求 4 MiB 编码预算，最多 16 个在途调用及 8 MiB 编码输入，容量不足立即拒绝。
+- Rust 顺序复用创建与启动登记表；创建成功先通过 Channel 通知。最终响应包含可空 `createdTask` 及 `started` / `failed` outcome，启动失败仍保留创建摘要；创建失败直接返回错误。通知发送失败不能阻止启动。
+- 该入口不构成原子事务或跨进程恢复日志；两个阶段保留各自幂等身份与过期规则。Review、steer 和排队不在本入口迁移范围。
+
 ## 命令边界
 
 - Tauri 命令按职责拆分在 `src-tauri/src/application/*_commands.rs`

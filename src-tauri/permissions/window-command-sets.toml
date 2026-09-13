@@ -79,6 +79,7 @@ permissions = [
   "allow-list-tasks",
   "allow-read-task",
   "allow-start-task",
+  "allow-submit-prompt",
   "allow-start-turn",
   "allow-steer-turn",
   "allow-interrupt-turn",

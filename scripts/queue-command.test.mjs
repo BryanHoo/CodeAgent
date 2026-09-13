@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+void test("prompt submission command is registered and granted only to main", () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  assert.ok(read("src-tauri/build.rs").includes('"submit_prompt"'));
+  assert.ok(read("src-tauri/src/lib.rs").includes("submit_prompt,"));
+  for (const set of read("src-tauri/permissions/window-command-sets.toml").split("[[set]]").slice(1)) {
+    assert.equal(set.includes('"allow-submit-prompt"'), set.includes('identifier = "main-window-commands"'));
+  }
+});
+
 void test("queue move command replaces raw reorder and is granted only to the main window", () => {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   const manifest = read("src-tauri/build.rs");

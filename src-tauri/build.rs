@@ -110,6 +110,7 @@ fn main() {
         "read_task",
         "start_task",
         "start_turn",
+        "submit_prompt",
         "steer_turn",
         "interrupt_turn",
         "resolve_pending_request",

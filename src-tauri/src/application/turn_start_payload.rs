@@ -13,6 +13,12 @@ pub struct TurnStartIdentity {
     pub(super) bytes: usize,
 }
 
+impl TurnStartIdentity {
+    pub(crate) fn encoded_bytes(&self) -> usize {
+        self.bytes
+    }
+}
+
 pub fn fingerprint(
     project_id: &str,
     task_id: &str,

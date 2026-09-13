@@ -22,7 +22,7 @@ const turnOptions: AgentTurnOptions = {
 };
 
 describe("startPromptTurn", () => {
-  it("leaves thread readiness to Rust after task creation", async () => {
+  it("delegates creation and turn start to one native submission", async () => {
     const startTask = vi.fn(async () => ({ task }));
     const startTurn = vi.fn(async () => ({
       checkpoint: { sequence: 1, sessionId: "runtime-a" },
@@ -36,9 +36,10 @@ describe("startPromptTurn", () => {
         status: "running" as const,
       },
     }));
-    const client = { startTask, startTurn } as Pick<
+    const submitPrompt = vi.fn(startTurn.getMockImplementation()!);
+    const client = { startTask, startTurn, submitPrompt } as Pick<
       NativeMutationClient,
-      "startTask" | "startTurn"
+      "submitPrompt"
     >;
 
     await startPromptTurn(client, {
@@ -48,8 +49,13 @@ describe("startPromptTurn", () => {
       turnOptions,
     });
 
-    expect(startTurn).toHaveBeenCalledWith("project-a", task.id, input, turnOptions, {
-      idempotencyKey: "turn-key",
+    expect(submitPrompt).toHaveBeenCalledWith({
+      idempotencyKeys: { startTask: "task-key", startTurn: "turn-key" },
+      input,
+      projectId: "project-a",
+      turnOptions,
     });
+    expect(startTask).not.toHaveBeenCalled();
+    expect(startTurn).not.toHaveBeenCalled();
   });
 });

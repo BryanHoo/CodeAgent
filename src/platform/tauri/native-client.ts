@@ -21,7 +21,7 @@ export class NativeCommandError extends Error {
   }
 }
 
-function normalizeNativeError(error: unknown): unknown {
+export function normalizeNativeError(error: unknown): unknown {
   if (
     typeof error === "object" &&
     error !== null &&

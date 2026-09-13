@@ -114,6 +114,7 @@ export type NativeMutationClient = Pick<
   | "startQueuedSubmission"
   | "startTask"
   | "startTurn"
+  | "submitPrompt"
   | "steerTurn"
   | "uploadAttachment"
   | "unarchiveTask"

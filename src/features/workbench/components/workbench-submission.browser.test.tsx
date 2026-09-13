@@ -69,7 +69,7 @@ test.each([1280, 1920].flatMap((width) =>
       checkpoint: { sequence: 0, sessionId: "session" } });
   }));
   const client = {
-    startTurn, listQueuedSubmissions: async () => ({ data: [], nextCursor: null }),
+    submitPrompt: startTurn, listQueuedSubmissions: async () => ({ data: [] }),
   } as unknown as NativeWorkbenchClient;
   const composerRef = createRef<WorkbenchComposerHandle>();
   function Harness() {

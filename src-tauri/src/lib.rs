@@ -44,6 +44,7 @@ use application::{
     open_commands::{get_project_open_capabilities, open_project, open_task_attachment},
     pet_commands::{download_workbench_pet, list_workbench_pets},
     project_file_window_commands::open_project_file_window,
+    prompt_submission::submit_prompt,
     scheduled_task_commands::{
         create_scheduled_task, delete_scheduled_task, list_scheduled_tasks, preview_scheduled_task,
         run_scheduled_task_now, set_scheduled_task_enabled, update_scheduled_task,
@@ -243,6 +244,7 @@ pub fn run() {
             read_task,
             start_task,
             start_turn,
+            submit_prompt,
             steer_turn,
             interrupt_turn,
             resolve_pending_request,

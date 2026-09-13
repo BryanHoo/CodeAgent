@@ -65,6 +65,7 @@ use runtime_supervisor::{
 
 #[derive(Default)]
 pub struct AppState {
+    pub(super) prompt_submissions: super::prompt_submission::SubmissionBudget,
     pub(super) task_creations: super::task_creation::TaskCreationRegistry,
     pub(super) turn_starts: super::turn_start::TurnStartRegistry,
     pub terminals: crate::infrastructure::terminal::TerminalManager,

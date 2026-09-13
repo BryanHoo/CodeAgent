@@ -40,6 +40,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 归档与删除 | `archiveTask`, `unarchiveTask`, `deleteTask`, `unsubscribeTask` | 原生 thread 生命周期；删除临时任务后仅清理验证为受控直接子目录的工作区；Rust lease 管理器在终态触发释放，活跃任务保持 busy 并有界退避重试，WebView 只声明消费者挂载/卸载 | 已实现 |
 | 会话快照 | `readTask` | `thread/read(includeTurns:false)` + `thread/turns/list` | 已实现 |
 | 运行时未就绪后重试 | `startTask`, `startTurn` | Rust 仅对取得连接前的 `CodexRuntimeUnavailable` 允许后续同键请求重试；保持身份、原保留期限与并发去重，其他失败继续重放 | 已实现 |
+| 普通提示词提交编排 | `submitPrompt` | Rust 顺序创建并启动；创建通知与最终摘要保留部分成功，前端去重并补回丢失通知；16 个在途调用、8 MiB 输入编码预算。不提供跨进程整体恢复 | 已实现 |
 | Turn 启动幂等 | `startTurn` | Rust 在 15 分钟保留窗口内合并同键同内容启动并重放结果；完整请求指纹校验、128 项记录、单项 64 KiB 编码结果。取消等待不取消启动；不覆盖应用重启或创建与启动的整体恢复 | 已实现 |
 | 启动前线程恢复 | `startTurn` | 普通、Goal 和定时任务在 Rust 恢复订阅；无 rollout 新线程仅经当前 Provider 的身份及载入状态校验后继续，前端不传恢复标志 | 已实现 |
 | 任务创建幂等 | `startTask` | 前端显式传入键；Rust 合并同键并发并在注册后 15 分钟内重放结果，最多 128 条记录。等待取消或超时不取消创建；不覆盖应用重启及 Turn 启动 | 已实现 |
