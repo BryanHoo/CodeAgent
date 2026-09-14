@@ -17,6 +17,47 @@ fn git(root: &Path, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
+#[tokio::test]
+async fn chinese_parent_and_repository_paths_should_preserve_git_changes() {
+    let fixture = Repository::new();
+    let root = fixture.0.join("中文父目录 含空格").join("中文项目");
+    fs::create_dir_all(&root).unwrap();
+    git(&root, &["init", "-b", "主分支"]);
+    git(&root, &["config", "user.name", "CodeAgent Test"]);
+    git(&root, &["config", "user.email", "test@example.com"]);
+    fs::write(root.join("已跟踪文件.txt"), "初始内容\n").unwrap();
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "-m", "初次提交"]);
+    fs::write(root.join("已跟踪文件.txt"), "修改内容\n").unwrap();
+    fs::write(root.join("新增文件.txt"), "新内容\n").unwrap();
+    let canonical = super::canonical_root(root.to_str().unwrap()).await.unwrap();
+    get_git_status(&root, None, false).await.unwrap();
+    let status = get_git_status(&canonical, None, true).await.unwrap();
+    assert_eq!(status.branch.as_deref(), Some("主分支"));
+    assert_eq!(status.repository_mode, "root");
+    assert_eq!(status.unstaged.len(), 2);
+    assert!(
+        status
+            .unstaged
+            .iter()
+            .any(|change| change.path == "新增文件.txt")
+    );
+    assert!(
+        status
+            .unstaged
+            .iter()
+            .any(|change| change.path == "已跟踪文件.txt")
+    );
+    #[cfg(windows)]
+    {
+        let ordinary = std::path::PathBuf::from(super::git_process::git_path_argument(&root));
+        get_git_status(&ordinary, None, false).await.unwrap();
+        let alternate = root.to_string_lossy().to_uppercase();
+        let canonical = super::canonical_root(&alternate).await.unwrap();
+        get_git_status(&canonical, None, false).await.unwrap();
+    }
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn commit_context_should_read_link_text_without_opening_its_target() {

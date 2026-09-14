@@ -378,6 +378,11 @@ pub async fn unsubscribe_task(
     ) {
         return Err(ConnectionError::InvalidMessage);
     }
+    connection
+        .new_task_projects
+        .lock()
+        .map_err(|_| ConnectionError::StateUnavailable)?
+        .remove(task_id);
     let response: NativeThreadUnsubscribeResponse = connection
         .request(
             "thread/unsubscribe",

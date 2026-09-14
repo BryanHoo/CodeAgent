@@ -97,7 +97,9 @@ pub(super) async fn read_git_status(
     include_diff: bool,
     strict: bool,
 ) -> Result<GitStatus, WorkspaceError> {
-    let selected = select_repository(root, repository).await?;
+    let selected = select_repository(root, repository)
+        .await
+        .map_err(|error| status_error("repository selection", error))?;
     let Some(repo) = selected.path else {
         return Ok(GitStatus {
             base_branches: Vec::new(),
@@ -116,7 +118,9 @@ pub(super) async fn read_git_status(
     )
     .await?;
     if truncated {
-        return Err(WorkspaceError::InvalidPath);
+        return Err(WorkspaceError::GitCommandFailed(format!(
+            "git status output exceeded {MAX_GIT_OUTPUT_BYTES} bytes"
+        )));
     }
     let branch = optional_git_line(&repo, &["branch", "--show-current"]).await?;
     let head = head_commit(&repo).await?;
@@ -130,7 +134,8 @@ pub(super) async fn read_git_status(
         .filter(|branch| matches!(branch.as_str(), "main" | "master"))
         .cloned()
         .collect();
-    let (mut staged, mut unstaged) = parse_status(&status_output)?;
+    let (mut staged, mut unstaged) =
+        parse_status(&status_output).map_err(|error| status_error("path decoding", error))?;
     if include_diff {
         add_diffs(&repo, &mut staged, true).await?;
         add_diffs(&repo, &mut unstaged, false).await?;
@@ -138,7 +143,11 @@ pub(super) async fn read_git_status(
     let mut snapshot_parts = vec![String::from_utf8_lossy(&status_output).into_owned()];
     snapshot_parts.push(head.unwrap_or_default());
     snapshot_parts.push(branch.clone().unwrap_or_default());
-    snapshot_parts.push(super::git_snapshot::content_fingerprint(&repo, &unstaged, strict).await?);
+    snapshot_parts.push(
+        super::git_snapshot::content_fingerprint(&repo, &unstaged, strict)
+            .await
+            .map_err(|error| status_error("snapshot", error))?,
+    );
     Ok(GitStatus {
         base_branches,
         branch,
@@ -148,6 +157,16 @@ pub(super) async fn read_git_status(
         staged,
         unstaged,
     })
+}
+
+fn status_error(stage: &'static str, source: WorkspaceError) -> WorkspaceError {
+    match source {
+        WorkspaceError::InvalidPath => WorkspaceError::GitStatusRead {
+            stage,
+            source: Box::new(source),
+        },
+        other => other,
+    }
 }
 
 pub async fn get_git_history(
@@ -266,7 +285,7 @@ async fn select_repository(
         }
         return Ok(RepositorySelection {
             mode: "root",
-            path: Some(root.to_path_buf()),
+            path: Some(tokio::fs::canonicalize(root).await?),
             repositories: Vec::new(),
             repository: None,
         });
@@ -287,7 +306,7 @@ async fn select_repository(
     let repository = requested.map(str::to_owned);
     let path = match requested {
         Some(requested) if repositories.iter().any(|value| value == requested) => {
-            Some(root.join(valid_relative(requested)?))
+            Some(tokio::fs::canonicalize(root.join(valid_relative(requested)?)).await?)
         }
         Some(_) => return Err(WorkspaceError::InvalidPath),
         None => None,

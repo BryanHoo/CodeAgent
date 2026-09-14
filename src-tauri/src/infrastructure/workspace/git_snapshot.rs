@@ -89,7 +89,9 @@ pub(super) async fn content_fingerprint(
     )
     .await?;
     if truncated {
-        return Err(WorkspaceError::InvalidPath);
+        return Err(WorkspaceError::GitCommandFailed(
+            "git index metadata output exceeded 2097152 bytes".to_owned(),
+        ));
     }
     let paths: BTreeSet<String> = unstaged
         .iter()

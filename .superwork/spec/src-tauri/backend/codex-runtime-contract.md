@@ -68,6 +68,8 @@
 
 - 新项目线程在首次落盘前，`thread/resume` 可返回 `no rollout found`，而 `thread/read(includeTurns: false)` 的 live snapshot 返回 `projectId: null`、`status: idle`。只能使用当前连接经 `thread/start` 校验成功的项目归属补齐该空值，并继续核对线程 ID、项目和载入状态；没有创建证据、跨项目及非空原生归属冲突必须拒绝。原生归属物化或 resume 成功后释放启动期记录，记录不得跨连接复用。
 
+- 首次落盘也可能创建尚未写入元数据的空 rollout，使 resume 与 read 同时返回精确的 `-32603` 空会话文件错误。仅对当前连接创建、项目相符且尚未取消订阅的新线程，允许用有界 `thread/loaded/list` 确认它仍在当前服务端载入后沿用订阅；查询结束再次核对创建证据。取消订阅前清除该证据，历史损坏、其他存储错误和 writer 冲突不得走此回退。正常读取不增加 RPC，不增加后台轮询，不修改会话文件。
+
 ## 验证要求
 
 - 覆盖精确版本门禁、六个平台 URL 与 SHA-512、安装命令和前端恢复提示
