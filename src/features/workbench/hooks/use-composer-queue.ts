@@ -91,8 +91,6 @@ export function useComposerQueue({
     .filter((entry) => entry.scope === routeScope)
     .map((entry) => entry.prompt);
   const awaitingIds = new Set(currentAwaiting.map((prompt) => prompt.id));
-  const editingPrompt = serverPrompts.find((prompt) => prompt.status === "editing");
-  const editingId = editingPrompt?.id;
   const queuedPrompts = [
     ...serverPrompts.filter((prompt) => !awaitingIds.has(prompt.id)),
     ...currentAwaiting,
@@ -134,19 +132,9 @@ export function useComposerQueue({
     if (taskId === undefined) {
       return false;
     }
-    if (editingId === undefined) {
-      await client.addQueuedSubmission(projectId, taskId, input, clientUserMessageId, {
-        idempotencyKey: createUuid(),
-      });
-    } else {
-      await client.updateQueuedSubmission(projectId, taskId, editingId, input, "queued", {
-        idempotencyKey: createUuid(),
-      });
-      queueStartAttempt.current = undefined;
-      if (activeTurnId === undefined) {
-        await startQueued(taskId, editingId);
-      }
-    }
+    await client.addQueuedSubmission(projectId, taskId, input, clientUserMessageId, {
+      idempotencyKey: createUuid(),
+    });
     await invalidateQueue();
     return true;
   };
@@ -200,12 +188,9 @@ export function useComposerQueue({
     queuedPrompt: QueuedComposerPrompt,
     submitPrompt: SubmitPrompt,
   ) => {
-    const promptIndex = serverPrompts.findIndex((prompt) => prompt.id === queuedPrompt.id);
-    const editingIndex = serverPrompts.findIndex((prompt) => prompt.status === "editing");
     if (
       queuedPrompt.status !== "queued" ||
-      taskId === undefined ||
-      (editingIndex >= 0 && promptIndex >= editingIndex)
+      taskId === undefined
     ) {
       return;
     }
@@ -257,7 +242,6 @@ export function useComposerQueue({
 
   return {
     editQueuedPrompt,
-    editingId,
     moveQueuedPrompt,
     onSteerAccepted,
     queueError: queueQuery.error,

@@ -118,7 +118,6 @@ export type NativeMutationClient = Pick<
   | "steerTurn"
   | "uploadAttachment"
   | "unarchiveTask"
-  | "updateQueuedSubmission"
   | "updateTaskGoal"
 >;
 export type NativePendingRequestClient = Pick<NativeClient, "resolvePendingRequest">;

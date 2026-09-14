@@ -219,7 +219,6 @@ export function WorkbenchComposer({
     client,
     controller: composerController,
     composerMode,
-    editingQueuedSubmission: composerQueue.editingId !== undefined,
     followUpBehavior,
     fastMode: fastModeEnabled,
     isCurrentSubmissionTarget,
@@ -334,10 +333,7 @@ export function WorkbenchComposer({
       }
     });
   };
-  const submitAction =
-    composerQueue.editingId === undefined
-      ? resolveComposerSubmitAction(state, hasComposerInput, followUpBehavior, canSteer)
-      : "queue";
+  const submitAction = resolveComposerSubmitAction(state, hasComposerInput, followUpBehavior, canSteer);
   const composerView = (
     <WorkbenchComposerView
       activeCommandIndex={activeCommandIndex}

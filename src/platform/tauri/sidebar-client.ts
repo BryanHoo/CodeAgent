@@ -14,7 +14,6 @@ import type {
   AgentBackgroundTerminalPage,
   AgentPromptInput,
   AgentQueuedSubmissionSnapshot,
-  AgentQueuedSubmissionStatus,
   AgentTaskSnapshotResponse,
   AgentTaskPage,
   AgentTaskSettings,
@@ -52,7 +51,6 @@ import type {
   UnarchiveAgentTaskResponse,
   UpdateAgentGoalRequest,
   UpdateAgentGoalResponse,
-  UpdateAgentQueuedSubmissionResponse,
 } from "@/protocol/index.js";
 
 import type { TauriClientOptions } from "./native-client.js";
@@ -281,23 +279,6 @@ export class TauriSidebarClient extends TauriRuntimeClient {
       clientUserMessageId,
       input,
       projectId,
-      taskId,
-    });
-  }
-
-  public async updateQueuedSubmission(
-    projectId: string,
-    taskId: string,
-    queuedSubmissionId: string,
-    input: AgentPromptInput,
-    status: AgentQueuedSubmissionStatus,
-    _options: MutationOptions = {},
-  ): Promise<UpdateAgentQueuedSubmissionResponse> {
-    return this.call("update_queued_submission", {
-      input,
-      projectId,
-      queuedSubmissionId,
-      status,
       taskId,
     });
   }

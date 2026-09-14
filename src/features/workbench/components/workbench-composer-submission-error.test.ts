@@ -148,7 +148,6 @@ describe("createComposerSubmission", () => {
         uploadAttempts: { current: new Map() },
         uploadedAttachments: { current: new Map() },
       } as never,
-      editingQueuedSubmission: false,
       fastMode: false,
       followUpBehavior: "steer",
       isCurrentSubmissionTarget: (projectId, taskId) =>

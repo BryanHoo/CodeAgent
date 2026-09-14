@@ -58,8 +58,6 @@ pub async fn start_queued_submission(
             )
             .await
             .map_err(AppError::from)?;
-            // 仅首次确认启动后清除编辑状态；重放不能修改后来建立的编辑状态。
-            state.clear_queue_editing(&worker_task).await;
             serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
         },
         move |id| async move {
@@ -68,7 +66,6 @@ pub async fn start_queued_submission(
             crate::infrastructure::codex::read_task(&connection, cleanup_project.clone(), cleanup_task.clone())
                 .await.map_err(|error| serde_json::json!(AppError::from(error)))?;
             super::queue_start_recovery::cleanup(&state.queued_steers, &connection, &cleanup_project, &cleanup_task, &id).await?;
-            state.update_queue_editing(&cleanup_task, &id, false).await;
             Ok(())
         },
     )

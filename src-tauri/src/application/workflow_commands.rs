@@ -105,13 +105,9 @@ pub async fn list_queued_submissions(
     state: State<'_, AppState>,
 ) -> Result<Value, AppError> {
     let connection = validate_task(&state, project_id, &task_id).await?;
-    let editing_at_read = state.queue_editing_submission(&task_id).await;
-    let mut response = codex::read_queued_submissions(&connection, &task_id)
+    let response = codex::read_queued_submissions(&connection, &task_id)
         .await
         .map_err(AppError::from)?;
-    state
-        .complete_queue_snapshot(&task_id, editing_at_read.as_deref(), &mut response)
-        .await;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 
@@ -144,44 +140,6 @@ pub async fn add_queued_submission(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn update_queued_submission(
-    app: AppHandle,
-    project_id: String,
-    task_id: String,
-    queued_submission_id: String,
-    mut input: AgentPromptInput,
-    status: String,
-    state: State<'_, AppState>,
-) -> Result<Value, AppError> {
-    let editing = match status.as_str() {
-        "editing" => true,
-        "queued" => false,
-        _ => return Err(AppError::CodexRequestFailed),
-    };
-    let app_data = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
-    super::attachment_commands::resolve_prompt_attachments(
-        &app_data,
-        &project_id,
-        &task_id,
-        &mut input,
-    )
-    .await?;
-    let connection = validate_task(&state, project_id, &task_id).await?;
-    let mut response =
-        codex::update_queued_submission(&connection, &task_id, &queued_submission_id, &input)
-            .await
-            .map_err(AppError::from)?;
-    response.queued_submission.status = if editing { "editing" } else { "queued" };
-    state
-        .update_queue_editing(&task_id, &queued_submission_id, editing)
-        .await;
-    serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
-}
-
-#[tauri::command(rename_all = "camelCase")]
 pub async fn delete_queued_submission(
     project_id: String,
     task_id: String,
@@ -192,9 +150,6 @@ pub async fn delete_queued_submission(
     let response = codex::delete_queued_submission(&connection, &task_id, &queued_submission_id)
         .await
         .map_err(AppError::from)?;
-    state
-        .update_queue_editing(&task_id, &queued_submission_id, false)
-        .await;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }
 

@@ -82,7 +82,6 @@ export const workbench = {
     cancelQueuedTooltip: "Cancel queued message",
     editQueued: "Edit queued message: {{summary}}",
     editQueuedTooltip: "Edit queued message",
-    editingQueued: "Editing",
     disableFastMode: "Disable fast mode",
     closeDraftEditing: "Close todo editing and keep unsaved changes",
     deleteDraft: "Delete todo: {{summary}}",

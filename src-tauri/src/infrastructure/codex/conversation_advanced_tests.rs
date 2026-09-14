@@ -13,7 +13,7 @@ use super::{
     conversation_events::map_server_message,
     conversation_queue::{
         add_queued_submission, delete_queued_submission, list_queued_submissions,
-        reorder_queued_submissions, start_queued_submission, update_queued_submission,
+        reorder_queued_submissions, start_queued_submission,
     },
 };
 
@@ -291,10 +291,6 @@ async fn native_queue_commands_should_preserve_submission_order_and_content() {
                 "thread/queue/add",
                 json!({"queuedSubmission": queued.clone()}),
             ),
-            (
-                "thread/queue/update",
-                json!({"queuedSubmission": queued.clone()}),
-            ),
             ("thread/queue/reorder", json!({})),
             ("thread/queue/delete", json!({"deleted": true})),
             (
@@ -310,7 +306,7 @@ async fn native_queue_commands_should_preserve_submission_order_and_content() {
                 serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
             assert_eq!(request["method"], method);
             assert_eq!(request["params"]["threadId"], "thread-a");
-            if method == "thread/queue/add" || method == "thread/queue/update" {
+            if method == "thread/queue/add" {
                 assert_eq!(request["params"]["input"][0]["text"], "继续修复");
             }
             if method == "thread/queue/reorder" {
@@ -340,9 +336,6 @@ async fn native_queue_commands_should_preserve_submission_order_and_content() {
     add_queued_submission(&connection, "thread-a", &input, "message-a")
         .await
         .expect("submission should add");
-    update_queued_submission(&connection, "thread-a", "queue-a", &input)
-        .await
-        .expect("submission should update");
     reorder_queued_submissions(&connection, "thread-a", &["queue-a".to_owned()])
         .await
         .expect("queue should reorder");

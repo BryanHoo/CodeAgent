@@ -45,7 +45,6 @@ type ComposerSubmissionOptions = Readonly<{
   client: NativeMutationClient;
   controller: ReturnType<typeof useWorkbenchComposerController>;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
-  editingQueuedSubmission: boolean;
   fastMode: boolean;
   isCurrentSubmissionTarget: (projectId: string, taskId: string) => boolean;
   onDirectSubmission: WorkbenchComposerProps["onDirectSubmission"];
@@ -122,7 +121,6 @@ export function createComposerSubmission({
   client,
   controller,
   followUpBehavior,
-  editingQueuedSubmission,
   fastMode,
   isCurrentSubmissionTarget,
   onDirectSubmission,
@@ -198,12 +196,9 @@ export function createComposerSubmission({
       return false;
     }
     const hasInput = text !== "" || message.files.length > 0 || skills.length > 0;
-    // 编辑中的排队项始终更新原记录，不能因 Turn 已结束而误开新 Turn。
     const action =
       options.forceAction ??
-      (editingQueuedSubmission
-        ? "queue"
-        : resolveComposerSubmitAction(state, hasInput, followUpBehavior, canSteer));
+      resolveComposerSubmitAction(state, hasInput, followUpBehavior, canSteer);
     if (
       action === "blocked" ||
       action === "interrupt" ||

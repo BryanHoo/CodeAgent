@@ -197,20 +197,6 @@ export type AddAgentQueuedSubmissionResponse = Readonly<
   Static<typeof AddAgentQueuedSubmissionResponseSchema>
 >;
 
-export const UpdateAgentQueuedSubmissionRequestSchema = Type.Object(
-  {
-    input: AgentPromptInputSchema,
-    status: Type.Union([Type.Literal("editing"), Type.Literal("queued")]),
-  },
-  { additionalProperties: false },
-);
-export type UpdateAgentQueuedSubmissionRequest = Readonly<
-  Static<typeof UpdateAgentQueuedSubmissionRequestSchema>
->;
-
-export const UpdateAgentQueuedSubmissionResponseSchema = AddAgentQueuedSubmissionResponseSchema;
-export type UpdateAgentQueuedSubmissionResponse = AddAgentQueuedSubmissionResponse;
-
 export const DeleteAgentQueuedSubmissionResponseSchema = Type.Object(
   { deleted: Type.Boolean() },
   { additionalProperties: false },

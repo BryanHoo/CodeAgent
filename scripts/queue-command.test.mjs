@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+void test("withdraw editing does not expose the obsolete queue update command", () => {
+  for (const path of ["src-tauri/build.rs", "src-tauri/src/lib.rs", "src-tauri/permissions/window-command-sets.toml"]) {
+    const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /update_queued_submission|allow-update-queued-submission/u, path);
+  }
+});
+
 void test("prompt submission command is registered and granted only to main", () => {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   assert.ok(read("src-tauri/build.rs").includes('"submit_prompt"'));

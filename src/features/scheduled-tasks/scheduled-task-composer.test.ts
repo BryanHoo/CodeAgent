@@ -49,7 +49,6 @@ describe("scheduled task composer capture", () => {
       client: client as never,
       composerMode: "plan",
       controller: controller as never,
-      editingQueuedSubmission: false,
       fastMode: true,
       followUpBehavior: "queue",
       isCurrentSubmissionTarget: () => true,

@@ -368,10 +368,7 @@ export const AgentPromptInputSchema = Type.Union([
 
 export type AgentPromptInput = Readonly<Static<typeof AgentPromptInputSchema>>;
 
-export const AgentQueuedSubmissionStatusSchema = Type.Union([
-  Type.Literal("editing"),
-  Type.Literal("queued"),
-]);
+export const AgentQueuedSubmissionStatusSchema = Type.Literal("queued");
 export type AgentQueuedSubmissionStatus = Readonly<
   Static<typeof AgentQueuedSubmissionStatusSchema>
 >;

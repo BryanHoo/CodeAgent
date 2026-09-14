@@ -74,14 +74,6 @@ struct AddParams<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UpdateParams<'a> {
-    input: Vec<Value>,
-    queued_submission_id: &'a str,
-    thread_id: &'a str,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct SubmissionIdParams<'a> {
     queued_submission_id: &'a str,
     thread_id: &'a str,
@@ -175,28 +167,6 @@ pub async fn add_queued_submission(
             &AddParams {
                 client_user_message_id,
                 input: map_prompt_input(input)?,
-                thread_id: task_id,
-            },
-            REQUEST_TIMEOUT,
-        )
-        .await?;
-    Ok(QueuedSubmissionResponse {
-        queued_submission: map_submission(response.queued_submission)?,
-    })
-}
-
-pub async fn update_queued_submission(
-    connection: &AppServerConnection,
-    task_id: &str,
-    submission_id: &str,
-    input: &AgentPromptInput,
-) -> Result<QueuedSubmissionResponse, ConnectionError> {
-    let response: NativeSubmissionResponse = connection
-        .request(
-            "thread/queue/update",
-            &UpdateParams {
-                input: map_prompt_input(input)?,
-                queued_submission_id: required_id(submission_id)?,
                 thread_id: task_id,
             },
             REQUEST_TIMEOUT,

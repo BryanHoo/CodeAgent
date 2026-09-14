@@ -96,7 +96,6 @@ permissions = [
   "allow-terminate-background-terminal",
   "allow-list-queued-submissions",
   "allow-add-queued-submission",
-  "allow-update-queued-submission",
   "allow-delete-queued-submission",
   "allow-move-queued-submission",
   "allow-start-queued-submission",

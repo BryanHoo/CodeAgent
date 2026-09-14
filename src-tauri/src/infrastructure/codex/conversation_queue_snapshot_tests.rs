@@ -43,12 +43,7 @@ async fn queue_snapshot_should_return_all_pages_without_webview_pagination() {
         json!({"data":[submission("a")],"nextCursor":"next"}),
         json!({"data":[submission("b")],"nextCursor":null}),
     ]);
-    let mut snapshot = read_queued_submissions(&connection, "task").await.unwrap();
-    let state = crate::application::state::AppState::default();
-    state.update_queue_editing("task", "b", true).await;
-    state
-        .complete_queue_snapshot("task", Some("b"), &mut snapshot)
-        .await;
+    let snapshot = read_queued_submissions(&connection, "task").await.unwrap();
     assert_eq!(
         snapshot
             .data
@@ -58,11 +53,7 @@ async fn queue_snapshot_should_return_all_pages_without_webview_pagination() {
         ["a", "b"]
     );
     assert_eq!(snapshot.data[1].text, "text-b");
-    assert_eq!(snapshot.data[1].status, "editing");
-    assert_eq!(
-        state.queue_editing_submission("task").await.as_deref(),
-        Some("b")
-    );
+    assert_eq!(snapshot.data[1].status, "queued");
     assert!(
         serde_json::to_value(snapshot)
             .unwrap()

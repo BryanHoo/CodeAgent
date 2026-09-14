@@ -53,7 +53,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Review 提交 | `submitReview` | Rust 创建后执行 `review/start`，保留部分成功摘要；独立有界启动登记合并同键请求，取消等待不取消 worker；不提供跨重启整体恢复 | 已实现 |
 | 高级会话 | `compactTask`, `forkTask` | 原生 `thread/compact/start`, `thread/fork` | 已实现 |
 | 任务设置 | `getTaskSettings`, `updateTaskSettings` | 应用私有原子 JSON；启动回合前持久化并同步线程设置 | 已实现 |
-| 排队提交 | `list/add/update/delete/reorder/startQueuedSubmission` | 原生 `thread/queue/*`，保留顺序和编辑状态 | 已实现 |
+| 排队提交 | `list/add/delete/move/startQueuedSubmission` | 原生 `thread/queue/*`；编辑先撤回原项并恢复完整输入，不维护服务端编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；消费 ACK、1 MiB 在途预算、4 MiB 待发送预算和控制预留；单调序号、显式缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
 | 会话元数据恢复 | `readTask` | Rust 补齐最近计划/用量及同任务待审批请求；计划/用量最多 256 任务、4 MiB 编码字节，单字段 256 KiB；WebView 重建复用，Provider 重启清空 | 已实现 |
@@ -74,9 +74,9 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Diff 行数统计 | Codex 历史/实时变更、Git 状态详情 | Rust 按来源格式计算 `stats`；前端只读取、按展示分组汇总，不重复扫描正文；截断统计仅覆盖返回内容 | 已迁入 Rust |
 | Diff 补丁规范化 | Codex 历史/实时变更、Git 未跟踪文本 | Rust 生成文件头、hunk 和行前缀，保留空白及缺失尾换行标记；已有 Git 补丁原样保留；前端仅解析和渲染 | 已迁入 Rust |
 | 队列相邻移动 | `moveQueuedSubmission` → `thread/queue/list`、`thread/queue/reorder` | 前端仅提交 ID 与方向；Rust 有界读取当前顺序并交换相邻项；出队或边界返回无变化，冲突不重试；不保证外部并发重排的顺序 CAS | 已迁入 Rust |
-| 队列完整读取 | `listQueuedSubmissions` → `thread/queue/list` | Rust 单次校验任务后有界读取全部页，并补齐编辑状态；WebView 只接收 `{ data }`，不传游标；失败不返回部分数据 | 已迁入 Rust |
+| 队列完整读取 | `listQueuedSubmissions` → `thread/queue/list` | Rust 单次校验任务后有界读取全部页；WebView 只接收 `{ data }`，不传游标；失败不返回部分数据 | 已迁入 Rust |
 | 队列追加与清理恢复 | `steerTurn`、`startQueuedSubmission` → `turn/steer`、`thread/queue/delete` | Rust 共用同项消费租约，启动后保留尝试标记，阻止本地换键重复消费；已接受追加项换键、换回合或转为空闲只补清理。下一项固定首项身份，清理核对内容，`cleanupOnly` 不生成新回合消息。保留 15 分钟，不保证上游原子消费或跨重启恢复 | 已迁入 Rust |
-| 队列启动幂等 | `startQueuedSubmission` → `thread/queue/start` | 原生登记有界项目/任务/可选队列项身份；同键重放原 Turn，不再次消费下一项或清除编辑状态；按钮重试保留最近失败键，不覆盖运行中追加/删除及跨重启恢复 | 已迁入 Rust |
+| 队列启动幂等 | `startQueuedSubmission` → `thread/queue/start` | 原生登记有界项目/任务/可选队列项身份；同键重放原 Turn，不再次消费下一项；按钮重试保留最近失败键，不覆盖运行中追加/删除及跨重启恢复 | 已迁入 Rust |
 | Git Diff 与提交 | commit files/diff、`generateCommitMessage`, `commitProjectChanges` | 选中文件提交、陈旧快照拒绝、真实 Diff；临时只读 Turn 调用配置模型生成 message | 已实现 |
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
 | 右栏检查器 | 文件、Sources、Changes、历史、MCP | MCP 按当前 Task 读取线程级权威快照并展示紧凑连接态与工具数 | 已实现 |

@@ -126,7 +126,6 @@ fn main() {
         "terminate_background_terminal",
         "list_queued_submissions",
         "add_queued_submission",
-        "update_queued_submission",
         "delete_queued_submission",
         "move_queued_submission",
         "start_queued_submission",
