@@ -133,7 +133,7 @@ export class ProjectEventRuntime {
     this.#clearEventHistory();
   }
 
-  #retainTask(store: TaskStore, target: TaskEventTarget, attempt = 0, previousError?: Error): void {
+  #retainTask(store: TaskStore, target: TaskEventTarget, attempt = 0): void {
     const initialState = store.getState();
     initialState.setWriteAccess("checking");
     const retained = this.#client.retainTaskSubscription(this.#projectId, initialState.taskId)
@@ -141,28 +141,28 @@ export class ProjectEventRuntime {
         const state = store.getState();
         if (this.#targets.get(store) !== target || state.writeAccess !== "checking") return;
         state.setWriteAccess("writable");
-        if (state.error === previousError) {
-          state.setError(null);
-        }
       }).catch((reason: unknown) => {
         const state = store.getState();
         if (this.#targets.get(store) !== target || state.writeAccess === "external") return;
         const error = reason instanceof Error ? reason : new Error(String(reason));
         const external = error instanceof NativeCommandError && error.code === "CODEX_THREAD_BUSY";
-        state.setWriteAccess(external ? "external" : "unavailable");
-        if (!external) {
-          state.setError(error);
+        if (external) {
+          state.setWriteAccess("external");
+        } else {
           recordInternalWarning("task_subscription_retain_failed", error, {
             projectId: this.#projectId, taskId: state.taskId,
           });
-          // 冷启动失败不能永久锁住已在输出的任务；只重查两次，不把事件连通当作写入权。
+          // 有界重查期间保持 checking，不让首次落盘的短暂失败替换已显示的会话。
           if (attempt < 2) {
             this.#retainRetryTimers.set(store, setTimeout(() => {
               this.#retainRetryTimers.delete(store);
-              if (this.#targets.get(store) === target && store.getState().writeAccess === "unavailable") {
-                this.#retainTask(store, target, attempt + 1, error);
+              if (this.#targets.get(store) === target && store.getState().writeAccess === "checking") {
+                this.#retainTask(store, target, attempt + 1);
               }
             }, 500 * 3 ** attempt));
+          } else {
+            state.setError(error);
+            state.setWriteAccess("unavailable");
           }
         }
       });

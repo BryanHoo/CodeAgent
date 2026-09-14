@@ -45,12 +45,13 @@ function createSnapshot(projectId: string, taskId: string): AgentTaskSnapshotRes
 }
 
 describe("ProjectRuntimeManager task activity restoration", () => {
-  it.each(["recover", "external", "exhaust", "detach", "dispose"] as const)("bounds cold ownership retries and respects task lifetime (%s)", async (outcome) => {
+  it.each(["recover", "recover-last", "external", "exhaust", "detach", "dispose"] as const)("bounds cold ownership retries and respects task lifetime (%s)", async (outcome) => {
     vi.useFakeTimers();
     const response = createSnapshot("project-1", "task-1");
-    const failure = new NativeCommandError("CODEX_REQUEST_FAILED", "cold resume failed");
+    const failure = new NativeCommandError("CODEX_REQUEST_FAILED", "failed to read thread: thread-store internal error: failed to read session metadata from path: rollout at path is empty");
     const retainTaskSubscription = vi.fn().mockRejectedValue(failure);
     if (outcome === "recover") retainTaskSubscription.mockRejectedValueOnce(failure).mockResolvedValue(undefined);
+    if (outcome === "recover-last") retainTaskSubscription.mockRejectedValueOnce(failure).mockRejectedValueOnce(failure).mockResolvedValue(undefined);
     if (outcome === "external") retainTaskSubscription.mockRejectedValue(new NativeCommandError("CODEX_THREAD_BUSY", "busy"));
     const client: NativeRuntimeClient = {
       readTask: vi.fn(async () => response), retainTaskSubscription,
@@ -59,19 +60,31 @@ describe("ProjectRuntimeManager task activity restoration", () => {
     };
     const runtime = createProjectRuntimeManager(client);
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" });
+    const observedErrors: Error[] = [];
+    const unsubscribe = store.subscribe((state) => { if (state.error !== null) observedErrors.push(state.error); });
     const detach = runtime.attachTaskStore(response, store, async () => response);
     try {
       await vi.advanceTimersByTimeAsync(0);
-      expect(store.getState().writeAccess).toBe(outcome === "external" ? "external" : "unavailable");
+      expect(store.getState().writeAccess).toBe(outcome === "external" ? "external" : "checking");
+      expect(store.getState().error).toBeNull();
       if (outcome === "detach") detach();
       if (outcome === "dispose") runtime.dispose();
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(retainTaskSubscription).toHaveBeenCalledTimes(outcome === "recover" ? 2 : outcome === "exhaust" ? 3 : 1);
-      expect(store.getState().writeAccess).toBe(outcome === "recover" ? "writable" : outcome === "external" ? "external" : "unavailable");
-      expect(store.getState().error).toBe(outcome === "recover" || outcome === "external" ? null : failure);
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(store.getState().error).toBeNull();
+      expect(store.getState().writeAccess).toBe(outcome === "recover" ? "writable" : outcome === "external" ? "external" : "checking");
+      expect(retainTaskSubscription).toHaveBeenCalledTimes(outcome === "recover" || outcome === "recover-last" || outcome === "exhaust" ? 2 : 1);
+      await vi.advanceTimersByTimeAsync(1);
+      const expectedCalls = outcome === "recover" ? 2 : outcome === "exhaust" || outcome === "recover-last" ? 3 : 1;
+      const recovered = outcome === "recover" || outcome === "recover-last";
+      expect(retainTaskSubscription).toHaveBeenCalledTimes(expectedCalls);
+      expect(store.getState().writeAccess).toBe(recovered ? "writable" : outcome === "external" ? "external" : outcome === "exhaust" ? "unavailable" : "checking");
+      expect(store.getState().error).toBe(outcome === "exhaust" ? failure : null);
+      expect(observedErrors.length > 0).toBe(outcome === "exhaust");
+      expect(observedErrors.every((error) => error === failure)).toBe(true);
+      expect(client.readTask).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(60_000);
-      expect(retainTaskSubscription).toHaveBeenCalledTimes(outcome === "recover" ? 2 : outcome === "exhaust" ? 3 : 1);
-    } finally { detach(); runtime.dispose(); vi.useRealTimers(); }
+      expect(retainTaskSubscription).toHaveBeenCalledTimes(expectedCalls);
+    } finally { unsubscribe(); detach(); runtime.dispose(); vi.useRealTimers(); }
   });
 
   it("does not let a pending retry clear a newer external lock and releases on detach", async () => {
@@ -101,6 +114,7 @@ describe("ProjectRuntimeManager task activity restoration", () => {
   });
 
   it.each(["success", "failure"] as const)("settles a cold ownership check after streaming has started (%s)", async (outcome) => {
+    vi.useFakeTimers();
     const check = deferred();
     const response = createSnapshot("project-1", "task-1");
     let onEvent: SubscribeAgentEventsOptions["onEvent"] = () => undefined;
@@ -130,7 +144,9 @@ describe("ProjectRuntimeManager task activity restoration", () => {
       expect(store.getState().writeAccess).toBe("checking");
       if (outcome === "success") check.resolve();
       else check.reject(new NativeCommandError("CODEX_REQUEST_FAILED", "cold resume failed"));
-      await vi.waitFor(() => expect(store.getState().writeAccess).toBe(outcome === "success" ? "writable" : "unavailable"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().writeAccess).toBe(outcome === "success" ? "writable" : "checking");
+      expect(store.getState().error).toBeNull();
       // 连接成功和后续增量均不能替代权威写入权检查。
       onEvent({
         version: 2, provider: "codex", sessionId: "session-1", sequence: 6,
@@ -138,13 +154,14 @@ describe("ProjectRuntimeManager task activity restoration", () => {
         type: "item.started", payload: { item: { id: "answer", type: "message", role: "assistant", text: "still streaming" } },
       });
       expect(store.getState().connectionState).toBe("connected");
-      expect(store.getState().writeAccess).toBe(outcome === "success" ? "writable" : "unavailable");
+      expect(store.getState().writeAccess).toBe(outcome === "success" ? "writable" : "checking");
       expect(client.retainTaskSubscription).toHaveBeenCalledTimes(1);
       detach();
       detach = runtime.attachTaskStore(response, store, async () => response);
-      await vi.waitFor(() => expect(store.getState().writeAccess).toBe("writable"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().writeAccess).toBe("writable");
       expect(client.retainTaskSubscription).toHaveBeenCalledTimes(2);
-    } finally { detach(); runtime.dispose(); }
+    } finally { detach(); runtime.dispose(); vi.useRealTimers(); }
   });
 
   it("ignores a late ownership failure and releases only after the pending resume settles", async () => {
