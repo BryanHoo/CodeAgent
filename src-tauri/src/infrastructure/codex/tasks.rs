@@ -250,6 +250,7 @@ pub async fn rename_task(
     if title.is_empty() {
         return Err(ConnectionError::InvalidMessage);
     }
+    let _title_mutation = connection.title_mutation.lock().await;
     read_native_task(connection, &project_id, &task_id).await?;
     request_empty(
         connection,
@@ -344,6 +345,7 @@ pub async fn delete_task(
         },
     )
     .await?;
+    super::task_title::take_task_title_root(connection, &task_id);
     Ok(DeletedTask {
         response: AgentTaskStatusResponse {
             status: "deleted",

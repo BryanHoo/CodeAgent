@@ -47,6 +47,7 @@ mod runtime_manager;
 mod runtime_path;
 mod sidebar;
 mod stderr;
+pub mod task_title;
 mod tasks;
 
 #[cfg(test)]

@@ -76,6 +76,9 @@ pub struct AppServerConnection {
     pub(super) model_catalog: Arc<ModelCatalogCache>,
     // 仅当前连接创建且尚未确认落盘的线程需要保留项目归属。
     pub(super) new_task_projects: Mutex<HashMap<String, String>>,
+    // 新建任务仅保留首次标题生成所需的目录；领取后立即移除，重连不继承。
+    pub(super) pending_task_titles: Mutex<HashMap<String, String>>,
+    pub(super) title_mutation: AsyncMutex<()>,
     writer: AsyncMutex<Option<AsyncWriter>>,
     pending: PendingRequests,
     server_messages: AsyncMutex<Option<ServerMessageReceiver>>,
@@ -128,6 +131,8 @@ impl AppServerConnection {
         Self {
             model_catalog,
             new_task_projects: Mutex::new(HashMap::new()),
+            pending_task_titles: Mutex::new(HashMap::new()),
+            title_mutation: AsyncMutex::new(()),
             writer: AsyncMutex::new(Some(Box::pin(writer))),
             pending,
             server_messages: AsyncMutex::new(Some(message_receiver)),

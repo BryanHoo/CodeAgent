@@ -106,6 +106,11 @@ async fn conversation_commands_should_follow_codex_lifecycle() {
         .await
         .expect("task should start");
     assert_eq!(task.task.id, "thread-a");
+    assert_eq!(
+        super::task_title::take_task_title_root(&connection, "thread-a").as_deref(),
+        Some("/work/a")
+    );
+    assert!(super::task_title::take_task_title_root(&connection, "thread-a").is_none());
 
     let options = AgentTurnOptions {
         approvals_reviewer: "auto_review".to_owned(),

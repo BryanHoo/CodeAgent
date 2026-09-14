@@ -235,6 +235,19 @@ pub async fn start_task(
             .map_err(|_| ConnectionError::StateUnavailable)?
             .insert(response.thread.id.clone(), project_id.clone());
     }
+    if response
+        .thread
+        .name
+        .as_deref()
+        .is_none_or(|name| name.trim().is_empty())
+        && let Some(cwd) = cwd
+    {
+        connection
+            .pending_task_titles
+            .lock()
+            .map_err(|_| ConnectionError::StateUnavailable)?
+            .insert(response.thread.id.clone(), cwd.to_owned());
+    }
     Ok(AgentTaskMutationResponse {
         task: map_native_task(response.thread, project_id),
     })

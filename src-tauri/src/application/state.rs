@@ -410,3 +410,7 @@ mod skill_snapshot_tests;
 #[cfg(test)]
 #[path = "state_snapshot_tests.rs"]
 mod snapshot_tests;
+
+#[cfg(test)]
+#[path = "task_title_generation_tests.rs"]
+mod task_title_generation_tests;

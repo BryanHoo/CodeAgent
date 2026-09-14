@@ -52,11 +52,26 @@ pub(crate) async fn start_turn_for_task(
     )
     .await
     .map_err(|_| AppError::FilesystemRequestFailed)?;
+    let title_prompt = codex::task_title::title_prompt(if input.text.trim().is_empty() {
+        prompt_task_title(&input).unwrap_or("新任务")
+    } else {
+        &input.text
+    });
     if options.goal_mode {
         codex::ensure_task_writer(&connection, project_id, task_id, &settings)
             .await
             .map_err(AppError::from)?;
-        return start_goal_turn(&connection, project_id, task_id, input, options, state).await;
+        let result = start_goal_turn(&connection, project_id, task_id, input, options, state).await;
+        if result.is_ok() {
+            super::task_title_generation::spawn_task_title(
+                app,
+                connection,
+                project_id,
+                task_id,
+                title_prompt,
+            );
+        }
+        return result;
     }
     let mut response = codex::start_turn(
         &connection,
@@ -68,6 +83,13 @@ pub(crate) async fn start_turn_for_task(
     )
     .await
     .map_err(AppError::from)?;
+    super::task_title_generation::spawn_task_title(
+        app,
+        connection,
+        project_id,
+        task_id,
+        title_prompt,
+    );
     response.checkpoint.sequence = state.project_sequence(project_id).await;
     serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
 }

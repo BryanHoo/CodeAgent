@@ -53,6 +53,7 @@ mod task_subscription;
 pub mod task_subscription_commands;
 #[cfg(test)]
 mod task_subscription_tests;
+mod task_title_generation;
 pub mod task_window_commands;
 mod task_window_runtime;
 mod task_window_stream;
