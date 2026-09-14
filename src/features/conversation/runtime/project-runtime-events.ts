@@ -37,6 +37,7 @@ export class ProjectEventRuntime {
   readonly #activeTaskRecovery: ActiveTaskSnapshotRecoveryController<AgentTaskSnapshotResponse>;
   readonly #targets = new Map<TaskStore, TaskEventTarget>();
   readonly #retains = new Map<TaskStore, Promise<void>>();
+  readonly #retainRetryTimers = new Map<TaskStore, ReturnType<typeof setTimeout>>();
   #connectionCleanup: (() => void) | undefined;
   #connectionState: AgentEventConnectionState = "closed";
   #disposed = false;
@@ -132,26 +133,45 @@ export class ProjectEventRuntime {
     this.#clearEventHistory();
   }
 
-  #retainTask(store: TaskStore, target: TaskEventTarget): void {
-    store.getState().setWriteAccess("checking");
-    const retained = this.#client.retainTaskSubscription(this.#projectId, store.getState().taskId)
+  #retainTask(store: TaskStore, target: TaskEventTarget, attempt = 0, previousError?: Error): void {
+    const initialState = store.getState();
+    initialState.setWriteAccess("checking");
+    const retained = this.#client.retainTaskSubscription(this.#projectId, initialState.taskId)
       .then(() => {
-        if (this.#targets.get(store) === target) store.getState().setWriteAccess("writable");
-      }).catch((error: unknown) => {
-        if (this.#targets.get(store) !== target) return;
+        const state = store.getState();
+        if (this.#targets.get(store) !== target || state.writeAccess !== "checking") return;
+        state.setWriteAccess("writable");
+        if (state.error === previousError) {
+          state.setError(null);
+        }
+      }).catch((reason: unknown) => {
+        const state = store.getState();
+        if (this.#targets.get(store) !== target || state.writeAccess === "external") return;
+        const error = reason instanceof Error ? reason : new Error(String(reason));
         const external = error instanceof NativeCommandError && error.code === "CODEX_THREAD_BUSY";
-        store.getState().setWriteAccess(external ? "external" : "unavailable");
+        state.setWriteAccess(external ? "external" : "unavailable");
         if (!external) {
-          store.getState().setError(error instanceof Error ? error : new Error(String(error)));
+          state.setError(error);
           recordInternalWarning("task_subscription_retain_failed", error, {
-            projectId: this.#projectId, taskId: store.getState().taskId,
+            projectId: this.#projectId, taskId: state.taskId,
           });
+          // 冷启动失败不能永久锁住已在输出的任务；只重查两次，不把事件连通当作写入权。
+          if (attempt < 2) {
+            this.#retainRetryTimers.set(store, setTimeout(() => {
+              this.#retainRetryTimers.delete(store);
+              if (this.#targets.get(store) === target && store.getState().writeAccess === "unavailable") {
+                this.#retainTask(store, target, attempt + 1, error);
+              }
+            }, 500 * 3 ** attempt));
+          }
         }
       });
     this.#retains.set(store, retained);
   }
 
   #releaseRetainedTask(store: TaskStore): void {
+    clearTimeout(this.#retainRetryTimers.get(store));
+    this.#retainRetryTimers.delete(store);
     const retained = this.#retains.get(store);
     this.#retains.delete(store);
     // 等待恢复完成再释放，防止快速切换时先 unsubscribe、后 resume 留下无人持有的线程。

@@ -44,7 +44,15 @@ test.each([1280, 1920])("locks the whole composer while preserving the draft and
       runtime={{ connectionState: "connected", error: null, writeAccess } as TaskRuntimeView} />
     </ComposerDraftProvider></ProjectDraftProvider></TooltipProvider>
   </QueryClientProvider>;
-  const screen = await render(view("writable"));
+  const screen = await render(view("checking"));
+  const coldEditor = screen.getByRole("textbox").element() as HTMLElement;
+  expect(coldEditor.isContentEditable).toBe(false);
+  expect(coldEditor.closest("[inert]")).not.toBeNull();
+  await screen.rerender(view("writable"));
+  await screen.getByRole("textbox").click();
+  expect(document.activeElement).toBe(coldEditor);
+  expect(coldEditor.isContentEditable).toBe(true);
+  await screen.getByRole("textbox").fill("保留未发送草稿");
   const editor = document.querySelector('[contenteditable="true"]') as HTMLElement;
   expect(editor.textContent).toContain("保留未发送草稿");
   await screen.rerender(view("external"));
@@ -59,6 +67,8 @@ test.each([1280, 1920])("locks the whole composer while preserving the draft and
   expect(overlayRect.bottom).toBeGreaterThanOrEqual(formRect.bottom);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   for (const button of form.querySelectorAll("button")) expect(button.matches(":disabled")).toBe(true);
+  // Chromium 在下一次渲染更新时才把焦点移出刚变为 inert 的编辑器。
+  await expect.poll(() => document.activeElement).not.toBe(editor);
   editor.focus();
   expect(document.activeElement).not.toBe(editor);
   await expect(composerRef.current!.submitCurrent()).resolves.toBe(false);

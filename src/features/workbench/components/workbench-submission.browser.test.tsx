@@ -217,4 +217,32 @@ test.each([1280, 1920].flatMap((width) =>
   expect(Math.max(...samples.slice(1).map((top, index) => top - samples[index]!))).toBeLessThan(1);
   expect(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+  // 持续输出时必须能点击并编辑下一条草稿，不能依赖切换任务恢复焦点。
+  const editorNode = editor.element() as HTMLElement;
+  await expect.poll(() => editorNode.isContentEditable).toBe(true);
+  let sequence = 4;
+  store.getState().applyEvents([{
+    version: 2, provider: "codex", sessionId: "session", sequence: sequence++,
+    taskId: snapshot.id, turnId: nextTurn.id, itemId: "stream-focus", timestamp: nextTurn.startedAt!,
+    type: "item.started", payload: { item: { id: "stream-focus", type: "message", role: "assistant", text: "流式回答" } },
+  }]);
+  for (let batch = 0; batch < 12; batch += 1) {
+    store.getState().applyEvents([{
+      version: 2, provider: "codex", sessionId: "session", sequence: sequence++,
+      taskId: snapshot.id, turnId: nextTurn.id, itemId: "stream-focus", timestamp: nextTurn.startedAt!,
+      type: "message.delta", payload: { delta: `\n\n流式段落 ${batch}：${"持续输出内容。".repeat(80)}` },
+    }]);
+    await nextFrame();
+    await nextFrame();
+    await expect.element(screen.getByText(`流式段落 ${batch}：${"持续输出内容。".repeat(80)}`, { exact: true })).toBeVisible();
+    editorNode.blur();
+    const rect = editorNode.getBoundingClientRect();
+    expect(editorNode.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))).toBe(true);
+    await editor.click();
+    expect(document.activeElement).toBe(editorNode);
+    await editor.fill(`未发送草稿 ${batch}`);
+    await nextFrame();
+    expect(document.activeElement).toBe(editorNode);
+    expect(editorNode.textContent).toBe(`未发送草稿 ${batch}`);
+  }
 });
