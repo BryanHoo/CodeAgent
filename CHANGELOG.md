@@ -5,6 +5,28 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-14
+
+### Added
+
+- 添加新任务自动标题生成，复用提交信息模型配置，并隔离辅助线程中的工具与 MCP。
+- 添加运行时事件确认、有界背压恢复，以及任务创建、回合启动、追加、队列消费和待处理回答的原生幂等保护。
+- 添加 Codex 运行时结构化诊断日志，关联连接、请求、任务阶段、耗时与错误链。
+
+### Changed
+
+- 将会话状态投影、Skill 关联、Diff 规范化与变更统计迁移至 Rust，减少 WebView 重复计算和传输开销。
+- 简化队列编辑流程，撤回队列项后在输入框修改，并加强并发消费与失败恢复。
+- 将提交消息生成规则改为手动保存，失败时保留草稿并支持重试。
+
+### Fixed
+
+- 修复长行流式输出和复杂 Markdown 增量解析造成的重复扫描与工作台卡顿，并修复中文标点附近的加粗渲染。
+- 修复消息提交与尾部高度变化期间的虚拟列表回弹、置底失效和旧测量回滚。
+- 修复首次任务订阅闪错、写入权失败后输入丢失、新线程项目归属缺失，以及通知交错时半帧读取状态丢失。
+- 修复 Windows 空会话写入恢复、Git 路径校验，以及项目文件搜索、提交、符号链接和 Git 快照缓存边界问题。
+- 修复应用退出落盘、连接请求清理与权限审批回答校验。
+
 ## [0.2.0] - 2026-09-11
 
 ### Added
@@ -227,7 +249,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.12...v0.2.0
 [0.1.12]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.12
 [0.1.11]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.11
