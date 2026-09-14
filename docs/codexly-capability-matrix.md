@@ -64,7 +64,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |
 | Item 映射 | 消息、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.154.0 官方可见 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；推理 Item 在适配层过滤，未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；上游通知队列与缓冲分别限制 8 MiB，WebView 消费 ACK 释放在途额度；普通输出不能占用审批控制预留，超预算副本触发快照恢复，事实缓冲耗尽显式失败 | 已实现 |
-| 审批与输入 | `resolvePendingRequest` | 严格区分 `command`/`writeStdin`，终端输入保留会话、stdin 与 cwd，Guardian 输入进入自动审批时间线；原生回写权限、用户输入及 MCP elicitation。Rust 校验回答完整性、题目身份及单项非空字符串，保留自由文本。完整身份与回答参与幂等登记，同键重放，取消等待不取消处理；控制预算独立，旧连接结果不污染新连接，不代表上游确认或跨重启恢复 | 已实现 |
+| 审批与输入 | `resolvePendingRequest` | 严格区分 `command`/`writeStdin`，终端输入保留会话、stdin 与 cwd，Guardian 输入进入自动审批时间线；原生回写权限、用户输入及 MCP elicitation。Rust 校验回答完整性、题目身份及单项非空字符串，保留自由文本；权限类别、唯一性与作用域由 Rust 校验，仅回写原生请求中的所选权限。完整身份与回答参与幂等登记，同键重放，取消等待不取消处理；控制预算独立，旧连接结果不污染新连接，不代表上游确认或跨重启恢复 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | 文件预览、读取与操作支持项目外绝对路径及父目录跳转；保留文件树过滤、ignore 缓存索引、会话取消和结果上限；源码与图片支持轻量原生独立窗口预览 | 已实现 |
 | 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.152 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
 | 模型输入能力 | `model/list.inputModalities` | 提交前按所选模型动态校验图片与音频能力；保留未知新模态，不使用本地硬编码模型名单 | 已实现 |

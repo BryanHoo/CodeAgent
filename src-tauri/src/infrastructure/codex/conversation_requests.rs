@@ -6,6 +6,9 @@ use serde_json::{Map, Value, json};
 #[path = "conversation_user_input_tests.rs"]
 mod user_input_tests;
 
+#[path = "conversation_permission_resolution.rs"]
+mod permission_resolution;
+
 use super::{
     connection::{ConnectionError, ServerMessage},
     conversation::RUNTIME_SESSION_ID,
@@ -124,34 +127,7 @@ pub fn response_for_resolution(
                 (id.clone(), json!({"answers": answers}))
             }).collect::<Map<_, _>>()}))
         }
-        "item/permissions/requestApproval" => {
-            let granted = resolution
-                .get("grantedPermissions")
-                .and_then(Value::as_array)
-                .ok_or(ConnectionError::InvalidMessage)?;
-            let native = pending
-                .native_permissions
-                .as_ref()
-                .and_then(Value::as_object)
-                .ok_or(ConnectionError::InvalidMessage)?;
-            let mut permissions = Map::new();
-            for category in granted.iter().filter_map(Value::as_str) {
-                let key = match category {
-                    "network" => "network",
-                    "file_system" => "fileSystem",
-                    _ => return Err(ConnectionError::InvalidMessage),
-                };
-                let value = native.get(key).ok_or(ConnectionError::InvalidMessage)?;
-                if value.is_null() {
-                    return Err(ConnectionError::InvalidMessage);
-                }
-                permissions.insert(key.to_owned(), value.clone());
-            }
-            Ok(json!({
-                "permissions": permissions,
-                "scope": required_string(resolution, "scope")?,
-            }))
-        }
+        "item/permissions/requestApproval" => permission_resolution::response(pending, resolution),
         "mcpServer/elicitation/request" if pending.request["mode"] == "unsupported" => {
             // 未实现设备验证与扩展表单，后端只允许取消或拒绝，不能伪造验证证明。
             let action = required_string(resolution, "action")?;
