@@ -14,7 +14,7 @@ type EmulatorMetric = { parsedBytes: number; pendingBytes: number; peakPendingBy
 type TestWindow = Window & {
   __TAURI__: { core: { invoke: <T>(command: string, args?: unknown, options?: { headers: Record<string, string> }) => Promise<T> } };
   __terminalInputSequences: Record<string, number>;
-  __CODEAGENT_TERMINAL_TEST__: { create: (projectId: string, rootId: string) => Promise<void>; scopes: () => TerminalMetadata[]; close: (scope: TerminalMetadata) => Promise<void>; remove: (scope: TerminalMetadata) => Promise<void> };
+  __CODEAGENT_TERMINAL_TEST__: { create: (projectId: string, rootId: string) => Promise<void>; scopes: () => TerminalMetadata[]; close: (scope: TerminalMetadata) => Promise<void> };
   __CODEAGENT_TERMINAL_METRICS__: () => EmulatorMetric[];
 };
 
@@ -65,8 +65,10 @@ describe("Release native terminal measurements", () => {
     await $("aria/API Key（可选）").setValue("sk-webview-test");
     await $("aria/连接").click();
     await $("aria/终端 0").waitForExist();
-    if (process.platform === "win32") await windowsTerminalNative("activate");
-    else {
+    if (process.platform === "win32") {
+      // 资源采样仅要求窗口可见；已可见时不额外争抢系统前台输入焦点。
+      if (await browser.execute(() => document.hidden)) await windowsTerminalNative("activate");
+    } else {
       const executable = resolve("src-tauri/target/aarch64-apple-darwin/release/codeagent");
       await promisify(execFile)("swift", ["-e", "import AppKit; let path = CommandLine.arguments[1]; for app in NSWorkspace.shared.runningApplications where app.executableURL?.path == path { print(app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])) }", executable]);
     }
@@ -111,6 +113,16 @@ describe("Release native terminal measurements", () => {
       const twelve = await nativeMetrics();
       expect(twelve.liveCount).toBe(12);
       const countCalls = () => browser.execute(() => Object.entries(window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__?.calls ?? {}).filter(([name]) => name.includes("project_terminal")).reduce((total, [, calls]) => total + calls.length, 0));
+      // 资源采样不需要输入焦点；先排空失焦通知，避免把 ESC[O 误算为空闲轮询。
+      await browser.execute(() => { (document.activeElement as HTMLElement | null)?.blur(); });
+      // 等待 shell 启动输出的 ACK、resize 与焦点通知排空，再开始空闲计数。
+      let lastCalls = await countCalls();
+      let quietSince = performance.now();
+      await browser.waitUntil(async () => {
+        const current = await countCalls();
+        if (current !== lastCalls) { lastCalls = current; quietSince = performance.now(); }
+        return performance.now() - quietSince >= 2000;
+      }, { timeout: 20000, interval: 250, timeoutMsg: "Terminal startup did not become idle" });
       const before = await countCalls();
       for (let round = 1; round <= 3; round += 1) phases.push(await observe(`twelve-idle-${round}`, twelve, 60000));
       idleTerminalCalls = (await countCalls()) - before;
@@ -148,12 +160,15 @@ describe("Release native terminal measurements", () => {
         expect(renderer.reduce((total, value) => total + value.parsedBytes, 0) - beforeOutput).toBeGreaterThan(24 * 1024 * 1024);
         phases.push(await observe("recovered-idle", twelve, 30000));
       }
+    } catch (error) {
+      console.error("terminal measurement failed before cleanup", error);
+      throw error;
     } finally {
       const started = performance.now();
       const cleanup = await browser.executeAsync((done) => {
         const api = (window as TestWindow).__CODEAGENT_TERMINAL_TEST__;
         if (api === undefined) { done("empty"); return; }
-        Promise.all(api.scopes().map(async (scope) => { await api.close(scope); await api.remove(scope); })).then(() => done("closed"), (error: unknown) => done(String(error)));
+        Promise.all(api.scopes().map((scope) => api.close(scope))).then(() => done("closed"), (error: unknown) => done(String(error)));
       });
       cleanupMs = performance.now() - started;
       const closed = await nativeMetrics();

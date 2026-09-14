@@ -1,12 +1,67 @@
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { ConversationList } from "./conversation.js";
 import "../../styles/globals.css";
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+it("尾部在测量交付后更新时不被上一帧尺寸回滚", async () => {
+  const NativeResizeObserver = globalThis.ResizeObserver;
+  const deliveries: (() => void)[] = [];
+  let holdMeasurements = false;
+  let captured = false;
+  const observerMock = vi.spyOn(globalThis, "ResizeObserver").mockImplementation(function (callback) {
+    return new NativeResizeObserver((entries, observer) => {
+      if (!holdMeasurements) return callback(entries, observer);
+      deliveries.push(() => callback(entries, observer));
+      if (entries.some((entry) => (entry.target as HTMLElement).dataset["virtualRow"] === "footer")) {
+        captured = true;
+      }
+    });
+  });
+  const history = Array.from({ length: 20 }, (_, index) => `turn-${index}`);
+  let updateFooter = (_height: number) => {};
+  function Harness() {
+    const [height, setHeight] = useState(32);
+    useEffect(() => {
+      updateFooter = setHeight;
+      return () => { updateFooter = () => {}; };
+    }, []);
+    return <ConversationList
+      conversationId="footer-measurement-race"
+      footer={<div style={{ height }}>pending</div>}
+      getItemKey={(item) => item}
+      items={history}
+      renderItem={(item) => <div style={{ height: 120 }}>{item}</div>}
+      style={{ height: 480, overflowY: "auto" }}
+    />;
+  }
+  const screen = await render(<Harness />);
+  const container = screen.getByRole("log").element();
+  await expect.element(screen.getByText("pending", { exact: true })).toBeVisible();
+  await expect.poll(() => container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+  const footer = container.querySelector<HTMLElement>('[data-virtual-row="footer"]')!;
+  try {
+    for (let index = 0; index < 3; index += 1) await nextFrame();
+    holdMeasurements = true;
+    flushSync(() => updateFooter(64));
+    await expect.poll(() => captured).toBe(true);
+    // 保留真实旧测量，模拟提交响应先更新布局、测量回调随后才消费旧 entry。
+    flushSync(() => updateFooter(248));
+    holdMeasurements = false;
+    for (const deliver of deliveries) deliver();
+    for (let index = 0; index < 8; index += 1) {
+      await nextFrame();
+      expect.soft(container.getBoundingClientRect().bottom - footer.getBoundingClientRect().bottom).toBe(28);
+      expect.soft(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+    }
+  } finally {
+    observerMock.mockRestore();
+  }
+});
 
 it("仅尾部占位变化时在提交帧内同步真实高度与置底", async () => {
   const history = Array.from({ length: 20 }, (_, index) => `turn-${index}`);
@@ -29,6 +84,10 @@ it("仅尾部占位变化时在提交帧内同步真实高度与置底", async (
   const screen = await render(<Harness />);
   const container = screen.getByRole("log").element();
   await expect.poll(() => container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+  await expect.poll(() => {
+    const footer = container.querySelector<HTMLElement>('[data-virtual-row="footer"]');
+    return footer ? container.getBoundingClientRect().bottom - footer.getBoundingClientRect().bottom : null;
+  }).toBe(28);
   for (const height of [160, undefined, 64]) {
     // 响应可仅改变尾部而不改变历史 Item；布局必须在提交时完成，不能依赖下一帧观察器兜底。
     flushSync(() => updateFooter(height));

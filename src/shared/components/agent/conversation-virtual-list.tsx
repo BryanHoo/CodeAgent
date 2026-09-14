@@ -142,6 +142,8 @@ export function ConversationVirtualList<TItem>({
     gap: TURN_GAP_PX,
     getItemKey: getVirtualKey,
     getScrollElement: () => scrollContainerRef.current,
+    // RO 延迟到下一帧时，entry 可能早于同步提交；读取当前高度，避免回滚新尺寸。
+    measureElement: (element) => element.offsetHeight,
     overscan: TURN_OVERSCAN,
     // 留白属于列表而非末行，追加消息时不能改变已测量历史行的高度。
     paddingEnd: VERTICAL_PADDING_PX,

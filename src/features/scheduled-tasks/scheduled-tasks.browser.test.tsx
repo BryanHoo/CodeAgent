@@ -109,9 +109,9 @@ describe("ScheduledTaskList", () => {
     </I18nextProvider>);
     await screen.getByRole("combobox", { name: "重复规则" }).selectOptions("daily");
     await expect.poll(() => onPreview.mock.calls.length).toBe(1);
-    expect(screen.container.querySelectorAll(".scheduled-task-preview li")).toHaveLength(3);
+    await expect.poll(() => screen.container.querySelectorAll(".scheduled-task-preview li").length).toBe(3);
     await screen.getByRole("button", { name: "展开 5 次" }).click();
-    expect(screen.container.querySelectorAll(".scheduled-task-preview li")).toHaveLength(5);
+    await expect.poll(() => screen.container.querySelectorAll(".scheduled-task-preview li").length).toBe(5);
     await screen.getByRole("textbox", { name: "任务名称" }).fill("新的名称");
     expect(onPreview).toHaveBeenCalledTimes(1);
   });

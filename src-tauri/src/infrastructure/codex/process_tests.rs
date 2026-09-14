@@ -109,7 +109,7 @@ async fn private_codex_should_install_and_complete_real_app_server_lifecycle() {
     state
         .inspect_codex(&app_data, |_| panic!("must reuse the private runtime"))
         .await;
-    let process = CodexProcess::start(&app_data)
+    let mut process = CodexProcess::start(&app_data)
         .await
         .expect("installed Codex app-server should start");
     assert_eq!(process.version(), SUPPORTED_CODEX_VERSION);
@@ -207,7 +207,7 @@ async fn private_codex_should_install_and_complete_real_app_server_lifecycle() {
             Duration::from_secs(10),
         )
         .await;
-    let other_process = CodexProcess::start(&app_data)
+    let mut other_process = CodexProcess::start(&app_data)
         .await
         .expect("second client should start");
     let conflict =
@@ -218,11 +218,22 @@ async fn private_codex_should_install_and_complete_real_app_server_lifecycle() {
         crate::application::error::AppError::from(conflict),
         crate::application::error::AppError::CodexThreadBusy
     ));
+    other_process
+        ._child
+        .kill()
+        .await
+        .expect("second client should exit before removing its runtime");
     drop(other_process);
     let deleted = tasks::delete_task(&connection, "temporary".to_owned(), task.task.id)
         .await
         .expect("CodeAgent temporary task should be removable");
     assert_eq!(deleted.response.status, "deleted");
+    // kill_on_drop 只发出终止请求；Windows 删除可执行文件前必须等待进程退出。
+    process
+        ._child
+        .kill()
+        .await
+        .expect("primary client should exit before removing its runtime");
     drop(process);
     std::fs::remove_dir_all(app_data).expect("remove the isolated runtime fixture");
 }

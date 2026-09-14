@@ -8,6 +8,7 @@ import { measureSystemInputLatency, measureTerminalLatency, summarizeLatency } f
 import { postTerminalSystemText } from "./terminal-system-keyboard.js";
 import { terminalNativeDialog } from "./terminal-native-dialog.js";
 import { windowsTerminalNative } from "./windows-terminal-native.js";
+import type { TerminalControlEvent } from "../../src/protocol/project-terminal.js";
 
 async function enterCommand(command: string): Promise<void> {
   await browser.execute((text) => {
@@ -21,9 +22,9 @@ async function enterCommand(command: string): Promise<void> {
 
 async function clearNativeTerminals(): Promise<void> {
   const result = await browser.executeAsync((done: (value: string) => void) => {
-    const api = (window as unknown as { __CODEAGENT_TERMINAL_TEST__?: { scopes: () => unknown[]; close: (scope: unknown) => Promise<void>; remove: (scope: unknown) => Promise<void> } }).__CODEAGENT_TERMINAL_TEST__;
+    const api = (window as unknown as { __CODEAGENT_TERMINAL_TEST__?: { scopes: () => unknown[]; close: (scope: unknown) => Promise<void> } }).__CODEAGENT_TERMINAL_TEST__;
     if (api === undefined) { done("unavailable"); return; }
-    Promise.all(api.scopes().map(async (scope) => { await api.close(scope); await api.remove(scope); })).then(() => done("closed"), (error: unknown) => done(String(error)));
+    Promise.all(api.scopes().map((scope) => api.close(scope))).then(() => done("closed"), (error: unknown) => done(String(error)));
   });
   expect(["closed", "unavailable"]).toContain(result);
 }
@@ -42,12 +43,20 @@ describe("project terminal native UI", () => {
     await passthroughNativeCommands(["connect_project_terminals", "create_project_terminal", "write_project_terminal", "resize_project_terminal", "ack_project_terminal", "close_project_terminal", "remove_project_terminal"]);
     await browser.execute(() => {
       const target = window as unknown as {
-        __terminalProof: { marker: boolean; keyboard: boolean; frames: number; windowsOutput: boolean; windowsInterrupt: boolean };
+        __terminalProof: { marker: boolean; keyboard: boolean; frames: number; windowsOutput: boolean; windowsInterrupt: boolean; exitCode: number | null };
       };
-      target.__terminalProof = { marker: false, keyboard: false, frames: 0, windowsOutput: false, windowsInterrupt: false };
+      target.__terminalProof = { marker: false, keyboard: false, frames: 0, windowsOutput: false, windowsInterrupt: false, exitCode: null };
       const original = window.__CODEAGENT_WEBVIEW_TEST_INVOKE__!;
       let tail = "";
       window.__CODEAGENT_WEBVIEW_TEST_INVOKE__ = (command, args, options) => {
+        if (command === "connect_project_terminals") {
+          const channel = (args as { onEvent: { onmessage: (event: TerminalControlEvent) => void } }).onEvent;
+          const receive = channel.onmessage;
+          channel.onmessage = (event) => {
+            if (event.type === "exited") target.__terminalProof.exitCode = event.data.exitCode;
+            receive(event);
+          };
+        }
         if (command === "create_project_terminal") {
           const channel = (args as { onOutput: { onmessage: (value: unknown) => void } }).onOutput;
           const receive = channel.onmessage;
@@ -107,7 +116,7 @@ describe("project terminal native UI", () => {
       const panel = document.querySelector("[data-project-terminal]")!.getBoundingClientRect();
       const footer = document.querySelector("[data-terminal-footer]")!.getBoundingClientRect();
       const screen = document.querySelector(".xterm-screen")!.getBoundingClientRect();
-      return { ordered: panel.bottom <= footer.top, width: screen.width, height: screen.height, canvases: document.querySelectorAll(".xterm canvas").length };
+      return { ordered: footer.bottom <= panel.top, width: screen.width, height: screen.height, canvases: document.querySelectorAll(".xterm canvas").length };
     });
     expect(geometry.ordered).toBe(true);
     expect(geometry.width).toBeGreaterThan(100);
@@ -142,8 +151,6 @@ describe("project terminal native UI", () => {
     expect([...input.samplesMs, ...switched.samplesMs].every((value) => Number.isFinite(value) && value >= 0)).toBe(true);
     expect(await browser.execute(() => window.__CODEAGENT_WEBVIEW_TEST_BRIDGE__?.calls.create_project_terminal?.length)).toBe(2);
     await $("aria/结束终端").click();
-    await $("aria/移除已退出终端").waitForExist();
-    await $("aria/移除已退出终端").click();
     await $("aria/终端 1").waitForExist();
   });
 
@@ -196,11 +203,10 @@ describe("project terminal native UI", () => {
     expect(await browser.execute(() => (window as unknown as { __terminalProof: { windowsOutput: boolean; windowsInterrupt: boolean } }).__terminalProof)).toEqual(expect.objectContaining({ windowsOutput: true, windowsInterrupt: true }));
   });
 
-  it("retains the real exit code and removes the exited tab", async () => {
+  it("reports the real exit code and automatically removes the exited tab", async () => {
     await enterCommand("exit 7");
     await $("aria/终端 0").waitForDisplayed();
-    await browser.waitUntil(async () => browser.execute(() => document.querySelector("[data-project-terminal]")?.textContent?.includes("7") ?? false));
-    await $("aria/移除已退出终端").click();
+    expect(await browser.execute(() => (window as unknown as { __terminalProof: { exitCode: number | null } }).__terminalProof.exitCode)).toBe(7);
     await browser.waitUntil(async () => browser.execute(() => document.querySelectorAll('[data-project-terminal] [role="tab"]').length === 0));
     expect(await browser.execute(() => document.querySelectorAll('[data-project-terminal] [role="tab"]').length)).toBe(0);
   });

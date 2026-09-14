@@ -26,15 +26,18 @@ describe("TaskWindow", () => {
     receive({ sequence: 1, title: "完成测试", status: "running", order: ["a"], updates: [{ id: "a", kind: "message", text, append: false }], truncated: false });
     const viewport = document.querySelector<HTMLDivElement>(".task-window-output")!;
     await vi.waitFor(() => expect(viewport.scrollHeight).toBeGreaterThan(500));
+    await expect.element(page.getByText("执行过程 59", { exact: true })).toBeVisible();
+    const bottomContent = viewport.textContent;
     viewport.scrollTop = 280;
     viewport.dispatchEvent(new Event("scroll"));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    await expect.poll(() => viewport.textContent).not.toBe(bottomContent);
     const before = viewport.textContent;
     const height = viewport.scrollHeight;
     receive({ sequence: 2, title: "完成测试", status: "completed", order: ["a"], updates: [], truncated: false });
     await vi.waitFor(() => expect(native.acknowledgeTaskWindow).toHaveBeenCalledWith(2));
     expect(viewport.textContent).toBe(before);
     expect(viewport.scrollHeight).toBe(height);
+    expect(viewport.scrollTop).toBe(280);
     expect(document.querySelector("details, [aria-expanded=false]")).toBeNull();
   });
   it("renders compact Markdown and operation titles without executable content", async () => {

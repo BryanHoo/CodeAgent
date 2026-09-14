@@ -108,10 +108,14 @@ test.each([1280, 1920].flatMap((width) =>
   </TooltipProvider></QueryClientProvider>);
   const editor = screen.getByRole("textbox");
   await editor.fill("继续回答");
-  await new Promise((resolve) => setTimeout(resolve, 300));
   const container = screen.getByRole("log").element();
+  const historyAnchor = screen.getByText("历史段落 23：这段回答已经占满聊天区域。", { exact: true });
+  await expect.element(historyAnchor).toBeVisible();
+  await expect.poll(() => container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
   expect(container.scrollHeight).toBeGreaterThan(container.clientHeight);
-  const anchor = screen.getByText("历史段落 23：这段回答已经占满聊天区域。", { exact: true }).element();
+  const anchor = historyAnchor.element();
+  const historyRow = anchor.closest<HTMLElement>('[data-virtual-row="turn"]')!;
+  await expect.poll(() => container.getBoundingClientRect().bottom - historyRow.getBoundingClientRect().bottom).toBe(28);
   const samples: number[] = [anchor.getBoundingClientRect().top];
   const overlaps: number[] = [];
   let userHasAppeared = false;

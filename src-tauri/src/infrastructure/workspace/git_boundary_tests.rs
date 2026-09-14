@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::Command};
 
 use super::git_integrity_tests::Repository;
-use super::{commit_changes, get_git_status, prepare_commit_message};
+use super::{commit_changes, get_git_status};
 
 fn git(root: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
@@ -25,9 +25,10 @@ async fn commit_context_should_read_link_text_without_opening_its_target() {
     fs::write(&outside, "PRIVATE_OUTSIDE_SENTINEL").unwrap();
     std::os::unix::fs::symlink(&outside, repo.0.join("link.txt")).unwrap();
     let status = get_git_status(&repo.0, None, false).await.unwrap();
-    let context = prepare_commit_message(&repo.0, None, &["link.txt".into()], &status.snapshot)
-        .await
-        .unwrap();
+    let context =
+        super::prepare_commit_message(&repo.0, None, &["link.txt".into()], &status.snapshot)
+            .await
+            .unwrap();
     fs::remove_file(&outside).unwrap();
     assert!(!context.changes.contains("PRIVATE_OUTSIDE_SENTINEL"));
     assert!(context.changes.contains(outside.to_str().unwrap()));
