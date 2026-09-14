@@ -143,3 +143,9 @@
 - macOS 桌面宠物窗口必须注册为带 `FullScreenAuxiliary`、`CanJoinAllSpaces` 与非激活样式的浮动 `NSPanel`；`tauri-nspanel` 的转换、配置和销毁必须通过 `run_on_main_thread` 执行，动态转换后需补齐防激活标记；CodeAgent 未激活时面板必须拒绝成为 key window，已激活时继续支持键盘操作
 - macOS 桌面宠物拖动只向主线程提交一次原生拖拽，并低开销轮询 AppKit 主键状态直至物理释放；释放后在应用已激活时恢复 main key window，并一次性钳制、布局和持久化；单一 `NSPanel` 调整气泡布局时必须保持宠物屏幕坐标稳定，其他平台的物理坐标命令继续按帧合并
 - CodeAgent 存储迁移不得修改 `CODEX_HOME`；Codex 配置、认证、线程与 SQLite 始终由官方目录管理
+
+## Git 提交结果与搜索预算
+
+- Git 提交成功后保留 SHA；暂存区同步失败通过必需的可空 `indexSyncError` 返回，错误值仅为 `GIT_INDEX_SYNC_FAILED`，不得将已完成提交作为整体失败提示重试。
+- 未跟踪符号链接进入提交上下文时读取链接文本，不跟随目标；unborn HEAD 按空历史与空 index 处理。
+- 文件搜索单索引 16 MiB、总缓存 32 MiB/8 目录、最多 2 个 worker/32 会话；超限目录保留完整扫描范围及最多 50 个排序结果，取消守卫随请求释放会话。

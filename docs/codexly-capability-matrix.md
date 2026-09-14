@@ -149,3 +149,13 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - [Tauri Notification 插件](https://v2.tauri.app/plugin/notification/)
 - [codex-webui](https://github.com/seo-rii/codex-webui)
 - [CodexHarbor](https://github.com/adondada/codexharbor)
+
+## Git 与文件搜索边界修复
+
+- 新建或 orphan 分支没有 HEAD 时返回正常状态和空历史，支持只提交所选文件的首次提交。
+- 生成提交说明时，未跟踪符号链接只读取链接文本，不读取目标文件正文。
+- 提交响应增加必需的可空 `indexSyncError`；已提交后暂存区同步失败返回 `GIT_INDEX_SYNC_FAILED` 并保留 SHA，界面明确提示提交完成及后续检查。
+- 任务设置复用跨平台原子覆盖，替换失败保留旧文件。
+- 文件搜索采用目录/总字节预算、并发配额及取消清理，超大目录以有界结果扫描保证匹配范围完整。
+
+2026-09-14 本机验证：前端 355 项单元测试、Chromium/WebKit 362 项浏览器测试、Rust 590 项单元测试及 6 项集成测试通过；格式、Clippy、类型检查、Modern/Legacy 构建和体积预算通过。Git 回归覆盖链接目标隔离、真实 index 被占用后的成功结果，以及 unborn 分支的状态、空历史和首次提交；搜索回归覆盖并发复用、取消清理、总字节预算与超限目录尾部匹配。Windows/Linux 原生故障注入未在本机执行。

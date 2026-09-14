@@ -14,3 +14,6 @@
 - 静态检查：`pnpm rust:clippy`
 - 测试：`pnpm rust:test`
 - 完整后端检查：`pnpm check:rust`
+
+- 手写源文件和测试文件不得超过 500 行；`pnpm source:lines` 覆盖已跟踪及新增文件，通过 `pnpm check:web` 和总入口 `pnpm check` 执行。
+- `pnpm performance:rust` 必须使用 `--release`；Debug 功能测试结果不能作为发布性能基线。记录内存时区分索引预算、进程 RSS 采样和峰值。

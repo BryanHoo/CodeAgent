@@ -68,3 +68,35 @@ async fn task_settings_should_survive_new_reads_and_replace_atomically() {
         .await
         .expect("test directory should clean up");
 }
+
+#[tokio::test]
+async fn task_settings_failed_replace_should_preserve_existing_target() {
+    let root = std::env::temp_dir().join(format!(
+        "codeagent-settings-failure-{}-{}",
+        std::process::id(),
+        TEST_ID.fetch_add(1, Ordering::Relaxed)
+    ));
+    let target = root.join("task-settings/project-a/thread-a.json");
+    tokio::fs::create_dir_all(&target).await.unwrap();
+    tokio::fs::write(target.join("preserve.txt"), "existing data")
+        .await
+        .unwrap();
+    assert!(
+        write_task_settings(&root, "project-a", "thread-a", &settings("model-b"))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(target.join("preserve.txt"))
+            .await
+            .unwrap(),
+        "existing data"
+    );
+    let mut entries = tokio::fs::read_dir(target.parent().unwrap()).await.unwrap();
+    assert_eq!(
+        entries.next_entry().await.unwrap().unwrap().file_name(),
+        "thread-a.json"
+    );
+    assert!(entries.next_entry().await.unwrap().is_none());
+    tokio::fs::remove_dir_all(root).await.unwrap();
+}

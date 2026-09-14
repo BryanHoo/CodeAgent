@@ -31,6 +31,7 @@ export const workbench = {
     commitCompletePushFailed: "Commit completed, but push failed",
     commitCompleteUpstreamMissing: "Commit completed; the current branch has no upstream",
     commitMessage: "Commit message",
+    indexSyncFailed: "Commit {{sha}} completed, but staging synchronization failed. Release the Git lock and inspect staging; do not repeat the commit.",
     commitSucceeded: "Committed successfully",
     changes: "Changes",
     generateMessage: "Generate message content",

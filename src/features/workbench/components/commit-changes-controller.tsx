@@ -91,9 +91,13 @@ export function CommitChangesController({
         void queryClient.invalidateQueries({
           queryKey: ["projects", projectId, rootPath, "git-history"],
         });
+        // 提交与收尾分别反馈，不能让已完成的提交看起来需要重试。
+        if (response.indexSyncError !== null) {
+          notifyActionError(new Error(t("commit.indexSyncFailed", { sha: response.commitSha.slice(0, 7) })));
+        }
         const successMessageKey = getCommitSuccessMessageKey(response);
         if (successMessageKey !== null) {
-          notifyActionSuccess(t(successMessageKey));
+          if (response.indexSyncError === null) notifyActionSuccess(t(successMessageKey));
           return;
         }
         notifyActionError(new Error(response.pushError ?? t("commit.commitCompletePushFailed")));

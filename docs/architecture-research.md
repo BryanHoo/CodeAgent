@@ -1,13 +1,15 @@
-# CodeAgent 桌面端架构调研与技术方案
+# CodeAgent 桌面端架构与设计依据
+
+前六节按当前实现维护；第九节保留历史实施路线，不代表功能完成状态。具体能力与验证范围以 [能力矩阵](./codexly-capability-matrix.md) 和 [性能基线](./performance-baseline.md) 为准。
 
 ## 1. 结论
 
-在跨平台、Codex 优先、性能优先并使用 AI Elements 快速构建 UI 的约束下，推荐采用以下架构：
+在跨平台、Codex 优先、性能优先并使用 AI Elements 快速构建 UI 的约束下，当前采用以下架构：
 
 ```text
 React 19 + Vite + TypeScript
         │
-AI Elements + Streamdown + react-virtuoso
+AI Elements + Streamdown + @tanstack/react-virtual
         │
 Tauri invoke / Channel
         │
@@ -26,10 +28,10 @@ stdio JSONL
 - Rust 职责下沉的实施进度与剩余边界见 [Rust 职责迁移](./rust-responsibility-migration.md)。
 - UI 使用 AI Elements 的源码组件，但不使用 Next.js、`useChat` 或 AI SDK HTTP 传输层。
 - Web 层只维护面向渲染的状态投影，线程、审批、认证和执行状态仍以 `app-server` 为准。
-- Codex 和 Claude Code 使用独立进程与应用缓存；Codex 继承官方 `CODEX_HOME`，与 CLI 共享项目、会话、认证和配置。
-- 不将 Provider 可执行文件作为 Tauri Sidecar 打包；优先复用本机兼容版本，缺失时应用私有按需安装。
+- 当前接入 Codex，继承官方 `CODEX_HOME`，与 CLI 共享项目、会话、认证和配置；Claude Code 属于后续路线，不是已实现运行时。
+- 不将 Provider 可执行文件作为 Tauri Sidecar 打包；只运行应用私有目录中的精确版本，缺失时按需安装，不扫描或回退到全局安装。
 
-纯 Rust 原生 UI 理论上可以进一步降低渲染损耗，但会失去 AI Elements 和 Web 生态的开发效率。在 Tauri 与 AI Elements 的既定条件下，本方案是性能、可靠性和开发效率之间的最佳平衡。
+纯 Rust 原生 UI 理论上可以进一步降低渲染损耗，但会失去 AI Elements 和 Web 生态的开发效率。在 Tauri 与 AI Elements 的既定条件下，当前方案兼顾 Web 组件复用、原生进程管理和增量渲染；性能以实测基线判断。
 
 ## 2. 官方能力与可行性
 
@@ -88,9 +90,9 @@ Provider Runtime Manager 负责私有运行时检查、自动安装、更新和�
 
 - 只检查应用数据目录中的固定版本路径，不扫描全局安装或包管理器。
 - 使用短超时和输出上限执行官方版本命令，拒绝任何不匹配适配器精确版本的结果。
-- 版本匹配后执行 Provider 专属能力探测，Codex 必须完成 `app-server` 初始化握手。
+- 日常检查验证固定版本；真正启动 Codex 时完成 `app-server` 初始化握手。
 - 私有版本缺失、损坏或不符时，自动将固定官方包下载到应用私有目录。
-- 校验版本、平台、架构、npm SHA-512 integrity 和官方签名，验证通过后原子切换。
+- 校验版本、平台、架构、固定的官方 npm SHA-512 integrity，验证通过后原子切换。
 - 原子替换失败时恢复原目录，界面提供重试，不运行不兼容版本。
 
 应用不执行全局包管理器命令，也不通过登录 shell 发现 Codex。
@@ -110,11 +112,11 @@ Rust 层不能把原始 JSONL 无条件透传给前端。每行消息至少需�
 
 ### 3.4 队列与背压
 
-推荐采用有界 Tokio `mpsc` 队列：
+当前链路采用有界通知缓冲、Channel 投递预算和 ACK：
 
 - 连续文本或命令输出增量可以按 8–16ms 或数据量阈值合并。
 - 审批、完成、错误、线程状态等语义事件立即发送。
-- 不丢弃任何会改变状态的事件。
+- 预算耗尽时显式请求快照恢复或重启连接，不静默丢弃事实流。
 - WebView 消费过慢时限制内存增长，并记录背压诊断信息。
 - 通过 `seq` 检测缺失、重复或乱序事件。
 
@@ -124,13 +126,12 @@ WebView 到 Rust 使用职责明确的 `invoke` 命令，例如：
 
 ```text
 start_runtime
-create_thread
-resume_thread
-submit_turn
-cancel_turn
-respond_approval
-load_thread_page
-shutdown_runtime
+start_task
+read_task
+submit_prompt
+start_turn
+interrupt_turn
+resolve_pending_request
 ```
 
 Rust 到 WebView 使用一个模块级、长生命周期的 `Channel`。不要在 React 组件挂载过程中反复替换 `Channel.onmessage`，否则可能在重挂载期间出现消息竞争或丢失。
@@ -149,7 +150,7 @@ Tailwind CSS 4
 shadcn/ui
 AI Elements
 Streamdown
-react-virtuoso
+@tanstack/react-virtual
 ```
 
 不引入 Next.js 运行时，也不通过 `useChat` 调用本地 HTTP API。这样可以减少 Node.js 中间层、端口管理、额外序列化和网络协议损耗。
@@ -223,7 +224,7 @@ Streamdown 适用于流式 Markdown，并提供块级缓存及延迟语法高亮
 
 ### 5.2 长会话虚拟化
 
-AI Elements 的 `Conversation` 提供自动滚动，但没有长列表虚拟化。普通会话可以直接使用其容器；长会话应使用开源 `react-virtuoso` 替换消息列表容器，同时保留 AI Elements 的消息组件。
+AI Elements 的 `Conversation` 提供自动滚动，但没有长列表虚拟化。普通会话可以直接使用其容器；当前长会话使用 `@tanstack/react-virtual` 实现动态高度虚拟列表，同时保留 AI Elements 的消息组件；源码、文件树和任务小窗也按需虚拟化。
 
 推荐行为：
 
@@ -233,7 +234,7 @@ AI Elements 的 `Conversation` 提供自动滚动，但没有长列表虚拟化�
 - 新消息到达时显示回到底部入口。
 - 按页加载旧消息和大型工具详情。
 
-参考：[React Virtuoso](https://virtuoso.dev/)
+参考：[TanStack Virtual](https://tanstack.com/virtual/latest/docs/introduction)
 
 ## 6. 数据隔离
 
@@ -299,7 +300,9 @@ CodeAgent 当前不为 UI 数据引入 SQLite。Codex 线程历史仍由 `app-se
 - 审批必须走真实协议闭环，不能只做视觉确认。
 - 协议版本必须与 Codex 二进制绑定并经过回归测试。
 
-## 9. 分阶段实施
+## 9. 历史实施路线与未来扩展
+
+以下是原始阶段划分，不作为当前实现清单；已交付范围见能力矩阵，Claude Code 尚未接入。
 
 ### 阶段一：Codex 最小闭环
 
@@ -319,7 +322,7 @@ CodeAgent 当前不为 UI 数据引入 SQLite。Codex 线程历史仍由 `app-se
 ### 阶段三：跨平台发布
 
 - 分别在 Windows、macOS 和 Ubuntu 原生 CI 中构建。
-- 实现 Provider 运行时发现、最低协议版本校验和能力探测。
+- 实现应用私有运行时定位、精确版本校验和启动握手。
 - 实现官方来源下载、完整性校验、应用私有安装、原子升级和回退。
 - 完成 macOS 签名与公证、Windows 签名及 Linux 依赖验证。
 - 对真实流式响应、审批、取消、崩溃恢复执行端到端测试。

@@ -5,7 +5,6 @@ use std::{
 };
 
 use serde::Serialize;
-use tokio::io::AsyncReadExt;
 
 use super::{
     git_process::{run_git, run_git_with_index, run_network_git},
@@ -14,7 +13,6 @@ use super::{
 };
 
 const MAX_GIT_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
-const MAX_COMMIT_CONTEXT_BYTES: usize = 512 * 1024;
 
 #[derive(Debug)]
 pub struct CommitMessageContext {
@@ -28,6 +26,7 @@ pub struct CommitChangesResponse {
     pub branch: Option<String>,
     pub commit_sha: String,
     pub message: String,
+    pub index_sync_error: Option<&'static str>,
     pub push_error: Option<String>,
     pub push_status: &'static str,
 }
@@ -56,115 +55,6 @@ pub async fn create_branch(
     let repo = repository_path(root, repository).await?;
     run_git(&repo, &["switch", "-c", branch], MAX_GIT_OUTPUT_BYTES).await?;
     get_git_status(root, repository, true).await
-}
-
-pub async fn prepare_commit_message(
-    root: &Path,
-    repository: Option<&str>,
-    paths: &[String],
-    expected_snapshot: &str,
-) -> Result<CommitMessageContext, WorkspaceError> {
-    validate_paths(paths)?;
-    let status = validate_snapshot(root, repository, expected_snapshot).await?;
-    let repo = repository_path(root, repository).await?;
-    let staged: Vec<_> = status
-        .staged
-        .iter()
-        .filter(|change| paths.contains(&change.path))
-        .collect();
-    let unstaged: Vec<_> = status
-        .unstaged
-        .iter()
-        .filter(|change| paths.contains(&change.path))
-        .collect();
-    if staged.is_empty() && unstaged.is_empty() {
-        return Err(WorkspaceError::InvalidPath);
-    }
-    let mut changes = String::new();
-    for (area, change) in staged
-        .iter()
-        .map(|change| ("staged", *change))
-        .chain(unstaged.iter().map(|change| ("unstaged", *change)))
-    {
-        append_bounded(
-            &mut changes,
-            &format!("## {area}: {} ({})\n", change.path, change.kind),
-            MAX_COMMIT_CONTEXT_BYTES,
-        );
-    }
-
-    append_selected_diff(
-        &repo,
-        &staged
-            .iter()
-            .flat_map(|change| {
-                std::iter::once(change.path.as_str()).chain(change.original_path.as_deref())
-            })
-            .collect::<Vec<_>>(),
-        true,
-        &mut changes,
-    )
-    .await?;
-    let tracked_unstaged: Vec<_> = unstaged
-        .iter()
-        .filter(|change| change.kind != "create")
-        .flat_map(|change| {
-            std::iter::once(change.path.as_str()).chain(change.original_path.as_deref())
-        })
-        .collect();
-    append_selected_diff(&repo, &tracked_unstaged, false, &mut changes).await?;
-
-    for change in unstaged.iter().filter(|change| change.kind == "create") {
-        // 未跟踪文件没有 Git diff，仅读取剩余上下文容量，避免大文件占用过多内存。
-        let remaining = MAX_COMMIT_CONTEXT_BYTES.saturating_sub(changes.len());
-        let mut content = Vec::with_capacity(remaining.min(8 * 1024));
-        if let Ok(file) = tokio::fs::File::open(repo.join(&change.path)).await {
-            file.take(remaining as u64)
-                .read_to_end(&mut content)
-                .await?;
-        }
-        append_bounded(
-            &mut changes,
-            &String::from_utf8_lossy(&content),
-            MAX_COMMIT_CONTEXT_BYTES,
-        );
-        append_bounded(&mut changes, "\n", MAX_COMMIT_CONTEXT_BYTES);
-    }
-    Ok(CommitMessageContext {
-        changes,
-        snapshot: status.snapshot,
-    })
-}
-
-async fn append_selected_diff(
-    repo: &Path,
-    paths: &[&str],
-    staged: bool,
-    target: &mut String,
-) -> Result<(), WorkspaceError> {
-    if paths.is_empty() || target.len() >= MAX_COMMIT_CONTEXT_BYTES {
-        return Ok(());
-    }
-    let mut args = vec!["diff", "--no-ext-diff"];
-    if staged {
-        args.push("--cached");
-    }
-    args.push("--");
-    args.extend_from_slice(paths);
-    let remaining = MAX_COMMIT_CONTEXT_BYTES - target.len();
-    let (diff, _) = run_git(repo, &args, remaining).await?;
-    append_bounded(
-        target,
-        &String::from_utf8_lossy(&diff),
-        MAX_COMMIT_CONTEXT_BYTES,
-    );
-    Ok(())
-}
-
-fn append_bounded(target: &mut String, value: &str, limit: usize) {
-    let remaining = limit.saturating_sub(target.len());
-    let end = value.floor_char_boundary(remaining.min(value.len()));
-    target.push_str(&value[..end]);
 }
 
 pub async fn commit_changes(
@@ -211,13 +101,13 @@ pub async fn commit_changes(
         .chain(&selected_unstaged)
         .map(|path| literal_path(path))
         .collect();
+    let head = super::git_read::head_commit(&repo).await?;
     let (temporary_root, temporary_index) = create_temporary_index().await?;
-
     let commit_result = async {
         // 从 HEAD 组装隔离 index，禁止未选择的暂存条目进入本次提交。
         run_git_with_index(
             &repo,
-            &["read-tree", "HEAD"],
+            &["read-tree", head.as_deref().unwrap_or("--empty")],
             MAX_GIT_OUTPUT_BYTES,
             &temporary_index,
             None,
@@ -290,27 +180,31 @@ pub async fn commit_changes(
     let _ = tokio::fs::remove_dir_all(&temporary_root).await;
     commit_result?;
 
+    let commit_sha = first_line(&repo, &["rev-parse", "HEAD"]).await?;
+    let branch = status.branch;
     let mut reset_args = vec!["reset", "--quiet", "HEAD", "--"];
     reset_args.extend(literal_paths.iter().map(String::as_str));
-    run_git(&repo, &reset_args, MAX_GIT_OUTPUT_BYTES).await?;
-    let commit_sha = first_line(&repo, &["rev-parse", "HEAD"]).await?;
-    let branch = optional_line(&repo, &["branch", "--show-current"]).await?;
+    // HEAD 已更新，收尾失败不能把成功提交降格为可重试的整体错误。
+    let index_sync_error = run_git(&repo, &reset_args, MAX_GIT_OUTPUT_BYTES)
+        .await
+        .err()
+        .map(|_| "GIT_INDEX_SYNC_FAILED");
     let (push_status, push_error) = if action == "commit" {
         ("not_requested", None)
     } else {
-        let remotes = remote_names(&repo).await?;
-        if remotes.is_empty() {
-            (
+        match remote_names(&repo).await {
+            Err(error) => ("failed", Some(error.to_string())),
+            Ok(remotes) if remotes.is_empty() => (
                 "not_configured",
                 Some(WorkspaceError::NoUpstream.to_string()),
-            )
-        } else {
-            push_current_branch(&repo, branch.as_deref(), &remotes).await
+            ),
+            Ok(remotes) => push_current_branch(&repo, branch.as_deref(), &remotes).await,
         }
     };
     Ok(CommitChangesResponse {
         branch,
         commit_sha,
+        index_sync_error,
         message: message.to_owned(),
         push_error,
         push_status,
@@ -427,7 +321,7 @@ pub(super) async fn validate_branch(
     Ok(())
 }
 
-fn validate_paths(paths: &[String]) -> Result<(), WorkspaceError> {
+pub(super) fn validate_paths(paths: &[String]) -> Result<(), WorkspaceError> {
     if paths.is_empty() || paths.len() > 500 {
         return Err(WorkspaceError::InvalidPath);
     }

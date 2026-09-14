@@ -119,7 +119,7 @@ pub(super) async fn read_git_status(
         return Err(WorkspaceError::InvalidPath);
     }
     let branch = optional_git_line(&repo, &["branch", "--show-current"]).await?;
-    let head = optional_git_line(&repo, &["rev-parse", "HEAD"]).await?;
+    let head = head_commit(&repo).await?;
     let branches = git_lines(
         &repo,
         &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
@@ -167,6 +167,16 @@ pub async fn get_git_history(
         });
     };
     let offset = parse_cursor(cursor)?;
+    if head_commit(repo).await?.is_none() {
+        return Ok(GitHistoryPage {
+            branch: optional_git_line(repo, &["branch", "--show-current"]).await?,
+            commits: Vec::new(),
+            next_cursor: None,
+            repositories: selected.repositories,
+            repository: selected.repository,
+            repository_mode: selected.mode,
+        });
+    }
     let skip = format!("--skip={offset}");
     let output = run_git(
         repo,
@@ -441,4 +451,9 @@ async fn git_lines(repo: &Path, args: &[&str]) -> Result<Vec<String>, WorkspaceE
 async fn optional_git_line(repo: &Path, args: &[&str]) -> Result<Option<String>, WorkspaceError> {
     let lines = git_lines(repo, args).await?;
     Ok(lines.into_iter().next())
+}
+
+/// unborn 分支没有提交，作为空历史处理；其他 Git 执行错误仍向上传递。
+pub(super) async fn head_commit(repo: &Path) -> Result<Option<String>, WorkspaceError> {
+    optional_git_line(repo, &["rev-parse", "--revs-only", "HEAD"]).await
 }

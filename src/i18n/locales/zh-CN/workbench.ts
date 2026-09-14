@@ -31,6 +31,7 @@ export const workbench = {
     commitCompletePushFailed: "提交已完成，但推送失败",
     commitCompleteUpstreamMissing: "提交已完成，当前分支未配置上游",
     commitMessage: "提交信息",
+    indexSyncFailed: "提交 {{sha}} 已完成，但暂存区同步失败。请释放 Git 占用后检查暂存区，不要重复提交。",
     commitSucceeded: "提交成功",
     changes: "变更",
     generateMessage: "生成 message 信息",

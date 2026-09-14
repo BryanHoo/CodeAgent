@@ -93,6 +93,7 @@ export async function installWebviewMocks(): Promise<WebviewMocks> {
           message: "test(webview): 覆盖原生流程",
           pushError: null,
           pushStatus: "not_requested",
+          indexSyncError: null,
         },
         configure_custom_provider: { models: modelPage, status: connectedProvider },
         connect_runtime: { lastSeq: 0, provider: "codex", status: "ready" },

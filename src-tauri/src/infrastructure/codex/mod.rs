@@ -93,6 +93,8 @@ mod conversation_item_tests;
 #[path = "conversation_plugin_install_tests.rs"]
 mod conversation_plugin_install_tests;
 #[cfg(test)]
+mod conversation_request_mapping_tests;
+#[cfg(test)]
 mod conversation_skill_tests;
 #[cfg(test)]
 #[path = "conversation_tests.rs"]

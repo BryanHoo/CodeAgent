@@ -144,3 +144,68 @@ async fn performance_baseline_source_read() {
     }
     fs::remove_dir_all(root).expect("fixture root should be removed");
 }
+
+/// 大目录与并发客户端采用相同优化构建；RSS 只表示 Rust 测试进程的采样值。
+#[tokio::test]
+#[ignore = "manual performance baseline"]
+async fn performance_baseline_large_concurrent_search() {
+    let root = test_root("large-search");
+    for index in 0..50_000 {
+        let directory = root.join(format!("module-{:03}", index % 100));
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join(format!("target-{index:05}.rs")), "").unwrap();
+    }
+    let root = fs::canonicalize(root).unwrap();
+    let search = Arc::new(ProjectFileSearch::default());
+    let rss_before = rust_process_rss_kib();
+    let mut samples = Vec::new();
+    for round in 0..5 {
+        let mut workers = Vec::new();
+        for client in 0..8 {
+            let search = Arc::clone(&search);
+            let root = root.clone();
+            workers.push(tokio::spawn(async move {
+                let start = Instant::now();
+                let result = search
+                    .search(&root, "root", "target", &format!("load-{round}-{client}"))
+                    .await
+                    .unwrap();
+                assert_eq!(result.data.len(), 50);
+                start.elapsed()
+            }));
+        }
+        for worker in workers {
+            samples.push(worker.await.unwrap());
+        }
+    }
+    let retained_bytes = search.retained_index_bytes();
+    assert!(retained_bytes <= 32 * 1024 * 1024);
+    println!(
+        "PERFORMANCE_BASELINE {}",
+        serde_json::json!({
+            "benchmark": "large_concurrent_search", "files": 50_000, "clients": 8, "rounds": 5,
+            "p50Ms": percentile(&samples, 0.50), "p95Ms": percentile(&samples, 0.95),
+            "retainedIndexBytes": retained_bytes, "rustRssBeforeKiB": rss_before, "rustRssAfterKiB": rust_process_rss_kib(),
+        })
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+fn rust_process_rss_kib() -> Option<u64> {
+    let output = std::process::Command::new("ps")
+        .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+        .output()
+        .ok()?;
+    output.status.success().then_some(())?;
+    std::str::from_utf8(&output.stdout)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+#[cfg(not(unix))]
+fn rust_process_rss_kib() -> Option<u64> {
+    None
+}

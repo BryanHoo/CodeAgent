@@ -73,24 +73,10 @@ pub async fn write_task_settings(
     let temp = temporary_path(parent, task_id);
     fs::write(&temp, bytes).await?;
 
-    // 同目录 rename 在 Unix 上原子替换；Windows 已存在目标时使用最小回退路径。
-    if let Err(error) = fs::rename(&temp, &target).await {
-        if error.kind() != io::ErrorKind::AlreadyExists
-            && error.kind() != io::ErrorKind::PermissionDenied
-        {
-            let _ = fs::remove_file(&temp).await;
-            return Err(error.into());
-        }
-        match fs::remove_file(&target).await {
-            Ok(()) => fs::rename(&temp, &target).await?,
-            Err(remove_error) if remove_error.kind() == io::ErrorKind::NotFound => {
-                fs::rename(&temp, &target).await?
-            }
-            Err(remove_error) => {
-                let _ = fs::remove_file(&temp).await;
-                return Err(remove_error.into());
-            }
-        }
+    // 与其他设置共用原子覆盖；失败时保留旧文件，不能先删除旧数据。
+    if let Err(error) = super::app_storage::replace_file_atomic(&temp, &target).await {
+        let _ = fs::remove_file(&temp).await;
+        return Err(error.into());
     }
     Ok(())
 }

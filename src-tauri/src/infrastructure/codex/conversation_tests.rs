@@ -3,11 +3,8 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
 use super::{
-    AppServerConnection,
-    connection::ServerMessage,
-    conversation::read_task_snapshot,
+    AppServerConnection, connection::ServerMessage, conversation::read_task_snapshot,
     conversation_events::map_server_message,
-    conversation_requests::{map_server_request, response_for_resolution},
 };
 
 #[tokio::test]
@@ -473,61 +470,4 @@ fn hook_and_auto_review_notifications_should_map_timeline_items() {
         assert_eq!(event["type"], event_type);
         assert_eq!(event["payload"]["item"]["type"], item_type);
     }
-}
-
-#[test]
-fn approval_requests_should_map_and_encode_native_responses() {
-    let mapped = map_server_request(
-        ServerMessage {
-            id: Some(9),
-            method: "item/commandExecution/requestApproval".to_owned(),
-            params: to_raw_value(&json!({
-                "threadId": "thread-a", "turnId": "turn-a", "itemId": "item-a", "kind": "command",
-                "startedAtMs": 1735689600000_i64, "command": "pnpm check", "cwd": "/work/a",
-                "reason": "需要执行测试", "networkApprovalContext": null,
-                "availableDecisions": ["accept", "acceptForSession", "decline"]
-            }))
-            .unwrap(),
-        },
-        5,
-        "2025-01-01T00:00:00Z",
-    )
-    .expect("request should map")
-    .expect("request should be supported");
-
-    assert_eq!(mapped.event["type"], "pending_request.created");
-    assert_eq!(mapped.pending.request["requestId"], "number:9");
-    assert_eq!(mapped.pending.request["type"], "command_approval");
-    assert_eq!(
-        mapped.pending.request["availableDecisions"],
-        json!(["allow", "allow_for_session", "deny"])
-    );
-    assert_eq!(
-        response_for_resolution(&mapped.pending, &json!({"decision": "allow_for_session"}))
-            .unwrap(),
-        json!({"decision": "acceptForSession"})
-    );
-
-    let elicitation = map_server_request(
-        ServerMessage {
-            id: Some(10),
-            method: "mcpServer/elicitation/request".to_owned(),
-            params: to_raw_value(&json!({
-                "threadId": "thread-a", "turnId": "turn-a", "serverName": "docs",
-                "mode": "form", "message": "选择范围",
-                "requestedSchema": {
-                    "type": "object", "required": ["scope"],
-                    "properties": {"scope": {"type": "string", "title": "范围", "enum": ["all", "current"]}}
-                }
-            }))
-            .unwrap(),
-        },
-        6,
-        "2025-01-01T00:00:00Z",
-    )
-    .unwrap()
-    .unwrap();
-    assert_eq!(elicitation.pending.request["type"], "mcp_elicitation");
-    assert_eq!(elicitation.pending.request["fields"][0]["type"], "select");
-    assert_eq!(elicitation.pending.request["fields"][0]["required"], true);
 }
