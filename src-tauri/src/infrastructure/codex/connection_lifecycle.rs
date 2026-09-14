@@ -43,6 +43,15 @@ impl Drop for InFlightWrite<'_> {
         }
         // write_all/flush 中断时无法保证 JSONL 帧完整：在释放写锁前永久撤销 writer。
         // 同步关闭写端并唤醒已有请求，停止读取任务让 Runtime 感知连接断开。
+        diagnostics::record(
+            diagnostics::DiagnosticLevel::Warn,
+            "codex_connection_write_aborted",
+            None,
+            std::collections::BTreeMap::from([(
+                "connectionSeq".to_owned(),
+                self.connection.diagnostic_seq.into(),
+            )]),
+        );
         self.slot.take();
         fail_pending(&self.connection.pending, PendingError::ConnectionClosed);
         self.connection.reader_task.abort();
@@ -51,6 +60,17 @@ impl Drop for InFlightWrite<'_> {
 
 impl AppServerConnection {
     pub(super) async fn write_message(&self, message: &[u8]) -> Result<(), ConnectionError> {
+        self.write_message_tracked(message, None).await
+    }
+
+    pub(super) async fn write_message_tracked(
+        &self,
+        message: &[u8],
+        mut phase: Option<&mut &'static str>,
+    ) -> Result<(), ConnectionError> {
+        if let Some(phase) = phase.as_deref_mut() {
+            *phase = "write_queue";
+        }
         let mut slot = self.writer.lock().await;
         if slot.is_none() {
             return Err(ConnectionError::ConnectionClosed);
@@ -64,7 +84,13 @@ impl AppServerConnection {
             .slot
             .as_mut()
             .ok_or(ConnectionError::ConnectionClosed)?;
+        if let Some(phase) = phase.as_deref_mut() {
+            *phase = "write";
+        }
         writer.write_all(message).await?;
+        if let Some(phase) = phase {
+            *phase = "flush";
+        }
         writer.flush().await?;
         write.complete = true;
         Ok(())

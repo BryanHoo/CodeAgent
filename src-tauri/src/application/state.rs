@@ -16,6 +16,8 @@ mod event_stream;
 use event_stream::RuntimeEventStream;
 #[path = "state_event_delta_batcher.rs"]
 mod event_delta_batcher;
+#[path = "state_event_diagnostics.rs"]
+mod event_diagnostics;
 #[path = "state_event_forwarder.rs"]
 mod event_forwarder;
 #[path = "state_event_publisher.rs"]
@@ -370,6 +372,33 @@ impl AppState {
 
 impl RuntimeSession {
     fn transition(&mut self, status: RuntimeStatus, provider: Option<ProviderKind>) -> AppEvent {
+        if self.snapshot.status != status {
+            crate::infrastructure::diagnostics::record(
+                if status == RuntimeStatus::Failed {
+                    crate::infrastructure::diagnostics::DiagnosticLevel::Warn
+                } else {
+                    crate::infrastructure::diagnostics::DiagnosticLevel::Info
+                },
+                "codex_runtime_transition",
+                None,
+                std::collections::BTreeMap::from([
+                    ("previousStatus".to_owned(), json!(self.snapshot.status)),
+                    ("status".to_owned(), json!(status)),
+                    (
+                        "restartGeneration".to_owned(),
+                        json!(self.restart_generation),
+                    ),
+                    (
+                        "connectionSeq".to_owned(),
+                        json!(
+                            self.codex_process
+                                .as_ref()
+                                .map(|process| process.connection().diagnostic_seq())
+                        ),
+                    ),
+                ]),
+            );
+        }
         self.snapshot.last_seq += 1;
         self.snapshot.status = status;
         self.snapshot.provider = provider;
@@ -414,3 +443,7 @@ mod snapshot_tests;
 #[cfg(test)]
 #[path = "task_title_generation_tests.rs"]
 mod task_title_generation_tests;
+
+#[cfg(test)]
+#[path = "state_diagnostics_tests.rs"]
+mod diagnostics_tests;

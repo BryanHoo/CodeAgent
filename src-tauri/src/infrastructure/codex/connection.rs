@@ -35,7 +35,10 @@ use super::protocol::{
 
 #[path = "connection_lifecycle.rs"]
 mod lifecycle;
+#[path = "connection_reader.rs"]
+mod reader;
 use lifecycle::PendingRegistration;
+use reader::read_responses;
 
 type PendingResult = Result<Box<RawValue>, PendingError>;
 type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<PendingResult>>>>;
@@ -73,6 +76,7 @@ pub enum ConnectionError {
 }
 
 pub struct AppServerConnection {
+    diagnostic_seq: u64,
     pub(super) model_catalog: Arc<ModelCatalogCache>,
     // 仅当前连接创建且尚未确认落盘的线程需要保留项目归属。
     pub(super) new_task_projects: Mutex<HashMap<String, String>>,
@@ -116,6 +120,7 @@ impl AppServerConnection {
         R: AsyncRead + Send + Unpin + 'static,
         W: AsyncWrite + Send + Unpin + 'static,
     {
+        let diagnostic_seq = super::connection_diagnostics::next_connection_seq();
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let reader_pending = Arc::clone(&pending);
         let (message_sender, message_receiver) = server_message_channel(256);
@@ -126,9 +131,11 @@ impl AppServerConnection {
             message_sender,
             image_store,
             Arc::clone(&model_catalog),
+            diagnostic_seq,
         ));
 
         Self {
+            diagnostic_seq,
             model_catalog,
             new_task_projects: Mutex::new(HashMap::new()),
             pending_task_titles: Mutex::new(HashMap::new()),
@@ -139,6 +146,10 @@ impl AppServerConnection {
             next_id: AtomicU64::new(1),
             reader_task,
         }
+    }
+
+    pub fn diagnostic_seq(&self) -> u64 {
+        self.diagnostic_seq
     }
 
     pub async fn take_server_messages(&self) -> Result<ServerMessageReceiver, ConnectionError> {
@@ -182,46 +193,56 @@ impl AppServerConnection {
         // 一次调用共享总截止时间，排队、写入、响应以及过载退避均消耗同一预算。
         let started = Instant::now();
         let deadline = started + request_timeout;
-        let mut retry_count = 0;
+        let mut observation = super::connection_diagnostics::RpcObservation::start(
+            method,
+            self.diagnostic_seq,
+            request_timeout,
+        );
         let result = timeout_at(deadline, async {
             for delay in OVERLOAD_RETRY_DELAYS {
-                match self.request_once(method, params).await {
+                match self.request_once(method, params, &mut observation).await {
                     Err(ConnectionError::Request { code: -32001, .. }) => {
+                        observation.phase = "retry_backoff";
                         sleep(delay).await;
-                        retry_count += 1;
+                        observation.retry_count += 1;
                     }
                     result => return result,
                 }
             }
-            self.request_once(method, params).await
+            self.request_once(method, params, &mut observation).await
         })
         .await
         .unwrap_or(Err(ConnectionError::Timeout));
-        super::connection_diagnostics::record_rpc_result(
-            method,
-            &result,
-            started.elapsed(),
-            retry_count,
-        );
+        observation.finish(&result);
         result
     }
 
-    async fn request_once<P, R>(&self, method: &str, params: &P) -> Result<R, ConnectionError>
+    async fn request_once<P, R>(
+        &self,
+        method: &str,
+        params: &P,
+        observation: &mut super::connection_diagnostics::RpcObservation<'_>,
+    ) -> Result<R, ConnectionError>
     where
         P: Serialize,
         R: DeserializeOwned,
     {
         let _catalog_change = self.model_catalog.changing_for_request(method);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        observation.request_seq = Some(id);
+        observation.phase = "encode";
         let message = encode_request(id, method, params)?;
         let (sender, receiver) = oneshot::channel();
 
         let _registration = PendingRegistration::new(&self.pending, id, sender)?;
-        self.write_message(&message).await?;
+        self.write_message_tracked(&message, Some(&mut observation.phase))
+            .await?;
+        observation.phase = "response";
         let response = receiver
             .await
             .map_err(|_| ConnectionError::ConnectionClosed)?;
 
+        observation.phase = "decode";
         match response {
             Ok(result) => serde_json::from_str(result.get()).map_err(ConnectionError::Json),
             Err(PendingError::Request(error)) => Err(ConnectionError::Request {
@@ -312,132 +333,6 @@ where
     }
 }
 
-async fn read_responses<R>(
-    reader: R,
-    pending: PendingRequests,
-    server_messages: ServerMessageSender,
-    image_store: Option<GeneratedImageStore>,
-    model_catalog: Arc<ModelCatalogCache>,
-) where
-    R: AsyncRead + Unpin,
-{
-    let mut reader = BufReader::new(reader);
-    let mut line = Vec::with_capacity(8 * 1024);
-    let mut queued_notifications = NotificationBuffer::new(NOTIFICATION_OVERFLOW_CAPACITY);
-
-    loop {
-        line.clear();
-        let read_result = {
-            // 跨通知发送轮次保留同一个 Future，避免丢失已消费的半帧和图片扫描状态。
-            let read = read_bounded_frame(
-                &mut reader,
-                &mut line,
-                MAX_STANDARD_FRAME_BYTES,
-                MAX_IMAGE_FRAME_BYTES,
-            );
-            tokio::pin!(read);
-            loop {
-                tokio::select! {
-                    biased;
-                    result = &mut read => break result,
-                    permit = server_messages.reserve(queued_notifications.next_bytes()), if !queued_notifications.is_empty() => {
-                        let Ok(permit) = permit else {
-                            queued_notifications.clear();
-                            continue;
-                        };
-                        permit.send(queued_notifications.pop_front().expect("queue is not empty"));
-                    }
-                }
-            }
-        };
-        match read_result {
-            Ok(false) => {
-                fail_pending(&pending, PendingError::ConnectionClosed);
-                // stdout 已关闭且不再有 response；尽量交付此前已接收的通知。
-                while let Some(notification) = queued_notifications.pop_front() {
-                    if server_messages.send(notification).await.is_err() {
-                        break;
-                    }
-                }
-                return;
-            }
-            Err(FrameReadError::Io(_error)) => {
-                fail_pending(&pending, PendingError::ConnectionClosed);
-                return;
-            }
-            Err(FrameReadError::TooLarge) => {
-                fail_pending(&pending, PendingError::InvalidMessage);
-                return;
-            }
-            Ok(true) => {}
-        }
-
-        while matches!(line.last(), Some(b'\r')) {
-            line.pop();
-        }
-        if line.is_empty() {
-            continue;
-        }
-
-        if let Some(store) = image_store.as_ref()
-            && GeneratedImageStore::contains_image_generation(&line)
-        {
-            let store = store.clone();
-            match tokio::task::spawn_blocking(move || store.sanitize_frame(line)).await {
-                Ok(Ok(sanitized)) => line = sanitized,
-                Ok(Err(_)) | Err(_) => {
-                    fail_pending(&pending, PendingError::InvalidMessage);
-                    return;
-                }
-            }
-        }
-
-        // 只解析响应信封，result 保持 RawValue，避免大响应在路由阶段重复建树。
-        let mut message = match serde_json::from_slice::<IncomingMessage>(&line) {
-            Ok(message) => message,
-            Err(_) => {
-                fail_pending(&pending, PendingError::InvalidMessage);
-                return;
-            }
-        };
-        if let Some(method) = message.method.take() {
-            if matches!(
-                method.as_str(),
-                "account/updated" | "account/login/completed"
-            ) {
-                model_catalog.invalidate();
-            }
-            let Some(params) = message.params else {
-                fail_pending(&pending, PendingError::InvalidMessage);
-                return;
-            };
-            let mut notification = ServerMessage {
-                id: message.id,
-                method,
-                params,
-            };
-            if queued_notifications.is_empty() {
-                match server_messages.try_send(notification) {
-                    Ok(()) => continue,
-                    Err(mpsc::error::TrySendError::Full(returned)) => notification = returned,
-                    Err(mpsc::error::TrySendError::Closed(_)) => continue,
-                }
-            }
-            // 不等待通知消费，继续读取 RPC；事实流触达硬预算时显式失败，由 Runtime 恢复。
-            if !queued_notifications.push(notification) {
-                diagnostics::record_error(
-                    "codex_notification_budget_exceeded",
-                    "notification fact buffer exhausted",
-                );
-                fail_pending(&pending, PendingError::InvalidMessage);
-                return;
-            }
-            continue;
-        }
-        route_response(&pending, message);
-    }
-}
-
 fn route_response(pending: &PendingRequests, message: IncomingMessage) {
     if message.method.is_some() {
         return;
@@ -478,3 +373,7 @@ mod frame_cancellation_tests;
 #[cfg(test)]
 #[path = "connection_request_lifecycle_tests.rs"]
 mod request_lifecycle_tests;
+
+#[cfg(test)]
+#[path = "connection_logging_tests.rs"]
+mod logging_tests;

@@ -174,6 +174,7 @@ pub fn record_codex_event(event: DiagnosticEvent) {
     emit(event);
 }
 
+#[track_caller]
 pub fn record_error(event: &str, error: impl Display) {
     record(
         DiagnosticLevel::Error,
@@ -183,21 +184,46 @@ pub fn record_error(event: &str, error: impl Display) {
     );
 }
 
-pub fn record_warning(event: &str, error: impl Display) {
+#[track_caller]
+pub fn record_error_chain(event: &str, error: &dyn std::error::Error) {
+    let mut context = BTreeMap::new();
+    let mut cause = error.source();
+    // 分字段保留有限错误链，避免顶层包装信息遮蔽操作系统原因或异常链无限增长。
+    for index in 1..=4 {
+        let Some(error) = cause else {
+            break;
+        };
+        context.insert(format!("cause{index}"), json!(error.to_string()));
+        cause = error.source();
+    }
     record(
-        DiagnosticLevel::Warn,
+        DiagnosticLevel::Error,
         event,
         Some(error.to_string()),
-        BTreeMap::new(),
+        context,
     );
 }
 
+#[track_caller]
 pub fn record(
     level: DiagnosticLevel,
     event: &str,
     message: Option<String>,
-    context: BTreeMap<String, Value>,
+    mut context: BTreeMap<String, Value>,
 ) {
+    if level == DiagnosticLevel::Debug {
+        return;
+    }
+    if matches!(level, DiagnosticLevel::Warn | DiagnosticLevel::Error) {
+        let caller = std::panic::Location::caller();
+        // 仅保留源文件名与行号，不泄漏编译机器目录。
+        let source = Path::new(caller.file())
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown");
+        context.insert("sourceFile".to_owned(), json!(source));
+        context.insert("sourceLine".to_owned(), json!(caller.line()));
+    }
     emit(rust_event(
         level,
         event,
@@ -297,3 +323,6 @@ pub fn sanitize_frontend_event(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) mod test_support;

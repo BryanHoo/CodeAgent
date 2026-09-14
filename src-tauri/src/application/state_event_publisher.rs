@@ -110,7 +110,16 @@ pub(super) async fn publish_mapped_event(
     session
         .performance_metrics
         .record_delivery(&project_id, provider_event_count, 1, queue_depth);
+    let diagnostic_connection = super::event_diagnostics::is_diagnostic_event(&event)
+        .then(|| {
+            session
+                .codex_process
+                .as_ref()
+                .map(|process| process.connection().diagnostic_seq())
+        })
+        .flatten();
     drop(session);
+    super::event_diagnostics::record_task_event(&event, &project_id, diagnostic_connection);
     if let Some(app) = app {
         // 原生状态已完成投影；即使窗口已销毁，仍更新托盘、宠物和通知。
         if let Some(task_activities) = task_activities.as_deref() {

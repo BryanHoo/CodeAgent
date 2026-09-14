@@ -61,6 +61,7 @@ CodeAgent 将 AI 编程任务、对话、审批、项目文件和 Git 操作集�
 
 - [安装、更新与卸载](./docs/installation.md)
 - [源码开发与构建](./docs/development.md)
+- [诊断日志与问题排查](./docs/diagnostics.md)
 - [macOS 分档构建](./docs/macos-build-profiles.md)
 - [发布指南](./docs/releasing.md)
 - [更新日志](./CHANGELOG.md)

@@ -68,10 +68,11 @@ impl CodexProcess {
         let stderr = child.stderr.take().ok_or(ProcessError::MissingPipe)?;
 
         // stderr 读取与磁盘写入通过有界队列隔离，避免日志反压阻塞协议进程。
-        let (stderr_task, stderr_writer_task) = spawn_codex_stderr_tasks(stderr);
         let connection = Arc::new(AppServerConnection::with_image_store(
             stdout, stdin, app_data,
         ));
+        let (stderr_task, stderr_writer_task) =
+            spawn_codex_stderr_tasks(stderr, connection.diagnostic_seq());
         let metadata = connection
             .initialize(STARTUP_TIMEOUT)
             .await

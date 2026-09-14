@@ -12,27 +12,107 @@ type RpcDiagnostic = (
     BTreeMap<String, Value>,
 );
 
-pub(super) fn record_rpc_result<T>(
-    method: &str,
-    result: &Result<T, ConnectionError>,
-    elapsed: Duration,
-    retry_count: u32,
-) {
-    if let Some((level, event, message, context)) =
-        rpc_diagnostic(method, result.as_ref().err(), elapsed, retry_count)
-    {
+static NEXT_CONNECTION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+static NEXT_OPERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+pub(super) fn next_connection_seq() -> u64 {
+    NEXT_CONNECTION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+pub(super) struct RpcObservation<'a> {
+    method: &'a str,
+    connection_seq: u64,
+    operation_seq: u64,
+    started: tokio::time::Instant,
+    timeout: Duration,
+    finished: bool,
+    pub(super) request_seq: Option<u64>,
+    pub(super) retry_count: u32,
+    pub(super) phase: &'static str,
+}
+
+impl<'a> RpcObservation<'a> {
+    pub(super) fn start(method: &'a str, connection_seq: u64, timeout: Duration) -> Self {
+        let observation = Self {
+            method,
+            connection_seq,
+            timeout,
+            operation_seq: NEXT_OPERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            started: tokio::time::Instant::now(),
+            finished: false,
+            request_seq: None,
+            retry_count: 0,
+            phase: "encode",
+        };
+        if key_operation(method) {
+            observation.emit(
+                DiagnosticLevel::Info,
+                "codex_rpc_request_started",
+                None,
+                BTreeMap::new(),
+            );
+        }
+        observation
+    }
+
+    fn emit(
+        &self,
+        level: DiagnosticLevel,
+        event: &str,
+        message: Option<String>,
+        mut context: BTreeMap<String, Value>,
+    ) {
+        context.extend([
+            ("connectionSeq".to_owned(), json!(self.connection_seq)),
+            ("operationSeq".to_owned(), json!(self.operation_seq)),
+            ("rpcMethod".to_owned(), json!(self.method)),
+            ("timeoutMs".to_owned(), json!(duration_ms(self.timeout))),
+            (
+                "elapsedMs".to_owned(),
+                json!(duration_ms(self.started.elapsed())),
+            ),
+            ("retryCount".to_owned(), json!(self.retry_count)),
+            ("phase".to_owned(), json!(self.phase)),
+        ]);
+        if let Some(request_seq) = self.request_seq {
+            context.insert("requestSeq".to_owned(), json!(request_seq));
+        }
         diagnostics::record(level, event, message, context);
+    }
+
+    pub(super) fn finish<T>(&mut self, result: &Result<T, ConnectionError>) {
+        self.finished = true;
+        if let Some((level, event, message, context)) = rpc_diagnostic(
+            self.method,
+            result.as_ref().err(),
+            self.started.elapsed(),
+            self.retry_count,
+        ) {
+            self.emit(level, event, message, context);
+        }
     }
 }
 
-fn rpc_diagnostic(
-    method: &str,
-    error: Option<&ConnectionError>,
-    elapsed: Duration,
-    retry_count: u32,
-) -> Option<RpcDiagnostic> {
-    // 高频读取成功不落盘；只保留关键操作、重试恢复和所有最终失败。
-    let key_operation = matches!(
+impl Drop for RpcObservation<'_> {
+    fn drop(&mut self) {
+        // Future 被调用方取消也要闭合关键操作；普通读取取消不刷屏、不标记为错误。
+        if !self.finished && key_operation(self.method) {
+            self.emit(
+                DiagnosticLevel::Info,
+                "codex_rpc_request_cancelled",
+                None,
+                BTreeMap::new(),
+            );
+        }
+    }
+}
+
+fn duration_ms(duration: Duration) -> u64 {
+    duration.as_millis().min(u64::MAX as u128) as u64
+}
+
+fn key_operation(method: &str) -> bool {
+    matches!(
         method,
         "initialize"
             | "thread/start"
@@ -42,8 +122,18 @@ fn rpc_diagnostic(
             | "turn/start"
             | "turn/interrupt"
             | "turn/steer"
-    );
-    if error.is_none() && retry_count == 0 && !key_operation {
+    )
+}
+
+fn rpc_diagnostic(
+    method: &str,
+    error: Option<&ConnectionError>,
+    elapsed: Duration,
+    retry_count: u32,
+) -> Option<RpcDiagnostic> {
+    // 普通读取只在慢请求、重试恢复或失败时记录，保持稳定路径低开销。
+    let slow = elapsed >= Duration::from_secs(2);
+    if error.is_none() && retry_count == 0 && !key_operation(method) && !slow {
         return None;
     }
     let mut context = BTreeMap::from([
@@ -79,6 +169,14 @@ fn rpc_diagnostic(
             context,
         ));
     }
+    if slow {
+        return Some((
+            DiagnosticLevel::Warn,
+            "codex_rpc_request_slow",
+            None,
+            context,
+        ));
+    }
     let event = if retry_count > 0 {
         "codex_rpc_request_recovered"
     } else {
@@ -90,6 +188,13 @@ fn rpc_diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_slow_reads_are_visible_without_logging_fast_reads() {
+        let event = rpc_diagnostic("thread/read", None, Duration::from_secs(2), 0).unwrap();
+        assert_eq!(event.0, DiagnosticLevel::Warn);
+        assert_eq!(event.1, "codex_rpc_request_slow");
+    }
 
     #[test]
     fn rpc_error_preserves_protocol_details() {

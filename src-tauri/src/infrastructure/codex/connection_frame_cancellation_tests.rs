@@ -22,7 +22,7 @@ async fn verify_partial_response(close_receiver: bool) {
     let (response_tx, mut response_rx) = oneshot::channel();
     pending.lock().unwrap().insert(1, response_tx);
     let (sender, mut receiver) = server_message_channel(1);
-    let read = read_responses(reader, pending, sender, None, Arc::default());
+    let read = read_responses(reader, pending, sender, None, Arc::default(), 1);
     tokio::pin!(read);
 
     writer

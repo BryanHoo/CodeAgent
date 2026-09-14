@@ -35,6 +35,23 @@ pub(super) fn prepare_runtime_restart(runtime: &mut RuntimeSession) -> (u64, Dur
     let (next_attempt, delay) = runtime_restart_plan(runtime.restart_attempt, uptime);
     runtime.restart_attempt = next_attempt;
     invalidate_runtime_restart(runtime);
+    crate::infrastructure::diagnostics::record(
+        crate::infrastructure::diagnostics::DiagnosticLevel::Warn,
+        "codex_runtime_restart_scheduled",
+        None,
+        std::collections::BTreeMap::from([
+            (
+                "restartGeneration".to_owned(),
+                runtime.restart_generation.into(),
+            ),
+            ("restartAttempt".to_owned(), next_attempt.into()),
+            ("delayMs".to_owned(), (delay.as_millis() as u64).into()),
+            (
+                "uptimeMs".to_owned(),
+                (uptime.as_millis().min(u64::MAX as u128) as u64).into(),
+            ),
+        ]),
+    );
     (runtime.restart_generation, delay)
 }
 

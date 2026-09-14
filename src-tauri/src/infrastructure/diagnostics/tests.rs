@@ -228,3 +228,32 @@ fn codex_info_noise_is_discarded_but_error_module_is_preserved() {
     assert_eq!(event.event, "codex.codex_core.stream");
     assert_eq!(event.message.as_deref(), Some("connection lost"));
 }
+
+#[test]
+fn diagnostic_error_records_safe_source_location() {
+    let capture = super::test_support::Capture::start();
+    super::record_error("test_failure", "broken pipe");
+    let events = capture.take();
+    assert_eq!(events[0]["context"]["sourceFile"], json!("tests.rs"));
+    assert!(events[0]["context"]["sourceLine"].is_u64());
+}
+
+#[test]
+fn diagnostic_error_chain_keeps_the_os_cause_separately() {
+    #[derive(Debug, thiserror::Error)]
+    #[error("runtime startup failed")]
+    struct StartError(#[source] std::io::Error);
+    let capture = super::test_support::Capture::start();
+    super::record_error_chain(
+        "test_start_failed",
+        &StartError(std::io::Error::from_raw_os_error(13)),
+    );
+    let events = capture.take();
+    assert_eq!(events[0]["message"], json!("runtime startup failed"));
+    assert!(
+        events[0]["context"]["cause1"]
+            .as_str()
+            .unwrap()
+            .contains("13")
+    );
+}

@@ -60,9 +60,9 @@ impl AppState {
                 let messages = match process.connection().take_server_messages().await {
                     Ok(messages) => messages,
                     Err(error) => {
-                        crate::infrastructure::diagnostics::record_error(
+                        crate::infrastructure::diagnostics::record_error_chain(
                             "codex_event_stream_attach_failed",
-                            error,
+                            &error,
                         );
                         self.fail_codex_start(app).await;
                         return Err(AppError::CodexRuntimeStartFailed);
@@ -84,9 +84,9 @@ impl AppState {
                 Ok(snapshot)
             }
             Err(error) => {
-                crate::infrastructure::diagnostics::record_error(
+                crate::infrastructure::diagnostics::record_error_chain(
                     "codex_runtime_start_failed",
-                    error,
+                    &error,
                 );
                 self.fail_codex_start(app).await;
                 Err(AppError::CodexRuntimeStartFailed)
