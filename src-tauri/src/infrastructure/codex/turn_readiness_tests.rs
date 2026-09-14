@@ -5,9 +5,24 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 
 // 模拟 Provider 的恢复与元数据应答；所有用例都要求失败前不发送 turn/start。
 async fn rejected_start(resume_error: Value, thread: Option<Value>) -> ConnectionError {
+    rejected_start_with_project(resume_error, thread, None).await
+}
+
+async fn rejected_start_with_project(
+    resume_error: Value,
+    thread: Option<Value>,
+    created_project: Option<&str>,
+) -> ConnectionError {
     let (client, server) = duplex(8192);
     let (reader, writer) = split(client);
     let connection = AppServerConnection::new(reader, writer);
+    if let Some(project) = created_project {
+        connection
+            .new_task_projects
+            .lock()
+            .unwrap()
+            .insert("thread-a".into(), project.into());
+    }
     let (reader, mut writer) = split(server);
     let peer = tokio::spawn(async move {
         let mut lines = BufReader::new(reader).lines();
@@ -67,6 +82,34 @@ fn missing_rollout() -> Value {
 fn thread(id: &str, project_id: &str, status: &str) -> Value {
     json!({"id": id, "name": null, "preview": "", "projectId": project_id,
         "section": null, "status": {"type": status}, "updatedAt": 1735689600})
+}
+
+#[tokio::test]
+async fn turn_readiness_should_reject_missing_project_without_creation_evidence() {
+    let mut snapshot = thread("thread-a", "project-a", "idle");
+    snapshot["projectId"] = Value::Null;
+    let error = rejected_start(missing_rollout(), Some(snapshot)).await;
+    assert!(matches!(error, ConnectionError::InvalidMessage));
+}
+
+#[tokio::test]
+async fn turn_readiness_should_reject_missing_project_created_for_another_project() {
+    let mut snapshot = thread("thread-a", "project-a", "idle");
+    snapshot["projectId"] = Value::Null;
+    let error =
+        rejected_start_with_project(missing_rollout(), Some(snapshot), Some("other-project")).await;
+    assert!(matches!(error, ConnectionError::InvalidMessage));
+}
+
+#[tokio::test]
+async fn turn_readiness_should_not_override_native_project_with_creation_evidence() {
+    let error = rejected_start_with_project(
+        missing_rollout(),
+        Some(thread("thread-a", "other-project", "idle")),
+        Some("project-a"),
+    )
+    .await;
+    assert!(matches!(error, ConnectionError::InvalidMessage));
 }
 
 #[tokio::test]

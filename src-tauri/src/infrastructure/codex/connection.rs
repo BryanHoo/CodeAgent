@@ -74,6 +74,8 @@ pub enum ConnectionError {
 
 pub struct AppServerConnection {
     pub(super) model_catalog: Arc<ModelCatalogCache>,
+    // 仅当前连接创建且尚未确认落盘的线程需要保留项目归属。
+    pub(super) new_task_projects: Mutex<HashMap<String, String>>,
     writer: AsyncMutex<Option<AsyncWriter>>,
     pending: PendingRequests,
     server_messages: AsyncMutex<Option<ServerMessageReceiver>>,
@@ -125,6 +127,7 @@ impl AppServerConnection {
 
         Self {
             model_catalog,
+            new_task_projects: Mutex::new(HashMap::new()),
             writer: AsyncMutex::new(Some(Box::pin(writer))),
             pending,
             server_messages: AsyncMutex::new(Some(message_receiver)),

@@ -416,7 +416,7 @@ async fn read_native_task(
     project_id: &str,
     task_id: &str,
 ) -> Result<NativeThread, ConnectionError> {
-    let response: NativeThreadResponse = connection
+    let mut response: NativeThreadResponse = connection
         .request(
             "thread/read",
             &ThreadReadParams {
@@ -426,6 +426,7 @@ async fn read_native_task(
             REQUEST_TIMEOUT,
         )
         .await?;
+    connection.restore_new_task_project(&response.thread.id, &mut response.thread.project_id)?;
     validate_task_project(&response.thread, project_id)?;
     Ok(response.thread)
 }

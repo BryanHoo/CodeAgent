@@ -5,6 +5,27 @@ use super::{
     tasks::is_task_loaded,
 };
 
+impl AppServerConnection {
+    /// 补齐新线程 live snapshot 缺失的项目；绝不覆盖 Provider 返回的非空归属。
+    pub(super) fn restore_new_task_project(
+        &self,
+        task_id: &str,
+        project_id: &mut Option<String>,
+    ) -> Result<(), ConnectionError> {
+        let mut projects = self
+            .new_task_projects
+            .lock()
+            .map_err(|_| ConnectionError::StateUnavailable)?;
+        if project_id.is_some() {
+            // 原生元数据已物化，释放启动期记录，后续只信任 Provider。
+            projects.remove(task_id);
+        } else if let Some(project) = projects.get(task_id) {
+            *project_id = Some(project.clone());
+        }
+        Ok(())
+    }
+}
+
 /// 打开任务时确认本地写入权，不发起 Turn，也不加载历史正文。
 pub async fn retain_task_writer(
     connection: &AppServerConnection,

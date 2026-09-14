@@ -63,6 +63,8 @@
 - MCP elicitation 的 `openaiForm` 与旧 `openai/form` 均映射为 `unsupported`，不得按标准 `form` 渲染或提交
 - 不启用 `omit_app_server_notification_media`，生成图片链路仍依赖通知中的媒体数据落盘
 
+- 新项目线程在首次落盘前，`thread/resume` 可返回 `no rollout found`，而 `thread/read(includeTurns: false)` 的 live snapshot 返回 `projectId: null`、`status: idle`。只能使用当前连接经 `thread/start` 校验成功的项目归属补齐该空值，并继续核对线程 ID、项目和载入状态；没有创建证据、跨项目及非空原生归属冲突必须拒绝。原生归属物化或 resume 成功后释放启动期记录，记录不得跨连接复用。
+
 ## 验证要求
 
 - 覆盖精确版本门禁、六个平台 URL 与 SHA-512、安装命令和前端恢复提示

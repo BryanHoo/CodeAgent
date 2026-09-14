@@ -228,6 +228,13 @@ pub async fn start_task(
         response.thread.project_id.as_deref(),
         &project_id,
     )?;
+    if native_project_id.is_some() {
+        connection
+            .new_task_projects
+            .lock()
+            .map_err(|_| ConnectionError::StateUnavailable)?
+            .insert(response.thread.id.clone(), project_id.clone());
+    }
     Ok(AgentTaskMutationResponse {
         task: map_native_task(response.thread, project_id),
     })
@@ -294,7 +301,13 @@ pub async fn resume_task(
     if resumed.thread.id != task_id {
         return Err(ConnectionError::InvalidMessage);
     }
-    validate_task_identity(task_id, resumed.thread.project_id.as_deref(), project_id)
+    validate_task_identity(task_id, resumed.thread.project_id.as_deref(), project_id)?;
+    connection
+        .new_task_projects
+        .lock()
+        .map_err(|_| ConnectionError::StateUnavailable)?
+        .remove(task_id);
+    Ok(())
 }
 
 pub async fn update_thread_settings(
