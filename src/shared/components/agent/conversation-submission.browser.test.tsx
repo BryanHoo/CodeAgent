@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
@@ -6,6 +7,37 @@ import { ConversationList } from "./conversation.js";
 import "../../styles/globals.css";
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+it("仅尾部占位变化时在提交帧内同步真实高度与置底", async () => {
+  const history = Array.from({ length: 20 }, (_, index) => `turn-${index}`);
+  let updateFooter = (_height: number | undefined) => {};
+  function Harness() {
+    const [footerHeight, setFooterHeight] = useState<number | undefined>(64);
+    useEffect(() => {
+      updateFooter = setFooterHeight;
+      return () => { updateFooter = () => {}; };
+    }, []);
+    return <ConversationList
+      conversationId="footer-resize"
+      footer={footerHeight === undefined ? undefined : <div style={{ height: footerHeight }}>pending</div>}
+      getItemKey={(item) => item}
+      items={history}
+      renderItem={(item) => <div style={{ height: 120 }}>{item}</div>}
+      style={{ height: 480, overflowY: "auto" }}
+    />;
+  }
+  const screen = await render(<Harness />);
+  const container = screen.getByRole("log").element();
+  await expect.poll(() => container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+  for (const height of [160, undefined, 64]) {
+    // 响应可仅改变尾部而不改变历史 Item；布局必须在提交时完成，不能依赖下一帧观察器兜底。
+    flushSync(() => updateFooter(height));
+    const rows = container.querySelectorAll<HTMLElement>("[data-virtual-row]");
+    const lastRow = rows[rows.length - 1]!;
+    expect.soft(container.getBoundingClientRect().bottom - lastRow.getBoundingClientRect().bottom).toBe(28);
+    expect.soft(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
+  }
+});
 
 it("发送新消息时历史位置不反向跳动且待处理尾部保持挂载", async () => {
   const history = Array.from({ length: 20 }, (_, index) => `turn-${String(index)}`);

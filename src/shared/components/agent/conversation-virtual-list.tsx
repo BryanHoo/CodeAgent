@@ -163,7 +163,7 @@ export function ConversationVirtualList<TItem>({
   );
 
   useLayoutEffect(() => {
-    // Item 结构变化会更新估算函数；绘制前同步已挂载行，避免正文先出现、尾部下一帧才让位。
+    // Item 结构或尾部占位变化时，绘制前同步已挂载行；尾部可独立更新，不能只依赖估算函数。
     // 先批量读取再更新 Virtualizer，不扫描历史全文，也不参与普通文本 Delta。
     const measurements = Array.from(virtualizer.elementsCache.values(), (element) =>
       [virtualizer.indexFromElement(element), element.offsetHeight] as const,
@@ -176,7 +176,7 @@ export function ConversationVirtualList<TItem>({
       if (content) content.style.height = `${virtualizer.getTotalSize()}px`;
       virtualizer.scrollToOffset(viewport.scrollHeight - viewport.clientHeight);
     }
-  }, [estimateSize, virtualizer]);
+  }, [estimateSize, footer, virtualizer]);
 
   useLayoutEffect(() => {
     const snapshot = prependScrollSnapshotRef.current;
