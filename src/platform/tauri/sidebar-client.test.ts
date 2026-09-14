@@ -178,7 +178,7 @@ describe("TauriSidebarClient", () => {
     const input = { attachments: [], skills: [], text: "继续修复", type: "prompt" as const };
 
     await client.listQueuedSubmissions("project-a", "thread-a");
-    await client.addQueuedSubmission("project-a", "thread-a", input, "message-a");
+    await client.addQueuedSubmission("project-a", "thread-a", input, "message-a", { idempotencyKey: "queue-add-a" });
     await client.deleteQueuedSubmission("project-a", "thread-a", "queue-a");
     await client.moveQueuedSubmission("project-a", "thread-a", "queue-b", -1);
     await client.startQueuedSubmission("project-a", "thread-a", "queue-a", { idempotencyKey: "queue-start-a" });
@@ -188,6 +188,7 @@ describe("TauriSidebarClient", () => {
       taskId: "thread-a",
     });
     expect(invoke).toHaveBeenNthCalledWith(2, "add_queued_submission", {
+      idempotencyKey: "queue-add-a",
       clientUserMessageId: "message-a",
       input,
       projectId: "project-a",

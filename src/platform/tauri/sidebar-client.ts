@@ -273,9 +273,10 @@ export class TauriSidebarClient extends TauriRuntimeClient {
     taskId: string,
     input: AgentPromptInput,
     clientUserMessageId: string,
-    _options: MutationOptions = {},
+    options: Readonly<{ idempotencyKey: string }>,
   ): Promise<AddAgentQueuedSubmissionResponse> {
     return this.call("add_queued_submission", {
+      idempotencyKey: options.idempotencyKey,
       clientUserMessageId,
       input,
       projectId,

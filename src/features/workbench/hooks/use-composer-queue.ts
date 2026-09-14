@@ -60,6 +60,7 @@ export function useComposerQueue({
 }: ComposerQueueOptions) {
   const queryClient = useQueryClient();
   const queueStartAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
+  const queueAddAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const queryKey = taskQueueQueryKey(projectId, taskId ?? "");
   // client 是稳定的传输实现，不参与队列缓存身份，缓存仍按 projectId 与 taskId 共享。
   // oxlint-disable-next-line @tanstack/query/exhaustive-deps
@@ -127,15 +128,19 @@ export function useComposerQueue({
   };
   const saveQueuedSubmission = async (
     input: AgentPromptInput,
-    clientUserMessageId: string,
   ): Promise<boolean> => {
     if (taskId === undefined) {
       return false;
     }
-    await client.addQueuedSubmission(projectId, taskId, input, clientUserMessageId, {
-      idempotencyKey: createUuid(),
+    const attempt = resolveIdempotencyAttempt(queueAddAttempt.current,
+      JSON.stringify({ projectId, taskId, input }));
+    queueAddAttempt.current = attempt;
+    // 请求或刷新失败时保留消息身份；Rust 重放同一次入队结果。
+    await client.addQueuedSubmission(projectId, taskId, input, attempt.key, {
+      idempotencyKey: attempt.key,
     });
     await invalidateQueue();
+    if (queueAddAttempt.current === attempt) queueAddAttempt.current = undefined;
     return true;
   };
 

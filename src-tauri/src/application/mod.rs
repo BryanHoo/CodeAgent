@@ -24,6 +24,7 @@ mod pet_assets;
 pub mod pet_commands;
 pub mod project_file_window_commands;
 pub mod prompt_submission;
+mod queue_add;
 pub mod queue_start;
 mod queue_start_recovery;
 pub mod queued_steer;

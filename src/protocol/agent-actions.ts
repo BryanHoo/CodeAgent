@@ -180,7 +180,8 @@ export type SteerAgentTurnResponse = Readonly<Static<typeof SteerAgentTurnRespon
 
 export const AddAgentQueuedSubmissionRequestSchema = Type.Object(
   {
-    clientUserMessageId: Type.String({ minLength: 1 }),
+    clientUserMessageId: Type.String({ minLength: 1, maxLength: 1024 }),
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 128 }),
     input: AgentPromptInputSchema,
   },
   { additionalProperties: false },

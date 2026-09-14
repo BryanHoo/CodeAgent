@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use super::{error::AppError, state::AppState};
 use crate::{domain::conversation::AgentPromptInput, infrastructure::codex};
@@ -116,27 +116,21 @@ pub async fn add_queued_submission(
     app: AppHandle,
     project_id: String,
     task_id: String,
-    mut input: AgentPromptInput,
+    input: AgentPromptInput,
     client_user_message_id: String,
-    state: State<'_, AppState>,
-) -> Result<Value, AppError> {
-    let app_data = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| AppError::FilesystemRequestFailed)?;
-    super::attachment_commands::resolve_prompt_attachments(
-        &app_data,
-        &project_id,
-        &task_id,
-        &mut input,
+    idempotency_key: String,
+) -> Result<Value, Value> {
+    super::queue_add::add(
+        app,
+        super::queue_add::QueueAddRequest {
+            project_id,
+            task_id,
+            input,
+            client_user_message_id,
+            idempotency_key,
+        },
     )
-    .await?;
-    let connection = validate_task(&state, project_id, &task_id).await?;
-    let response =
-        codex::add_queued_submission(&connection, &task_id, &input, &client_user_message_id)
-            .await
-            .map_err(AppError::from)?;
-    serde_json::to_value(response).map_err(|_| AppError::CodexRequestFailed)
+    .await
 }
 
 #[tauri::command(rename_all = "camelCase")]

@@ -59,7 +59,7 @@ type ComposerSubmissionOptions = Readonly<{
   projectId: string;
   promptContent: PromptSkillContent;
   routeScope: string;
-  saveQueuedSubmission: (input: AgentPromptInput, clientUserMessageId: string) => Promise<boolean>;
+  saveQueuedSubmission: (input: AgentPromptInput) => Promise<boolean>;
   selectedModel: AgentModel | undefined;
   selectedReasoningEffort: string | undefined;
   skillEditorRef: RefObject<PromptSkillEditorHandle | null>;
@@ -301,7 +301,7 @@ export function createComposerSubmission({
 
     if (action === "queue") {
       try {
-        const saved = await saveQueuedSubmission(input, createUuid());
+        const saved = await saveQueuedSubmission(input);
         if (saved && isCurrentScope(requestScope)) {
           clearComposerInput();
           uploadedAttachments.current.clear();

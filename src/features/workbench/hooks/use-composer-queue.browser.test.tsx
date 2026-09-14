@@ -31,6 +31,29 @@ const queuedSubmission: AgentQueuedSubmission = {
   text: "检查引导信息",
 };
 
+test("queue add retries preserve identity and successful later submissions get a new identity", async () => {
+  const onError = vi.fn();
+  const addQueuedSubmission = vi.fn().mockRejectedValueOnce(new Error("response lost"))
+    .mockResolvedValue({ queuedSubmission });
+  const client = { addQueuedSubmission, listQueuedSubmissions: async () => ({ data: [] }) } as unknown as NativeMutationClient;
+  const input = { type: "prompt" as const, text: "same input", attachments: [], skills: [] };
+  function Harness() {
+    const queue = useComposerQueue({ activeTurnId: "turn-a", client, handleAttachmentsChange: vi.fn(),
+      projectId: "project-a", replacePromptContent: vi.fn(), routeScope: "project-a:task-a", runtime: undefined,
+      skillEditorRef: { current: null }, skills: [], taskId: "task-a" });
+    return <button onClick={() => void queue.saveQueuedSubmission(input).catch(onError)}>排队</button>;
+  }
+  const screen = await render(<QueryClientProvider client={new QueryClient()}><Harness /></QueryClientProvider>);
+  await screen.getByRole("button", { name: "排队", exact: true }).click();
+  await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+  await screen.getByRole("button", { name: "排队", exact: true }).click();
+  await vi.waitFor(() => expect(addQueuedSubmission).toHaveBeenCalledTimes(2));
+  expect(addQueuedSubmission.mock.calls[1]).toEqual(addQueuedSubmission.mock.calls[0]);
+  await screen.getByRole("button", { name: "排队", exact: true }).click();
+  await vi.waitFor(() => expect(addQueuedSubmission).toHaveBeenCalledTimes(3));
+  expect(addQueuedSubmission.mock.calls[2]?.[4]).not.toEqual(addQueuedSubmission.mock.calls[1]?.[4]);
+});
+
 test("idle cleanup refreshes the queue without inventing a new turn", async () => {
   const onError = vi.fn();
   const startQueuedSubmission = vi.fn(async () => ({cleanupOnly:true, taskId:"task-a", queuedSubmissionId:"queue-a"}));
