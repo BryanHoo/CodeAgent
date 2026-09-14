@@ -229,7 +229,7 @@ fn build_app_server_command(program: &OsStr, runtime_path: Option<&OsStr>) -> Co
     command
         .args(["app-server", "--enable", "plugins", "--listen", "stdio://"])
         .env("LOG_FORMAT", "json")
-        .env("RUST_LOG", "codex_app_server=info,codex_core=warn")
+        .env("RUST_LOG", "warn")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

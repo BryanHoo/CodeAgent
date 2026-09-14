@@ -111,11 +111,7 @@ pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
         .target(file_target)
         .clear_format()
         .filter(|metadata| metadata.target() == LOG_TARGET)
-        .level(if cfg!(debug_assertions) {
-            log::LevelFilter::Debug
-        } else {
-            log::LevelFilter::Info
-        })
+        .level(log::LevelFilter::Info)
         .max_file_size(5 * 1024 * 1024)
         .rotation_strategy(RotationStrategy::KeepSome(5));
     if cfg!(debug_assertions) {
@@ -187,16 +183,6 @@ pub fn record_error(event: &str, error: impl Display) {
     );
 }
 
-pub fn record_codex_rpc_error(method: &str, code: i64, message: &str) {
-    emit(codex_rpc_error_event(
-        method,
-        code,
-        message,
-        session(),
-        &timestamp(),
-    ));
-}
-
 pub fn record_warning(event: &str, error: impl Display) {
     record(
         DiagnosticLevel::Warn,
@@ -220,26 +206,6 @@ pub fn record(
         session(),
         &timestamp(),
     ));
-}
-
-fn codex_rpc_error_event(
-    method: &str,
-    code: i64,
-    message: &str,
-    session: &DiagnosticSession,
-    timestamp: &str,
-) -> DiagnosticEvent {
-    rust_event(
-        DiagnosticLevel::Error,
-        "codex_rpc_request_failed",
-        Some(message.to_owned()),
-        BTreeMap::from([
-            ("rpcCode".to_owned(), json!(code)),
-            ("rpcMethod".to_owned(), json!(method)),
-        ]),
-        session,
-        timestamp,
-    )
 }
 
 fn rust_event(
@@ -267,6 +233,10 @@ fn rust_event(
 }
 
 fn emit(event: DiagnosticEvent) {
+    // 在序列化之前跳过调试事件，开发构建也保持与发布构建一致的日志密度。
+    if event.level == DiagnosticLevel::Debug {
+        return;
+    }
     let Ok(serialized) = serde_json::to_string(&event) else {
         return;
     };

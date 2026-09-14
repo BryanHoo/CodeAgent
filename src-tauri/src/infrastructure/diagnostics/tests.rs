@@ -10,8 +10,8 @@ use serde_json::{Value, json};
 
 use super::{
     CodexLogParseError, DiagnosticLevel, DiagnosticSession, DiagnosticSource,
-    FrontendDiagnosticInput, codex::MAX_CODEX_LOG_LINE_BYTES, codex_rpc_error_event,
-    parse_codex_event, sanitize_frontend_event, write_diagnostic_archive,
+    FrontendDiagnosticInput, codex::MAX_CODEX_LOG_LINE_BYTES, parse_codex_event,
+    sanitize_frontend_event, write_diagnostic_archive,
 };
 
 #[test]
@@ -120,26 +120,6 @@ fn codex_log_rejects_malformed_and_oversized_lines_without_echoing_content() {
 }
 
 #[test]
-fn codex_rpc_error_log_preserves_protocol_details() {
-    let event = codex_rpc_error_event(
-        "config/batchWrite",
-        -32600,
-        "invalid value: expected TOML value",
-        &DiagnosticSession::fixed(),
-        "2026-09-03T08:00:00Z",
-    );
-
-    assert_eq!(event.event, "codex_rpc_request_failed");
-    assert_eq!(event.level, DiagnosticLevel::Error);
-    assert_eq!(
-        event.message.as_deref(),
-        Some("invalid value: expected TOML value")
-    );
-    assert_eq!(event.context["rpcCode"], json!(-32600));
-    assert_eq!(event.context["rpcMethod"], json!("config/batchWrite"));
-}
-
-#[test]
 fn diagnostic_archive_contains_only_allowlisted_artifacts() {
     let root = temporary_directory("archive");
     let log_dir = root.join("logs");
@@ -229,4 +209,22 @@ fn temporary_directory(label: &str) -> PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!("codeagent-diagnostics-{label}-{unique}"))
+}
+
+#[test]
+fn codex_info_noise_is_discarded_but_error_module_is_preserved() {
+    let session = DiagnosticSession::fixed();
+    for level in ["INFO", "DEBUG", "TRACE"] {
+        let line = json!({"timestamp":"2026-09-14T00:00:00Z", "level":level,
+            "target":"codex_app_server::transport", "fields":{"message":"request received"}});
+        assert!(
+            parse_codex_event(line.to_string().as_bytes(), &session)
+                .unwrap()
+                .is_none()
+        );
+    }
+    let line = br#"{"timestamp":"2026-09-14T00:00:00Z","level":"ERROR","target":"codex_core::stream","fields":{"message":"connection lost"}}"#;
+    let event = parse_codex_event(line, &session).unwrap().unwrap();
+    assert_eq!(event.event, "codex.codex_core.stream");
+    assert_eq!(event.message.as_deref(), Some("connection lost"));
 }

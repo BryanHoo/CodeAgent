@@ -6,6 +6,7 @@ mod catalogs;
 mod commit_message;
 mod config;
 mod connection;
+mod connection_diagnostics;
 mod connection_event_buffer;
 mod connection_message_channel;
 pub(crate) use connection_message_channel::ServerMessageReceiver;

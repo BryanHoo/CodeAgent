@@ -34,8 +34,8 @@ pub fn parse_codex_event(
     let level = match object.get("level").and_then(Value::as_str) {
         Some("ERROR") => DiagnosticLevel::Error,
         Some("WARN") => DiagnosticLevel::Warn,
-        Some("INFO") => DiagnosticLevel::Info,
-        Some("DEBUG" | "TRACE") => return Ok(None),
+        // 普通内部日志不进入队列，避免挤占错误日志与传输预算。
+        Some("INFO" | "DEBUG" | "TRACE") => return Ok(None),
         _ => return Err(CodexLogParseError::InvalidStructure),
     };
     let timestamp = object
@@ -67,7 +67,7 @@ pub fn parse_codex_event(
         .unwrap_or(target);
     let event = format!(
         "codex.{}",
-        sanitize_event_code(event_suffix, "internal_event")
+        sanitize_event_code(&event_suffix.replace("::", "."), "internal_event")
     );
 
     Ok(Some(DiagnosticEvent {

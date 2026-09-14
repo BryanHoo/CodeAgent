@@ -180,11 +180,16 @@ impl AppServerConnection {
         R: DeserializeOwned,
     {
         // 一次调用共享总截止时间，排队、写入、响应以及过载退避均消耗同一预算。
-        let deadline = Instant::now() + request_timeout;
+        let started = Instant::now();
+        let deadline = started + request_timeout;
+        let mut retry_count = 0;
         let result = timeout_at(deadline, async {
             for delay in OVERLOAD_RETRY_DELAYS {
                 match self.request_once(method, params).await {
-                    Err(ConnectionError::Request { code: -32001, .. }) => sleep(delay).await,
+                    Err(ConnectionError::Request { code: -32001, .. }) => {
+                        sleep(delay).await;
+                        retry_count += 1;
+                    }
                     result => return result,
                 }
             }
@@ -192,7 +197,12 @@ impl AppServerConnection {
         })
         .await
         .unwrap_or(Err(ConnectionError::Timeout));
-        record_rpc_error(method, &result);
+        super::connection_diagnostics::record_rpc_result(
+            method,
+            &result,
+            started.elapsed(),
+            retry_count,
+        );
         result
     }
 
@@ -231,12 +241,6 @@ impl AppServerConnection {
     pub async fn respond<R: Serialize>(&self, id: u64, result: &R) -> Result<(), ConnectionError> {
         let message = encode_response(id, result)?;
         self.write_message(&message).await
-    }
-}
-
-fn record_rpc_error<T>(method: &str, result: &Result<T, ConnectionError>) {
-    if let Err(ConnectionError::Request { code, message }) = result {
-        diagnostics::record_codex_rpc_error(method, *code, message);
     }
 }
 

@@ -42,10 +42,7 @@ fn command_should_use_stdio_and_inherit_official_codex_home() {
     assert!(command.get_envs().all(|(key, _)| key != "CODEX_HOME"));
     assert_eq!(
         command.get_envs().find(|(key, _)| *key == "RUST_LOG"),
-        Some((
-            OsStr::new("RUST_LOG"),
-            Some(OsStr::new("codex_app_server=info,codex_core=warn"))
-        ))
+        Some((OsStr::new("RUST_LOG"), Some(OsStr::new("warn"))))
     );
     assert_eq!(
         command.get_envs().find(|(key, _)| *key == "PATH"),
