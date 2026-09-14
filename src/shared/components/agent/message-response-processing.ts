@@ -126,11 +126,28 @@ export type ProcessedMessageResponse = ParsedCodeComments & Readonly<{
   replacement: string;
 }>;
 
+function pendingFileReferenceStart(line: string, previousLength: number): number {
+  let start = previousLength > 1 || (previousLength === 1 && line.startsWith("(")) ? 0 : -1;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === ")" || character === "\r") {
+      start = -1;
+    } else if (start < 0 && character === "]" && line[index + 1] === "(") {
+      start = previousLength + index;
+    }
+  }
+  // 仅未闭合的 ](target 和 Chunk 末尾的 ] 需要等待；普通方括号和完整链接立即提交。
+  const length = previousLength + line.length;
+  return start >= 0 ? start : line.endsWith("]") ? length - 1 : length;
+}
+
 export class IncrementalMessageResponseProcessor {
   private cachedResult: ProcessedMessageResponse = { comments: [], markdown: "", replaceFrom: 0, replacement: "" };
   private committedComments: CodeComment[] = [];
   private discardBlankLines = false;
   private pendingLine = "";
+  private pendingReferenceLength = 0;
+  private pendingReferencePreview: IncrementalWhitespaceBuffer | undefined;
   private lineStarted = false;
   private previousSource: string | TextSnapshot = "";
   private whitespace = new IncrementalWhitespaceBuffer();
@@ -153,45 +170,61 @@ export class IncrementalMessageResponseProcessor {
       const start = continuing ? previous.chunkCount : 0;
       addition = source.chunks.slice(start, source.chunkCount).join("");
     }
-
-    const replaceFrom = this.whitespace.materialize().length;
-    this.pendingLine += addition;
     this.previousSource = source;
-    let lineFeedIndex = this.pendingLine.indexOf("\n");
+    if (addition.length === 0) return this.cachedResult;
+
+    let replaceFrom = this.whitespace.materialize().length;
+    let previousReferenceLength = this.pendingReferenceLength;
+    const previousPendingLength = this.pendingLine.length;
+    this.pendingLine += addition;
+    const addedLineFeedIndex = addition.indexOf("\n");
+    let lineFeedIndex = addedLineFeedIndex < 0 ? -1 : previousPendingLength + addedLineFeedIndex;
     while (lineFeedIndex >= 0) {
       const line = this.pendingLine.slice(0, lineFeedIndex);
       this.pendingLine = this.pendingLine.slice(lineFeedIndex + 1);
       this.commitLine(line, true);
       this.lineStarted = false;
+      previousReferenceLength = 0;
       lineFeedIndex = this.pendingLine.indexOf("\n");
     }
 
     // 普通行无需等换行；只保留可能成为评论指令或文件链接目标的后缀。
     const directive = "::code-comment{";
-    const mayBeDirective = !this.lineStarted &&
+    const mayBeDirective = previousReferenceLength === 0 && !this.lineStarted &&
       (directive.startsWith(this.pendingLine) || this.pendingLine.startsWith(directive));
-    const mayBeDiscardedBlankLine = this.discardBlankLines && !this.lineStarted && this.pendingLine.trim().length === 0;
+    const mayBeDiscardedBlankLine = previousReferenceLength === 0 && this.discardBlankLines && !this.lineStarted && this.pendingLine.trim().length === 0;
+    let reuseReferencePreview = false;
+    this.pendingReferenceLength = 0;
     if (!mayBeDirective && !mayBeDiscardedBlankLine) {
-      const targetStart = this.pendingLine.indexOf("]");
-      const committedLength = targetStart < 0 ? this.pendingLine.length : targetStart;
+      // 已等待的目标前缀不再读取；字符串索引也可能迫使 WebKit 展平整条增长中的 rope。
+      const committedLength = pendingFileReferenceStart(previousReferenceLength > 0 ? addition : this.pendingLine, previousReferenceLength);
       if (committedLength > 0) {
         this.commitLine(this.pendingLine.slice(0, committedLength), false);
         this.pendingLine = this.pendingLine.slice(committedLength);
         this.lineStarted = true;
+      } else {
+        reuseReferencePreview = previousReferenceLength > 0;
       }
+      this.pendingReferenceLength = this.pendingLine.length;
     }
 
     // 当前行仍可能继续增长，基于已提交状态制作轻量预览，不能污染后续 Chunk。
     const previewComments = [...this.committedComments];
-    const previewWhitespace = this.whitespace.clone();
+    const previewWhitespace = reuseReferencePreview && this.pendingReferencePreview !== undefined
+      ? this.pendingReferencePreview : this.whitespace.clone();
+    if (reuseReferencePreview) replaceFrom = this.cachedResult.markdown.length;
     if (this.pendingLine.length > 0) {
-      if (this.lineStarted) previewWhitespace.append(normalizeMarkdownFileReferences(this.pendingLine));
+      // 未闭合链接不可能被规范化；沿用预览状态，仅扫描新增字节，闭合后再一次性替换目标。
+      if (this.pendingReferenceLength > 0) {
+        previewWhitespace.append(reuseReferencePreview ? addition : this.pendingLine);
+      } else if (this.lineStarted) previewWhitespace.append(normalizeMarkdownFileReferences(this.pendingLine));
       else processLine(this.pendingLine, false, {
         comments: previewComments,
         discardBlankLines: this.discardBlankLines,
         whitespace: previewWhitespace,
       });
     }
+    this.pendingReferencePreview = this.pendingReferenceLength > 0 ? previewWhitespace : undefined;
     this.cachedResult = {
       comments: previewComments,
       markdown: previewWhitespace.materialize(),
@@ -219,6 +252,8 @@ export class IncrementalMessageResponseProcessor {
     this.committedComments = [];
     this.discardBlankLines = false;
     this.pendingLine = "";
+    this.pendingReferenceLength = 0;
+    this.pendingReferencePreview = undefined;
     this.lineStarted = false;
     this.previousSource = "";
     this.whitespace = new IncrementalWhitespaceBuffer();

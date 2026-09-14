@@ -35,6 +35,9 @@ for (const count of [2_000, 4_000, 8_000]) {
       ["long paragraph", "", "ordinary text "],
       ["open code fence", "```ts\n", "const value = `template`;\n"],
       ["long code line", "```ts\n", "value + "],
+      ["long code line after bracket", "```ts\nconst values = []; ", "values[index] + "],
+      ["long paragraph after file link", "[file](src/main.ts:12) ", "ordinary text "],
+      ["unfinished file link", "[file](/tmp/", "ordinary text "],
     ]) {
       bench(name!, () => {
         const store = createTaskItemStore({ id: "message", type: "message", role: "assistant", text: initial! });

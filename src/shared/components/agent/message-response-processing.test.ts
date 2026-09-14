@@ -30,6 +30,41 @@ function createIncrementalMarkdownBlockParser(parse = parseMarkdownIntoBlocks) {
 }
 
 describe("incremental message preprocessing", () => {
+  it("preserves a pending link boundary across empty chunks", () => {
+    const processor = new IncrementalMessageResponseProcessor();
+    const buffer = new AppendOnlyTextBuffer("[file]");
+    processor.process(buffer.getSnapshot());
+    buffer.append("");
+    processor.process(buffer.getSnapshot());
+    buffer.append("(src/main.ts)");
+    expect(processor.process(buffer.getSnapshot())).toMatchObject(preprocessMessageResponse("[file](src/main.ts)"));
+  });
+
+  it.each(["const values = [] ", "[file](src/main.ts:12) ", "[label] ordinary ", "[file](/tmp/"])(
+    "does not rescan committed brackets or links in a growing line: %s", (prefix) => {
+      const processor = new IncrementalMessageResponseProcessor();
+      const buffer = new AppendOnlyTextBuffer(prefix);
+      // oxlint-disable-next-line typescript/unbound-method -- 计数后显式恢复字符串 this。
+      const matchAll = String.prototype.matchAll;
+      let scanned = 0;
+      const spy = vi.spyOn(String.prototype, "matchAll").mockImplementation(function (this: string, pattern) {
+        scanned += this.length;
+        return matchAll.call(this, pattern);
+      });
+      let response;
+      try {
+        for (let index = 0; index < 200; index += 1) {
+          buffer.append("ordinary text ");
+          response = processor.process(buffer.getSnapshot());
+        }
+      } finally {
+        spy.mockRestore();
+      }
+      expect(response).toMatchObject(preprocessMessageResponse(prefix + "ordinary text ".repeat(200)));
+      expect(scanned).toBeLessThan(10_000);
+    },
+  );
+
   it("does not rescan a growing ordinary line", () => {
     const processor = new IncrementalMessageResponseProcessor();
     const buffer = new AppendOnlyTextBuffer("");
@@ -104,6 +139,8 @@ describe("incremental message preprocessing", () => {
     "A plain paragraph that becomes **bold** and a link www.example.com",
     "prefix ::code-comment{file=\"a.ts\" title=\"literal\" body=\"text\"}\n\nend",
     " A leading space\n\n::code-comment{file=\"a.ts\" title=\"issue\" body=\"text\"}\n\n    Next\n\nAfter",
+    "const values = [] + rows[index] + [other]; [file](src/a.ts) then [next](/a b/main.ts:2) end]",
+    "[unfinished](src/a.ts\rplain] text [nested](src/[name].ts) end",
   ])("matches full preprocessing across every character boundary: %s", (source) => {
     const buffer = new AppendOnlyTextBuffer("");
     const processor = new IncrementalMessageResponseProcessor();
