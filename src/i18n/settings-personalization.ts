@@ -4,7 +4,7 @@ import { i18n } from "./i18n.js";
 i18n.addResourceBundle("zh-CN", "settings", { personalization: {
   instructions: "Codex 说明",
   commitTitle: "提交消息",
-  commitDescription: "设置 Git 提交消息的生成偏好，修改后自动保存。",
+  commitDescription: "设置 Git 提交消息的生成偏好。模型修改后自动保存，生成规则需点击保存。",
   commitModel: "生成模型",
   commitModelDescription: "选择用于生成提交消息的模型。",
   commitRules: "生成规则",
@@ -26,7 +26,7 @@ i18n.addResourceBundle("zh-CN", "settings", { personalization: {
 i18n.addResourceBundle("en", "settings", { personalization: {
   instructions: "Codex instructions",
   commitTitle: "Commit messages",
-  commitDescription: "Set preferences for generated Git commit messages. Changes are saved automatically.",
+  commitDescription: "Set preferences for generated Git commit messages. Model changes are saved automatically; click Save to apply generation rules.",
   commitModel: "Generation model",
   commitModelDescription: "Choose the model used to generate commit messages.",
   commitRules: "Generation rules",

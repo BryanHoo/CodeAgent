@@ -185,15 +185,39 @@ describe("GlobalSettingsPage", () => {
     await expect.element(screen.getByRole("button", { name: "常规", exact: true })).toBeVisible();
   });
 
-  it("flushes the latest prompt before returning to the app", async () => {
+  it("saves generation rules only after clicking save", async () => {
+    const { screen, onSave } = await renderSettings("personalization");
+    const editor = screen.getByRole("textbox", { name: "提交提示词" });
+    await editor.fill("新的提交规则");
+    editor.element().blur();
+    expect(onSave).not.toHaveBeenCalled();
+    const save = screen.getByRole("region", { name: "提交消息", exact: true }).getByRole("button", { name: "保存", exact: true });
+    await save.click();
+    await expect.poll(() => onSave.mock.calls.at(-1)?.[0]).toMatchObject({ commitMessagePrompt: "新的提交规则" });
+    await expect.element(save).toBeDisabled();
+  });
+
+  it("preserves generation rules after save failure and allows retry", async () => {
+    const { screen, onSave } = await renderSettings("personalization");
+    onSave.mockRejectedValueOnce(new Error("disk unavailable"));
+    const editor = screen.getByRole("textbox", { name: "提交提示词" });
+    await editor.fill("保留规则草稿");
+    const panel = screen.getByRole("region", { name: "提交消息", exact: true });
+    const save = panel.getByRole("button", { name: "保存", exact: true });
+    await save.click();
+    await expect.element(panel.getByRole("alert")).toHaveTextContent("保存失败，草稿已保留。");
+    await expect.element(editor).toHaveValue("保留规则草稿");
+    await save.click();
+    await expect.element(save).toBeDisabled();
+    expect(onSave).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not save generation rule drafts when leaving settings", async () => {
     const { screen, onClose, onSave } = await renderSettings("personalization");
-    await screen.getByRole("textbox", { name: "提交提示词" }).fill("新的提交规则");
-    await screen.getByRole("button", { name: "常规", exact: true }).click();
-    await screen.getByRole("button", { name: "个性化", exact: true }).click();
-    await expect.element(screen.getByRole("textbox", { name: "提交提示词" })).toHaveValue("新的提交规则");
+    await screen.getByRole("textbox", { name: "提交提示词" }).fill("未保存的规则");
     await screen.getByRole("button", { name: "返回应用" }).click();
     expect(onClose).toHaveBeenCalledOnce();
-    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ commitMessagePrompt: "新的提交规则" }));
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("clears search before returning with Escape and defers to nested dialogs", async () => {

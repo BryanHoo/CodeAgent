@@ -140,7 +140,16 @@ export function GlobalSettingsPage({
             <p>{t("errors.load")}</p>
             <Button variant="ghost" onClick={() => void onRetry()}>{t("common:actions.retry")}</Button>
           </div> : isPending || settings === undefined ? <p role="status" className="text-body-small text-muted-foreground">{t("loading")}</p> : (
-            <CommitSettingsPanel settings={draft} models={models} onChange={updateDraft} onFlush={() => saveQueue.save(draftRef.current)} />
+            <CommitSettingsPanel settings={draft} models={models} onChange={updateDraft} onSaveRules={async (commitMessagePrompt) => {
+              // 先等待已有自动保存完成；成功后才更新全局快照，失败时由编辑器保留草稿。
+              await saveQueue.flush();
+              const next = { ...draftRef.current, commitMessagePrompt };
+              await onSaveRef.current(next);
+              saveQueue.reset(next);
+              draftRef.current = { ...draftRef.current, commitMessagePrompt };
+              hasLocalChangesRef.current = true;
+              setDraft(draftRef.current);
+            }} />
           )
         } />
 
