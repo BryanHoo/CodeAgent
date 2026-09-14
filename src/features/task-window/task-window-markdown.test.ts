@@ -15,4 +15,12 @@ describe("task window Markdown projection", () => {
     expect(JSON.stringify(blocks)).not.toContain("alert(1)");
     expect(JSON.stringify(blocks)).not.toContain("https://");
   });
+
+  it("renders Chinese bold labels without changing code or escaped markers", () => {
+    const blocks = parseTaskWindowMarkdown("- **持续对话： **使用 `query()`\n- **精确恢复：**记录原生");
+    expect(blocks.flatMap((block) => block.runs).filter((run) => run.marks.includes("strong")).map((run) => run.text)).toEqual(["持续对话：", "精确恢复："]);
+    const literal = parseTaskWindowMarkdown("`**持续对话： **`\n\n\\*\\*持续对话： \\*\\*");
+    expect(literal.flatMap((block) => block.runs).some((run) => run.marks.includes("strong"))).toBe(false);
+  });
+
 });

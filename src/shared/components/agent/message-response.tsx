@@ -34,6 +34,7 @@ import {
 } from "./message-response-processing.js";
 import { createIncrementalMarkdownBlockParser } from "./incremental-markdown-blocks.js";
 import type { TextSnapshot } from "../../lib/append-only-text.js";
+import { unparsedStrongRemarkPlugin } from "./markdown-strong-plugin.js";
 import { StreamingMarkdown } from "./streaming-markdown.js";
 import { openMarkdownLink } from "./markdown-link-navigation.js";
 import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
@@ -401,6 +402,7 @@ function MessageResponseContent({
     () => [
       // Streamdown 收到自定义插件后不再注入默认 GFM；必须显式保留表格等标准扩展。
       ...Object.values(defaultRemarkPlugins),
+      unparsedStrongRemarkPlugin,
       rawMarkupRemarkPlugin,
       ...(promptFileReferences ? [promptFileReferenceRemarkPlugin] : []),
       ...(remarkPlugins ?? []),

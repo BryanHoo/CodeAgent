@@ -1,5 +1,6 @@
 import { Lexer, type Token, type Tokens } from "marked";
 import remend from "remend";
+import { splitUnparsedStrong } from "../../shared/lib/markdown-strong.js";
 
 export type InlineMark = "strong" | "em" | "del" | "code" | "link";
 export type InlineRun = Readonly<{ text: string; marks: readonly InlineMark[] }>;
@@ -20,6 +21,11 @@ function inline(tokens: readonly Token[], marks: readonly InlineMark[] = []): In
     }
     if (token.type === "codespan") return [{ text: token.text, marks: [...marks, "code"] }];
     if ("tokens" in token && token.tokens) return inline(token.tokens, marks);
+    // 与主会话共享文本修复规则；代码及 escape Token 不参与二次解析。
+    if (token.type === "text" && token.raw === token.text) {
+      const parts = splitUnparsedStrong(token.text);
+      if (parts) return parts.map((part) => ({ text: part.text, marks: part.strong ? [...marks, "strong"] : marks }));
+    }
     return "text" in token ? [{ text: token.text, marks }] : [];
   });
 }
