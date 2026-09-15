@@ -32,6 +32,7 @@ export { getCodeLanguage } from "../../../shared/components/agent/code-languages
 
 type ProjectSourcePanelProps = Readonly<{
   client: NativeSourceFileClient;
+  headerActions?: ReactNode;
   onClose?: () => void;
   previewKind: "image" | "source";
   projectId: string;
@@ -157,6 +158,7 @@ export function getNextSourceCursor(
 
 export function ProjectSourcePanel({
   client,
+  headerActions,
   onClose,
   previewKind,
   projectId,
@@ -282,7 +284,7 @@ export function ProjectSourcePanel({
     >
       {previewKind === "image" ? (
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
-          <SourceHeader {...headerProps} />
+          <SourceHeader {...headerProps} actions={headerActions} />
           <div className="grid min-h-0 place-items-center overflow-hidden p-4 sm:p-6">
             {imageQuery.isPending ? (
               <div className="text-body-small text-muted-foreground" role="status">
@@ -307,7 +309,7 @@ export function ProjectSourcePanel({
         </div>
       ) : firstSourcePage === undefined && sourceQuery.isPending ? (
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-          <SourceHeader {...headerProps} />
+          <SourceHeader {...headerProps} actions={headerActions} />
           <div
             className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
             role="status"
@@ -317,7 +319,7 @@ export function ProjectSourcePanel({
         </div>
       ) : firstSourcePage === undefined && sourceQuery.error !== null ? (
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-          <SourceHeader {...headerProps} />
+          <SourceHeader {...headerProps} actions={headerActions} />
           <div
             className="grid min-h-48 place-items-center text-body-small text-danger"
             role="alert"
@@ -330,22 +332,25 @@ export function ProjectSourcePanel({
           <SourceHeader
             {...headerProps}
             actions={
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    aria-label={t("projectDialog.showRawContent")}
-                    onClick={() => {
-                      updateMarkdownPreviewPreference(false);
-                    }}
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Code2 className="size-3.5" aria-hidden="true" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t("projectDialog.showRawContent")}</TooltipContent>
-              </Tooltip>
+              <>
+                {headerActions}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={t("projectDialog.showRawContent")}
+                      onClick={() => {
+                        updateMarkdownPreviewPreference(false);
+                      }}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Code2 className="size-3.5" aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("projectDialog.showRawContent")}</TooltipContent>
+                </Tooltip>
+              </>
             }
           />
           <div className="min-h-0 overflow-auto px-5 py-4 sm:px-8 sm:py-6">
@@ -365,6 +370,7 @@ export function ProjectSourcePanel({
             {...headerProps}
             actions={
               <>
+                {headerActions}
                 {canRenderMarkdown ? (
                   <Tooltip>
                     <TooltipTrigger asChild>

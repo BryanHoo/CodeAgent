@@ -1,5 +1,5 @@
 import { FileCode2 } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 
 import { CodeBlockHeader, CodeBlockTitle } from "../../shared/components/agent/code-block.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/components/core/tooltip.js";
@@ -9,7 +9,10 @@ import { getFileChangeStats, getFileName } from "./file-change.js";
 
 const PatchDiffViewer = lazy(() => import("./patch-diff-viewer.js"));
 
-export function FileDiffPanel({ change }: Readonly<{ change: AgentFileChange }>) {
+export function FileDiffPanel({
+  actions,
+  change,
+}: Readonly<{ actions?: ReactNode; change: AgentFileChange }>) {
   const { t } = useTranslation("workbench");
   const { additions, removals } = getFileChangeStats(change);
 
@@ -36,6 +39,7 @@ export function FileDiffPanel({ change }: Readonly<{ change: AgentFileChange }>)
         <div className="flex shrink-0 items-center gap-2 text-label font-medium">
           <span className="text-diff-added">+{additions}</span>
           <span className="text-diff-removed">-{removals}</span>
+          {actions}
         </div>
       </CodeBlockHeader>
       <div className="min-h-0 min-w-0 overflow-auto bg-content">

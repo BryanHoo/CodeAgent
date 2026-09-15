@@ -105,17 +105,25 @@ export function useWorkbenchShellController(
     },
     [projectId, setInspectorFileSelection, setInspectorOpen, setInspectorTab],
   );
-  const openProjectFileDiff = useCallback(
+  const loadProjectFileDiff = useCallback(
     (change: AgentFileChange) => {
-      if (selectedRootPath === undefined) return;
-      void loadProjectGitFileDiff(
+      if (selectedRootPath === undefined) {
+        return Promise.reject(new Error("Project root is unavailable"));
+      }
+      return loadProjectGitFileDiff(
         queryClient,
         client,
         projectId,
         selectedRootPath,
         gitStatusQuery.data,
         change,
-      )
+      );
+    },
+    [client, gitStatusQuery.data, projectId, queryClient, selectedRootPath],
+  );
+  const openProjectFileDiff = useCallback(
+    (change: AgentFileChange) => {
+      void loadProjectFileDiff(change)
         .then((loadedChange) => {
           // Inspector 文件树和变更面板保留弹窗，不改变用户当前查看的标签。
           setProjectFileDialogSelection({ change: loadedChange, kind: "diff", projectId });
@@ -124,14 +132,7 @@ export function useWorkbenchShellController(
           notifyActionError(error instanceof Error ? error : new Error("Git diff is unavailable"));
         });
     },
-    [
-      client,
-      gitStatusQuery.data,
-      projectId,
-      queryClient,
-      selectedRootPath,
-      setProjectFileDialogSelection,
-    ],
+    [loadProjectFileDiff, projectId, setProjectFileDialogSelection],
   );
   const openMessageFileReference = useCallback(
     (reference: MessageFileReference, mode?: MessageFileReferenceOpenMode) => {
@@ -202,7 +203,7 @@ export function useWorkbenchShellController(
     ],
   );
   const openProjectFile = useCallback(
-    (path: string) => {
+    (path: string, change?: AgentFileChange) => {
       const kind = classifyProjectFileReference(path);
       if (kind === "system") {
         const mutation = projectPathOpenMutationRef.current;
@@ -214,6 +215,7 @@ export function useWorkbenchShellController(
       }
 
       setProjectFileDialogSelection({
+        ...(change === undefined ? {} : { change }),
         kind,
         projectId,
         reference: { lineNumber: null, path },
@@ -461,6 +463,7 @@ export function useWorkbenchShellController(
     handleTaskCreated,
     handleTaskStarted,
     models,
+    loadProjectFileDiff,
     openFileDiff,
     openProjectFileDiff,
     openFileReview,

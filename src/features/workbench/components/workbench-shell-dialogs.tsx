@@ -17,6 +17,7 @@ export function WorkbenchShellDialogs({
   const {
     client,
     closeTaskRenameDialog,
+    loadProjectFileDiff,
     projectRuntime,
     renameActiveTask,
     renameMutation,
@@ -42,6 +43,12 @@ export function WorkbenchShellDialogs({
       ) : selectedProjectFileDialog === null ? null : (
         <ProjectSourceDialog
           client={client}
+          {...(selectedProjectFileDialog.change === undefined
+            ? {}
+            : {
+                change: selectedProjectFileDialog.change,
+                loadDiff: loadProjectFileDiff,
+              })}
           onClose={() => {
             setProjectFileDialogSelection(null);
           }}

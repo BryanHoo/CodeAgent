@@ -309,6 +309,8 @@ export const workbench = {
     rename: "Rename project",
     renameDescription: "This changes only the sidebar display name, not the folder name on disk.",
     showRawContent: "Show raw content",
+    showDiff: "View Diff",
+    showSource: "View file contents",
     sourcePartial: "Partial content",
   },
   projectPicker: {

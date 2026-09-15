@@ -307,6 +307,8 @@ export const workbench = {
     rename: "重命名项目",
     renameDescription: "只修改左栏显示名称，不会修改磁盘上的文件夹名称。",
     showRawContent: "显示原始内容",
+    showDiff: "查看 Diff",
+    showSource: "查看文件内容",
     sourcePartial: "部分内容",
   },
   projectPicker: {

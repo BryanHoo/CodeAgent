@@ -108,6 +108,7 @@ type WorkbenchInspectorProps = Readonly<{
 
 export type WorkbenchInspectorFileSelection =
   | Readonly<{
+      change?: AgentFileChange;
       kind: "image" | "source";
       reference: MessageFileReference;
     }>
@@ -311,7 +312,6 @@ export function WorkbenchInspector({
                   fileChangesByPath={fileChangesByPath}
                   key={`${projectId ?? projectName}:${projectPath}`}
                   onExpandedPathsChange={onFileTreeExpandedChange}
-                  onOpenFileDiff={onOpenFileDiff}
                   onOpenProjectFile={onOpenProjectFile}
                   onOpenProjectPath={onOpenProjectPath}
                   onReferenceProjectPath={onReferenceProjectPath}
