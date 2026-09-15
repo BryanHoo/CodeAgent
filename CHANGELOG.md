@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-15
+
+### Added
+
+- 添加项目变更摘要与文件审核入口，并支持在文件预览和 Diff 之间按需切换。
+- 添加主窗口、托盘和 macOS `Cmd+Q` 共用的关闭确认流程，统一关闭、最小化和取消操作。
+- 添加任务完成、等待审批和失败状态图标，并在窗口聚焦与任务切换时刷新项目 Git 状态。
+
+### Changed
+
+- 优化 Git 审核面板状态、延迟加载和文件树占位统计，减少不必要的 Diff 加载。
+- 更新 `rustls` 依赖版本。
+
+### Fixed
+
+- 修复未跟踪目录展开导致 Git 状态输出和 IPC 负载增长的问题。
+- 修复 Git 错误分类与本地化提示，保留原始诊断并区分本地修改覆盖和状态输出超限。
+- 修复 Git 详情快照校准，以及 macOS 全屏窗口最小化时序。
+
 ## [0.2.1] - 2026-09-14
 
 ### Added
@@ -249,7 +268,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.12...v0.2.0
 [0.1.12]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.10...v0.1.12

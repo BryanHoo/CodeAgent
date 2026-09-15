@@ -37,7 +37,7 @@ CodeAgent brings AI coding tasks, conversations, approvals, project files, and G
 - Choose the model, reasoning effort, Fast mode, approval behavior, and file access for each task
 - Manage multiple project roots, temporary tasks, and archived tasks, generate titles for new tasks, and fork new tasks from existing conversations
 - Filter tasks in the current project with collapsible search
-- Browse and manage project files, review diffs, uncommitted changes, and commit history, then copy messages as source-preserving Markdown
+- Browse and manage project files, switch between file previews and diffs, review uncommitted changes and commit history, then copy messages as source-preserving Markdown
 - Create or switch Git branches and worktrees, then select files to commit or push
 - Use Simplified Chinese or English, system notifications, tray controls, and workspace pets
 
