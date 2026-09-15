@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { getApplicationDetailViewUpdateGate } from "../../shared/lifecycle/application-visibility.js";
 import { recordInternalWarning } from "../notifications/internal-diagnostics.js";
+import { installProjectGitStatusFocusRefresh } from "./project-git-focus-refresh.js";
 import { isGitUnavailableError } from "./project-git-error.js";
 import { type NativeGitStatusClient, projectGitStatusQueryOptions } from "./project-queries.js";
 
@@ -41,6 +42,7 @@ function defaultPageVisibility(): boolean {
 
 export class ProjectGitStatusCoordinator {
   readonly #client: NativeGitStatusClient;
+  readonly #disposeFocusRefresh: () => void;
   readonly #fileChangeDebounceMs: number;
   readonly #isPageVisible: () => boolean;
   readonly #pollIntervalMs: number;
@@ -58,6 +60,7 @@ export class ProjectGitStatusCoordinator {
   ) {
     this.#queryClient = queryClient;
     this.#client = client;
+    this.#disposeFocusRefresh = installProjectGitStatusFocusRefresh(queryClient);
     this.#fileChangeDebounceMs =
       options.fileChangeDebounceMs ?? PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS;
     this.#isPageVisible = options.isPageVisible ?? defaultPageVisibility;
@@ -72,6 +75,7 @@ export class ProjectGitStatusCoordinator {
       return;
     }
     this.#disposed = true;
+    this.#disposeFocusRefresh();
     for (const state of this.#projects.values()) {
       this.#closeState(state);
     }
