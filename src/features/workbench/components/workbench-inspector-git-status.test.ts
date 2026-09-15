@@ -19,3 +19,20 @@ it("合并暂存和工作区统计，但拒绝其他快照的旧详情", () => {
   expect(result.displayChanges[0]?.stats).toEqual({ additions: 7, removals: 3 });
   expect(deriveInspectorGitChangeState(status, { ...details, snapshot: "b".repeat(64) }).changeStats).toBeUndefined();
 });
+
+
+it("详情未加载或属于旧快照时，不向文件树输出占位零统计", () => {
+  const status: ProjectGitStatus = {
+    baseBranches: [], branch: "main", branches: [], repositoryMode: "root", snapshot: "current",
+    staged: [],
+    unstaged: [{ path: "new.ts", kind: "create", diff: "", stats: { additions: 0, removals: 0 } }],
+  };
+  const details: ProjectGitStatus = {
+    ...status,
+    unstaged: [{ ...status.unstaged[0]!, diff: "+new", stats: { additions: 5, removals: 0 } }],
+  };
+  expect(deriveInspectorGitChangeState(status, undefined).fileChangesByPath.size).toBe(0);
+  expect(deriveInspectorGitChangeState(status, { ...details, snapshot: "old" }).fileChangesByPath.size).toBe(0);
+  expect(deriveInspectorGitChangeState(status, details).fileChangesByPath.get("new.ts")?.stats)
+    .toEqual({ additions: 5, removals: 0 });
+});

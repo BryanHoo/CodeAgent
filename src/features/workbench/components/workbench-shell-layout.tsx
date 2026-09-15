@@ -462,10 +462,8 @@ export function WorkbenchShellLayout({
               ? Promise.resolve()
               : refreshProjectGitStatus(projectId, selectedRootPath)
           }
-          onCommitChanges={() => {
-            setInspectorTab("changes");
-            setInspectorOpen(true);
-          }}
+          onReviewFileChanges={openFileReview}
+          onCommitChanges={() => setInspectorTab("changes")}
           onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
           onTabChange={setInspectorTab}
           onOpenSubagent={(selection) => {

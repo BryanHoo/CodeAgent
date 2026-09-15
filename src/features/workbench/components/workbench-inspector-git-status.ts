@@ -53,7 +53,10 @@ export function deriveInspectorGitChangeState(
     { additions: 0, removals: 0 },
   );
   const displayChanges = mergeDisplayChanges(statsChanges ?? allChanges);
-  const fileChangesByPath = new Map(displayChanges.map((change) => [change.path, change] as const));
+  // 轻量状态的 stats 是占位值；详情就绪前保留文件数量，但不向文件树发布假行数。
+  const fileChangesByPath = new Map(
+    (statsChanges === undefined ? [] : displayChanges).map((change) => [change.path, change] as const),
+  );
 
   return {
     changeStats,

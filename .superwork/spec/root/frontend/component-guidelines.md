@@ -54,7 +54,7 @@
 - 打开已有会话时，Composer 必须从现有 `threadConfiguration` 恢复模型与推理强度，字段为空时分别回退任务设置；仅覆盖这两个字段，不恢复历史权限。当前作用域内的用户手动选择优先于线程配置，后台刷新不得覆盖；切换任务后重新恢复目标线程配置。沿用模型目录与支持的推理强度校验，不在 Inspector 重复展示快照，不新增读取、轮询或自动设置写回
 - `temporary` 是合成任务作用域；依赖真实 Project 的查询必须在该作用域禁用。系统打开能力属于全局查询，不得因 `temporary` 禁用；文件打开、预览、读取和编辑不限制项目目录。绝对路径直接定位，相对路径使用当前目录或任务 cwd；面板、独立窗口 URL 与 Tauri IPC 必须完整透传 `taskId`。
 - Inspector 始终显示可用 Tab；数据模块仅在存在实体时渲染，无内容时在面板内容区显示空状态
-- Inspector 的项目 Tab 固定排在上下文 Tab 前；普通 Task 启动后保持项目 Tab，仅当计划或目标出现时自动切换到上下文 Tab
+- Inspector 的项目 Tab 固定排在上下文 Tab 前；普通 Task 启动后保持项目 Tab，仅当计划或目标出现时自动切换到上下文 Tab。聊天任务默认收起右栏，用户可自行展开，切换聊天任务后重新默认收起；项目右栏显隐偏好独立保留。
 - 同一 Project 内切换 Task 时必须保留 Inspector 外壳与项目文件树挂载，仅重置任务上下文，避免无变化的项目数据重新加载和闪烁
 - `@pierre/diffs` 首次显示前按当前文件语言预加载高亮器，避免首个 Diff 异步初始化后保持空白
 - 项目文件树打开已修改文件时必须先展示当前文件预览；仅在用户点击预览头部的 Diff 图标后按需读取并切换 Diff，且允许返回文件内容。变更列表仍直接打开 Diff；浏览器回归覆盖修改文件主操作、Diff 切换与返回预览
@@ -73,3 +73,5 @@
 - 桌面宠物必须支持 macOS、Ubuntu Wayland/X11 与 Windows；macOS 使用一次原生拖拽命令跟踪至 `mouseUp`，Linux Wayland 会话在 GTK 初始化前按 `x11,wayland` 顺序选择后端，以获得桌宠所需的全局窗口坐标并保留无 XWayland 时的启动回退，Windows 使用公开虚拟桌面 API 跟随当前桌面并恢复 topmost 层级；Linux 与 Windows 的位置 IPC 按动画帧合并到最新坐标
 - macOS 宠物在 CodeAgent 未激活时不得获取 key focus；切换到原生拖拽前必须先释放 WebView pointer capture，物理主键释放后再恢复 main key window 并同步位置、气泡布局和持久化；WebView fallback 必须在 `buttons` 不含主键时兜底结束拖动
 - Tauri asset protocol 的宠物图集使用 `HTMLImageElement` 解码后绘制到 Canvas；不得依赖 WKWebView 对自定义协议执行 `fetch` 后再 `createImageBitmap`
+
+- 项目标签承载未提交文件变更摘要：左侧单行显示文件数和增删行数，右侧并排显示带背景的审核和提交文字按钮，不显示独立标题或图标；审核打开文件审核弹窗，提交切换变更标签；上下文不展示项目 Git 变更。文件树只能展示与当前轻量快照匹配的详情统计，详情未就绪不得显示占位 `+0 -0`；两次读取之间文件变化导致快照不一致时应有界校准，复用共享 Query，避免后台重复读取完整 Diff。

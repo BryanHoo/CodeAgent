@@ -1,9 +1,15 @@
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
-import { FileReviewDialog } from "../../diff/file-review-dialog.js";
+import { lazy, Suspense } from "react";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
+
+// 审核工作区仅在打开弹窗时加载，项目文件统计不承担其首屏解析开销。
+const LazyFileReviewDialog = lazy(async () => {
+  const module = await import("../../diff/file-review-dialog.js");
+  return { default: module.FileReviewDialog };
+});
 
 export function WorkbenchShellDialogs({
   context,
@@ -59,12 +65,14 @@ export function WorkbenchShellDialogs({
         />
       )}
       {selectedFileReview === null ? null : (
-        <FileReviewDialog
-          changes={selectedFileReview}
-          onClose={() => {
-            setFileReviewSelection(null);
-          }}
-        />
+        <Suspense fallback={null}>
+          <LazyFileReviewDialog
+            changes={selectedFileReview}
+            onClose={() => {
+              setFileReviewSelection(null);
+            }}
+          />
+        </Suspense>
       )}
       <SubagentOutputDialog
         onClose={() => {

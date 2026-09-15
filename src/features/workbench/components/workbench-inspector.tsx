@@ -77,6 +77,7 @@ type WorkbenchInspectorProps = Readonly<{
   onClearGoal?: () => Promise<void>;
   onGoalStatusChange?: (status: "active" | "paused") => Promise<void>;
   onOpenFileDiff?: (change: AgentFileChange) => void;
+  onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
   onOpenTaskAttachment?: (attachmentId: string) => void;
   onOpenProjectPath?: (appId: ProjectOpenAppId, path?: string) => void;
   onOpenProjectFile?: (path: string) => void;
@@ -140,6 +141,7 @@ export function WorkbenchInspector({
   onClearGoal = () => Promise.resolve(),
   onGoalStatusChange = () => Promise.resolve(),
   onOpenFileDiff = () => undefined,
+  onReviewFileChanges = () => undefined,
   onOpenTaskAttachment = () => undefined,
   onOpenProjectPath = () => undefined,
   onOpenProjectFile = () => undefined,
@@ -184,7 +186,7 @@ export function WorkbenchInspector({
   const isGitProject = gitStatus !== undefined && gitStatus.repositoryMode !== "none";
   const { changeStats, displayChanges, fileChangesByPath } = useMemo(
     () =>
-      isGitProject && (activeTab === "context" || activeTab === "project")
+      isGitProject && activeTab === "project"
         ? deriveInspectorGitChangeState(gitStatus, gitStatusDetails)
         : {
             changeStats: undefined,
@@ -202,16 +204,6 @@ export function WorkbenchInspector({
       {task?.goal === null || task?.goal === undefined ? null : (
         <GoalSection goal={task.goal} onClear={onClearGoal} onStatusChange={onGoalStatusChange} />
       )}
-      {isGitProject && displayChanges.length > 0 ? (
-        <InspectorGitChangesSection
-          changeCount={displayChanges.length}
-          changeStats={changeStats}
-          onCommitChanges={onCommitChanges}
-          onOpenChanges={() => {
-            onTabChange("changes");
-          }}
-        />
-      ) : null}
       {backgroundTerminals.length > 0 ? (
         <BackgroundTerminalSection
           onTerminate={onTerminateBackgroundTerminal}
@@ -271,6 +263,16 @@ export function WorkbenchInspector({
           )
         ) : activeTab === "project" ? (
           <div className="flex h-full min-h-0 flex-col">
+            {isGitProject && displayChanges.length > 0 ? (
+              <div className="shrink-0 px-2.5 py-0.5">
+                <InspectorGitChangesSection
+                  changeCount={displayChanges.length}
+                  changeStats={changeStats}
+                  onCommitChanges={onCommitChanges}
+                  onReviewChanges={() => onReviewFileChanges(displayChanges)}
+                />
+              </div>
+            ) : null}
             <div className="flex min-h-0 flex-1 flex-col">
               {gitStatusError !== null ? (
                 <div className="mx-2.5 mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">

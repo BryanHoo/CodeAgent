@@ -74,7 +74,7 @@ export const conversation = {
     fileTree: "Project files",
     file: "File",
     gitChanges: "Uncommitted changes",
-    gitChangesCount: "{{count}} changes",
+    gitChangesCount: "{{count}} files",
     gitChangesRetrying: "Git change refresh failed. Retrying automatically",
     gitLoading: "Loading Git changes...",
     goal: "Goal",

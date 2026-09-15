@@ -21,3 +21,27 @@ export function useProjectGitStatusRouteRefresh(
     void refetch();
   }, [enabled, isPending, refetch, routeScope]);
 }
+
+export function useProjectGitDetailsRefresh(
+  scope: string,
+  enabled: boolean,
+  statusSnapshot: string | undefined,
+  detailsSnapshot: string | undefined,
+  fetching: boolean,
+  refetch: () => Promise<unknown>,
+): void {
+  const refreshedMismatchRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!enabled || statusSnapshot === undefined || detailsSnapshot === undefined || fetching) return;
+    if (statusSnapshot === detailsSnapshot) {
+      refreshedMismatchRef.current = undefined;
+      return;
+    }
+    // 文件可能在轻量读取与详情读取之间再次修改；补读当前状态，让详情查询切换到真实快照。
+    // 同一不一致只校准一次，避免读取失败或仓库持续变化造成重复请求。
+    const mismatch = JSON.stringify([scope, statusSnapshot, detailsSnapshot]);
+    if (refreshedMismatchRef.current === mismatch) return;
+    refreshedMismatchRef.current = mismatch;
+    void refetch();
+  }, [detailsSnapshot, enabled, fetching, refetch, scope, statusSnapshot]);
+}

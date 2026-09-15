@@ -26,3 +26,17 @@ describe("WorkbenchInspector temporary context", () => {
     expect(markup).not.toContain(i18n.t("inspector.terminals", { ns: "conversation" }));
   });
 });
+
+
+it("上下文不再展示项目文件变更模块", () => {
+  const markup = renderToStaticMarkup(createElement(TooltipProvider, null,
+    createElement(WorkbenchInspector, {
+      contextOnly: true, projectName: "Project", projectPath: "/project", projectRootId: "root",
+      gitStatus: {
+        baseBranches: [], branch: "main", branches: [], repositoryMode: "root", snapshot: "current",
+        staged: [], unstaged: [{ path: "file.ts", kind: "create", diff: "+new", stats: { additions: 1, removals: 0 } }],
+      },
+    }),
+  ));
+  expect(markup).not.toContain('id="workbench-commit-changes"');
+});

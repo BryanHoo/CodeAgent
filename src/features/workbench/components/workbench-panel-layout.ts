@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type SetStateAction } from "react";
 
 export const sidebarOverlayQuery = "(max-width: 760px)";
 export const inspectorOverlayQuery = "(max-width: 1100px)";
@@ -26,11 +26,31 @@ export function resolveQuickOpenVisibility(board: boolean, temporary: boolean): 
   return !board && !temporary;
 }
 
-export function useWorkbenchPanelLayout() {
+export function useWorkbenchPanelLayout({ temporary = false, scopeKey = "" }: Readonly<{
+  temporary?: boolean;
+  scopeKey?: string;
+}> = {}) {
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
-  const [inspectorOpen, setInspectorOpen] = useState(() =>
+  const [projectInspectorOpen, setProjectInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
+  const [chatInspector, setChatInspector] = useState({ scopeKey, open: false });
+  // 聊天的展开操作只属于当前任务，切换任务时同步回到默认收起，不影响项目偏好。
+  const inspectorOpen = temporary
+    ? chatInspector.scopeKey === scopeKey && chatInspector.open
+    : projectInspectorOpen;
+  const setInspectorOpen = useCallback((next: SetStateAction<boolean>) => {
+    if (!temporary) {
+      setProjectInspectorOpen(next);
+      return;
+    }
+    setChatInspector((previous) => ({
+      scopeKey,
+      open: typeof next === "function"
+        ? next(previous.scopeKey === scopeKey && previous.open)
+        : next,
+    }));
+  }, [scopeKey, temporary]);
   const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarWidthLimits.default);
   const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
   const [shellWidth, setShellWidth] = useState(() =>

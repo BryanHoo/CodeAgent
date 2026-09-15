@@ -74,7 +74,7 @@ export const conversation = {
     fileTree: "项目文件",
     file: "文件",
     gitChanges: "未提交变更",
-    gitChangesCount: "{{count}} 个变更",
+    gitChangesCount: "{{count}} 个文件",
     gitChangesRetrying: "Git 变更刷新失败，正在自动重试",
     gitLoading: "正在读取 Git 变更...",
     goal: "目标",

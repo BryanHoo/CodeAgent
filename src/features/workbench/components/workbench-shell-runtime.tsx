@@ -36,12 +36,12 @@ import {
   modelsQueryOptions,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
-  projectGitDetailedStatusQueryOptions,
   projectGitStatusQueryOptions,
   projectOpenCapabilitiesQueryOptions,
   skillsQueryOptions,
   taskRenameMutationOptions,
 } from "../../projects/project-queries.js";
+import { useProjectGitDetails } from "../hooks/use-project-git-details.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 import { useProjectGitStatusRouteRefresh } from "../hooks/use-project-git-status-route-refresh.js";
 import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
@@ -55,7 +55,6 @@ import {
   deriveWorkbenchInspectorActivation,
   deriveWorkbenchInspectorContextActivation,
   getDefaultWorkbenchInspectorTab,
-  shouldEnableProjectGitDetails,
   type WorkbenchInspectorContextArtifactState,
 } from "../workbench-inspector-activation.js";
 import { shouldEnableWorkbenchSkills } from "../workbench-query-availability.js";
@@ -139,6 +138,7 @@ export function useWorkbenchShellRuntime({
   } = useProjectActions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const inspectorScopeKey = `${projectId}:${taskId ?? "draft"}`;
   const {
     inspectorMaximumWidth,
     inspectorOpen,
@@ -150,8 +150,7 @@ export function useWorkbenchShellRuntime({
     sidebarOpen,
     sidebarWidth,
     workbenchShellRef,
-  } = useWorkbenchPanelLayout();
-  const inspectorScopeKey = `${projectId}:${taskId ?? "draft"}`;
+  } = useWorkbenchPanelLayout({ temporary, scopeKey: inspectorScopeKey });
   const defaultInspectorTab: WorkbenchInspectorTab = getDefaultWorkbenchInspectorTab(temporary);
   const [inspectorTabState, setInspectorTabState] = useState<{
     scopeKey: string;
@@ -329,21 +328,15 @@ export function useWorkbenchShellRuntime({
     [projectId, setSelectedProjectRoot],
   );
 
-  const gitStatusDetailsQuery = useQuery(
-    projectGitDetailedStatusQueryOptions(
-      projectId,
-      selectedRootPath ?? "",
-      null,
-      gitStatusQuery.data?.snapshot ?? "",
-      shouldEnableProjectGitDetails({
-        activePanel:
-          inspectorActivation.context || inspectorActivation.project || inspectorActivation.changes,
-        gitStatus: gitStatusQuery.data,
-        temporary,
-      }),
-      client,
-    ),
-  );
+  const gitStatusDetailsQuery = useProjectGitDetails({
+    activePanel: inspectorActivation.project || inspectorActivation.changes,
+    client,
+    projectId,
+    rootPath: selectedRootPath ?? "",
+    scope: inspectorScopeKey,
+    statusQuery: gitStatusQuery,
+    temporary,
+  });
   const setInspectorTab = useCallback(
     (tab: WorkbenchInspectorTab) => {
       setInspectorTabState({ scopeKey: inspectorScopeKey, tab });
