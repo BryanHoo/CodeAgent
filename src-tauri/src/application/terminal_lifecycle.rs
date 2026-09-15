@@ -4,8 +4,8 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
-use tauri::{AppHandle, Manager, WebviewWindow, Window, WindowEvent};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 #[derive(Default)]
 pub(crate) struct TerminalLifecycle {
@@ -16,7 +16,6 @@ pub(crate) struct TerminalLifecycle {
 #[derive(Default)]
 struct WindowOwner {
     generation: Mutex<String>,
-    closing: AtomicBool,
 }
 
 impl TerminalLifecycle {
@@ -28,9 +27,6 @@ impl TerminalLifecycle {
     }
     pub fn is_closing(&self) -> bool {
         self.exiting.load(Ordering::Acquire)
-            || self
-                .owner()
-                .is_some_and(|owner| owner.closing.load(Ordering::Acquire))
     }
     pub fn bind_generation(&self, generation: &str) {
         if let Some(owner) = self.owner() {
@@ -46,7 +42,6 @@ pub(crate) fn bind_window(app: &AppHandle, window: &WebviewWindow) {
     let manager = app.state::<AppState>().terminals.clone();
     let owner = Arc::new(WindowOwner {
         generation: Mutex::new(manager.generation()),
-        ..WindowOwner::default()
     });
     *app.state::<TerminalLifecycle>()
         .owner
@@ -78,57 +73,6 @@ pub(crate) fn resume_owner(app: &AppHandle) {
     if !app.state::<TerminalLifecycle>().is_closing() && manager.live_count() == 0 {
         manager.set_closing(false);
     }
-}
-
-pub(crate) fn request_close(window: &Window) -> bool {
-    let app = window.app_handle();
-    let manager = app.state::<AppState>().terminals.clone();
-    if manager.live_count() == 0 {
-        return false;
-    }
-    let Some(owner) = app.state::<TerminalLifecycle>().owner() else {
-        return true;
-    };
-    if owner.closing.swap(true, Ordering::AcqRel) {
-        return true;
-    }
-    let generation = manager.generation();
-    // owner blocks creation/reconnect while the dialog is pending. Existing PTYs
-    // must still accept protocol replies; close_generation stops them on confirm.
-    let app = app.clone();
-    app.dialog()
-        .message("关闭窗口将结束所有本地终端及其运行中的程序。")
-        // 绑定发起关闭的原生窗口，避免 macOS 使用脱离应用窗口的系统级提示。
-        .parent(window)
-        .title("结束本地终端？")
-        .kind(MessageDialogKind::Warning)
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "结束并关闭".into(),
-            "取消".into(),
-        ))
-        .show(move |confirmed| {
-            if !confirmed {
-                owner.closing.store(false, Ordering::Release);
-                return;
-            }
-            tauri::async_runtime::spawn(async move {
-                let cleanup = manager.clone();
-                let closing_generation = generation.clone();
-                let result = tauri::async_runtime::spawn_blocking(move || {
-                    cleanup.close_generation(&closing_generation)
-                })
-                .await;
-                if matches!(result, Ok(Ok(()))) && manager.generation() == generation {
-                    if let Some(window) = app.get_webview_window("main") {
-                        super::app_lifecycle::hide_main_window(&window.as_ref().window());
-                    }
-                } else if !matches!(result, Ok(Ok(()))) {
-                    report_cleanup_failure(&app);
-                }
-                owner.closing.store(false, Ordering::Release);
-            });
-        });
-    true
 }
 
 pub(crate) fn request_exit(app: &AppHandle, code: i32) -> bool {
@@ -163,6 +107,7 @@ pub(crate) fn request_exit(app: &AppHandle, code: i32) -> bool {
 }
 
 fn report_cleanup_failure(app: &AppHandle) {
+    super::app_close::reset_close_confirmation(app);
     crate::infrastructure::diagnostics::record_error(
         "terminal_cleanup_failed",
         TerminalError::CleanupFailed,

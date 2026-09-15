@@ -71,11 +71,7 @@ fn tray_task_menu_ids_round_trip_to_navigation_targets() {
         TrayMenuAction::QuitApplication
     );
     assert_eq!(tray_menu_action("unknown"), TrayMenuAction::Ignore);
-    #[cfg(target_os = "macos")]
-    assert_eq!(
-        tray_menu_action("hold-to-quit-app"),
-        TrayMenuAction::ConfirmQuitApplication
-    );
+    assert_eq!(tray_menu_action("hold-to-quit-app"), TrayMenuAction::Ignore);
     assert_eq!(
         tray_menu_action(&tray_task_menu_id(&task)),
         TrayMenuAction::OpenTask {

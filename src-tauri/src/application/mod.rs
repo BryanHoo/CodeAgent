@@ -1,4 +1,6 @@
+mod app_close;
 pub(super) mod app_lifecycle;
+mod app_minimize;
 pub mod app_storage_commands;
 pub(crate) mod app_storage_runtime;
 #[cfg(test)]

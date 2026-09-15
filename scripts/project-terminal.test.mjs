@@ -19,18 +19,34 @@ await test("terminal commands are registered and granted only to the main comman
   }
 });
 
-await test("native lifecycle owns terminal cleanup before hide and settings cleanup", async () => {
+await test("native lifecycle owns terminal cleanup before exit and settings cleanup", async () => {
   const lifecycle = await readFile(new URL("../src-tauri/src/application/app_lifecycle.rs", import.meta.url), "utf8");
   const sidebar = await readFile(new URL("../src-tauri/src/application/sidebar_commands.rs", import.meta.url), "utf8");
-  assert.ok(lifecycle.includes("terminal_lifecycle::request_close"));
+  assert.ok(lifecycle.includes("app_close::request_close_confirmation"));
   assert.ok(lifecycle.includes("terminal_lifecycle::request_exit"));
   const removal = sidebar.slice(sidebar.indexOf("pub async fn remove_project("), sidebar.indexOf("pub async fn reorder_projects("));
   assert.ok(removal.indexOf("terminals.invalidate_project") > 0);
   assert.ok(removal.indexOf("terminals.invalidate_project") < removal.indexOf("delete_project_task_settings("));
 });
 
-await test("terminal close confirmation is parented to its initiating native window", async () => {
-  const lifecycle = await readFile(new URL("../src-tauri/src/application/terminal_lifecycle.rs", import.meta.url), "utf8");
-  const close = lifecycle.slice(lifecycle.indexOf("pub(crate) fn request_close("), lifecycle.indexOf("pub(crate) fn request_exit("));
-  assert.ok(close.includes(".parent(window)"));
+await test("shared close confirmation uses a visible native parent and three choices", async () => {
+  const lifecycle = await readFile(new URL("../src-tauri/src/application/app_close.rs", import.meta.url), "utf8");
+  assert.ok(lifecycle.includes("dialog.parent(&window)"));
+  assert.ok(lifecycle.includes("window.is_visible()"));
+  assert.ok(lifecycle.includes("window.is_minimized()"));
+  assert.ok(lifecycle.includes("MessageDialogButtons::YesNoCancelCustom"));
+  assert.ok(lifecycle.includes("show_with_result"));
+  assert.ok(lifecycle.includes("request_minimize"), "minimize must wait for the native fullscreen transition");
+});
+
+await test("macOS fullscreen minimization waits for the native completion notification", async () => {
+  const native = await readFile(new URL("../src-tauri/native/macos-panel-activation/src/minimize.rs", import.meta.url), "utf8");
+  const application = await readFile(new URL("../src-tauri/src/application/app_minimize.rs", import.meta.url), "utf8");
+  assert.ok(application.includes("run_on_main_thread"));
+  assert.ok(application.includes("macos_panel_activation::minimize_window"));
+  assert.ok(native.includes("NSWindowDidExitFullScreenNotification"));
+  assert.ok(native.includes("NSWindowWillCloseNotification"));
+  assert.ok(native.includes("removeObserver"));
+  assert.ok(native.includes("NSOperationQueue::mainQueue().addOperationWithBlock"));
+  assert.ok(native.indexOf("wait_for_fullscreen_exit(&window, completed)") < native.indexOf("window.toggleFullScreen(None)"));
 });

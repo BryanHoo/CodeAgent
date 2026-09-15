@@ -1,9 +1,6 @@
-use std::{
-    sync::{
-        Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 
 #[cfg(target_os = "macos")]
@@ -17,51 +14,31 @@ use super::desktop_pet_commands::acknowledge_completed_desktop_pet_route;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const MAIN_WINDOW_NAVIGATE_EVENT: &str = "main-window://navigate";
-const MAIN_WINDOW_DESTROY_MIN_SECS: u64 = 30;
-const MAIN_WINDOW_DESTROY_MAX_SECS: u64 = 60;
 #[cfg(target_os = "macos")]
-const HOLD_TO_QUIT_MENU_ID: &str = "hold-to-quit-app";
+const QUIT_APP_MENU_ID: &str = "quit-app";
 
 #[derive(Default)]
 pub(crate) struct MainWindowLifecycle {
     inner: Mutex<MainWindowLifecycleState>,
+    pub(super) close_confirmation: super::app_close::CloseConfirmation,
     storage_exit_pending: AtomicBool,
     storage_exit_ready: AtomicBool,
 }
 
 #[derive(Default)]
 struct MainWindowLifecycleState {
-    destroy_generation: u64,
-    restore_windowed: bool,
+    restore_generation: u64,
     route: Option<String>,
 }
 
 impl MainWindowLifecycle {
-    fn schedule_destroy(&self, route: Option<String>) -> u64 {
-        let mut state = self.lock();
-        state.destroy_generation = state.destroy_generation.wrapping_add(1);
-        if route.is_some() {
-            state.route = route;
-        }
-        state.restore_windowed = true;
-        state.destroy_generation
-    }
-
     fn prepare_show(&self, route: Option<String>) -> u64 {
         let mut state = self.lock();
-        state.destroy_generation = state.destroy_generation.wrapping_add(1);
+        state.restore_generation = state.restore_generation.wrapping_add(1);
         if route.is_some() {
             state.route = route;
         }
-        state.destroy_generation
-    }
-
-    fn take_windowed_restore(&self, generation: u64) -> bool {
-        let mut state = self.lock();
-        if state.destroy_generation != generation {
-            return false;
-        }
-        std::mem::take(&mut state.restore_windowed)
+        state.restore_generation
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, MainWindowLifecycleState> {
@@ -73,20 +50,20 @@ impl MainWindowLifecycle {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CloseRequestAction {
-    HideMainWindow,
+    ConfirmClose,
     AllowClose,
 }
 
 fn close_request_action(window_label: &str) -> CloseRequestAction {
     if window_label == MAIN_WINDOW_LABEL {
-        CloseRequestAction::HideMainWindow
+        CloseRequestAction::ConfirmClose
     } else {
         CloseRequestAction::AllowClose
     }
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn configure_macos_hold_to_quit_menu(app: &AppHandle) -> tauri::Result<()> {
+pub(crate) fn configure_macos_quit_menu(app: &AppHandle) -> tauri::Result<()> {
     let Some(menu) = app.menu() else {
         return Ok(());
     };
@@ -98,11 +75,11 @@ pub(crate) fn configure_macos_hold_to_quit_menu(app: &AppHandle) -> tauri::Resul
         return Ok(());
     }
 
-    // 默认菜单末项是直接 terminate: 的 Quit；替换后由原生长按确认流程决定是否退出。
+    // 替换直接 terminate: 的系统菜单项，让 Cmd+Q 与托盘共用关闭确认。
     application_menu.remove_at(application_items.len() - 1)?;
     let quit = MenuItem::with_id(
         app,
-        HOLD_TO_QUIT_MENU_ID,
+        QUIT_APP_MENU_ID,
         "退出 CodeAgent",
         true,
         Some("CmdOrCtrl+Q"),
@@ -111,7 +88,7 @@ pub(crate) fn configure_macos_hold_to_quit_menu(app: &AppHandle) -> tauri::Resul
 }
 
 pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
-    if close_request_action(window.label()) != CloseRequestAction::HideMainWindow {
+    if close_request_action(window.label()) != CloseRequestAction::ConfirmClose {
         return;
     }
     let WindowEvent::CloseRequested { api, .. } = event else {
@@ -119,42 +96,20 @@ pub(crate) fn handle_window_event(window: &Window, event: &WindowEvent) {
     };
 
     api.prevent_close();
-    if super::terminal_lifecycle::request_close(window) {
-        return;
-    }
-    hide_main_window(window);
-}
-
-pub(super) fn hide_main_window(window: &Window) {
-    // 本地终端确认和清理完成后，再进入原有隐藏及延迟销毁流程。
-    let _ = window.hide();
-    #[cfg(target_os = "macos")]
-    let _ = window.app_handle().set_dock_visibility(false);
-
-    let app = window.app_handle().clone();
-    let route = app
-        .get_webview_window(MAIN_WINDOW_LABEL)
-        .and_then(|main_window| main_window.url().ok())
-        .map(|url| app_route_from_url(&url));
-    let generation = app.state::<MainWindowLifecycle>().schedule_destroy(route);
-    let entropy = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(generation, |duration| {
-            duration.as_nanos() as u64 ^ generation
-        });
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(main_window_destroy_delay(entropy)).await;
-        destroy_main_window_if_current(&app, generation);
-    });
+    super::app_close::request_close_confirmation(window.app_handle());
 }
 
 pub(crate) fn handle_run_event(app: &AppHandle, event: RunEvent) {
     let RunEvent::ExitRequested { code, api, .. } = event else {
         return;
     };
-    // 销毁最后一个隐藏窗口只释放 WebView 资源，后台运行时和托盘必须继续存活。
+    // 辅助窗口销毁不代表用户确认退出，后台运行时和托盘必须继续存活。
     if should_keep_background_runtime_alive(code) {
         api.prevent_exit();
+        // Dock 等系统退出入口没有退出码；主窗口仍存在时也必须先让用户选择。
+        if app.get_webview_window(MAIN_WINDOW_LABEL).is_some() {
+            super::app_close::request_close_confirmation(app);
+        }
     } else if let Some(code) = code {
         let lifecycle = app.state::<MainWindowLifecycle>();
         if lifecycle.storage_exit_ready.load(Ordering::Acquire) {
@@ -185,6 +140,7 @@ pub(crate) fn handle_run_event(app: &AppHandle, event: RunEvent) {
                         "app_storage_shutdown_failed",
                         error,
                     );
+                    super::app_close::reset_close_confirmation(&app);
                     // writer 异常退出时保持应用存活，不能把未完成的落盘当作成功。
                     app.state::<MainWindowLifecycle>()
                         .storage_exit_pending
@@ -236,20 +192,6 @@ fn queue_main_window_restore(app: &AppHandle, route: Option<String>) {
     });
 }
 
-trait MainWindowFullscreen {
-    fn set_fullscreen(&self, fullscreen: bool);
-}
-
-impl MainWindowFullscreen for WebviewWindow {
-    fn set_fullscreen(&self, fullscreen: bool) {
-        let _ = WebviewWindow::set_fullscreen(self, fullscreen);
-    }
-}
-
-fn reset_main_window_fullscreen(window: &impl MainWindowFullscreen) {
-    window.set_fullscreen(false);
-}
-
 fn restore_main_window(
     app: &AppHandle,
     generation: u64,
@@ -260,7 +202,7 @@ fn restore_main_window(
     let lifecycle = app.state::<MainWindowLifecycle>();
     let saved_route = {
         let state = lifecycle.lock();
-        if state.destroy_generation != generation {
+        if state.restore_generation != generation {
             return Err(tauri::Error::WindowNotFound);
         }
         state.route.clone()
@@ -274,10 +216,6 @@ fn restore_main_window(
         window.emit(MAIN_WINDOW_NAVIGATE_EVENT, route)?;
     }
 
-    // 只有明确关闭后的首次唤醒才退出全屏；通知聚焦可见窗口时保留用户当前状态。
-    if lifecycle.take_windowed_restore(generation) {
-        reset_main_window_fullscreen(&window);
-    }
     window.unminimize()?;
     window.show()?;
     window.set_focus()?;
@@ -311,31 +249,6 @@ fn create_main_window(app: &AppHandle, route: Option<String>) -> tauri::Result<W
     Ok(window)
 }
 
-fn destroy_main_window_if_current(app: &AppHandle, generation: u64) {
-    let lifecycle = app.state::<MainWindowLifecycle>();
-    let mut state = lifecycle.lock();
-    if state.destroy_generation != generation {
-        return;
-    }
-    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-        return;
-    };
-    if window.is_visible().unwrap_or(true) {
-        return;
-    }
-    if let Ok(route) = window.url() {
-        state.route = Some(app_route_from_url(&route));
-    }
-    if let Err(error) = window.destroy() {
-        crate::infrastructure::diagnostics::record_error("main_window_destroy_failed", error);
-    }
-}
-
-fn main_window_destroy_delay(entropy: u64) -> Duration {
-    let range = MAIN_WINDOW_DESTROY_MAX_SECS - MAIN_WINDOW_DESTROY_MIN_SECS + 1;
-    Duration::from_secs(MAIN_WINDOW_DESTROY_MIN_SECS + entropy % range)
-}
-
 fn app_route_from_url(url: &Url) -> String {
     let mut route = url.path().trim_start_matches('/').to_owned();
     if route.is_empty() {
@@ -355,48 +268,11 @@ fn app_route_from_url(url: &Url) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
-
-    #[derive(Default)]
-    struct RecordingWindow {
-        fullscreen: Cell<Option<bool>>,
-    }
-
-    impl MainWindowFullscreen for RecordingWindow {
-        fn set_fullscreen(&self, fullscreen: bool) {
-            self.fullscreen.set(Some(fullscreen));
-        }
-    }
-
     #[test]
-    fn reopening_main_window_resets_fullscreen_before_showing_it() {
-        let window = RecordingWindow::default();
-
-        reset_main_window_fullscreen(&window);
-
-        assert_eq!(window.fullscreen.get(), Some(false));
-    }
-
-    #[test]
-    fn fullscreen_reset_is_consumed_only_after_explicit_close() {
-        let lifecycle = MainWindowLifecycle::default();
-
-        let notification_focus = lifecycle.prepare_show(None);
-        assert!(!lifecycle.take_windowed_restore(notification_focus));
-
-        lifecycle.schedule_destroy(None);
-        let closed_window_restore = lifecycle.prepare_show(None);
-        assert!(lifecycle.take_windowed_restore(closed_window_restore));
-
-        let later_notification_focus = lifecycle.prepare_show(None);
-        assert!(!lifecycle.take_windowed_restore(later_notification_focus));
-    }
-
-    #[test]
-    fn main_window_close_moves_the_app_to_background() {
+    fn main_window_close_requires_confirmation() {
         assert_eq!(
             close_request_action("main"),
-            CloseRequestAction::HideMainWindow
+            CloseRequestAction::ConfirmClose
         );
     }
 
@@ -415,29 +291,13 @@ mod tests {
     }
 
     #[test]
-    fn hidden_main_window_destroy_delay_stays_within_configured_range() {
-        assert_eq!(main_window_destroy_delay(0), Duration::from_secs(30));
-        assert_eq!(main_window_destroy_delay(30), Duration::from_secs(60));
-        assert_eq!(main_window_destroy_delay(31), Duration::from_secs(30));
-    }
-
-    #[test]
-    fn showing_main_window_invalidates_pending_destroy_generation() {
+    fn latest_requested_route_replaces_the_saved_route() {
         let lifecycle = MainWindowLifecycle::default();
-        let scheduled = lifecycle.schedule_destroy(None);
-        lifecycle.prepare_show(None);
-
-        assert_ne!(lifecycle.lock().destroy_generation, scheduled);
-    }
-
-    #[test]
-    fn latest_requested_route_replaces_the_hidden_route() {
-        let lifecycle = MainWindowLifecycle::default();
-        lifecycle.schedule_destroy(Some("p/project-a".to_owned()));
+        lifecycle.prepare_show(Some("p/project-a".to_owned()));
         let generation = lifecycle.prepare_show(Some("p/project-a/t/task-a".to_owned()));
         let state = lifecycle.lock();
 
-        assert_eq!(state.destroy_generation, generation);
+        assert_eq!(state.restore_generation, generation);
         assert_eq!(state.route.as_deref(), Some("p/project-a/t/task-a"));
     }
 

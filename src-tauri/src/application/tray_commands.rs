@@ -10,8 +10,6 @@ use super::{
     error::AppError,
 };
 
-#[cfg(target_os = "macos")]
-const HOLD_TO_QUIT_MENU_ID: &str = "hold-to-quit-app";
 // 原生菜单宽度由最长标题决定，限制为 16 字符以保持紧凑。
 const MAX_MENU_TASK_NAME_CHARS: usize = 16;
 const MENU_TASK_NAME_ELLIPSIS_CHARS: usize = 3;
@@ -33,19 +31,14 @@ pub(super) struct TrayTask {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum TrayMenuAction {
     ShowMainWindow,
-    OpenTask {
-        project_id: String,
-        task_id: String,
-    },
+    OpenTask { project_id: String, task_id: String },
     QuitApplication,
-    #[cfg(target_os = "macos")]
-    ConfirmQuitApplication,
     Ignore,
 }
 
 pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
-    super::app_lifecycle::configure_macos_hold_to_quit_menu(app)?;
+    super::app_lifecycle::configure_macos_quit_menu(app)?;
 
     let menu = build_tray_menu(app, &[])?;
     let mut tray = TrayIconBuilder::with_id(TRAY_ICON_ID)
@@ -63,13 +56,7 @@ pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     crate::infrastructure::diagnostics::record_error("tray_task_open_failed", error)
                 }
             },
-            TrayMenuAction::QuitApplication => app.exit(0),
-            #[cfg(target_os = "macos")]
-            TrayMenuAction::ConfirmQuitApplication => {
-                if macos_panel_activation::confirm_hold_to_quit() {
-                    app.exit(0);
-                }
-            }
+            TrayMenuAction::QuitApplication => super::app_close::request_close_confirmation(app),
             TrayMenuAction::Ignore => {}
         });
     #[cfg(target_os = "macos")]
@@ -200,8 +187,6 @@ pub(super) fn tray_menu_action(menu_id: &str) -> TrayMenuAction {
     match menu_id {
         SHOW_MAIN_MENU_ID => return TrayMenuAction::ShowMainWindow,
         QUIT_APP_MENU_ID => return TrayMenuAction::QuitApplication,
-        #[cfg(target_os = "macos")]
-        HOLD_TO_QUIT_MENU_ID => return TrayMenuAction::ConfirmQuitApplication,
         _ => {}
     }
     let Some(encoded) = menu_id.strip_prefix(RUNNING_TASK_MENU_PREFIX) else {
