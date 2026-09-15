@@ -276,7 +276,7 @@ async fn native_queue_commands_should_preserve_submission_order_and_content() {
     let connection = AppServerConnection::new(client_reader, client_writer);
     let queued = json!({
         "id": "queue-a",
-        "input": [{"type": "text", "text": "继续修复", "textElements": []}],
+        "input": [{"type": "text", "text": "继续修复", "text_elements": []}],
         "clientUserMessageId": "message-a"
     });
 

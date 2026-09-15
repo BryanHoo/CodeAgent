@@ -6,6 +6,7 @@ pub mod filesystem;
 pub mod local_settings;
 pub mod personalization;
 pub mod provider_models;
+pub(crate) mod queued_media;
 pub mod scheduled_tasks;
 pub mod skills_market;
 pub mod task_settings;

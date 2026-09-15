@@ -23,12 +23,13 @@ pub async fn validate_attachment(
     id: &str,
 ) -> Result<PathBuf, workspace::WorkspaceError> {
     let task_root = root(app_data, project_id, task_id).await?;
-    validate_attachment_in_root(app_data, project_id, task_root.as_deref(), id).await
+    validate_attachment_in_root(app_data, project_id, task_id, task_root.as_deref(), id).await
 }
 
 pub async fn validate_attachment_in_root(
     app_data: &Path,
     project_id: &str,
+    task_id: &str,
     task_root: Option<&Path>,
     id: &str,
 ) -> Result<PathBuf, workspace::WorkspaceError> {
@@ -38,7 +39,12 @@ pub async fn validate_attachment_in_root(
     {
         return Ok(path);
     }
-    workspace::validate_attachment(app_data, project_id, id).await
+    match workspace::validate_attachment(app_data, project_id, id).await {
+        Ok(path) => Ok(path),
+        Err(_) => {
+            workspace::validate_attachment(app_data, &super::queued_media::scope(task_id), id).await
+        }
+    }
 }
 
 pub async fn retain_attachment(
@@ -148,6 +154,7 @@ mod tests {
             validate_attachment_in_root(
                 &app_data,
                 "temporary",
+                "task-a",
                 Some(&root),
                 &outside.join("secret.txt").to_string_lossy()
             )

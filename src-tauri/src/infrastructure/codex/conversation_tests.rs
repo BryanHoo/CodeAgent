@@ -81,7 +81,7 @@ async fn read_task_snapshot_should_map_native_thread_history() {
             {"turnId": "turn-a", "item": {"id": "reason-a", "type": "reasoning", "summary": ["摘要"], "content": ["推理"]}},
             {"turnId": "turn-a", "item": {"id": "agent-a", "type": "agentMessage", "text": "已完成", "phase": "final_answer", "delivery": null}},
             {"turnId": "turn-a", "item": {"id": "expanded-skill", "type": "userMessage", "content": [{"type": "skill", "name": "rust", "path": "/skills/rust"}]}},
-            {"turnId": "turn-a", "item": {"id": "user-a", "type": "userMessage", "content": [{"type": "text", "text": "$rust 检查代码", "textElements": []}]}}
+            {"turnId": "turn-a", "item": {"id": "user-a", "type": "userMessage", "content": [{"type": "text", "text": "$rust 检查代码", "text_elements": []}]}}
         ]);
         server_writer
             .write_all(

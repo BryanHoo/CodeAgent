@@ -289,7 +289,7 @@ fn user_pasted_text_wire_input_should_remain_an_attachment() {
         "type": "userMessage",
         "content": [{
             "text": &path,
-            "textElements": [{
+            "text_elements": [{
                 "byteRange": {"start": 0, "end": path.len()},
                 "placeholder": "codexly-file:eyJraW5kIjoidGV4dCIsIm1lZGlhVHlwZSI6InRleHQvcGxhaW4iLCJuYW1lIjoiUGFzdGVkIHRleHQudHh0Iiwic2l6ZSI6MTd9",
             }],

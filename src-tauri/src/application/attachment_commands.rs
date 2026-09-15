@@ -195,6 +195,7 @@ pub async fn resolve_prompt_attachments(
         let path = temporary_task_storage::validate_attachment_in_root(
             app_data,
             project_id,
+            task_id,
             task_root.as_deref(),
             id,
         )

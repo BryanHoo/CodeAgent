@@ -55,7 +55,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Review 提交 | `submitReview` | Rust 创建后执行 `review/start`，保留部分成功摘要；独立有界启动登记合并同键请求，取消等待不取消 worker；不提供跨重启整体恢复 | 已实现 |
 | 高级会话 | `compactTask`, `forkTask` | 原生 `thread/compact/start`, `thread/fork` | 已实现 |
 | 任务设置 | `getTaskSettings`, `updateTaskSettings` | 应用私有原子 JSON；启动回合前持久化并同步线程设置 | 已实现 |
-| 排队提交 | `list/add/delete/move/startQueuedSubmission` | 原生 `thread/queue/*`；编辑先撤回原项并恢复完整输入，不维护服务端编辑状态 | 已实现 |
+| 排队提交 | `list/add/delete/move/startQueuedSubmission` | 原生 `thread/queue/*`；恢复 0.154.0 返回的 `image`/`audio` 内联快照到按任务隔离的本地缓存，WebView 只接收附件元数据；编辑先撤回原项并恢复完整输入，不维护服务端编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；消费 ACK、1 MiB 在途预算、4 MiB 待发送预算和控制预留；单调序号、显式缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
 | 会话元数据恢复 | `readTask` | Rust 补齐最近计划/用量及同任务待审批请求；计划/用量最多 256 任务、4 MiB 编码字节，单字段 256 KiB；WebView 重建复用，Provider 重启清空 | 已实现 |
@@ -68,7 +68,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；上游通知队列与缓冲分别限制 8 MiB，WebView 消费 ACK 释放在途额度；普通输出不能占用审批控制预留，超预算副本触发快照恢复，事实缓冲耗尽显式失败 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 `command`/`writeStdin`，终端输入保留会话、stdin 与 cwd，Guardian 输入进入自动审批时间线；原生回写权限、用户输入及 MCP elicitation。Rust 校验回答完整性、题目身份及单项非空字符串，保留自由文本；权限类别、唯一性与作用域由 Rust 校验，仅回写原生请求中的所选权限。完整身份与回答参与幂等登记，同键重放，取消等待不取消处理；控制预算独立，旧连接结果不污染新连接，不代表上游确认或跨重启恢复 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | 文件预览、读取与操作支持项目外绝对路径及父目录跳转；保留文件树过滤、ignore 缓存索引、会话取消和结果上限；源码与图片支持轻量原生独立窗口预览 | 已实现 |
-| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.152 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
+| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.152 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用，历史、实时与队列按该字段还原为附件，路径不进入可见正文；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
 | 模型输入能力 | `model/list.inputModalities` | 提交前按所选模型动态校验图片与音频能力；保留未知新模态，不使用本地硬编码模型名单 | 已实现 |
 | 通用文件原生输入 | `input_file` | Codex 0.152 app-server `ContentItem` 没有该类型；项目不绕过 app-server，也不伪造协议，普通文件以本地路径交给 Codex 工具读取 | 上游未提供 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |

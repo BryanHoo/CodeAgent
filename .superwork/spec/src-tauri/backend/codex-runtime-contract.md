@@ -65,6 +65,8 @@
 - `modelProvider/authRecoveryStarted` 和 `modelProvider/authRecoveryCompleted` 必须校验 `threadId`、`turnId`、`provider`、`message` 后显式消费；当前不投影到 UI
 - MCP elicitation 的 `openaiForm` 与旧 `openai/form` 均映射为 `unsupported`，不得按标准 `form` 渲染或提交
 - 不启用 `omit_app_server_notification_media`，生成图片链路仍依赖通知中的媒体数据落盘
+- `UserInput::Text` 的收发字段均为 `text_elements`，内部 `TextElement` 使用 `byteRange`；不能根据枚举的 camelCase 类型名推断字段名。普通消息的历史、实时事件及队列共用附件标记解析；历史可能直接拼接多个输入块，必须按 UTF-8 字节区间提取全部 `codexly-file:` 附件，拒绝越界、重叠和非字符边界，原样保留区间外正文及用户主动输入的普通路径。
+- `thread/queue/add` 与 `thread/queue/list` 会把本地图片和音频返回为 `image`/`audio` 的 `url` 数据快照。必须在 Rust 阻塞池中有界解码、按任务隔离并复用本地附件缓存，WebView 只接收路径和元数据；重发及预览只接受当前任务的缓存身份。媒体响应沿用 72 MiB 帧预算，单个快照解码最多 50 MiB，拒绝无效内容并清理临时文件；不能把已成功入队的媒体误判为未知输入类型。
 
 - 新项目线程在首次落盘前，`thread/resume` 可返回 `no rollout found`，而 `thread/read(includeTurns: false)` 的 live snapshot 返回 `projectId: null`、`status: idle`。只能使用当前连接经 `thread/start` 校验成功的项目归属补齐该空值，并继续核对线程 ID、项目和载入状态；没有创建证据、跨项目及非空原生归属冲突必须拒绝。原生归属物化或 resume 成功后释放启动期记录，记录不得跨连接复用。
 

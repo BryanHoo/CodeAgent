@@ -17,6 +17,10 @@ const DEFAULT_PAGE_LIMIT: u32 = 100;
 const MAX_PAGE_LIMIT: u32 = 100;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+#[cfg(test)]
+#[path = "conversation_queue_media_tests.rs"]
+mod media_tests;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ListParams<'a> {
@@ -143,11 +147,7 @@ pub async fn list_queued_submissions(
         )
         .await?;
     Ok(QueuedSubmissionPage {
-        data: response
-            .data
-            .into_iter()
-            .map(map_submission)
-            .collect::<Result<Vec<_>, _>>()?,
+        data: map_submissions(connection, task_id, response.data).await?,
         next_cursor: response.next_cursor,
     })
 }
@@ -173,7 +173,10 @@ pub async fn add_queued_submission(
         )
         .await?;
     Ok(QueuedSubmissionResponse {
-        queued_submission: map_submission(response.queued_submission)?,
+        queued_submission: map_submissions(connection, task_id, vec![response.queued_submission])
+            .await?
+            .pop()
+            .ok_or(ConnectionError::InvalidMessage)?,
     })
 }
 
@@ -247,7 +250,43 @@ fn required_id(value: &str) -> Result<&str, ConnectionError> {
         .ok_or(ConnectionError::InvalidMessage)
 }
 
-fn map_submission(native: NativeSubmission) -> Result<AgentQueuedSubmission, ConnectionError> {
+async fn map_submissions(
+    connection: &AppServerConnection,
+    task_id: &str,
+    submissions: Vec<NativeSubmission>,
+) -> Result<Vec<AgentQueuedSubmission>, ConnectionError> {
+    let has_media = submissions.iter().any(|submission| {
+        submission
+            .input
+            .iter()
+            .any(|input| matches!(input["type"].as_str(), Some("image" | "audio")))
+    });
+    if has_media {
+        let store = connection
+            .queued_media
+            .clone()
+            .ok_or(ConnectionError::InvalidMessage)?;
+        let task_id = task_id.to_owned();
+        // 解码和落盘在阻塞池进行；RPC 接收循环继续排水，不让图片拖慢其他任务。
+        return tokio::task::spawn_blocking(move || {
+            submissions
+                .into_iter()
+                .map(|submission| map_submission(submission, Some((&store, &task_id))))
+                .collect()
+        })
+        .await
+        .map_err(|_| ConnectionError::InvalidMessage)?;
+    }
+    submissions
+        .into_iter()
+        .map(|submission| map_submission(submission, None))
+        .collect()
+}
+
+fn map_submission(
+    native: NativeSubmission,
+    media: Option<(&crate::infrastructure::queued_media::QueuedMediaStore, &str)>,
+) -> Result<AgentQueuedSubmission, ConnectionError> {
     if native.id.is_empty() || native.client_user_message_id.is_empty() {
         return Err(ConnectionError::InvalidMessage);
     }
@@ -258,8 +297,9 @@ fn map_submission(native: NativeSubmission) -> Result<AgentQueuedSubmission, Con
         let object = input.as_object().ok_or(ConnectionError::InvalidMessage)?;
         match object_string_from_map(object, "type")? {
             "text" => {
-                if let Some(attachment) = read_file_text_input(object)? {
-                    attachments.push(attachment);
+                if let Some(restored) = read_file_text_input(object)? {
+                    text.push_str(&restored.text);
+                    attachments.extend(restored.attachments);
                 } else {
                     text.push_str(object_string_from_map(object, "text")?);
                 }
@@ -270,6 +310,14 @@ fn map_submission(native: NativeSubmission) -> Result<AgentQueuedSubmission, Con
             })),
             "localImage" => attachments.push(map_local_image_attachment(object)?),
             "localAudio" => attachments.push(map_local_audio_attachment(object)?),
+            "image" | "audio" => {
+                let (store, task_id) = media.ok_or(ConnectionError::InvalidMessage)?;
+                attachments.push(
+                    store
+                        .restore(task_id, &input)
+                        .map_err(|_| ConnectionError::InvalidMessage)?,
+                );
+            }
             _ => return Err(ConnectionError::InvalidMessage),
         }
     }
@@ -311,7 +359,7 @@ mod tests {
             id: "queue-a".to_owned(),
             input: vec![json!({
                 "text": &path,
-                "textElements": [{
+                "text_elements": [{
                     "byteRange": {"start": 0, "end": path.len()},
                     "placeholder": FILE_PLACEHOLDER,
                 }],
@@ -319,7 +367,7 @@ mod tests {
             })],
         };
 
-        let mapped = map_submission(submission).expect("queued file should map");
+        let mapped = map_submission(submission, None).expect("queued file should map");
         assert_eq!(mapped.text, "");
         assert_eq!(mapped.attachments.len(), 1);
         assert_eq!(mapped.attachments[0]["id"], path);
@@ -346,7 +394,7 @@ mod tests {
             ],
         };
 
-        let mapped = map_submission(submission).expect("queued media should map");
+        let mapped = map_submission(submission, None).expect("queued media should map");
 
         assert_eq!(mapped.attachments[0]["detail"], "auto");
         assert_eq!(mapped.attachments[0]["mediaType"], "image/webp");

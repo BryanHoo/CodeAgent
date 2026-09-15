@@ -9,7 +9,7 @@ use super::{
 fn user(id: &str, text: &str, names: &[&str]) -> Value {
     let mut content = Vec::new();
     if !text.is_empty() {
-        content.push(json!({"type":"text", "text":text, "textElements":[]}));
+        content.push(json!({"type":"text", "text":text, "text_elements":[]}));
     }
     content.extend(
         names

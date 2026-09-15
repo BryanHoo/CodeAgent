@@ -333,8 +333,11 @@ fn map_user_message(
         };
         match part.get("type").and_then(Value::as_str) {
             Some("text") => {
-                if let Some(attachment) = read_file_text_input(part)? {
-                    attachments.push(attachment);
+                if let Some(restored) = read_file_text_input(part)? {
+                    if !restored.text.is_empty() {
+                        text.push(restored.text);
+                    }
+                    attachments.extend(restored.attachments);
                 } else {
                     text.push(required_string(part, "text")?.to_owned());
                 }

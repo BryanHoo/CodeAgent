@@ -76,6 +76,7 @@ pub enum ConnectionError {
 }
 
 pub struct AppServerConnection {
+    pub(super) queued_media: Option<crate::infrastructure::queued_media::QueuedMediaStore>,
     diagnostic_seq: u64,
     pub(super) model_catalog: Arc<ModelCatalogCache>,
     // 仅当前连接创建且尚未确认落盘的线程需要保留项目归属。
@@ -112,10 +113,10 @@ impl AppServerConnection {
         R: AsyncRead + Send + Unpin + 'static,
         W: AsyncWrite + Send + Unpin + 'static,
     {
-        Self::build(reader, writer, Some(GeneratedImageStore::new(app_data)))
+        Self::build(reader, writer, Some(app_data))
     }
 
-    fn build<R, W>(reader: R, writer: W, image_store: Option<GeneratedImageStore>) -> Self
+    fn build<R, W>(reader: R, writer: W, app_data: Option<&Path>) -> Self
     where
         R: AsyncRead + Send + Unpin + 'static,
         W: AsyncWrite + Send + Unpin + 'static,
@@ -129,12 +130,13 @@ impl AppServerConnection {
             reader,
             reader_pending,
             message_sender,
-            image_store,
+            app_data.map(GeneratedImageStore::new),
             Arc::clone(&model_catalog),
             diagnostic_seq,
         ));
 
         Self {
+            queued_media: app_data.map(crate::infrastructure::queued_media::QueuedMediaStore::new),
             diagnostic_seq,
             model_catalog,
             new_task_projects: Mutex::new(HashMap::new()),
@@ -312,7 +314,14 @@ where
         let copy_len = data_len.min(limit.saturating_sub(frame.len()));
         frame.extend_from_slice(&buffer[..copy_len]);
 
-        if !is_image && GeneratedImageStore::contains_image_generation(&frame[scan_from..]) {
+        // 队列图片/音频也以内联快照返回，使用同一个有界媒体帧预算。
+        let scanned = &frame[scan_from..];
+        if !is_image
+            && (GeneratedImageStore::contains_image_generation(scanned)
+                || scanned
+                    .windows(11)
+                    .any(|bytes| matches!(bytes, b"data:image/" | b"data:audio/")))
+        {
             is_image = true;
         }
         scan_from = frame
