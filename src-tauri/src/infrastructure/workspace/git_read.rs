@@ -113,7 +113,8 @@ pub(super) async fn read_git_status(
     };
     let (status_output, truncated) = run_git(
         &repo,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        // 聚合未跟踪目录，避免生成文件数量线性放大状态输出和 IPC 负载。
+        &["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
         MAX_GIT_OUTPUT_BYTES,
     )
     .await?;

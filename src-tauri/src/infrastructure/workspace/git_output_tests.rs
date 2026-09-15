@@ -4,6 +4,27 @@ use super::git_tests::{create_repository, run};
 use std::fs;
 
 #[tokio::test]
+async fn git_status_should_collapse_untracked_directories() {
+    let root = create_repository("codeagent-git-many-untracked");
+    let generated = root.join("generated");
+    fs::create_dir(&generated).unwrap();
+    for index in 0..3 {
+        fs::write(
+            generated.join(format!("artifact-{index}.txt")),
+            "generated\n",
+        )
+        .unwrap();
+    }
+    let root = fs::canonicalize(root).unwrap();
+
+    let status = super::get_git_status(&root, None, false).await.unwrap();
+
+    assert_eq!(status.unstaged.len(), 1);
+    assert_eq!(status.unstaged[0].path, "generated/");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
 async fn git_process_should_stop_stdout_over_two_mib_without_deadlock() {
     let root = create_repository("codeagent-git-large-stdout");
     fs::write(root.join("large.txt"), "before\n".repeat(400_000)).unwrap();
