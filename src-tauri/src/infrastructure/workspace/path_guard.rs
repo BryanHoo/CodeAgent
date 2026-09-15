@@ -22,6 +22,10 @@ pub enum WorkspaceError {
     #[error("Git was not found; install Git and restart CodeAgent")]
     GitNotFound,
     #[error("{0}")]
+    GitLocalChangesOverwritten(String),
+    #[error("git status output exceeded {maximum_bytes} bytes")]
+    GitStatusTooLarge { maximum_bytes: usize },
+    #[error("{0}")]
     GitCommandFailed(String),
     #[error("workspace I/O failed: {0}")]
     Io(#[from] std::io::Error),
@@ -37,6 +41,8 @@ impl WorkspaceError {
             Self::InvalidBranch => "INVALID_BRANCH",
             Self::NoUpstream => "NO_UPSTREAM",
             Self::GitNotFound => "GIT_NOT_FOUND",
+            Self::GitLocalChangesOverwritten(_) => "GIT_LOCAL_CHANGES_OVERWRITTEN",
+            Self::GitStatusTooLarge { .. } => "GIT_STATUS_TOO_LARGE",
             Self::GitCommandFailed(_) => "GIT_COMMAND_FAILED",
             Self::Io(_) => "IO_FAILED",
         }

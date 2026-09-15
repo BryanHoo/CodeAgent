@@ -38,6 +38,7 @@ import {
 } from "../../../shared/components/core/tooltip.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { useFileNavigationViewPreference } from "../../diff/file-navigation-view-preference.js";
+import { actionErrorMessage } from "../../notifications/action-notifications.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { CommitChangesTreeSection } from "./commit-changes-tree.js";
@@ -199,7 +200,7 @@ export function CommitChangesPanel({
 
       {error === null ? null : (
         <p className="mx-3 mt-2 shrink-0 text-caption text-danger" role="alert">
-          {error.message}
+          {actionErrorMessage(error)}
         </p>
       )}
 

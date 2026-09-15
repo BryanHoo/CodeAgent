@@ -21,6 +21,7 @@ import { useInspectorTask } from "./use-inspector-task.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { providerConnectionQueryOptions } from "../../provider-connection/provider-connection-queries.js";
 import { notifyActionError } from "../../notifications/action-notifications.js";
+import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import { isGitUnavailableError } from "../../projects/project-git-error.js";
 import { shouldRefreshTaskDefaults } from "../../projects/global-settings-effects.js";
 import {
@@ -69,7 +70,6 @@ import {
 } from "../project-file-reference.js";
 export { useSubmissionStartedAt } from "./use-submission-started-at.js";
 const emptyExpandedFileTreePaths = new Set<string>();
-
 export function taskLaunchQueryKey(projectId: string, taskId: string) {
   return ["projects", projectId, "tasks", taskId, "launch"] as const;
 }
@@ -175,10 +175,10 @@ export function useWorkbenchShellRuntime({
     ),
   );
   useEffect(() => {
-    if (isGitUnavailableError(gitStatusQuery.error)) {
-      notifyActionError(gitStatusQuery.error);
-    }
-  }, [gitStatusQuery.error]);
+    if (gitStatusQuery.error === null) return;
+    recordInternalWarning("git_status_query_failed", gitStatusQuery.error, { projectId });
+    if (isGitUnavailableError(gitStatusQuery.error)) notifyActionError(gitStatusQuery.error);
+  }, [gitStatusQuery.error, projectId]);
   const inspectorActivation = deriveWorkbenchInspectorActivation({
     contextOnly: temporary,
     fileOpen: inspectorFileSelection?.projectId === projectId,

@@ -15,6 +15,7 @@ import {
   notifyActionError,
   notifyActionSuccess,
 } from "../../notifications/action-notifications.js";
+import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import type { WorkbenchComposerProps } from "../components/workbench-composer-contracts.js";
 import { upsertProjectInPage } from "../../projects/project-query-cache.js";
 import { useProjectData } from "../../projects/project-context.js";
@@ -222,6 +223,7 @@ export function useWorkbenchBranchSwitch({
           notifyActionSuccess();
         }
       } catch (error) {
+        recordInternalWarning("git_branch_switch_failed", error, { projectId });
         notifyActionError(error);
         await queryClient
           .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId, rootPath) })
@@ -255,6 +257,7 @@ export function useWorkbenchBranchSwitch({
         }
         return created;
       } catch (error) {
+        recordInternalWarning("git_branch_create_failed", error, { projectId });
         notifyActionError(error);
         await queryClient
           .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId, rootPath) })

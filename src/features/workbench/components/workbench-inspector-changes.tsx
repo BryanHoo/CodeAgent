@@ -2,6 +2,7 @@ import type { ProjectGitStatus } from "@/protocol/index.js";
 
 import { i18n } from "../../../i18n/i18n.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
+import { actionErrorMessage } from "../../notifications/action-notifications.js";
 import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
 import { CommitChangesController } from "./commit-changes-controller.js";
 
@@ -42,7 +43,7 @@ export function WorkbenchInspectorChanges({
   if (gitStatusError !== null) {
     return (
       <p className="p-3 text-caption text-danger" role="alert">
-        {gitStatusError.message}
+        {actionErrorMessage(gitStatusError)}
       </p>
     );
   }

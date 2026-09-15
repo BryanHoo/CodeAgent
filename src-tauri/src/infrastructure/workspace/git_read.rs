@@ -119,9 +119,9 @@ pub(super) async fn read_git_status(
     )
     .await?;
     if truncated {
-        return Err(WorkspaceError::GitCommandFailed(format!(
-            "git status output exceeded {MAX_GIT_OUTPUT_BYTES} bytes"
-        )));
+        return Err(WorkspaceError::GitStatusTooLarge {
+            maximum_bytes: MAX_GIT_OUTPUT_BYTES,
+        });
     }
     let branch = optional_git_line(&repo, &["branch", "--show-current"]).await?;
     let head = head_commit(&repo).await?;

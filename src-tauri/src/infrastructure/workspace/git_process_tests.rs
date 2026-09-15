@@ -4,7 +4,9 @@ use std::{env, path::Path};
 
 #[cfg(windows)]
 use super::git_path_argument;
-use super::{BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, first_existing_path};
+use super::{
+    BoundedCapture, LOCAL_GIT_TIMEOUT, NETWORK_GIT_TIMEOUT, first_existing_path, git_failure,
+};
 #[cfg(unix)]
 use super::{run_git_command, unix_kill_process_group_args};
 
@@ -28,6 +30,25 @@ fn git_discovery_should_select_the_first_existing_file() {
     assert_eq!(
         first_existing_path([missing, current_executable.clone()]),
         Some(current_executable)
+    );
+}
+
+#[test]
+fn branch_switch_should_classify_local_changes_without_losing_git_details() {
+    let detail = "error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/main.rs\nPlease commit your changes or stash them before you switch branches.\nAborting";
+
+    let error = git_failure(
+        &["switch", "--", "feature"],
+        "failed with exit code: 1".to_owned(),
+        detail.as_bytes(),
+    );
+
+    assert_eq!(
+        (error.code(), error.to_string()),
+        (
+            "GIT_LOCAL_CHANGES_OVERWRITTEN",
+            format!("git switch failed with exit code: 1: {detail}")
+        )
     );
 }
 

@@ -143,6 +143,9 @@ async fn run_git_command(
         .args(args)
         .current_dir(repo)
         .env_remove("GIT_INDEX_FILE")
+        // 固定机器可解析的 Git 错误语言，界面文案由应用本地化层负责。
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
         .stdin(if input.is_some() {
             std::process::Stdio::piped()
         } else {
@@ -438,6 +441,12 @@ fn git_failure(args: &[&str], fallback: String, stderr: &[u8]) -> WorkspaceError
     } else {
         format!("git {operation} {fallback}: {detail}")
     };
+    if operation == "switch"
+        && detail.contains("would be overwritten by checkout")
+        && (detail.contains("local changes") || detail.contains("untracked working tree files"))
+    {
+        return WorkspaceError::GitLocalChangesOverwritten(message);
+    }
     WorkspaceError::GitCommandFailed(message)
 }
 

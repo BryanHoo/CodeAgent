@@ -12,7 +12,12 @@ export const common = {
   },
   errors: {
     attachmentTooLarge: "附件超过大小限制：普通文件最多 50 MiB，图片最多 512 MiB。",
+    gitCommandFailed: "Git 操作失败，请检查项目的 Git 状态后重试。详细信息已写入诊断日志。",
+    gitInvalidBranch: "分支名称无效，请修改后重试。",
+    gitLocalChangesOverwritten: "无法切换分支：目标分支会覆盖当前本地修改。请先提交修改，或运行 git stash 暂存后再重试。",
     gitNotFound: "未检测到 Git，请安装 Git 并重启 CodeAgent。",
+    gitSnapshotChanged: "操作期间项目文件发生了变化，请刷新 Git 状态后重试。",
+    gitStatusTooLarge: "Git 变更项过多，无法刷新。请将依赖目录或生成文件加入 .gitignore 后重试。",
     fileOpenTargetUnavailable: "文件不存在或无法访问，请确认文件是否已移动、删除，或检查访问权限。",
     fileOpenApplicationFailed: "系统默认应用未能打开文件，请在 Finder 或文件管理器中检查默认打开方式。",
     notFoundDescription: "当前地址不属于已注册的应用路由。",

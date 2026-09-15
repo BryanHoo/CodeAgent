@@ -31,17 +31,27 @@ function readNotificationOptions(
 }
 
 export function actionErrorMessage(error: unknown): string {
-  if (error instanceof Error && "code" in error && error.code === "FILE_OPEN_TARGET_UNAVAILABLE") {
-    return i18n.t("errors.fileOpenTargetUnavailable", { ns: "common" });
-  }
-  if (error instanceof Error && "code" in error && error.code === "FILE_OPEN_APPLICATION_FAILED") {
-    return i18n.t("errors.fileOpenApplicationFailed", { ns: "common" });
-  }
-  if (error instanceof Error && "code" in error && error.code === "ATTACHMENT_TOO_LARGE") {
-    return i18n.t("errors.attachmentTooLarge", { ns: "common" });
-  }
-  if (error instanceof Error && "code" in error && error.code === "GIT_NOT_FOUND") {
-    return i18n.t("errors.gitNotFound", { ns: "common" });
+  if (error instanceof Error && "code" in error) {
+    switch (error.code) {
+      case "FILE_OPEN_TARGET_UNAVAILABLE":
+        return i18n.t("errors.fileOpenTargetUnavailable", { ns: "common" });
+      case "FILE_OPEN_APPLICATION_FAILED":
+        return i18n.t("errors.fileOpenApplicationFailed", { ns: "common" });
+      case "ATTACHMENT_TOO_LARGE":
+        return i18n.t("errors.attachmentTooLarge", { ns: "common" });
+      case "GIT_NOT_FOUND":
+        return i18n.t("errors.gitNotFound", { ns: "common" });
+      case "GIT_LOCAL_CHANGES_OVERWRITTEN":
+        return i18n.t("errors.gitLocalChangesOverwritten", { ns: "common" });
+      case "GIT_STATUS_TOO_LARGE":
+        return i18n.t("errors.gitStatusTooLarge", { ns: "common" });
+      case "SNAPSHOT_MISMATCH":
+        return i18n.t("errors.gitSnapshotChanged", { ns: "common" });
+      case "INVALID_BRANCH":
+        return i18n.t("errors.gitInvalidBranch", { ns: "common" });
+      case "GIT_COMMAND_FAILED":
+        return i18n.t("errors.gitCommandFailed", { ns: "common" });
+    }
   }
   if (error instanceof Error && error.message.trim().length > 0) return error.message;
   if (typeof error === "string" && error.trim().length > 0) return error;

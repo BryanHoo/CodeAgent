@@ -39,7 +39,6 @@ import type { ProjectProviderProps } from "./project-provider-types.js";
 import { ProjectProviderView } from "./project-provider-view.js";
 
 const emptyProjects: readonly Project[] = [];
-
 export function ProjectProvider({
   children,
   client = nativeClient,
@@ -398,6 +397,7 @@ export function ProjectProvider({
         await gitStatusCoordinator.refreshProject(projectId, rootPath);
         notifyActionSuccess();
       } catch (error) {
+        recordInternalWarning("git_status_refresh_failed", error, { projectId });
         notifyActionError(error);
       }
     },

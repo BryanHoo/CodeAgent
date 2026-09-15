@@ -206,6 +206,22 @@ mod tests {
     }
 
     #[test]
+    fn oversized_git_status_should_preserve_limit_and_stable_code() {
+        let value = serde_json::to_value(AppError::from(WorkspaceError::GitStatusTooLarge {
+            maximum_bytes: 2_097_152,
+        }))
+        .unwrap();
+
+        assert_eq!(
+            value,
+            json!({
+                "code": "GIT_STATUS_TOO_LARGE",
+                "message": "git status output exceeded 2097152 bytes"
+            })
+        );
+    }
+
+    #[test]
     fn active_thread_writer_should_preserve_a_stable_error_code() {
         let error = crate::infrastructure::codex::ConnectionError::Request {
             code: -32600,

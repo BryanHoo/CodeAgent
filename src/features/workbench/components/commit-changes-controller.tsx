@@ -1,6 +1,6 @@
 import type { CommitProjectChangesResponse, ProjectGitStatus } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
@@ -8,6 +8,7 @@ import {
   notifyActionError,
   notifyActionSuccess,
 } from "../../notifications/action-notifications.js";
+import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import {
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
@@ -73,10 +74,17 @@ export function CommitChangesController({
   const activeGitStatus =
     gitStatus.repositoryMode === "root" ? gitStatus : (repositoryStatusQuery.data ?? gitStatus);
   const result = resultState?.snapshot === activeGitStatus.snapshot ? resultState.result : null;
+  const statusError = detailsError ?? repositoryStatusQuery.error;
+
+  useEffect(() => {
+    if (statusError !== null) {
+      recordInternalWarning("git_status_details_query_failed", statusError, { projectId });
+    }
+  }, [projectId, statusError]);
 
   return (
     <CommitChangesPanel
-      error={detailsError ?? repositoryStatusQuery.error}
+      error={statusError}
       gitStatus={activeGitStatus}
       isCommitting={commitMutation.isPending}
       isGenerating={messageMutation.isPending}

@@ -12,7 +12,12 @@ export const common = {
   },
   errors: {
     attachmentTooLarge: "The attachment is too large. Files support up to 50 MiB and images up to 512 MiB.",
+    gitCommandFailed: "The Git operation failed. Check the repository status and try again. Details were saved to the diagnostic log.",
+    gitInvalidBranch: "The branch name is invalid. Change it and try again.",
+    gitLocalChangesOverwritten: "Unable to switch branches because the target branch would overwrite local changes. Commit them or run git stash, then try again.",
     gitNotFound: "Git was not found. Install Git and restart CodeAgent.",
+    gitSnapshotChanged: "Project files changed during the operation. Refresh the Git status and try again.",
+    gitStatusTooLarge: "There are too many Git changes to refresh. Add dependency or generated directories to .gitignore, then try again.",
     fileOpenTargetUnavailable: "The file does not exist or cannot be accessed. Check whether it was moved or deleted, and check access permissions.",
     fileOpenApplicationFailed: "The system default application could not open the file. Check its default application in Finder or your file manager.",
     notFoundDescription: "This address does not match a registered application route.",
