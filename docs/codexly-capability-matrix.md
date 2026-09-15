@@ -53,7 +53,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 回合控制 | `startTurn`, `interruptTurn` | 原生 `turn/start`, `turn/interrupt` | 已实现 |
 | Goal 模式 | `updateTaskGoal`, `clearTaskGoal` | 原生 `thread/goal/*`；Goal 启动等待真实 `turn/started`。Rust 统一目标非空、4000 Unicode 标量及纯文本限制，在提交创建前和计划保存/执行前校验；前端按错误码展示 | 已实现 |
 | Review 提交 | `submitReview` | Rust 创建后执行 `review/start`，保留部分成功摘要；独立有界启动登记合并同键请求，取消等待不取消 worker；不提供跨重启整体恢复 | 已实现 |
-| 高级会话 | `compactTask`, `forkTask` | 原生 `thread/compact/start`, `thread/fork` | 已实现 |
+| 高级会话 | `compactTask`, `forkTask` | 原生 `thread/compact/start`, `thread/fork`；Fork 显式继承源线程当前模型与思考强度，缺失字段回退源任务设置，并同步保存到新任务 | 已实现 |
 | 任务设置 | `getTaskSettings`, `updateTaskSettings` | 应用私有原子 JSON；启动回合前持久化并同步线程设置 | 已实现 |
 | 排队提交 | `list/add/delete/move/startQueuedSubmission` | 原生 `thread/queue/*`；恢复 0.154.0 返回的 `image`/`audio` 内联快照到按任务隔离的本地缓存，WebView 只接收附件元数据；编辑先撤回原项并恢复完整输入，不维护服务端编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |

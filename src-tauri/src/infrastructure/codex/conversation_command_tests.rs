@@ -240,6 +240,11 @@ async fn advanced_task_commands_should_use_native_codex_methods() {
                 );
             }
             if method == "thread/fork" {
+                assert_eq!(request["params"]["model"], "source-model");
+                assert_eq!(
+                    request["params"]["config"]["model_reasoning_effort"],
+                    "xhigh"
+                );
                 assert_eq!(request["params"]["lastTurnId"], "turn-a");
                 assert_eq!(request["params"]["excludeTurns"], true);
                 assert_eq!(
@@ -276,10 +281,19 @@ async fn advanced_task_commands_should_use_native_codex_methods() {
             .status,
         "compacting"
     );
-    let forked = fork_task(&connection, "project-a", "thread-a", Some("turn-a"))
-        .await
-        .unwrap();
+    let mut settings = crate::domain::conversation::AgentTaskSettings::default();
+    let forked = fork_task(
+        &connection,
+        "project-a",
+        "thread-a",
+        Some("turn-a"),
+        &mut settings,
+    )
+    .await
+    .unwrap();
     assert_eq!(forked.task.id, "thread-b");
+    assert_eq!(settings.model, "source-model");
+    assert_eq!(settings.reasoning_effort, "xhigh");
     server_task.await.unwrap();
 }
 
@@ -288,6 +302,8 @@ fn native_task(id: &str) -> Value {
         "id": id,
         "name": null,
         "preview": "任务",
+        "model": "source-model",
+        "reasoningEffort": "xhigh",
         "projectId": "project-a",
         "section": null,
         "status": {"type": "idle"},

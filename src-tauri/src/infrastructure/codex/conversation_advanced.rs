@@ -8,12 +8,16 @@ use super::{
     connection::ConnectionError,
     conversation::{NativeTurn, map_turn},
     conversation_commands::{ThreadConfig, thread_config},
-    tasks::{NativeThread, map_task, read_task, validate_task_project},
+    tasks::{NativeThread, map_task, read_native_task, read_task, validate_task_project},
 };
-use crate::domain::conversation::AgentGoal;
+use crate::domain::conversation::{AgentGoal, AgentTaskSettings};
 use crate::domain::{conversation::AgentTurn, sidebar::AgentTaskMutationResponse};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+#[cfg(test)]
+#[path = "conversation_fork_settings_tests.rs"]
+mod fork_settings_tests;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,11 +55,19 @@ struct ThreadIdParams<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadForkParams<'a> {
-    config: ThreadConfig,
+    config: ForkThreadConfig<'a>,
+    model: &'a str,
     exclude_turns: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_turn_id: Option<&'a str>,
     thread_id: &'a str,
+}
+
+#[derive(Serialize)]
+struct ForkThreadConfig<'a> {
+    #[serde(flatten)]
+    base: ThreadConfig,
+    model_reasoning_effort: &'a str,
 }
 
 #[derive(Deserialize)]
@@ -327,13 +339,32 @@ pub async fn fork_task(
     project_id: &str,
     task_id: &str,
     last_turn_id: Option<&str>,
+    settings: &mut AgentTaskSettings,
 ) -> Result<AgentTaskMutationResponse, ConnectionError> {
-    read_task(connection, project_id.to_owned(), task_id.to_owned()).await?;
+    let source = read_native_task(connection, project_id, task_id).await?;
+    if source.id != task_id {
+        return Err(ConnectionError::InvalidMessage);
+    }
+    // 源线程实际配置优先于本地默认值；更新同一份设置，供调用方保存到新任务。
+    // Fork 不会自动继承模型与思考强度，必须显式传递；缺失字段分别沿用源任务设置。
+    if let Some(model) = source.model {
+        settings.model = model;
+    }
+    if let Some(effort) = source.reasoning_effort {
+        settings.reasoning_effort = effort;
+    }
+    if !settings.is_valid() {
+        return Err(ConnectionError::InvalidMessage);
+    }
     let response: ThreadForkResponse = connection
         .request(
             "thread/fork",
             &ThreadForkParams {
-                config: thread_config(),
+                config: ForkThreadConfig {
+                    base: thread_config(),
+                    model_reasoning_effort: &settings.reasoning_effort,
+                },
+                model: &settings.model,
                 // 历史由分页接口加载，Fork 仅返回元数据，避免极限会话形成超大单帧。
                 exclude_turns: true,
                 last_turn_id,

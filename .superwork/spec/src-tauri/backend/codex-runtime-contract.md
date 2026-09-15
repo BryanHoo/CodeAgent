@@ -53,6 +53,7 @@
 - MCP `toolsError` 表示未获得工具目录；存在字符串错误时，仅将 `connected` / `unknown` 摘要映射为 `failed`，不得覆盖认证、启动或禁用态。IPC 仍只传名称、显示名、状态和工具数量，不传错误正文或工具定义。
 - MCP `openai/userVerification` 使用 `description` 显示不支持提示，不读取旧 `message` 字段、不传 `challenge`；只允许 `cancel` / `decline` 且响应 `content: null`，后端必须拒绝 `accept`。本地 154 的 `userVerification/*` 尚无原生实现，不声明具备设备验证能力。
 - 线程新增 `originator`、`environments`、`daybreakEnabled` 不进入桌面投影；`thread/list` 不发送仅托管端支持的非空 `originators`。保持恢复/分叉 `excludeTurns: true` 及 `thread/read(includeTurns: false)`。
+- Fork 必须复用源线程元数据读取，优先继承当前 `model` 与 `reasoningEffort`，字段为空时分别回退源任务有效设置。请求显式传递 `model` 与 `config.model_reasoning_effort`，并把同一份解析后的设置保存到新任务；不能仅复制本地默认值或依赖 Codex 自动继承。普通项目和临时任务遵循相同规则，保留历史截断参数，不增加额外快照读取。
 - 沿用 Codex 154 的无订阅空闲线程默认 60 秒卸载；活跃或被订阅线程不得主动卸载，不增加轮询或修改用户 `thread_unload_delay_secs`。
 - 原始 `configuration_update` 属于 `ResponseItem`，不作为 UI `ThreadItem`；继续在握手中关闭 `rawResponseItem/completed`，避免新增无效事件传输。
 - 仅 `delivery: async` 的 `agentMessage.questions` 映射为结构化问题；实时与历史共用映射，问题树不进入 Delta 热路径。每个 Item 最多 16 题、每题最多 32 项，标题/选项分别不超过 4096/1024 字节，总文本不超过 64 KiB；超预算时保留官方 `text` 展示，不渲染巨大表单

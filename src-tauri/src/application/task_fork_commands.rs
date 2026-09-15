@@ -15,14 +15,20 @@ pub async fn fork_task(
     state: State<'_, AppState>,
 ) -> Result<AgentTaskMutationResponse, AppError> {
     let connection = state.codex_connection().await?;
-    let settings = effective_task_settings(&app, &project_id, &task_id).await?;
+    let mut settings = effective_task_settings(&app, &project_id, &task_id).await?;
     let app_data = app
         .path()
         .app_data_dir()
         .map_err(|_| AppError::FilesystemRequestFailed)?;
-    let response = codex::fork_task(&connection, &project_id, &task_id, last_turn_id.as_deref())
-        .await
-        .map_err(AppError::from)?;
+    let response = codex::fork_task(
+        &connection,
+        &project_id,
+        &task_id,
+        last_turn_id.as_deref(),
+        &mut settings,
+    )
+    .await
+    .map_err(AppError::from)?;
     if project_id == super::task_workspace::TEMPORARY_PROJECT_ID {
         let result =
             async {

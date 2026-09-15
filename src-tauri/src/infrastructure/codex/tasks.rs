@@ -49,7 +49,9 @@ struct NativeThreadPage {
 pub(super) struct NativeThread {
     #[serde(default)]
     cwd: Option<String>,
-    id: String,
+    pub(super) id: String,
+    pub(super) model: Option<String>,
+    pub(super) reasoning_effort: Option<String>,
     name: Option<String>,
     preview: String,
     project_id: Option<String>,
@@ -418,7 +420,7 @@ pub(super) async fn is_task_loaded(
     }
 }
 
-async fn read_native_task(
+pub(super) async fn read_native_task(
     connection: &AppServerConnection,
     project_id: &str,
     task_id: &str,
