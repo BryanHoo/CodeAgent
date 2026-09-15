@@ -24,11 +24,7 @@ import { notifyActionError } from "../../notifications/action-notifications.js";
 import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import { isGitUnavailableError } from "../../projects/project-git-error.js";
 import { shouldRefreshTaskDefaults } from "../../projects/global-settings-effects.js";
-import {
-  useProjectActions,
-  useProjectData,
-  useProjectRootSelection,
-} from "../../projects/project-context.js";
+import { useProjectActions, useProjectData, useProjectRootSelection } from "../../projects/project-context.js";
 import { resolveProjectRootFromSelections } from "../../projects/project-root-selection.js";
 import {
   appInfoQueryOptions,
@@ -47,6 +43,7 @@ import {
   taskRenameMutationOptions,
 } from "../../projects/project-queries.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
+import { useProjectGitStatusRouteRefresh } from "../hooks/use-project-git-status-route-refresh.js";
 import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { getProjectFileManagerApp } from "./project-open-menu.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
@@ -174,6 +171,7 @@ export function useWorkbenchShellRuntime({
       !temporary && selectedRootPath !== undefined,
     ),
   );
+  useProjectGitStatusRouteRefresh(inspectorScopeKey, !temporary && selectedRootPath !== undefined, gitStatusQuery);
   useEffect(() => {
     if (gitStatusQuery.error === null) return;
     recordInternalWarning("git_status_query_failed", gitStatusQuery.error, { projectId });

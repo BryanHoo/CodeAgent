@@ -11,7 +11,11 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
 } from "../../../shared/components/core/dropdown-menu.js";
-import { TaskActionMenu, TaskLink } from "./project-sidebar-task-row.js";
+import {
+  TaskActionMenu,
+  TaskLink,
+  TaskStatusIndicator,
+} from "./project-sidebar-task-row.js";
 import { TaskInteractionContext } from "../task-interaction-context.js";
 const { openTaskWindow } = vi.hoisted(() => ({ openTaskWindow: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../../platform/tauri/task-window-client.js", () => ({ openTaskWindow }));
@@ -156,5 +160,57 @@ describe("TaskLink", () => {
     expect(
       boundary.getBoundingClientRect().right - link!.getBoundingClientRect().right,
     ).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("TaskStatusIndicator", () => {
+  it.each([
+    {
+      attention: "completed" as const,
+      iconClass: "lucide-circle-check-big",
+      isAwaitingApproval: false,
+      label: "AI 回复已完成",
+      toneClass: "text-task-completed",
+    },
+    {
+      attention: "approval" as const,
+      iconClass: "lucide-clock-3",
+      isAwaitingApproval: true,
+      label: "任务等待审批",
+      toneClass: "text-task-waiting",
+    },
+    {
+      attention: "failed" as const,
+      iconClass: "lucide-circle-x",
+      isAwaitingApproval: false,
+      label: "AI 回复未完成",
+      toneClass: "text-task-failed",
+    },
+  ])("为 $label 显示明确的状态图标和语义色", async ({
+    attention,
+    iconClass,
+    isAwaitingApproval,
+    label,
+    toneClass,
+  }) => {
+    await i18n.changeLanguage("zh-CN");
+    const screen = await render(
+      <I18nextProvider i18n={i18n}>
+        <TaskStatusIndicator
+          attention={attention}
+          isAwaitingApproval={isAwaitingApproval}
+          isRunning={false}
+          updatedAt={task.updatedAt}
+        />
+      </I18nextProvider>,
+    );
+
+    const indicator = screen.getByRole("status", { name: label }).element();
+    const icon = indicator.querySelector("svg");
+
+    expect(indicator.classList.contains(toneClass)).toBe(true);
+    expect(icon?.classList.contains(iconClass)).toBe(true);
+    expect(getComputedStyle(icon!).width).toBe("14px");
+    expect(getComputedStyle(icon!).height).toBe("14px");
   });
 });
