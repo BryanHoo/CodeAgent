@@ -5,6 +5,22 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-16
+
+### Added
+
+- 添加跨项目聚合搜索，统一检索任务、历史消息和项目文件，并支持精确定位历史命中位置。
+- 添加队列图片与音频快照恢复，支持多个文本附件解析并保留正文内容。
+
+### Changed
+
+- 重构 Git 状态、统计、Diff 和提交路径读取，支持分页、按需加载与大型变更集的有界传输和渲染。
+- 统一本地设置的原子写入与配置校验，减少异常写入造成的配置损坏。
+
+### Fixed
+
+- 修复分叉任务未继承源线程模型与思考强度的问题。
+
 ## [0.2.2] - 2026-09-15
 
 ### Added
@@ -268,7 +284,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v0.1.12...v0.2.0
