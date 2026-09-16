@@ -35,6 +35,10 @@ describe("actionErrorMessage", () => {
     ["GIT_LOCAL_CHANGES_OVERWRITTEN", "gitLocalChangesOverwritten"],
     ["GIT_STATUS_TOO_LARGE", "gitStatusTooLarge"],
     ["GIT_COMMAND_FAILED", "gitCommandFailed"],
+    ["GIT_OUTPUT_INVALID", "gitCommandFailed"],
+    ["GIT_OUTPUT_TOO_LARGE", "gitStatusTooLarge"],
+    ["GIT_PATH_ENCODING_UNSUPPORTED", "gitPathEncodingUnsupported"],
+    ["GIT_REPOSITORY_UNAVAILABLE", "gitRepositoryUnavailable"],
     ["SNAPSHOT_MISMATCH", "gitSnapshotChanged"],
     ["INVALID_BRANCH", "gitInvalidBranch"],
   ] as const)("localizes %s without replacing diagnostic details", async (code, key) => {

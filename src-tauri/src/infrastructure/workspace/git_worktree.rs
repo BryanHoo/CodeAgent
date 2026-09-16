@@ -29,15 +29,13 @@ pub async fn list_worktrees(
     repository: Option<&str>,
 ) -> Result<WorktreePage, WorkspaceError> {
     let repo = repository_path(root, repository).await?;
-    let (output, truncated) = run_git(
+    let output = super::git_protocol::read_complete(
         &repo,
         &["worktree", "list", "--porcelain", "-z"],
+        "worktrees",
         MAX_GIT_OUTPUT_BYTES,
     )
     .await?;
-    if truncated {
-        return Err(WorkspaceError::InvalidPath);
-    }
     let current = tokio::fs::canonicalize(&repo).await?;
     let mut worktrees = Vec::new();
     let mut fields = Vec::new();

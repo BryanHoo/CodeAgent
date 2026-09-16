@@ -13,7 +13,6 @@ import {
   completedTasksInfiniteQueryOptions,
   flattenProjectTaskPages,
   projectPinnedTasksQueryOptions,
-  projectTaskSearchSourceQueryOptions,
   projectTasksInfiniteQueryOptions,
   type NativeWorkbenchClient,
   type ProjectTaskInfiniteData,
@@ -197,28 +196,6 @@ export function useProjectRootSelection() {
   return context;
 }
 
-export function useProjectTaskSearch(normalizedQuery: string) {
-  const { client, projects } = useProjectData();
-  const isSearchEnabled = normalizedQuery.length > 0;
-  const taskScopeIds = [TEMPORARY_TASK_SCOPE_ID, ...projects.map((project) => project.id)];
-  const searchQueries = useQueries({
-    queries: taskScopeIds.map((projectId) =>
-      projectTaskSearchSourceQueryOptions(projectId, isSearchEnabled, client),
-    ),
-  });
-  const isPending = isSearchEnabled && searchQueries.some((query) => query.isPending);
-  const error = searchQueries.find((query) => query.error !== null)?.error ?? null;
-
-  // 所有 Project 的搜索源完成后再发布结果，避免把“尚未加载”误报为“没有匹配”。
-  const tasks =
-    isPending || error !== null
-      ? emptyTasks
-      : searchQueries
-          .flatMap((query) => query.data ?? emptyTasks)
-          .filter((task) => task.title.toLocaleLowerCase().includes(normalizedQuery));
-
-  return { error, isPending, tasks } as const;
-}
 
 export function useCompletedTasks(projectId: string | null) {
   const { client } = useProjectData();

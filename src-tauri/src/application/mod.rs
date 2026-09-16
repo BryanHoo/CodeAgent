@@ -75,3 +75,5 @@ mod turn_start;
 mod turn_waiters;
 pub mod workflow_commands;
 pub mod workspace_commands;
+
+pub mod search_commands;

@@ -39,7 +39,7 @@ export function InspectorGitChangesSection({
       <div className="flex shrink-0 items-center gap-1.5">
         <Button
           aria-haspopup="dialog"
-          disabled={changeStats === undefined}
+          disabled={changeCount === 0}
           onClick={onReviewChanges}
           size="toolbar"
           type="button"

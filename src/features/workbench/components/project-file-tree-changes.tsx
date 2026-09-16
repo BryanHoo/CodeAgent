@@ -37,6 +37,7 @@ export function collectVisibleProjectFileTreeChangeStats(
   const statsByPath = new Map<string, ProjectFileTreeChangeStats>();
 
   for (const change of changesByPath.values()) {
+    if (change.diff === "" && !change.statsAvailable) continue;
     const path = change.path.replaceAll("\\", "/");
     let target: (typeof visibleEntries)[number] | undefined;
     for (const entry of visibleEntries) {

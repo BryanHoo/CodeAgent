@@ -1,3 +1,4 @@
+import type { TaskSearchInput } from "@/protocol/global-search.js";
 import {
   type ListCompletedTasksOptions,
   type ListTasksOptions,
@@ -74,6 +75,18 @@ export class TauriSidebarClient extends TauriRuntimeClient {
 
   public constructor(options: TauriClientOptions = {}) {
     super(options);
+  }
+
+  public async searchTasks(input: TaskSearchInput, options: ReadOptions = {}) {
+    const response = await this.callCancellable<unknown>("search_tasks", { input }, options.signal);
+    const { parseTaskSearchPage } = await import("./search-response.js");
+    return parseTaskSearchPage(response);
+  }
+
+  public async searchTaskOccurrences(taskId: string, query: string, cursor?: string, options: ReadOptions = {}) {
+    const response = await this.callCancellable<unknown>("search_task_occurrences", { taskId, query, cursor }, options.signal);
+    const { parseSearchOccurrencesPage } = await import("./search-response.js");
+    return parseSearchOccurrencesPage(response);
   }
 
   public async listProjects(_options: ReadOptions = {}): Promise<ProjectPage> {

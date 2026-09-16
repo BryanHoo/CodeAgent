@@ -164,3 +164,6 @@ mod turn_readiness_tests;
 pub use conversation_access::{ensure_task_writer, retain_task_writer};
 #[cfg(test)]
 mod model_cache_tests;
+
+mod search;
+pub use search::{search_task_occurrences, search_tasks};

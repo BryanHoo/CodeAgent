@@ -24,7 +24,6 @@ import {
   nativeClient,
   invalidateTaskQueue,
   PROJECT_PINNED_TASKS_KEY,
-  PROJECT_TASK_SEARCH_SOURCE_KEY,
   TASK_BOARD_COMPLETED_TASKS_QUERY_KEY,
   projectRemoveMutationOptions,
   projectRenameMutationOptions,
@@ -109,8 +108,8 @@ export function ProjectProvider({
                 queryKey: ["projects", projectId, "tasks"],
               }),
               queryClient.invalidateQueries({
-                exact: true,
-                queryKey: ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
+                queryKey: ["global-search"],
+                refetchType: "none",
               }),
               queryClient.invalidateQueries({
                 exact: true,

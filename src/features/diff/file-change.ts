@@ -1,6 +1,6 @@
 import type { AgentItem } from "@/protocol/index.js";
 
-export type AgentFileChange = Extract<AgentItem, { type: "file_change" }>["changes"][number];
+export type AgentFileChange = Extract<AgentItem, { type: "file_change" }>["changes"][number] & Readonly<{ statsAvailable?: boolean }>;
 
 export type FileChangeStats = Readonly<{
   additions: number;

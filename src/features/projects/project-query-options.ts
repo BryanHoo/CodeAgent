@@ -272,32 +272,6 @@ export function projectGitStatusQueryOptions(
   });
 }
 
-export function projectGitDetailedStatusQueryOptions(
-  projectId: string,
-  rootPath: string,
-  repository: string | null,
-  snapshot: string,
-  enabled: boolean,
-  client: NativeGitStatusClient = nativeClient,
-) {
-  return queryOptions({
-    enabled,
-    queryFn: ({ signal }) =>
-      client.getProjectGitStatus(
-        projectId,
-        {
-          includeDiff: true,
-          rootPath,
-          ...(repository === null ? {} : { repository }),
-        },
-        { signal },
-      ),
-    // 详情只服务触发它的仓库快照，状态变化后不会复用旧 Diff。
-    queryKey: ["projects", projectId, rootPath, "git-status-detail", repository, snapshot] as const,
-    retry: shouldRetryGitQuery,
-  });
-}
-
 export function projectGitRepositoryStatusQueryOptions(
   projectId: string,
   rootPath: string,
@@ -312,7 +286,7 @@ export function projectGitRepositoryStatusQueryOptions(
         ? Promise.reject(new Error("Git repository is not selected"))
         : client.getProjectGitStatus(
             projectId,
-            { includeDiff: true, repository, rootPath },
+            { repository, rootPath },
             { signal },
           ),
     queryKey: ["projects", projectId, rootPath, "git-status", repository] as const,

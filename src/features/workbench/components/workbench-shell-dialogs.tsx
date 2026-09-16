@@ -68,6 +68,7 @@ export function WorkbenchShellDialogs({
         <Suspense fallback={null}>
           <LazyFileReviewDialog
             changes={selectedFileReview}
+            loadDiff={loadProjectFileDiff}
             onClose={() => {
               setFileReviewSelection(null);
             }}

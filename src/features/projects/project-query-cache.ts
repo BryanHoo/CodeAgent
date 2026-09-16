@@ -5,8 +5,7 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { i18n } from "../../i18n/i18n.js";
 import {
   PROJECT_PINNED_TASKS_KEY,
-  PROJECT_TASK_SEARCH_PAGE_SIZE,
-  PROJECT_TASK_SEARCH_SOURCE_KEY,
+  PROJECT_PINNED_TASK_PAGE_SIZE,
   TASK_BOARD_COMPLETED_TASKS_QUERY_KEY,
   nativeClient,
   taskQueueQueryKey,
@@ -89,24 +88,13 @@ export function upsertProjectTaskInInfiniteData(
 
 export async function cacheCreatedProjectTask(queryClient: QueryClient, task: AgentTask) {
   const projectTasksQueryKey = ["projects", task.projectId, "tasks"] as const;
-  const taskSearchQueryKey = [
-    ...projectTasksQueryKey,
-    PROJECT_TASK_SEARCH_SOURCE_KEY,
-  ] as const;
 
   // 先终止创建前发出的旧列表请求，避免其响应覆盖刚写入的新 Task。
-  await Promise.all([
-    queryClient.cancelQueries({ exact: true, queryKey: projectTasksQueryKey }),
-    queryClient.cancelQueries({ exact: true, queryKey: taskSearchQueryKey }),
-  ]);
+  await queryClient.cancelQueries({ exact: true, queryKey: projectTasksQueryKey });
   queryClient.setQueryData<ProjectTaskInfiniteData>(projectTasksQueryKey, (currentData) =>
     upsertProjectTaskInInfiniteData(currentData, task),
   );
-  queryClient.setQueryData<readonly AgentTask[]>(taskSearchQueryKey, (currentTasks) =>
-    currentTasks === undefined
-      ? undefined
-      : [task, ...currentTasks.filter((currentTask) => currentTask.id !== task.id)],
-  );
+  void queryClient.invalidateQueries({ queryKey: ["global-search"], refetchType: "none" });
 }
 
 function promoteStartedTaskInTasks(
@@ -141,12 +129,10 @@ export async function refreshStartedProjectTask(
       ? currentData
       : upsertProjectTaskInInfiniteData(currentData, { ...startedTask, updatedAt });
   });
-  for (const sourceKey of [PROJECT_PINNED_TASKS_KEY, PROJECT_TASK_SEARCH_SOURCE_KEY]) {
-    queryClient.setQueryData<readonly AgentTask[]>(
-      [...projectTasksQueryKey, sourceKey],
-      (currentTasks) => promoteStartedTaskInTasks(currentTasks, taskId, updatedAt),
-    );
-  }
+  queryClient.setQueryData<readonly AgentTask[]>(
+    [...projectTasksQueryKey, PROJECT_PINNED_TASKS_KEY],
+    (currentTasks) => promoteStartedTaskInTasks(currentTasks, taskId, updatedAt),
+  );
   await queryClient.invalidateQueries({ exact: true, queryKey: projectTasksQueryKey });
   if (startedTask === undefined) {
     return;
@@ -207,7 +193,7 @@ export function replaceProjectTaskInInfiniteData(
 }
 
 export function replaceProjectTaskInQueryCaches(queryClient: QueryClient, task: AgentTask) {
-  // 重命名和固定操作必须同步普通分页、固定列表与已加载的全量搜索源。
+  // 重命名和固定操作同步普通分页与固定列表，并使聚合搜索缓存失效。
   queryClient.setQueryData<ProjectTaskInfiniteData>(
     ["projects", task.projectId, "tasks"],
     (currentData) => replaceProjectTaskInInfiniteData(currentData, task),
@@ -221,11 +207,7 @@ export function replaceProjectTaskInQueryCaches(queryClient: QueryClient, task: 
           ? [task, ...currentTasks.filter((currentTask) => currentTask.id !== task.id)]
           : currentTasks.filter((currentTask) => currentTask.id !== task.id),
   );
-  queryClient.setQueryData<readonly AgentTask[]>(
-    ["projects", task.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
-    (currentTasks) =>
-      currentTasks?.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
-  );
+  void queryClient.invalidateQueries({ queryKey: ["global-search"], refetchType: "none" });
 }
 
 function deriveStartedTaskTitle(
@@ -316,15 +298,13 @@ export function updateTaskTitleInProjectListCaches(
     ["projects", snapshot.projectId, "tasks"],
     (currentData) => updateNewTaskTitleFromSnapshotInInfiniteData(currentData, snapshot, options),
   );
-  for (const sourceKey of [PROJECT_PINNED_TASKS_KEY, PROJECT_TASK_SEARCH_SOURCE_KEY]) {
-    queryClient.setQueryData<readonly AgentTask[]>(
-      ["projects", snapshot.projectId, "tasks", sourceKey],
-      (currentTasks) =>
-        currentTasks === undefined
-          ? undefined
-          : updateNewTaskTitleFromSnapshotInTasks(currentTasks, snapshot, options),
-    );
-  }
+  queryClient.setQueryData<readonly AgentTask[]>(
+    ["projects", snapshot.projectId, "tasks", PROJECT_PINNED_TASKS_KEY],
+    (currentTasks) =>
+      currentTasks === undefined
+        ? undefined
+        : updateNewTaskTitleFromSnapshotInTasks(currentTasks, snapshot, options),
+  );
 }
 
 export function removeProjectTaskFromInfiniteData(
@@ -357,7 +337,7 @@ async function listAllProjectTasks(
   for (;;) {
     const pageOptions = {
       ...(cursor === undefined ? {} : { cursor }),
-      limit: PROJECT_TASK_SEARCH_PAGE_SIZE,
+      limit: PROJECT_PINNED_TASK_PAGE_SIZE,
       ...options,
     };
     const page =
@@ -377,14 +357,6 @@ async function listAllProjectTasks(
     requestedCursors.add(page.nextCursor);
     cursor = page.nextCursor;
   }
-}
-
-export function listProjectTasksForSearch(
-  projectId: string,
-  client: Pick<NativeClient, "listTasks">,
-  signal?: AbortSignal,
-) {
-  return listAllProjectTasks(projectId, client, {}, signal);
 }
 
 export function listPinnedProjectTasks(
@@ -407,20 +379,6 @@ export function projectPinnedTasksQueryOptions(
   });
 }
 
-export function projectTaskSearchSourceQueryOptions(
-  projectId: string,
-  enabled: boolean,
-  client: Pick<NativeClient, "listTasks"> = nativeClient,
-) {
-  // 注入的 client 不参与项目任务缓存身份，避免破坏既有前缀失效与直接写缓存逻辑。
-  // oxlint-disable-next-line @tanstack/query/exhaustive-deps
-  return queryOptions({
-    enabled,
-    queryFn: ({ signal }) => listProjectTasksForSearch(projectId, client, signal),
-    queryKey: ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY] as const,
-  });
-}
-
 export async function removeArchivedProjectTaskAndRefill(
   queryClient: QueryClient,
   projectId: string,
@@ -434,10 +392,7 @@ export async function removeArchivedProjectTaskAndRefill(
     [...projectTaskQueryKey, PROJECT_PINNED_TASKS_KEY],
     (currentTasks) => currentTasks?.filter((task) => task.id !== taskId),
   );
-  queryClient.setQueryData<readonly AgentTask[]>(
-    [...projectTaskQueryKey, PROJECT_TASK_SEARCH_SOURCE_KEY],
-    (currentTasks) => currentTasks?.filter((task) => task.id !== taskId),
-  );
+  void queryClient.invalidateQueries({ queryKey: ["global-search"], refetchType: "none" });
 
   // 归档会改变服务端 Cursor 边界，重新校准活动页才能稳定补足最近 5 项。
   await queryClient.invalidateQueries({ exact: true, queryKey: projectTaskQueryKey });

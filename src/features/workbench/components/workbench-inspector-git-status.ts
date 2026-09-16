@@ -18,6 +18,7 @@ function mergeDisplayChanges(changes: readonly AgentFileChange[]): readonly Agen
     }
     // staged 与 unstaged 可能同时包含同一路径，合并后只计为一个变更文件。
     mergedChanges.set(change.path, {
+      ...(existing.statsAvailable && change.statsAvailable ? { statsAvailable: true } : {}),
       stats: {
         additions: existing.stats.additions + change.stats.additions,
         removals: existing.stats.removals + change.stats.removals,
@@ -36,13 +37,14 @@ export function deriveInspectorGitChangeState(
 ): InspectorGitChangeState {
   const allChanges = [...(gitStatus?.unstaged ?? []), ...(gitStatus?.staged ?? [])];
   // 详情必须属于当前轻量快照，避免刷新竞态把旧行数展示到新文件集合上。
+  const statsStatus = gitStatusDetails?.snapshot === gitStatus?.snapshot ? gitStatusDetails ?? gitStatus : gitStatus;
   const statsChanges =
     gitStatusDetails !== undefined && gitStatusDetails.snapshot === gitStatus?.snapshot
       ? [...gitStatusDetails.unstaged, ...gitStatusDetails.staged]
-      : allChanges.every((change) => change.diff !== "")
+      : gitStatus?.stats !== undefined || allChanges.every((change) => change.diff !== "")
         ? allChanges
         : undefined;
-  const changeStats = statsChanges?.reduce(
+  const changeStats = statsStatus?.stats ?? statsChanges?.reduce(
     (total, change) => {
       const stats = getFileChangeStats(change);
       return {
@@ -52,10 +54,12 @@ export function deriveInspectorGitChangeState(
     },
     { additions: 0, removals: 0 },
   );
-  const displayChanges = mergeDisplayChanges(statsChanges ?? allChanges);
-  // 轻量状态的 stats 是占位值；详情就绪前保留文件数量，但不向文件树发布假行数。
+  // 统计已就绪不代表正文已加载，分别标记，防止文件树和审核入口依赖正文。
+  const displayChanges = mergeDisplayChanges((statsChanges ?? allChanges).map((change) =>
+    statsStatus?.stats !== undefined && change.diff === "" ? { ...change, statsAvailable: true } : change,
+  ));
   const fileChangesByPath = new Map(
-    (statsChanges === undefined ? [] : displayChanges).map((change) => [change.path, change] as const),
+    displayChanges.map((change) => [change.path, change] as const),
   );
 
   return {

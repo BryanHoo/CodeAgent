@@ -9,3 +9,5 @@ pub mod project_terminal;
 pub mod runtime;
 pub mod scheduled_task;
 pub mod sidebar;
+
+pub mod search;

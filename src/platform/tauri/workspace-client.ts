@@ -208,7 +208,7 @@ export class TauriWorkspaceClient extends TauriNativeClient {
     return this.callCancellable(
       "get_project_git_status",
       {
-        input: { ...input, includeDiff: input.includeDiff === true },
+        input,
         projectId,
       },
       options.signal,

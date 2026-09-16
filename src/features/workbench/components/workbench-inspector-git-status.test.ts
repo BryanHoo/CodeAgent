@@ -31,8 +31,21 @@ it("详情未加载或属于旧快照时，不向文件树输出占位零统计"
     ...status,
     unstaged: [{ ...status.unstaged[0]!, diff: "+new", stats: { additions: 5, removals: 0 } }],
   };
-  expect(deriveInspectorGitChangeState(status, undefined).fileChangesByPath.size).toBe(0);
-  expect(deriveInspectorGitChangeState(status, { ...details, snapshot: "old" }).fileChangesByPath.size).toBe(0);
+  expect(deriveInspectorGitChangeState(status, undefined).fileChangesByPath.size).toBe(1);
+  expect(deriveInspectorGitChangeState(status, { ...details, snapshot: "old" }).fileChangesByPath.size).toBe(1);
   expect(deriveInspectorGitChangeState(status, details).fileChangesByPath.get("new.ts")?.stats)
     .toEqual({ additions: 5, removals: 0 });
+});
+
+it("没有 Diff 正文也展示 numstat，分页汇总采用全仓总数", () => {
+  const status = {
+    baseBranches: [], branch: "main", branches: [], repositoryMode: "root" as const, snapshot: "current",
+    totalChanges: 1500,
+    stats: { additions: 3000, removals: 1500 },
+    staged: [],
+    unstaged: [{ path: "new.ts", kind: "create" as const, diff: "", stats: { additions: 2, removals: 0 } }],
+  };
+  const result = deriveInspectorGitChangeState(status, undefined);
+  expect(result.changeStats).toEqual({ additions: 3000, removals: 1500 });
+  expect(result.fileChangesByPath.get("new.ts")?.stats).toEqual({ additions: 2, removals: 0 });
 });

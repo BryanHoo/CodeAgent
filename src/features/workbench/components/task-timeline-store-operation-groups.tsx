@@ -40,7 +40,7 @@ export function StoredAssistantTimelineItems({
   return visibleGroups.map((group) => {
     const groupItemKeys = group.type === "item" ? [group.itemKey] : group.itemKeys;
     const content = groupItemKeys.map((itemKey) => (
-      <StoredTimelineItemContent
+      <div key={itemKey} data-conversation-anchor={itemKey}><StoredTimelineItemContent
         isLastTurnItem={itemKey === lastTurnItemKey}
         itemKey={itemKey}
         key={itemKey}
@@ -51,7 +51,7 @@ export function StoredAssistantTimelineItems({
         store={store}
         taskId={taskId}
         turnStatus={turnStatus}
-      />
+      /></div>
     ));
     if (group.type === "item") {
       return content[0] ?? null;

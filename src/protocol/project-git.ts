@@ -17,6 +17,7 @@ export const AgentFileChangeSchema = Type.Object(
   {
     // Rust 已规范化为补丁；不得再按 kind 将 create/delete 当作原始文件内容。
     diff: Type.String(),
+    truncated: Type.Optional(Type.Boolean()),
     stats: FileChangeStatsSchema,
     kind: Type.Union([Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")]),
     // Provider 历史可能保留绝对路径；只有 Project Git API 收紧为相对路径。
@@ -32,8 +33,13 @@ const GitChildRepositorySchema = Type.String({
   minLength: 1,
   pattern: "^(?!\\.{1,2}$)(?!.*[\\u0000\\r\\n])[^/\\\\]+$",
 });
-const SelectedGitPathsSchema = Type.Array(ProjectRelativePathSchema, {
-  maxItems: 500,
+// Git 路径来自 NUL 协议：允许目录尾斜杠及原生特殊字符，遍历边界由 Rust 再次校验。
+const GitPathSchema = Type.String({
+  minLength: 1,
+  pattern: "^(?!/)(?![A-Za-z]:)(?![\\s\\S]*\\u0000)(?![\\s\\S]*//)(?![\\s\\S]*(?:^|/)\\.\\.?(?:/|$))[\\s\\S]+$",
+});
+
+const SelectedGitPathsSchema = Type.Array(GitPathSchema, {
   minItems: 1,
   uniqueItems: true,
 });
@@ -41,15 +47,20 @@ const CommitMessageSchema = Type.String({ maxLength: 10_000, minLength: 1, patte
 const ProjectGitFileChangeSchema = Type.Object(
   {
     diff: Type.String(),
+    truncated: Type.Optional(Type.Boolean()),
     stats: FileChangeStatsSchema,
     kind: Type.Union([Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")]),
-    path: ProjectRelativePathSchema,
+    path: GitPathSchema,
   },
   { additionalProperties: false },
 );
 
 export const ProjectGitStatusSchema = Type.Object(
   {
+    // 全仓汇总独立于分页数量和按需加载的补丁正文。
+    stats: Type.Optional(FileChangeStatsSchema),
+    nextCursor: Type.Optional(Type.Union([Type.String({ maxLength: 85 }), Type.Null()])),
+    totalChanges: Type.Optional(Type.Integer({ minimum: 0 })),
     baseBranches: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
     branch: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     branches: Type.Array(GitBranchNameSchema, { uniqueItems: true }),
@@ -69,7 +80,9 @@ export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
 
 export const ProjectGitStatusQuerySchema = Type.Object(
   {
-    includeDiff: Type.Optional(Type.Boolean()),
+    cursor: Type.Optional(Type.String({ maxLength: 85 })),
+    diffPath: Type.Optional(GitPathSchema),
+    diffStaged: Type.Optional(Type.Boolean()),
     repository: Type.Optional(GitChildRepositorySchema),
     rootPath: ProjectRootPathSchema,
   },
@@ -81,10 +94,10 @@ export type ProjectGitStatusQuery = Readonly<Static<typeof ProjectGitStatusQuery
 export const ProjectGitCommitSchema = Type.Object(
   {
     authoredAt: Type.String({ format: "date-time" }),
-    authorEmail: Type.String({ maxLength: 320, minLength: 1 }),
-    authorName: Type.String({ maxLength: 512, minLength: 1, pattern: "\\S" }),
+    authorEmail: Type.String(),
+    authorName: Type.String(),
     sha: Type.String({ maxLength: 64, minLength: 40, pattern: "^[a-f0-9]+$" }),
-    title: Type.String({ maxLength: 10_000, minLength: 1, pattern: "\\S" }),
+    title: Type.String(),
   },
   { additionalProperties: false },
 );
@@ -111,7 +124,7 @@ export const ProjectGitHistoryPageSchema = Type.Object(
     nextCursor: Type.Union([GitHistoryCursorSchema, Type.Null()]),
     repositories: Type.Array(ProjectRelativePathSchema, { maxItems: 256, uniqueItems: true }),
     repository: Type.Union([ProjectRelativePathSchema, Type.Null()]),
-    repositoryMode: Type.Union([Type.Literal("root"), Type.Literal("children")]),
+    repositoryMode: Type.Union([Type.Literal("root"), Type.Literal("children"), Type.Literal("none")]),
   },
   { additionalProperties: false },
 );
@@ -139,7 +152,7 @@ export type ProjectGitCommitFilesQuery = Readonly<Static<typeof ProjectGitCommit
 export const ProjectGitCommitFileSchema = Type.Object(
   {
     kind: Type.Union([Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")]),
-    path: ProjectRelativePathSchema,
+    path: GitPathSchema,
   },
   { additionalProperties: false },
 );
@@ -156,7 +169,7 @@ export type ProjectGitCommitFilesPage = Readonly<Static<typeof ProjectGitCommitF
 
 export const ProjectGitCommitFileDiffQuerySchema = Type.Object(
   {
-    path: ProjectRelativePathSchema,
+    path: GitPathSchema,
     repository: Type.Optional(ProjectRelativePathSchema),
     rootPath: ProjectRootPathSchema,
     sha: GitCommitShaSchema,

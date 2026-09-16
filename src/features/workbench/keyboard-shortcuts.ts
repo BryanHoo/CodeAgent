@@ -27,7 +27,7 @@ type ShortcutEvent = Pick<
 
 export const WORKBENCH_SHORTCUTS: readonly WorkbenchShortcut[] = [
   { id: "newTask", key: "n", section: "general" },
-  { id: "searchTasks", key: "k", section: "general" },
+  { id: "searchTasks", key: "f", section: "general" },
   { id: "toggleSidebar", key: "b", section: "view" },
   { id: "toggleInspector", key: ".", section: "view" },
   { id: "toggleTerminal", key: "j", section: "view" },

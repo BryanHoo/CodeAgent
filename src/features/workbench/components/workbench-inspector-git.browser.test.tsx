@@ -57,7 +57,7 @@ it.for([{ width: 1280, theme: "light" }, { width: 1920, theme: "dark" }])("项�
   await expect.element(screen.getByText("1 个文件", { exact: true })).toBeVisible();
   await expect.element(screen.getByText("未提交变更", { exact: true })).not.toBeInTheDocument();
   await expect.element(reviewButton).toBeVisible();
-  await expect.element(reviewButton).toBeDisabled();
+  await expect.element(reviewButton).toBeEnabled();
   await expect.element(screen.getByText("+0", { exact: true })).not.toBeInTheDocument();
   await screen.getByRole("button", { name: "加载详情" }).click();
   await expect.element(screen.getByLabelText("main.ts，新增 5 行，删除 2 行")).toBeVisible();
@@ -88,4 +88,28 @@ it.for([{ width: 1280, theme: "light" }, { width: 1920, theme: "dark" }])("项�
   await screen.getByRole("tab", { name: "上下文", exact: true }).click();
   await expect.element(reviewButton).not.toBeInTheDocument();
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+});
+
+it("仅有分页 numstat 元数据时，项目汇总与文件树直接显示增删行数", async () => {
+  await i18n.changeLanguage("zh-CN");
+  vi.spyOn(nativeClient, "listProjectFiles").mockResolvedValue({
+    entries: [{ path: "main.ts", type: "file" }], path: null,
+  });
+  const readDiff = vi.spyOn(nativeClient, "getProjectGitStatus");
+  const counted: ProjectGitStatus = {
+    ...status, totalChanges: 1500, stats: { additions: 3000, removals: 1500 },
+    unstaged: [{ ...status.unstaged[0]!, stats: { additions: 7, removals: 3 } }],
+  };
+  const queryClient = new QueryClient();
+  const screen = await render(<QueryClientProvider client={queryClient}><TooltipProvider>
+    <div style={{ height: 640, width: 360, display: "flex" }}>
+      <WorkbenchInspector projectName="Project" projectId="project" projectPath="/project"
+        projectRootId="root" taskId="task" tab="project" gitStatus={counted} />
+    </div>
+  </TooltipProvider></QueryClientProvider>);
+  await expect.element(screen.getByText("+3000", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("-1500", { exact: true })).toBeVisible();
+  await expect.element(screen.getByLabelText("main.ts，新增 7 行，删除 3 行")).toBeVisible();
+  expect(readDiff).not.toHaveBeenCalled();
+  queryClient.clear();
 });

@@ -52,6 +52,9 @@ type CommitFileEntry = Readonly<{
 type CommitChangesPanelProps = Readonly<{
   error?: Error | null;
   gitStatus: ProjectGitStatus;
+  isDiffLoading?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
   isCommitting?: boolean;
   isGenerating?: boolean;
   isRepositoryLoading?: boolean;
@@ -105,6 +108,9 @@ function createCommitContentState(identity: string, entries: readonly CommitFile
 export function CommitChangesPanel({
   error = null,
   gitStatus,
+  isDiffLoading = false,
+  isLoadingMore = false,
+  onLoadMore,
   isCommitting = false,
   isGenerating = false,
   isRepositoryLoading = false,
@@ -311,6 +317,7 @@ export function CommitChangesPanel({
           <div className="flex min-h-0 flex-1 flex-col border-t border-separator">
             <div className="flex h-8 shrink-0 items-center gap-1 px-3 text-label font-semibold">
               <span>{t("commit.changes")}</span>
+              {isDiffLoading ? <span role="status" aria-label={t("diff.loading")}><LoaderCircle className="size-3.5 animate-spin" /></span> : null}
               <span className="ml-auto text-caption font-normal text-muted-foreground">
                 {t("commit.totalFiles", { count: entries.length })}
               </span>
@@ -339,33 +346,26 @@ export function CommitChangesPanel({
                 </TooltipContent>
               </Tooltip>
             </div>
-            <div
-              className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-0.5"
-              data-slot="commit-changes-scroll"
-            >
-              <CommitChangesTreeSection
-                changes={gitStatus.staged}
-                disabled={isPending || result !== null}
-                label={t("commit.staged")}
-                onOpenFileDiff={onOpenFileDiff}
-                onSelectedPathsChange={(paths) => {
-                  setContentState((current) => ({ ...current, selectedPaths: paths }));
-                }}
-                selectedPaths={selectedPaths}
-                viewMode={fileViewMode}
-              />
-              <CommitChangesTreeSection
-                changes={gitStatus.unstaged}
-                disabled={isPending || result !== null}
-                label={t("commit.unstaged")}
-                onOpenFileDiff={onOpenFileDiff}
-                onSelectedPathsChange={(paths) => {
-                  setContentState((current) => ({ ...current, selectedPaths: paths }));
-                }}
-                selectedPaths={selectedPaths}
-                viewMode={fileViewMode}
-              />
-            </div>
+            <CommitChangesTreeSection
+              changes={gitStatus.staged}
+              statsAvailable={gitStatus.stats !== undefined}
+              secondaryChanges={gitStatus.unstaged}
+              secondaryLabel={t("commit.unstaged")}
+              disabled={isPending || result !== null}
+              label={t("commit.staged")}
+              onOpenFileDiff={onOpenFileDiff}
+              onSelectedPathsChange={(paths) => setContentState((current) => ({ ...current, selectedPaths: paths }))}
+              selectedPaths={selectedPaths}
+              viewMode={fileViewMode}
+            />
+
+            {gitStatus.nextCursor ? <div className="shrink-0 border-t border-separator p-2">
+              <p className="text-caption text-muted-foreground">{t("commit.loadedFiles", { loaded: gitStatus.staged.length + gitStatus.unstaged.length, total: gitStatus.totalChanges })}</p>
+              <Button className="mt-1 w-full" disabled={isLoadingMore} onClick={onLoadMore} variant="ghost" size="sm">
+                {isLoadingMore ? <LoaderCircle className="size-3.5 animate-spin" /> : null}{t("commit.loadMore")}
+              </Button>
+            </div> : null}
+
           </div>
         </>
       ) : null}

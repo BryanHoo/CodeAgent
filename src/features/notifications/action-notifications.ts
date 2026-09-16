@@ -43,12 +43,18 @@ export function actionErrorMessage(error: unknown): string {
         return i18n.t("errors.gitNotFound", { ns: "common" });
       case "GIT_LOCAL_CHANGES_OVERWRITTEN":
         return i18n.t("errors.gitLocalChangesOverwritten", { ns: "common" });
+      case "GIT_OUTPUT_TOO_LARGE":
       case "GIT_STATUS_TOO_LARGE":
         return i18n.t("errors.gitStatusTooLarge", { ns: "common" });
       case "SNAPSHOT_MISMATCH":
         return i18n.t("errors.gitSnapshotChanged", { ns: "common" });
       case "INVALID_BRANCH":
         return i18n.t("errors.gitInvalidBranch", { ns: "common" });
+      case "GIT_PATH_ENCODING_UNSUPPORTED":
+        return i18n.t("errors.gitPathEncodingUnsupported", { ns: "common" });
+      case "GIT_REPOSITORY_UNAVAILABLE":
+        return i18n.t("errors.gitRepositoryUnavailable", { ns: "common" });
+      case "GIT_OUTPUT_INVALID":
       case "GIT_COMMAND_FAILED":
         return i18n.t("errors.gitCommandFailed", { ns: "common" });
     }

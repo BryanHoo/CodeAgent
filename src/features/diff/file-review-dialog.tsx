@@ -1,7 +1,6 @@
 import {
   ChevronDown,
   ChevronUp,
-  FileCode2,
   Files,
   List,
   ListTree,
@@ -25,7 +24,7 @@ import { Dialog, DialogContent, DialogTitle } from "../../shared/components/core
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
-import { getFileName } from "./file-change.js";
+import { AsyncFileDiff } from "./async-file-diff.js";
 import { useFileNavigationViewPreference } from "./file-navigation-view-preference.js";
 import { buildReviewFileTree, ReviewFileTreeNavigation } from "./file-review-tree.js";
 
@@ -133,7 +132,6 @@ export function FileReviewWorkspace({
   }
   const change = changes[currentIndex] ?? firstChange;
   const selectedPath = change.path.replaceAll("\\", "/");
-  const fileName = getFileName(change.path);
   const navigationLabel = t(
     navigationOpen ? "diff.collapseChangedFilesNavigation" : "diff.expandChangedFilesNavigation",
   );
@@ -144,15 +142,10 @@ export function FileReviewWorkspace({
   return (
     <section className="grid h-full min-h-0 w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
       <header className="flex min-h-toolbar min-w-0 items-center gap-2 px-3 shadow-toolbar sm:px-4">
-        <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-body-small font-semibold" id={titleId} title={change.path}>
-            {fileName}
-          </h2>
-          <p className="truncate text-caption text-muted-foreground" title={change.path}>
-            {change.path}
-          </p>
-        </div>
+        {/* 弹窗标题保持固定，当前文件名和路径由 Diff 区域展示。 */}
+        <h2 className="min-w-0 flex-1 truncate text-body-small font-semibold" id={titleId}>
+          {t("diff.reviewTitle")}
+        </h2>
         <span className="shrink-0 text-label text-muted-foreground">
           {currentIndex + 1} / {changes.length}
         </span>
@@ -313,11 +306,13 @@ export function FileReviewWorkspace({
 }
 
 type FileReviewDialogProps = Readonly<{
+  loadDiff?: (change: AgentFileChange) => Promise<AgentFileChange>;
   changes: readonly AgentFileChange[] | null;
   onClose: () => void;
 }>;
 
-export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
+export function FileReviewDialog({ changes, onClose, loadDiff }: FileReviewDialogProps) {
+  const { t } = useTranslation("workbench");
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
@@ -342,13 +337,14 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
         aria-labelledby={titleId}
         className="h-[min(86dvh,58rem)] max-w-[78rem] overflow-hidden bg-transparent p-0"
       >
-        <DialogTitle className="sr-only">{getFileName(changes[0]?.path ?? "")}</DialogTitle>
+        <DialogTitle className="sr-only">{t("diff.reviewTitle")}</DialogTitle>
         <FileReviewWorkspace
           changes={changes}
           currentIndex={currentIndex}
           onClose={onClose}
           onCurrentIndexChange={setCurrentIndex}
           titleId={titleId}
+          {...(loadDiff === undefined ? {} : { showStats: changes.every((change) => change.statsAvailable || change.diff !== ""), renderContent: (change: AgentFileChange) => <AsyncFileDiff change={change} loadDiff={loadDiff} /> })}
         />
       </DialogContent>
     </Dialog>

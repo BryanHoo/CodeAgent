@@ -401,9 +401,6 @@ export function WorkbenchShellLayout({
           contextOnly={temporary}
           expandedFileTreePaths={expandedFileTreePaths}
           gitStatusError={gitStatusQuery.error}
-          gitStatusDetails={context.gitStatusDetailsQuery.data}
-          gitStatusDetailsError={context.gitStatusDetailsQuery.error}
-          gitStatusDetailsPending={context.gitStatusDetailsQuery.isFetching}
           gitStatusPending={gitStatusQuery.isPending}
           gitStatusRefreshing={gitStatusQuery.isFetching}
           gitClient={client}

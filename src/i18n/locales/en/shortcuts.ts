@@ -2,7 +2,7 @@ export const shortcuts = {
   actions: {
     newTask: "New task",
     openSettings: "Open settings",
-    searchTasks: "Search tasks",
+    searchTasks: "Global search",
     showShortcuts: "View keyboard shortcuts",
     toggleInspector: "Show or hide context panel",
     toggleSidebar: "Show or hide project sidebar",

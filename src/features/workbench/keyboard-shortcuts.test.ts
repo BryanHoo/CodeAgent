@@ -18,6 +18,11 @@ const baseEvent = {
 };
 
 describe("workbench keyboard shortcuts", () => {
+  it("opens global search with Cmd+F and Ctrl+F", () => {
+    const search = WORKBENCH_SHORTCUTS.find((shortcut) => shortcut.id === "searchTasks")!;
+    expect(matchesShortcut({ ...baseEvent, key: "f" }, search, true)).toBe(true);
+    expect(matchesShortcut({ ...baseEvent, key: "f", metaKey: false, ctrlKey: true }, search, false)).toBe(true);
+  });
   it("matches the platform primary modifier and rejects unsafe key events", () => {
     const newTask = WORKBENCH_SHORTCUTS.find((shortcut) => shortcut.id === "newTask");
     expect(newTask).toBeDefined();

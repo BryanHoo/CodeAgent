@@ -206,8 +206,9 @@ mod tests {
     }
 
     #[test]
-    fn oversized_git_status_should_preserve_limit_and_stable_code() {
-        let value = serde_json::to_value(AppError::from(WorkspaceError::GitStatusTooLarge {
+    fn oversized_git_metadata_should_preserve_limit_and_stable_code() {
+        let value = serde_json::to_value(AppError::from(WorkspaceError::GitOutputTooLarge {
+            operation: "references",
             maximum_bytes: 2_097_152,
         }))
         .unwrap();
@@ -215,8 +216,8 @@ mod tests {
         assert_eq!(
             value,
             json!({
-                "code": "GIT_STATUS_TOO_LARGE",
-                "message": "git status output exceeded 2097152 bytes"
+                "code": "GIT_OUTPUT_TOO_LARGE",
+                "message": "git references output exceeded 2097152 bytes"
             })
         );
     }

@@ -41,7 +41,6 @@ import {
   skillsQueryOptions,
   taskRenameMutationOptions,
 } from "../../projects/project-queries.js";
-import { useProjectGitDetails } from "../hooks/use-project-git-details.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 import { useProjectGitStatusRouteRefresh } from "../hooks/use-project-git-status-route-refresh.js";
 import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
@@ -328,15 +327,7 @@ export function useWorkbenchShellRuntime({
     [projectId, setSelectedProjectRoot],
   );
 
-  const gitStatusDetailsQuery = useProjectGitDetails({
-    activePanel: inspectorActivation.project || inspectorActivation.changes,
-    client,
-    projectId,
-    rootPath: selectedRootPath ?? "",
-    scope: inspectorScopeKey,
-    statusQuery: gitStatusQuery,
-    temporary,
-  });
+
   const setInspectorTab = useCallback(
     (tab: WorkbenchInspectorTab) => {
       setInspectorTabState({ scopeKey: inspectorScopeKey, tab });
@@ -414,7 +405,6 @@ export function useWorkbenchShellRuntime({
     fileReviewSelection,
     getNewChatSubmissionStartedAt,
     gitStatusQuery,
-    gitStatusDetailsQuery,
     globalSettingsMutation,
     globalSettingsSection,
     globalSettingsQuery,

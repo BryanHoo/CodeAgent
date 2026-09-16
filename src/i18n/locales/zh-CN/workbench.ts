@@ -1,6 +1,6 @@
+import { gitCommit } from "./git-commit.js";
 import { skillsMarket } from "./skills-market.js";
 import { taskWindow } from "./task-window-menu.js";
-
 export const workbench = {
   taskWindow,
   pet: {
@@ -20,35 +20,10 @@ export const workbench = {
     retry: "重试",
     save: "保存",
   },
-  commit: {
-    allFiles: "全选",
-    commit: "提交",
-    commitActions: "选择提交方式",
-    commitAndPush: "提交并推送",
-    commitAndPushComplete: "提交并推送已完成",
-    commitAndPushSucceeded: "提交并推送成功",
-    commitComplete: "提交已完成",
-    commitCompletePushFailed: "提交已完成，但推送失败",
-    commitCompleteUpstreamMissing: "提交已完成，当前分支未配置上游",
-    commitMessage: "提交信息",
-    indexSyncFailed: "提交 {{sha}} 已完成，但暂存区同步失败。请释放 Git 占用后检查暂存区，不要重复提交。",
-    commitSucceeded: "提交成功",
-    changes: "变更",
-    generateMessage: "生成 message 信息",
-    messagePlaceholder: "输入提交信息",
-    repository: "Git 项目",
-    repositoryLoading: "正在加载 Git 项目",
-    repositoryUnavailable: "未找到可提交的 Git 项目",
-    selectAllFiles: "全选文件",
-    selectFiles: "选择文件",
-    selectRepository: "选择 Git 项目",
-    selectionLabel: "选择文件，已选择 {{selected}}/{{total}} 个文件",
-    staged: "已暂存",
-    totalFiles_one: "共 {{count}} 个",
-    totalFiles_other: "共 {{count}} 个",
-    unstaged: "未暂存",
-  },
+  commit: gitCommit,
   diff: {
+    reviewTitle: "审核",
+    truncated: "Diff 已截断，统计仅含已显示内容。",
     changedFiles: "变更文件",
     changedFilesNavigation: "变更文件导航",
     close: "关闭文件 Diff",
@@ -449,7 +424,7 @@ export const workbench = {
     projectActions: "{{project}} 的项目操作",
     remove: "删除",
     rename: "重命名",
-    search: "搜索任务",
+    search: "全局搜索",
     searchAll: "正在搜索全部任务",
     settings: "设置",
     updateAvailableHint: "升级",

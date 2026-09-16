@@ -6,11 +6,20 @@ use thiserror::Error;
 pub enum WorkspaceError {
     #[error("invalid workspace path")]
     InvalidPath,
-    #[error("git status {stage} failed: {source}")]
-    GitStatusRead {
-        stage: &'static str,
-        source: Box<WorkspaceError>,
+    #[error("git {operation} returned invalid data: {detail}")]
+    GitOutputInvalid {
+        operation: &'static str,
+        detail: &'static str,
     },
+    #[error("git {operation} output exceeded {maximum_bytes} bytes")]
+    GitOutputTooLarge {
+        operation: &'static str,
+        maximum_bytes: usize,
+    },
+    #[error("Git path cannot be represented as UTF-8")]
+    GitPathEncoding,
+    #[error("{0}")]
+    GitRepositoryUnavailable(String),
     #[error("attachment exceeds the {maximum_bytes} byte limit")]
     AttachmentTooLarge { maximum_bytes: usize },
     #[error("workspace snapshot changed; refresh and retry")]
@@ -23,8 +32,6 @@ pub enum WorkspaceError {
     GitNotFound,
     #[error("{0}")]
     GitLocalChangesOverwritten(String),
-    #[error("git status output exceeded {maximum_bytes} bytes")]
-    GitStatusTooLarge { maximum_bytes: usize },
     #[error("{0}")]
     GitCommandFailed(String),
     #[error("workspace I/O failed: {0}")]
@@ -35,14 +42,16 @@ impl WorkspaceError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::InvalidPath => "INVALID_PATH",
-            Self::GitStatusRead { source, .. } => source.code(),
+            Self::GitOutputInvalid { .. } => "GIT_OUTPUT_INVALID",
+            Self::GitOutputTooLarge { .. } => "GIT_OUTPUT_TOO_LARGE",
+            Self::GitPathEncoding => "GIT_PATH_ENCODING_UNSUPPORTED",
+            Self::GitRepositoryUnavailable(_) => "GIT_REPOSITORY_UNAVAILABLE",
             Self::AttachmentTooLarge { .. } => "ATTACHMENT_TOO_LARGE",
             Self::SnapshotMismatch => "SNAPSHOT_MISMATCH",
             Self::InvalidBranch => "INVALID_BRANCH",
             Self::NoUpstream => "NO_UPSTREAM",
             Self::GitNotFound => "GIT_NOT_FOUND",
             Self::GitLocalChangesOverwritten(_) => "GIT_LOCAL_CHANGES_OVERWRITTEN",
-            Self::GitStatusTooLarge { .. } => "GIT_STATUS_TOO_LARGE",
             Self::GitCommandFailed(_) => "GIT_COMMAND_FAILED",
             Self::Io(_) => "IO_FAILED",
         }
@@ -79,7 +88,11 @@ pub async fn resolve_destination(root: &Path, relative: &Path) -> Result<PathBuf
 
 pub fn valid_relative(value: &str) -> Result<PathBuf, WorkspaceError> {
     let path = Path::new(value);
-    if value.is_empty() || path.is_absolute() || value.contains('\\') {
+    if value.is_empty()
+        || value.contains('\0')
+        || path.is_absolute()
+        || (cfg!(windows) && value.contains('\\'))
+    {
         return Err(WorkspaceError::InvalidPath);
     }
     normalize_relative(path)

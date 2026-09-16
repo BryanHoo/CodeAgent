@@ -10,8 +10,10 @@ async fn add_diffs_should_include_untracked_text_file_additions() {
         .as_nanos();
     let root = std::env::temp_dir().join(format!("codeagent-git-diff-{unique}"));
     fs::create_dir_all(&root).unwrap();
+    let root = fs::canonicalize(root).unwrap();
     fs::write(root.join("new.txt"), "first\nsecond\nthird\n").unwrap();
     let mut changes = vec![GitChange {
+        truncated: false,
         stats: Default::default(),
         diff: String::new(),
         kind: "create",
@@ -46,6 +48,7 @@ async fn file_change_stats_should_count_git_add_delete_and_update_patches() {
         .as_nanos();
     let root = std::env::temp_dir().join(format!("codeagent-git-stats-{unique}"));
     fs::create_dir_all(&root).unwrap();
+    let root = fs::canonicalize(root).unwrap();
     let git = |args: &[&str]| {
         let output = std::process::Command::new("git")
             .args(args)
@@ -84,6 +87,7 @@ async fn file_change_stats_should_count_git_add_delete_and_update_patches() {
     ]
     .into_iter()
     .map(|(path, kind)| GitChange {
+        truncated: false,
         path: path.into(),
         kind,
         diff: String::new(),

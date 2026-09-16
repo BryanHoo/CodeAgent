@@ -54,7 +54,7 @@ pub(super) struct NativeThread {
     pub(super) reasoning_effort: Option<String>,
     name: Option<String>,
     preview: String,
-    project_id: Option<String>,
+    pub(super) project_id: Option<String>,
     section: Option<NativeThreadSection>,
     status: NativeThreadStatus,
     updated_at: i64,

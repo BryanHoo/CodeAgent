@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     env,
     path::{Path, PathBuf},
     process::ExitStatus,
@@ -14,7 +13,7 @@ use tokio::{
     time::{Instant, sleep_until},
 };
 
-use super::path_guard::WorkspaceError;
+use super::{git_capture::BoundedCapture, path_guard::WorkspaceError};
 
 const LOCAL_GIT_TIMEOUT: Duration = Duration::from_secs(30);
 const NETWORK_GIT_TIMEOUT: Duration = Duration::from_secs(120);
@@ -40,68 +39,39 @@ enum ProcessEvent {
     TaskFinished,
 }
 
-struct BoundedCapture {
-    head: Vec<u8>,
-    tail: VecDeque<u8>,
-    head_limit: usize,
-    tail_limit: usize,
-    total_bytes: usize,
-}
-
-impl BoundedCapture {
-    fn new(limit: usize) -> Self {
-        let head_limit = limit.div_ceil(2);
-        Self {
-            head: Vec::with_capacity(head_limit),
-            tail: VecDeque::with_capacity(limit - head_limit),
-            head_limit,
-            tail_limit: limit - head_limit,
-            total_bytes: 0,
-        }
-    }
-
-    fn push(&mut self, mut bytes: &[u8]) -> bool {
-        self.total_bytes = self.total_bytes.saturating_add(bytes.len());
-        let head_remaining = self.head_limit - self.head.len();
-        let head_bytes = head_remaining.min(bytes.len());
-        self.head.extend_from_slice(&bytes[..head_bytes]);
-        bytes = &bytes[head_bytes..];
-
-        if self.tail_limit > 0 {
-            if bytes.len() >= self.tail_limit {
-                self.tail.clear();
-                self.tail.extend(&bytes[bytes.len() - self.tail_limit..]);
-            } else {
-                let overflow = self
-                    .tail
-                    .len()
-                    .saturating_add(bytes.len())
-                    .saturating_sub(self.tail_limit);
-                self.tail.drain(..overflow);
-                self.tail.extend(bytes);
-            }
-        }
-        self.is_truncated()
-    }
-
-    fn is_truncated(&self) -> bool {
-        self.total_bytes > self.head_limit + self.tail_limit
-    }
-
-    fn into_bytes(self) -> Vec<u8> {
-        let mut bytes = self.head;
-        bytes.reserve(self.tail.len());
-        bytes.extend(self.tail);
-        bytes
-    }
-}
-
 pub(super) async fn run_git(
     repo: &Path,
     args: &[&str],
     max_bytes: usize,
 ) -> Result<(Vec<u8>, bool), WorkspaceError> {
-    run_git_command(repo, args, max_bytes, None, None, LOCAL_GIT_TIMEOUT).await
+    run_git_command(repo, args, max_bytes, None, None, LOCAL_GIT_TIMEOUT, false).await
+}
+
+/// 所有查询统一走无可选锁入口；写操作显式使用 run_git 或隔离 index 入口。
+pub(super) async fn run_git_read(
+    repo: &Path,
+    args: &[&str],
+    max_bytes: usize,
+) -> Result<(Vec<u8>, bool), WorkspaceError> {
+    run_git_command(repo, args, max_bytes, None, None, LOCAL_GIT_TIMEOUT, true).await
+}
+
+pub(super) async fn run_git_with_input(
+    repo: &Path,
+    args: &[&str],
+    max_bytes: usize,
+    input: &[u8],
+) -> Result<(Vec<u8>, bool), WorkspaceError> {
+    run_git_command(
+        repo,
+        args,
+        max_bytes,
+        None,
+        Some(input),
+        LOCAL_GIT_TIMEOUT,
+        false,
+    )
+    .await
 }
 
 pub(super) async fn run_network_git(
@@ -109,7 +79,16 @@ pub(super) async fn run_network_git(
     args: &[&str],
     max_bytes: usize,
 ) -> Result<(Vec<u8>, bool), WorkspaceError> {
-    run_git_command(repo, args, max_bytes, None, None, NETWORK_GIT_TIMEOUT).await
+    run_git_command(
+        repo,
+        args,
+        max_bytes,
+        None,
+        None,
+        NETWORK_GIT_TIMEOUT,
+        false,
+    )
+    .await
 }
 
 pub(super) async fn run_git_with_index(
@@ -126,6 +105,7 @@ pub(super) async fn run_git_with_index(
         Some(index_path),
         input,
         LOCAL_GIT_TIMEOUT,
+        false,
     )
     .await
 }
@@ -137,29 +117,9 @@ async fn run_git_command(
     index_path: Option<&Path>,
     input: Option<&[u8]>,
     timeout: Duration,
+    read_only: bool,
 ) -> Result<(Vec<u8>, bool), WorkspaceError> {
-    let mut command = Command::new(git_binary_path()?);
-    command
-        .args(args)
-        .current_dir(repo)
-        .env_remove("GIT_INDEX_FILE")
-        // 固定机器可解析的 Git 错误语言，界面文案由应用本地化层负责。
-        .env("LC_ALL", "C")
-        .env("LANG", "C")
-        .stdin(if input.is_some() {
-            std::process::Stdio::piped()
-        } else {
-            std::process::Stdio::null()
-        })
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-    // Git 可能启动 hook、ssh 等后代进程，统一进程组才能在超限或超时时关闭整棵进程树。
-    #[cfg(unix)]
-    command.process_group(0);
-    if let Some(index_path) = index_path {
-        command.env("GIT_INDEX_FILE", git_path_argument(index_path));
-    }
+    let mut command = configured_command(repo, args, index_path, input.is_some(), read_only)?;
 
     let mut child = command.spawn().map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
@@ -234,6 +194,71 @@ async fn run_git_command(
         ProcessOutcome::Exited(_) => {}
     }
     Ok((output, stdout_truncated))
+}
+
+pub(super) fn configured_command(
+    repo: &Path,
+    args: &[&str],
+    index_path: Option<&Path>,
+    has_input: bool,
+    read_only: bool,
+) -> Result<Command, WorkspaceError> {
+    let mut command = Command::new(git_binary_path()?);
+    // 隔离宿主遗留的仓库定位变量，防止读取或写入被重定向到另一仓库。
+    for variable in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_PREFIX",
+        "GIT_NAMESPACE",
+        "GIT_LITERAL_PATHSPECS",
+        "GIT_GLOB_PATHSPECS",
+        "GIT_NOGLOB_PATHSPECS",
+        "GIT_ICASE_PATHSPECS",
+    ] {
+        command.env_remove(variable);
+    }
+    if read_only {
+        // 后台读取禁止 Git 为 stat 缓存持有可选 index 锁，必要的写锁不受影响。
+        command.env("GIT_OPTIONAL_LOCKS", "0");
+        // status、numstat 和预览必须采用相同的 rename 策略，避免用户配置导致路径错配。
+        command.args([
+            "-c",
+            "status.renames=true",
+            "-c",
+            "diff.renames=true",
+            "-c",
+            "status.renameLimit=1000",
+            "-c",
+            "diff.renameLimit=1000",
+        ]);
+    }
+    command
+        .args(["--no-pager", "-c", "color.ui=false"])
+        .args(args)
+        .current_dir(repo)
+        .env_remove("GIT_INDEX_FILE")
+        // 固定机器可解析的 Git 错误语言，界面文案由应用本地化层负责。
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(if has_input {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    // Git 可能启动 hook、ssh 等后代进程，统一进程组才能在超限或超时时关闭整棵进程树。
+    #[cfg(unix)]
+    command.process_group(0);
+    if let Some(index_path) = index_path {
+        command.env("GIT_INDEX_FILE", git_path_argument(index_path));
+    }
+
+    Ok(command)
 }
 
 fn git_binary_path() -> Result<&'static Path, WorkspaceError> {
@@ -321,7 +346,11 @@ async fn drain_stream<R>(
 where
     R: AsyncRead + Unpin,
 {
-    let mut capture = BoundedCapture::new(limit);
+    let mut capture = if matches!(reason, StopReason::StdoutLimit) {
+        BoundedCapture::prefix(limit)
+    } else {
+        BoundedCapture::new(limit)
+    };
     // 读取缓冲区放到堆上，避免组合多个 Git future 时撑爆 WebView 宿主的工作线程栈。
     let mut buffer = vec![0_u8; READ_BUFFER_BYTES];
     let mut limit_reported = false;

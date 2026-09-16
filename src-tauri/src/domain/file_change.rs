@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-/// 仅统计本次返回的正文；截断信息继续由外层响应携带，不推测省略部分。
+/// 行数元数据：补丁预览统计返回正文，Git 清单的 numstat 统计完整变更。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct FileChangeStats {
     pub additions: usize,

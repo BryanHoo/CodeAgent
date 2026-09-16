@@ -50,6 +50,7 @@ use application::{
         run_scheduled_task_now, set_scheduled_task_enabled, update_scheduled_task,
     },
     scheduled_task_runtime::ScheduledTaskRuntime,
+    search_commands::{search_task_occurrences, search_tasks},
     sidebar_commands::{
         add_project, archive_task, compact_task, delete_task, get_task_settings, interrupt_turn,
         list_projects, list_tasks, pin_task, read_task, remove_project, rename_project,
@@ -240,6 +241,8 @@ pub fn run() {
             set_scheduled_task_enabled,
             run_scheduled_task_now,
             list_tasks,
+            search_tasks,
+            search_task_occurrences,
             read_task,
             start_task,
             start_turn,

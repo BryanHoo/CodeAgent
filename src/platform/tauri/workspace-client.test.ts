@@ -129,7 +129,7 @@ describe("TauriWorkspaceClient", () => {
       invoke: invoke as InvokeImplementation,
     });
 
-    await client.getProjectGitStatus("project-a", { includeDiff: true, rootPath: "/work/a" });
+    await client.getProjectGitStatus("project-a", { rootPath: "/work/a" });
     await client.getProjectGitHistory("project-a", { cursor: "20", rootPath: "/work/a" });
     await client.getProjectGitCommitFiles("project-a", {
       rootPath: "/work/a",
@@ -142,7 +142,7 @@ describe("TauriWorkspaceClient", () => {
     });
 
     expect(invoke).toHaveBeenNthCalledWith(1, "get_project_git_status", {
-      input: { includeDiff: true, rootPath: "/work/a" },
+      input: { rootPath: "/work/a" },
       projectId: "project-a",
     });
     expect(invoke).toHaveBeenNthCalledWith(2, "get_project_git_history", {

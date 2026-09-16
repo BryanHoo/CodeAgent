@@ -107,6 +107,8 @@ fn main() {
         "list_project_directories",
         "list_completed_tasks",
         "list_tasks",
+        "search_tasks",
+        "search_task_occurrences",
         "read_task",
         "start_task",
         "start_turn",

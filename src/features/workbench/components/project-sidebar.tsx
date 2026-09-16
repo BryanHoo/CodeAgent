@@ -7,7 +7,7 @@ import {
 } from "@/protocol/index.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Send } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -17,7 +17,6 @@ import {
   useProjectActivity,
   useProjectData,
   usePinnedProjectTasks,
-  useProjectTaskSearch,
 } from "../../projects/project-context.js";
 import {
   removeArchivedProjectTaskAndRefill,
@@ -52,6 +51,8 @@ export { ProductBrand } from "./project-sidebar-header.js";
 export * from "./project-sidebar-actions.js";
 export * from "./project-sidebar-state.js";
 export * from "./project-sidebar-task-row.js";
+
+const GlobalSearchDialog = lazy(() => import("../../search/global-search-dialog.js").then((module) => ({ default: module.GlobalSearchDialog })));
 
 const primaryActionClassName =
   "flex h-8 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
@@ -101,8 +102,7 @@ export function ProjectSidebar({
     ),
   );
   const expandedProjectsRef = useRef(expandedProjects);
-  const [query, setQuery] = useState("");
-  const [searchRequest, setSearchRequest] = useState(0);
+  const [searchState, setSearchState] = useState<"idle" | "open" | "closed">("idle");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [expandedTaskProjects, setExpandedTaskProjects] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -121,14 +121,14 @@ export function ProjectSidebar({
     activeProjectId: projectId,
     activeTaskId: taskId,
   });
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const taskSearch = useProjectTaskSearch(normalizedQuery);
+  const normalizedQuery = "";
+  const taskSearch = { error: null, isPending: false };
   const pinnedTaskQuery = usePinnedProjectTasks();
-  const visibleTasks = normalizedQuery.length === 0 ? tasks : taskSearch.tasks;
+  const visibleTasks = tasks;
   // 大列表只分组一次，Project 渲染不再重复扫描全部 Task。
   const tasksByProjectId = useMemo(() => groupTasksByProjectId(visibleTasks), [visibleTasks]);
   const pinnedTasks = getPinnedTasks(
-    normalizedQuery.length === 0 ? pinnedTaskQuery.tasks : visibleTasks,
+    pinnedTaskQuery.tasks,
   );
   const hasTaskError =
     pinnedTaskQuery.error !== null ||
@@ -328,8 +328,7 @@ export function ProjectSidebar({
         onNewTask={() => void navigate({ to: "/temporary" })}
         onOpenSettings={() => onOpenSettings("appearance")}
         onSearchTasks={() => {
-          onPanelShortcut("search");
-          setSearchRequest((request) => request + 1);
+          setSearchState("open");
         }}
         onShowShortcuts={() => setShortcutsOpen(true)}
         onToggleInspector={() => onPanelShortcut("inspector")}
@@ -337,9 +336,7 @@ export function ProjectSidebar({
       />
       <ProjectSidebarHeader
         onClose={onClose}
-        query={query}
-        searchRequest={searchRequest}
-        setQuery={setQuery}
+        onSearch={() => setSearchState("open")}
       />
 
       <nav className="space-y-0.5 px-2" aria-label={t("sidebar.agentNavigation")}>
@@ -467,6 +464,7 @@ export function ProjectSidebar({
         />
       </div>
       <KeyboardShortcutsDialog onOpenChange={setShortcutsOpen} open={shortcutsOpen} />
+      {searchState !== "idle" ? <Suspense fallback={null}><GlobalSearchDialog open={searchState === "open"} client={client} projects={projects} onClose={() => setSearchState("closed")} /></Suspense> : null}
     </aside>
   );
 }

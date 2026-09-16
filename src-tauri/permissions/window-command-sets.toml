@@ -77,6 +77,8 @@ permissions = [
   "allow-list-project-directories",
   "allow-list-completed-tasks",
   "allow-list-tasks",
+  "allow-search-tasks",
+  "allow-search-task-occurrences",
   "allow-read-task",
   "allow-start-task",
   "allow-submit-prompt",

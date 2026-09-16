@@ -84,6 +84,7 @@ async fn timeout_should_kill_git_descendants_holding_pipes() {
             None,
             None,
             Duration::from_millis(100),
+            false,
         ),
     )
     .await

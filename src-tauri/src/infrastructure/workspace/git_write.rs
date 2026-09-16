@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use super::{
     git_process::{run_git, run_git_with_index, run_network_git},
-    git_read::{GitStatus, get_git_status, repository_path},
+    git_read::{GitStatus, repository_path},
     path_guard::{WorkspaceError, valid_relative},
 };
 
@@ -41,7 +41,7 @@ pub async fn switch_branch(
     validate_branch(root, repository, branch).await?;
     let repo = repository_path(root, repository).await?;
     run_git(&repo, &["switch", "--", branch], MAX_GIT_OUTPUT_BYTES).await?;
-    get_git_status(root, repository, true).await
+    super::git_status_page::get_git_status_page(root, repository, None).await
 }
 
 pub async fn create_branch(
@@ -54,7 +54,7 @@ pub async fn create_branch(
     validate_branch(root, repository, branch).await?;
     let repo = repository_path(root, repository).await?;
     run_git(&repo, &["switch", "-c", branch], MAX_GIT_OUTPUT_BYTES).await?;
-    get_git_status(root, repository, true).await
+    super::git_status_page::get_git_status_page(root, repository, None).await
 }
 
 pub async fn commit_changes(
@@ -79,6 +79,7 @@ pub async fn commit_changes(
         .iter()
         .map(|change| change.path.as_str())
         .collect();
+    let selected: HashSet<_> = paths.iter().map(String::as_str).collect();
     let mut selected_staged: Vec<_> = paths
         .iter()
         .filter(|path| staged_paths.contains(path.as_str()))
@@ -87,20 +88,22 @@ pub async fn commit_changes(
         .iter()
         .filter(|path| !staged_paths.contains(path.as_str()))
         .collect();
+    let mut copied_paths: HashSet<_> = selected_staged.iter().map(|path| path.as_str()).collect();
     // 重命名是一项变更，隔离 index 和真实 index 必须同时处理旧路径删除与新路径写入。
     for change in &status.staged {
-        if paths.contains(&change.path)
+        if selected.contains(change.path.as_str())
             && let Some(original) = &change.original_path
-            && !selected_staged.contains(&original)
+            && copied_paths.insert(original.as_str())
         {
             selected_staged.push(original);
         }
     }
-    let literal_paths: Vec<_> = selected_staged
-        .iter()
-        .chain(&selected_unstaged)
-        .map(|path| literal_path(path))
-        .collect();
+    let reset_input = super::git_index_selection::path_input(
+        selected_staged
+            .iter()
+            .chain(&selected_unstaged)
+            .map(|path| path.as_str()),
+    );
     let head = super::git_read::head_commit(&repo).await?;
     let (temporary_root, temporary_index) = create_temporary_index().await?;
     let commit_result = async {
@@ -114,60 +117,28 @@ pub async fn commit_changes(
         )
         .await?;
         if !selected_staged.is_empty() {
-            let staged_literals: Vec<_> = selected_staged
-                .iter()
-                .map(|path| literal_path(path))
-                .collect();
-            let mut list_args = vec!["ls-files", "--stage", "-z", "--"];
-            list_args.extend(staged_literals.iter().map(String::as_str));
-            let (entries, truncated) = run_git(&repo, &list_args, MAX_GIT_OUTPUT_BYTES).await?;
-            if truncated {
-                return Err(WorkspaceError::InvalidPath);
-            }
-
-            let mut remove_args = vec!["update-index", "--force-remove", "--"];
-            remove_args.extend(selected_staged.iter().map(|path| path.as_str()));
-            run_git_with_index(
-                &repo,
-                &remove_args,
-                MAX_GIT_OUTPUT_BYTES,
-                &temporary_index,
-                None,
-            )
-            .await?;
-            if !entries.is_empty() {
-                // 复制真实 index 条目，确保混合文件提交暂存版本而非工作区版本。
-                run_git_with_index(
-                    &repo,
-                    &["update-index", "-z", "--index-info"],
-                    MAX_GIT_OUTPUT_BYTES,
-                    &temporary_index,
-                    Some(&entries),
-                )
+            super::git_index_selection::copy_staged(&repo, &temporary_index, &selected_staged)
                 .await?;
-            }
         }
         if !selected_unstaged.is_empty() {
-            let unstaged_literals: Vec<_> = selected_unstaged
-                .iter()
-                .map(|path| literal_path(path))
-                .collect();
-            let mut add_args = vec!["add", "--"];
-            add_args.extend(unstaged_literals.iter().map(String::as_str));
+            let input = super::git_index_selection::path_input(
+                selected_unstaged.iter().map(|path| path.as_str()),
+            );
             run_git_with_index(
                 &repo,
-                &add_args,
+                &["add", "--pathspec-from-file=-", "--pathspec-file-nul"],
                 MAX_GIT_OUTPUT_BYTES,
                 &temporary_index,
-                None,
+                Some(&input),
             )
             .await?;
         }
         // 隔离 index 构建期间内容仍可能变化，提交前再次拒绝过期预览。
         validate_snapshot(root, repository, expected_snapshot).await?;
+        // 大提交不打印逐文件摘要，避免成功提交后的日志洪水耗尽进程输出预算。
         run_git_with_index(
             &repo,
-            &["commit", "--no-gpg-sign", "-m", message],
+            &["commit", "--quiet", "--no-gpg-sign", "-m", message],
             MAX_GIT_OUTPUT_BYTES,
             &temporary_index,
             None,
@@ -182,13 +153,22 @@ pub async fn commit_changes(
 
     let commit_sha = first_line(&repo, &["rev-parse", "HEAD"]).await?;
     let branch = status.branch;
-    let mut reset_args = vec!["reset", "--quiet", "HEAD", "--"];
-    reset_args.extend(literal_paths.iter().map(String::as_str));
     // HEAD 已更新，收尾失败不能把成功提交降格为可重试的整体错误。
-    let index_sync_error = run_git(&repo, &reset_args, MAX_GIT_OUTPUT_BYTES)
-        .await
-        .err()
-        .map(|_| "GIT_INDEX_SYNC_FAILED");
+    let index_sync_error = super::git_process::run_git_with_input(
+        &repo,
+        &[
+            "reset",
+            "--quiet",
+            "--pathspec-from-file=-",
+            "--pathspec-file-nul",
+            "HEAD",
+        ],
+        MAX_GIT_OUTPUT_BYTES,
+        &reset_input,
+    )
+    .await
+    .err()
+    .map(|_| "GIT_INDEX_SYNC_FAILED");
     let (push_status, push_error) = if action == "commit" {
         ("not_requested", None)
     } else {
@@ -256,10 +236,6 @@ async fn remote_names(repo: &Path) -> Result<Vec<String>, WorkspaceError> {
         .collect())
 }
 
-fn literal_path(path: &str) -> String {
-    format!(":(literal){path}")
-}
-
 async fn create_temporary_index() -> Result<(PathBuf, PathBuf), WorkspaceError> {
     static NEXT_INDEX: AtomicU64 = AtomicU64::new(0);
     for _ in 0..16 {
@@ -322,7 +298,7 @@ pub(super) async fn validate_branch(
 }
 
 pub(super) fn validate_paths(paths: &[String]) -> Result<(), WorkspaceError> {
-    if paths.is_empty() || paths.len() > 500 {
+    if paths.is_empty() || paths.iter().map(String::len).sum::<usize>() > 32 * 1024 * 1024 {
         return Err(WorkspaceError::InvalidPath);
     }
     for path in paths {

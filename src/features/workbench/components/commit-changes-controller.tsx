@@ -1,6 +1,6 @@
 import type { CommitProjectChangesResponse, ProjectGitStatus } from "@/protocol/index.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { NativeWorkbenchClient } from "../../projects/project-queries.js";
@@ -15,6 +15,8 @@ import {
   projectGitRepositoryStatusQueryOptions,
 } from "../../projects/project-queries.js";
 import { CommitChangesPanel, collectCommitRepositories } from "./commit-changes-panel.js";
+import { useCommitStatusPages } from "../hooks/use-commit-status-pages.js";
+import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
 type CommitChangesControllerProps = Readonly<{
@@ -57,6 +59,9 @@ export function CommitChangesController({
     result: CommitProjectChangesResponse;
     snapshot: string;
   }>();
+  const [loadingDiff, setLoadingDiff] = useState(false);
+  const previewRequest = useRef(0);
+  useEffect(() => () => { previewRequest.current++; }, [projectId, rootPath]);
   const [selectedRepository, setSelectedRepository] = useState<string | null>(null);
   const effectiveRepository =
     selectedRepository !== null && repositories.includes(selectedRepository)
@@ -71,10 +76,12 @@ export function CommitChangesController({
       client,
     ),
   );
-  const activeGitStatus =
+  const initialGitStatus =
     gitStatus.repositoryMode === "root" ? gitStatus : (repositoryStatusQuery.data ?? gitStatus);
+  const pages = useCommitStatusPages(client, projectId, rootPath, gitStatus.repositoryMode === "root" ? null : effectiveRepository, initialGitStatus);
+  const activeGitStatus = pages.status;
   const result = resultState?.snapshot === activeGitStatus.snapshot ? resultState.result : null;
-  const statusError = detailsError ?? repositoryStatusQuery.error;
+  const statusError = detailsError ?? repositoryStatusQuery.error ?? pages.error;
 
   useEffect(() => {
     if (statusError !== null) {
@@ -114,11 +121,24 @@ export function CommitChangesController({
         const response = await messageMutation.mutateAsync(request);
         return response.message;
       }}
-      onOpenFileDiff={onOpenFileDiff}
+      isDiffLoading={loadingDiff}
+      isLoadingMore={pages.loading}
+      onLoadMore={() => { void pages.loadMore(); }}
+      onOpenFileDiff={(change) => {
+        const request = ++previewRequest.current;
+        setLoadingDiff(true);
+        void loadProjectGitFileDiff(queryClient, client, projectId, rootPath, activeGitStatus, change,
+          gitStatus.repositoryMode === "root" ? null : effectiveRepository)
+          .then((loaded) => { if (request === previewRequest.current) onOpenFileDiff(loaded); })
+          .catch((error: unknown) => { if (request === previewRequest.current) notifyActionError(error); })
+          .finally(() => { if (request === previewRequest.current) setLoadingDiff(false); });
+      }}
       onSelectRepository={(repository) => {
         setResultState(undefined);
         messageMutation.reset();
         commitMutation.reset();
+        previewRequest.current++;
+        setLoadingDiff(false);
         setSelectedRepository(repository);
       }}
       repositories={repositories}

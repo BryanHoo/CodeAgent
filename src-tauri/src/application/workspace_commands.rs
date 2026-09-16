@@ -18,7 +18,9 @@ pub struct FileMutationInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitStatusInput {
-    include_diff: bool,
+    cursor: Option<String>,
+    diff_path: Option<String>,
+    diff_staged: Option<bool>,
     repository: Option<String>,
     root_path: String,
 }
@@ -197,10 +199,23 @@ pub async fn get_project_git_status(
     state
         .run_cancellable(request_id.as_deref(), async {
             let (_, root, _) = project_root(&state, &project_id, &input.root_path).await?;
-            let response =
-                workspace::get_git_status(&root, input.repository.as_deref(), input.include_diff)
-                    .await
-                    .map_err(AppError::from)?;
+            let response = if let Some(path) = input.diff_path.as_deref() {
+                workspace::get_git_file_status(
+                    &root,
+                    input.repository.as_deref(),
+                    path,
+                    input.diff_staged.unwrap_or(false),
+                )
+                .await
+            } else {
+                workspace::get_git_status_page(
+                    &root,
+                    input.repository.as_deref(),
+                    input.cursor.as_deref(),
+                )
+                .await
+            }
+            .map_err(AppError::from)?;
             serde_json::to_value(response).map_err(|_| AppError::FilesystemRequestFailed)
         })
         .await

@@ -24,3 +24,16 @@ void test("task windows register commands and expose only their restricted surfa
   assert.ok(!capability.permissions.includes("allow-start-turn"));
   assert.ok(!capability.permissions.includes("allow-initialize-app-storage"));
 });
+
+void test("global search is registered and granted only to the main window", () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  const sets = read("src-tauri/permissions/window-command-sets.toml");
+  const mainSet = sets.split('identifier = "main-window-commands"')[1].split("[[set]]")[0];
+  for (const command of ["search_tasks", "search_task_occurrences"]) {
+    assert.ok(read("src-tauri/build.rs").includes(`"${command}"`));
+    assert.ok(read("src-tauri/src/lib.rs").includes(`${command},`));
+    const permission = `allow-${command.replaceAll("_", "-")}`;
+    assert.ok(mainSet.includes(permission));
+    assert.equal(sets.split(permission).length - 1, 1);
+  }
+});

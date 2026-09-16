@@ -1,62 +1,67 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-
 import { I18nextProvider, i18n } from "../../../i18n/i18n.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "../../../shared/components/core/dialog.js";
 import "../../../shared/styles/globals.css";
 import "../../../shared/styles/workbench.css";
 import { ProjectSidebarHeader } from "./project-sidebar-header.js";
+import { WorkbenchShortcuts } from "./workbench-shortcuts.js";
 
-function ProjectSidebarHeaderHarness() {
-  const [query, setQuery] = useState("");
-  const [searchRequest, setSearchRequest] = useState(0);
-
+function Harness() {
+  const [open, setOpen] = useState(false);
   return (
-    <aside className="workbench-sidebar w-sidebar bg-sidebar">
-      <button onClick={() => setSearchRequest((request) => request + 1)} type="button">
-        外部搜索
-      </button>
-      <ProjectSidebarHeader
-        onClose={vi.fn()}
-        query={query}
-        searchRequest={searchRequest}
-        setQuery={setQuery}
-      />
-    </aside>
+    <>
+      <WorkbenchShortcuts onSearchTasks={() => setOpen(true)} />
+      <ProjectSidebarHeader onClose={vi.fn()} onSearch={() => setOpen(true)} />
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>聚合搜索</DialogTitle>
+          <input aria-label="搜索内容" />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 describe("ProjectSidebarHeader", () => {
-  it("expands task search on demand and restores focus after closing", async () => {
+  it("opens a search dialog by click and primary+F without replacing the brand", async () => {
     await i18n.changeLanguage("zh-CN");
     const screen = await render(
       <I18nextProvider i18n={i18n}>
         <TooltipProvider>
-          <ProjectSidebarHeaderHarness />
+          <Harness />
         </TooltipProvider>
       </I18nextProvider>,
     );
-
-    const searchButton = screen.getByRole("button", { name: "搜索任务" });
-    expect(screen.getByRole("textbox", { name: "搜索任务" }).query()).toBeNull();
-    await expect.element(screen.getByRole("img", { name: "CodeAgent" })).toBeVisible();
-
-    await searchButton.click();
-    const searchInput = screen.getByRole("textbox", { name: "搜索任务" });
-    expect(document.activeElement).toBe(searchInput.element());
-    await page.screenshot({ path: "../../../../test-results/project-sidebar-search-expanded.png" });
-    await searchInput.fill("Protocol");
+    const trigger = screen.getByRole("button", { name: /搜索/ });
+    await trigger.click();
+    await expect
+      .element(screen.getByRole("dialog", { name: "聚合搜索" }))
+      .toBeVisible();
+    expect(document.querySelector('img[alt="CodeAgent"]')).not.toBeNull();
     await userEvent.keyboard("{Escape}");
-
-    expect(searchInput.query()).toBeNull();
-    await vi.waitFor(() => expect(document.activeElement).toBe(searchButton.element()));
-    await expect.element(screen.getByRole("img", { name: "CodeAgent" })).toBeVisible();
-
-    await searchButton.click();
-    await expect.element(screen.getByRole("textbox", { name: "搜索任务" })).toHaveValue("");
-    await screen.getByRole("button", { name: "外部搜索" }).click();
-    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "搜索任务" }).element());
+    await expect
+      .element(screen.getByRole("dialog", { name: "聚合搜索" }))
+      .not.toBeInTheDocument();
+    const event = new KeyboardEvent("keydown", {
+      key: "f",
+      bubbles: true,
+      cancelable: true,
+      ...(/mac/i.test(navigator.platform)
+        ? { metaKey: true }
+        : { ctrlKey: true }),
+    });
+    document.dispatchEvent(event);
+    await expect
+      .element(screen.getByRole("dialog", { name: "聚合搜索" }))
+      .toBeVisible();
+    expect(event.defaultPrevented).toBe(true);
   });
 });

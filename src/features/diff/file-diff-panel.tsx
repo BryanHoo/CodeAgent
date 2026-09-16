@@ -43,6 +43,11 @@ export function FileDiffPanel({
         </div>
       </CodeBlockHeader>
       <div className="min-h-0 min-w-0 overflow-auto bg-content">
+        {change.truncated === true ? (
+          <p className="px-3 py-2 text-caption text-muted-foreground" role="status">
+            {t("diff.truncated")}
+          </p>
+        ) : null}
         <Suspense
           fallback={
             <div

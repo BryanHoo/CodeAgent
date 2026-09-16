@@ -1,9 +1,9 @@
+import { HistoryNavigation, type HistoryAnchor } from "../../search/history-navigation.js";
 import type { PendingRequest } from "@/protocol/index.js";
 import { AlertTriangle, Info } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { useStore } from "zustand";
 import { i18n } from "../../../i18n/i18n.js";
-
 import { ConversationList } from "../../../shared/components/agent/conversation.js";
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type {
@@ -13,7 +13,6 @@ import type {
 } from "../../conversation/runtime/task-store.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
-
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
 import { useTurnSizeEstimate } from "./task-timeline-estimate.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
@@ -337,6 +336,7 @@ export function StorePendingRequestList({
 }
 
 export function TaskStoreTimeline({
+  searchTarget,
   connected,
   hasOlderHistory = false,
   isLoadingOlderHistory = false,
@@ -353,6 +353,7 @@ export function TaskStoreTimeline({
   submissionStartedAt,
   submissionTurnId,
 }: Readonly<{
+  searchTarget?: HistoryAnchor;
   connected: boolean;
   hasOlderHistory?: boolean;
   isLoadingOlderHistory?: boolean;
@@ -464,6 +465,8 @@ export function TaskStoreTimeline({
         : {})}
       items={turnIds}
       renderNavigation={(navigateToItem, scrollbarWidth, scrollContainerRef) => (
+        <>
+        {searchTarget === undefined ? null : <HistoryNavigation target={searchTarget} turnIds={turnIds} navigate={navigateToItem} containerRef={scrollContainerRef} />}
         <TaskTimelineNavigation
           items={navigationItems}
           scrollContainerRef={scrollContainerRef}
@@ -472,6 +475,7 @@ export function TaskStoreTimeline({
             navigateToItem(item.turnIndex, item.anchorId);
           }}
         />
+        </>
       )}
       renderItem={(turnId, turnIndex) => (
         <StoreTurnTimelineSection

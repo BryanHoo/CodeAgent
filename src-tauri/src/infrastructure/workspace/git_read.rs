@@ -1,94 +1,44 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use serde::Serialize;
 use sha2::{Digest, Sha256};
-
-use crate::encoding::encode_lower_hex;
 
 use super::{
     git_diff::add_diffs,
-    git_process::run_git,
-    path_guard::{WorkspaceError, valid_relative},
+    git_protocol::{MAX_METADATA_BYTES, invalid, read_complete},
+    git_repository::select_repository,
+    git_status_parse::parse_status,
+    path_guard::WorkspaceError,
 };
 
-const MAX_DIFF_BYTES: usize = 512 * 1024;
-const MAX_GIT_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
+pub use super::git_history::{get_commit_diff, get_commit_files, get_git_history};
+pub use super::git_models::{GitChange, GitStatus};
+pub(super) use super::git_repository::repository_path;
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitStatus {
-    pub base_branches: Vec<String>,
-    pub branch: Option<String>,
-    pub branches: Vec<String>,
-    pub repository_mode: &'static str,
-    pub snapshot: String,
-    pub staged: Vec<GitChange>,
-    pub unstaged: Vec<GitChange>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct GitChange {
-    pub stats: crate::domain::file_change::FileChangeStats,
-    pub diff: String,
-    pub kind: &'static str,
-    pub path: String,
-    #[serde(skip)]
-    pub original_path: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitHistoryPage {
-    pub branch: Option<String>,
-    pub commits: Vec<GitCommit>,
-    pub next_cursor: Option<String>,
-    pub repositories: Vec<String>,
-    pub repository: Option<String>,
-    pub repository_mode: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitCommit {
-    pub authored_at: String,
-    pub author_email: String,
-    pub author_name: String,
-    pub sha: String,
-    pub title: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitFilesPage {
-    pub files: Vec<CommitFile>,
-    pub next_cursor: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct CommitFile {
-    pub kind: &'static str,
-    pub path: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CommitDiff {
-    pub diff: String,
-    pub truncated: bool,
-}
-
-struct RepositorySelection {
-    mode: &'static str,
-    path: Option<PathBuf>,
-    repositories: Vec<String>,
-    repository: Option<String>,
-}
-
+#[cfg(test)]
 pub async fn get_git_status(
     root: &Path,
     repository: Option<&str>,
     include_diff: bool,
 ) -> Result<GitStatus, WorkspaceError> {
-    read_git_status(root, repository, include_diff, false).await
+    // 文件正在被编辑时只重新取一次快照，避免瞬时竞态直接变成界面错误或无限重试。
+    match read_git_status(root, repository, include_diff, false).await {
+        Err(WorkspaceError::SnapshotMismatch) => {
+            read_git_status(root, repository, include_diff, false).await
+        }
+        result => result,
+    }
+}
+
+pub(super) async fn get_git_status_with_stats(
+    root: &Path,
+    repository: Option<&str>,
+) -> Result<GitStatus, WorkspaceError> {
+    match read_status(root, repository, false, false, true).await {
+        Err(WorkspaceError::SnapshotMismatch) => {
+            read_status(root, repository, false, false, true).await
+        }
+        result => result,
+    }
 }
 
 pub(super) async fn read_git_status(
@@ -97,383 +47,208 @@ pub(super) async fn read_git_status(
     include_diff: bool,
     strict: bool,
 ) -> Result<GitStatus, WorkspaceError> {
-    let selected = select_repository(root, repository)
-        .await
-        .map_err(|error| status_error("repository selection", error))?;
+    read_status(root, repository, include_diff, strict, false).await
+}
+
+async fn read_status(
+    root: &Path,
+    repository: Option<&str>,
+    include_diff: bool,
+    strict: bool,
+    include_stats: bool,
+) -> Result<GitStatus, WorkspaceError> {
+    let selected = select_repository(root, repository).await?;
     let Some(repo) = selected.path else {
         return Ok(GitStatus {
+            stats: None,
+            next_cursor: None,
+            total_changes: None,
             base_branches: Vec::new(),
             branch: None,
             branches: Vec::new(),
             repository_mode: selected.mode,
-            snapshot: hash_parts(&selected.repositories),
+            snapshot: hash_parts(selected.repositories.iter().map(String::as_bytes)),
             staged: Vec::new(),
             unstaged: Vec::new(),
         });
     };
-    let (status_output, truncated) = run_git(
+    // v2 分支头同时提供 HEAD 与分支名，消除额外进程与两次查询之间的身份漂移。
+    let status_args = [
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--no-ahead-behind",
+        "-z",
+        "--untracked-files=normal",
+        "--ignore-submodules=none",
+    ];
+    let ((mut status, status_hash), branches) = tokio::try_join!(
+        read_status_records(&repo, &status_args),
+        git_lines(
+            &repo,
+            &["for-each-ref", "--format=%(refname:short)", "refs/heads"]
+        ),
+    )?;
+    let fingerprint = super::git_snapshot::content_fingerprint(
         &repo,
-        // 聚合未跟踪目录，避免生成文件数量线性放大状态输出和 IPC 负载。
-        &["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
-        MAX_GIT_OUTPUT_BYTES,
+        &mut status.unstaged,
+        &status.gitlinks,
+        strict,
     )
     .await?;
-    if truncated {
-        return Err(WorkspaceError::GitStatusTooLarge {
-            maximum_bytes: MAX_GIT_OUTPUT_BYTES,
-        });
-    }
-    let branch = optional_git_line(&repo, &["branch", "--show-current"]).await?;
-    let head = head_commit(&repo).await?;
-    let branches = git_lines(
-        &repo,
-        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-    )
-    .await?;
-    let base_branches = branches
-        .iter()
-        .filter(|branch| matches!(branch.as_str(), "main" | "master"))
-        .cloned()
-        .collect();
-    let (mut staged, mut unstaged) =
-        parse_status(&status_output).map_err(|error| status_error("path decoding", error))?;
+    // 仅 UI 清单读取 numstat；写入校验和单文件预览不额外计算全仓统计。
+    let stats = if include_stats {
+        Some(super::git_stats::read_stats(&repo, &mut status.staged, &mut status.unstaged).await?)
+    } else {
+        None
+    };
     if include_diff {
-        add_diffs(&repo, &mut staged, true).await?;
-        add_diffs(&repo, &mut unstaged, false).await?;
+        add_diffs(&repo, &mut status.staged, true).await?;
+        add_diffs(&repo, &mut status.unstaged, false).await?;
     }
-    let mut snapshot_parts = vec![String::from_utf8_lossy(&status_output).into_owned()];
-    snapshot_parts.push(head.unwrap_or_default());
-    snapshot_parts.push(branch.clone().unwrap_or_default());
-    snapshot_parts.push(
-        super::git_snapshot::content_fingerprint(&repo, &unstaged, strict)
-            .await
-            .map_err(|error| status_error("snapshot", error))?,
-    );
+    let snapshot = hash_parts([status_hash.as_slice(), fingerprint.as_bytes()]);
     Ok(GitStatus {
-        base_branches,
-        branch,
+        stats,
+        next_cursor: None,
+        total_changes: None,
+        base_branches: branches
+            .iter()
+            .filter(|branch| matches!(branch.as_str(), "main" | "master"))
+            .cloned()
+            .collect(),
+        branch: status.branch,
         branches,
         repository_mode: selected.mode,
-        snapshot: hash_parts(&snapshot_parts),
-        staged,
-        unstaged,
+        snapshot,
+        staged: status.staged,
+        unstaged: status.unstaged,
     })
 }
 
-fn status_error(stage: &'static str, source: WorkspaceError) -> WorkspaceError {
-    match source {
-        WorkspaceError::InvalidPath => WorkspaceError::GitStatusRead {
-            stage,
-            source: Box::new(source),
-        },
-        other => other,
-    }
-}
-
-pub async fn get_git_history(
-    root: &Path,
-    repository: Option<&str>,
-    cursor: Option<&str>,
-) -> Result<GitHistoryPage, WorkspaceError> {
-    let selected = select_repository(root, repository).await?;
-    let Some(repo) = selected.path.as_ref() else {
-        return Ok(GitHistoryPage {
-            branch: None,
-            commits: Vec::new(),
-            next_cursor: None,
-            repositories: selected.repositories,
-            repository: selected.repository,
-            repository_mode: selected.mode,
-        });
-    };
-    let offset = parse_cursor(cursor)?;
-    if head_commit(repo).await?.is_none() {
-        return Ok(GitHistoryPage {
-            branch: optional_git_line(repo, &["branch", "--show-current"]).await?,
-            commits: Vec::new(),
-            next_cursor: None,
-            repositories: selected.repositories,
-            repository: selected.repository,
-            repository_mode: selected.mode,
-        });
-    }
-    let skip = format!("--skip={offset}");
-    let output = run_git(
-        repo,
-        &[
-            "log",
-            "-21",
-            &skip,
-            "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1e",
-        ],
-        MAX_GIT_OUTPUT_BYTES,
-    )
-    .await?
-    .0;
-    let mut commits = parse_history(&output)?;
-    let has_more = commits.len() > 20;
-    commits.truncate(20);
-    Ok(GitHistoryPage {
-        branch: optional_git_line(repo, &["branch", "--show-current"]).await?,
-        commits,
-        next_cursor: has_more.then(|| (offset + 20).to_string()),
-        repositories: selected.repositories,
-        repository: selected.repository,
-        repository_mode: selected.mode,
-    })
-}
-
-pub async fn get_commit_files(
-    root: &Path,
-    repository: Option<&str>,
-    sha: &str,
-    cursor: Option<&str>,
-) -> Result<CommitFilesPage, WorkspaceError> {
-    validate_sha(sha)?;
-    let selected = select_repository(root, repository).await?;
-    let repo = selected.path.ok_or(WorkspaceError::InvalidPath)?;
-    let output = run_git(
-        &repo,
-        &[
-            "diff-tree",
-            "--root",
-            "--no-commit-id",
-            "--name-status",
-            "-r",
-            "-z",
-            sha,
-        ],
-        MAX_GIT_OUTPUT_BYTES,
-    )
-    .await?
-    .0;
-    let offset = parse_cursor(cursor)?;
-    let all = parse_commit_files(&output)?;
-    let files = all.iter().skip(offset).take(100).cloned().collect();
-    let next_cursor = (offset + 100 < all.len()).then(|| (offset + 100).to_string());
-    Ok(CommitFilesPage { files, next_cursor })
-}
-
-pub async fn get_commit_diff(
-    root: &Path,
-    repository: Option<&str>,
-    sha: &str,
-    relative: &str,
-) -> Result<CommitDiff, WorkspaceError> {
-    validate_sha(sha)?;
-    valid_relative(relative)?;
-    let selected = select_repository(root, repository).await?;
-    let repo = selected.path.ok_or(WorkspaceError::InvalidPath)?;
-    let (output, truncated) = run_git(
-        &repo,
-        &["show", "--format=", "--no-ext-diff", sha, "--", relative],
-        MAX_DIFF_BYTES,
-    )
-    .await?;
-    Ok(CommitDiff {
-        diff: String::from_utf8_lossy(&output).into_owned(),
-        truncated,
-    })
-}
-
-async fn select_repository(
-    root: &Path,
-    requested: Option<&str>,
-) -> Result<RepositorySelection, WorkspaceError> {
-    if tokio::fs::try_exists(root.join(".git")).await? {
-        if requested.is_some() {
-            return Err(WorkspaceError::InvalidPath);
-        }
-        return Ok(RepositorySelection {
-            mode: "root",
-            path: Some(tokio::fs::canonicalize(root).await?),
-            repositories: Vec::new(),
-            repository: None,
-        });
-    }
-    let mut repositories = Vec::new();
-    let mut reader = tokio::fs::read_dir(root).await?;
-    while let Some(entry) = reader.next_entry().await? {
-        if entry.file_type().await?.is_dir()
-            && tokio::fs::try_exists(entry.path().join(".git")).await?
-        {
-            repositories.push(entry.file_name().to_string_lossy().into_owned());
-            if repositories.len() == 256 {
-                break;
-            }
-        }
-    }
-    repositories.sort_unstable();
-    let repository = requested.map(str::to_owned);
-    let path = match requested {
-        Some(requested) if repositories.iter().any(|value| value == requested) => {
-            Some(tokio::fs::canonicalize(root.join(valid_relative(requested)?)).await?)
-        }
-        Some(_) => return Err(WorkspaceError::InvalidPath),
-        None => None,
-    };
-    Ok(RepositorySelection {
-        mode: if repositories.is_empty() {
-            "none"
-        } else {
-            "children"
-        },
-        path,
-        repositories,
-        repository,
-    })
-}
-
-pub(super) async fn repository_path(
-    root: &Path,
-    requested: Option<&str>,
-) -> Result<PathBuf, WorkspaceError> {
-    select_repository(root, requested)
-        .await?
-        .path
-        .ok_or(WorkspaceError::InvalidPath)
-}
-
-fn parse_status(output: &[u8]) -> Result<(Vec<GitChange>, Vec<GitChange>), WorkspaceError> {
-    let mut staged = Vec::new();
-    let mut unstaged = Vec::new();
-    // NUL 记录保留空格、换行和字面量 ` -> `，重命名记录再消费一个原路径字段。
-    let mut records = output
-        .split(|byte| *byte == 0)
-        .filter(|record| !record.is_empty());
-    while let Some(record) = records.next() {
-        if record.len() < 4 || record[2] != b' ' {
-            return Err(WorkspaceError::InvalidPath);
-        }
-        let path = std::str::from_utf8(&record[3..]).map_err(|_| WorkspaceError::InvalidPath)?;
-        valid_relative(path)?;
-        let original_path = if matches!(record[0], b'R' | b'C') || matches!(record[1], b'R' | b'C')
-        {
-            let original = records.next().ok_or(WorkspaceError::InvalidPath)?;
-            let original =
-                std::str::from_utf8(original).map_err(|_| WorkspaceError::InvalidPath)?;
-            valid_relative(original)?;
-            Some(original.to_owned())
-        } else {
-            None
-        };
-        let change = |code| GitChange {
-            stats: Default::default(),
-            diff: String::new(),
-            kind: change_kind(code),
-            path: path.to_owned(),
-            original_path: (code == b'R').then(|| original_path.clone()).flatten(),
-        };
-        if record[0] == b'?' && record[1] == b'?' {
-            unstaged.push(change(b'?'));
-        } else {
-            if record[0] != b' ' {
-                staged.push(change(record[0]));
-            }
-            if record[1] != b' ' {
-                unstaged.push(change(record[1]));
-            }
-        }
-    }
-    Ok((staged, unstaged))
-}
-
-fn parse_history(output: &[u8]) -> Result<Vec<GitCommit>, WorkspaceError> {
-    String::from_utf8_lossy(output)
-        .split('\u{1e}')
-        .filter_map(|record| {
-            let fields: Vec<&str> = record.trim().split('\u{1f}').collect();
-            (!record.trim().is_empty()).then_some(fields)
-        })
-        .map(|fields| {
-            if fields.len() != 5 || fields.iter().any(|field| field.is_empty()) {
-                return Err(WorkspaceError::InvalidPath);
-            }
-            Ok(GitCommit {
-                sha: fields[0].to_owned(),
-                author_name: fields[1].to_owned(),
-                author_email: fields[2].to_owned(),
-                authored_at: fields[3].to_owned(),
-                title: fields[4].to_owned(),
-            })
-        })
-        .collect()
-}
-
-fn parse_commit_files(output: &[u8]) -> Result<Vec<CommitFile>, WorkspaceError> {
-    let fields: Vec<&[u8]> = output
-        .split(|byte| *byte == 0)
-        .filter(|value| !value.is_empty())
-        .collect();
-    let mut files = Vec::new();
-    let mut index = 0;
-    while index < fields.len() {
-        let status = fields[index];
-        let rename = status
-            .first()
-            .is_some_and(|value| matches!(value, b'R' | b'C'));
-        let path_index = index + if rename { 2 } else { 1 };
-        let path = fields.get(path_index).ok_or(WorkspaceError::InvalidPath)?;
-        let path = std::str::from_utf8(path).map_err(|_| WorkspaceError::InvalidPath)?;
-        valid_relative(path)?;
-        files.push(CommitFile {
-            kind: change_kind(*status.first().ok_or(WorkspaceError::InvalidPath)?),
-            path: path.to_owned(),
-        });
-        index += if rename { 3 } else { 2 };
-    }
-    Ok(files)
-}
-
-fn change_kind(code: u8) -> &'static str {
-    match code {
-        b'A' | b'?' => "create",
-        b'D' => "delete",
-        _ => "update",
-    }
-}
-
-fn parse_cursor(cursor: Option<&str>) -> Result<usize, WorkspaceError> {
-    cursor
-        .unwrap_or("0")
-        .parse()
-        .map_err(|_| WorkspaceError::InvalidPath)
-}
-
-fn validate_sha(sha: &str) -> Result<(), WorkspaceError> {
-    if (40..=64).contains(&sha.len()) && sha.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Ok(())
-    } else {
-        Err(WorkspaceError::InvalidPath)
-    }
-}
-
-fn hash_parts(parts: &[String]) -> String {
+fn hash_parts<'a>(parts: impl IntoIterator<Item = &'a [u8]>) -> String {
     let mut hasher = Sha256::new();
     for part in parts {
-        hasher.update(part.as_bytes());
+        hasher.update(part);
         hasher.update([0]);
     }
-    encode_lower_hex(hasher.finalize())
+    crate::encoding::encode_lower_hex(hasher.finalize())
 }
 
-async fn git_lines(repo: &Path, args: &[&str]) -> Result<Vec<String>, WorkspaceError> {
-    let (output, _) = run_git(repo, args, MAX_GIT_OUTPUT_BYTES).await?;
-    Ok(String::from_utf8(output)
-        .map_err(|_| WorkspaceError::InvalidPath)?
+pub(super) async fn git_lines(repo: &Path, args: &[&str]) -> Result<Vec<String>, WorkspaceError> {
+    let output = read_complete(repo, args, "references", MAX_METADATA_BYTES).await?;
+    Ok(std::str::from_utf8(&output)
+        .map_err(|_| invalid("references", "invalid UTF-8"))?
         .lines()
-        .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(str::to_owned)
         .collect())
 }
 
-async fn optional_git_line(repo: &Path, args: &[&str]) -> Result<Option<String>, WorkspaceError> {
-    let lines = git_lines(repo, args).await?;
-    Ok(lines.into_iter().next())
+/// unborn 分支没有提交，其他命令失败保留 Git 原始错误。
+pub(super) async fn head_commit(repo: &Path) -> Result<Option<String>, WorkspaceError> {
+    Ok(git_lines(repo, &["rev-parse", "--revs-only", "HEAD"])
+        .await?
+        .into_iter()
+        .next())
 }
 
-/// unborn 分支没有提交，作为空历史处理；其他 Git 执行错误仍向上传递。
-pub(super) async fn head_commit(repo: &Path) -> Result<Option<String>, WorkspaceError> {
-    optional_git_line(repo, &["rev-parse", "--revs-only", "HEAD"]).await
+/// 单文件预览只读取该路径的状态与正文，不计算全仓内容快照。
+pub async fn get_git_file_status(
+    root: &Path,
+    repository: Option<&str>,
+    path: &str,
+    staged: bool,
+) -> Result<GitStatus, WorkspaceError> {
+    static DIFF_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+    let _permit = DIFF_SLOTS
+        .acquire()
+        .await
+        .map_err(|_| invalid("diff", "reader closed"))?;
+    super::path_guard::valid_relative(path)?;
+    let repo = repository_path(root, repository).await?;
+    let literal = super::git_protocol::literal_path(path);
+    let output = read_complete(
+        &repo,
+        &[
+            "status",
+            "--porcelain=v2",
+            "-z",
+            "--untracked-files=normal",
+            "--",
+            &literal,
+        ],
+        "file status",
+        MAX_METADATA_BYTES,
+    )
+    .await?;
+    let mut parsed = parse_status(&output)?;
+    let changes = if staged {
+        &mut parsed.staged
+    } else {
+        &mut parsed.unstaged
+    };
+    changes.retain(|change| change.path == path);
+    super::git_diff::add_file_diff(&repo, changes, staged).await?;
+    Ok(GitStatus {
+        stats: None,
+        next_cursor: None,
+        total_changes: None,
+        base_branches: Vec::new(),
+        branch: None,
+        branches: Vec::new(),
+        repository_mode: if repository.is_some() {
+            "children"
+        } else {
+            "root"
+        },
+        snapshot: hash_parts([output.as_slice()]),
+        staged: if staged { parsed.staged } else { Vec::new() },
+        unstaged: if staged { Vec::new() } else { parsed.unstaged },
+    })
+}
+
+async fn read_status_records(
+    repo: &Path,
+    args: &[&str],
+) -> Result<(super::git_status_parse::StatusRecords, Vec<u8>), WorkspaceError> {
+    let (status, hash, pending) = super::git_stream::fold_records(
+        repo,
+        args,
+        (
+            super::git_status_parse::StatusRecords::default(),
+            Sha256::new(),
+            Vec::new(),
+        ),
+        |(status, hash, pending), record| {
+            hash.update(record);
+            // rename 的源路径是独立 NUL 记录，必须与前一条一起解析。
+            if pending.is_empty() && record.starts_with(b"2 ") {
+                pending.extend_from_slice(record);
+                return Ok(());
+            }
+            let parsed = if pending.is_empty() {
+                parse_status(record)?
+            } else {
+                pending.extend_from_slice(record);
+                let parsed = parse_status(pending)?;
+                pending.clear();
+                parsed
+            };
+            if parsed.branch.is_some() {
+                status.branch = parsed.branch;
+            }
+            if parsed.head.is_some() {
+                status.head = parsed.head;
+            }
+            status.staged.extend(parsed.staged);
+            status.unstaged.extend(parsed.unstaged);
+            status.gitlinks.extend(parsed.gitlinks);
+            Ok(())
+        },
+    )
+    .await?;
+    if !pending.is_empty() {
+        return Err(invalid("status", "missing rename source"));
+    }
+    Ok((status, hash.finalize().to_vec()))
 }
