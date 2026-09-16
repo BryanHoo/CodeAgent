@@ -192,7 +192,7 @@ describeRealRuntime("三平台真实 Codex 原生链路", () => {
     });
 
     const gitStatus = await invokeNative<GitStatus>("get_project_git_status", {
-      input: { includeDiff: true, repository: null, rootPath },
+      input: { repository: null, rootPath },
       projectId,
       requestId: null,
     });
@@ -201,6 +201,14 @@ describeRealRuntime("三平台真实 Codex 原生链路", () => {
     expect(gitStatus.snapshot).toMatch(/^[a-f0-9]{64}$/u);
     const readmeChange = gitStatus.unstaged.find((change) => change.path === "README.md");
     expect(readmeChange).toMatchObject({ kind: "update", path: "README.md" });
-    expect(readmeChange?.diff).toContain("+真实 Native WebView 文件链路");
+    expect(readmeChange?.diff).toBe("");
+
+    const readmeDetails = await invokeNative<GitStatus>("get_project_git_status", {
+      input: { diffPath: "README.md", diffStaged: false, repository: null, rootPath },
+      projectId,
+      requestId: null,
+    });
+    const readmePatch = readmeDetails.unstaged.find((change) => change.path === "README.md");
+    expect(readmePatch?.diff).toContain("+真实 Native WebView 文件链路");
   });
 });
