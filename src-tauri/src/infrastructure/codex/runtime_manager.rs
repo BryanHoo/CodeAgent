@@ -351,24 +351,9 @@ async fn replace_runtime_directory(final_dir: &Path, staging_dir: &Path) -> Resu
 async fn write_active_runtime(app_data: &Path, binary_path: &Path) -> Result<(), io::Error> {
     let provider_root = app_data.join("providers/codex");
     let active_path = provider_root.join("active.json");
-    let temporary = provider_root.join(format!(
-        ".active-{}.tmp",
-        INSTALL_ID.fetch_add(1, Ordering::Relaxed)
-    ));
     let payload = serde_json::to_vec(&json!({
         "path": binary_path.to_string_lossy(),
         "version": SUPPORTED_CODEX_VERSION,
     }))?;
-    fs::write(&temporary, payload).await?;
-    if let Err(error) = fs::rename(&temporary, &active_path).await {
-        if !matches!(
-            error.kind(),
-            io::ErrorKind::AlreadyExists | io::ErrorKind::PermissionDenied
-        ) {
-            return Err(error);
-        }
-        let _ = fs::remove_file(&active_path).await;
-        fs::rename(&temporary, &active_path).await?;
-    }
-    Ok(())
+    crate::infrastructure::atomic_file::write_bytes(&active_path, payload).await
 }

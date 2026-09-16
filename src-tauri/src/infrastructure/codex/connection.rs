@@ -303,7 +303,7 @@ where
             return Ok(!frame.is_empty());
         }
 
-        let newline = buffer.iter().position(|byte| *byte == b'\n');
+        let newline = memchr::memchr(b'\n', buffer);
         let data_len = newline.unwrap_or(buffer.len());
         let limit = if is_image {
             image_limit
@@ -318,9 +318,8 @@ where
         let scanned = &frame[scan_from..];
         if !is_image
             && (GeneratedImageStore::contains_image_generation(scanned)
-                || scanned
-                    .windows(11)
-                    .any(|bytes| matches!(bytes, b"data:image/" | b"data:audio/")))
+                || memchr::memmem::find(scanned, b"data:image/").is_some()
+                || memchr::memmem::find(scanned, b"data:audio/").is_some())
         {
             is_image = true;
         }

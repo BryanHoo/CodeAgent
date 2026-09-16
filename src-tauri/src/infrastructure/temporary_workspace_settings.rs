@@ -82,18 +82,7 @@ pub(super) async fn write_json(
     name: &str,
     value: &impl Serialize,
 ) -> io::Result<()> {
-    fs::create_dir_all(directory).await?;
-    let temporary = directory.join(format!(
-        ".write-{}-{}.tmp",
-        std::process::id(),
-        WRITE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::write(&temporary, serde_json::to_vec(value)?).await?;
-    let result = super::app_storage::replace_file_atomic(&temporary, &directory.join(name)).await;
-    if result.is_err() {
-        let _ = fs::remove_file(temporary).await;
-    }
-    result
+    super::atomic_file::write_bytes(&directory.join(name), serde_json::to_vec(value)?).await
 }
 
 pub(super) fn index_path(app_data: &Path, task_id: &str) -> io::Result<PathBuf> {

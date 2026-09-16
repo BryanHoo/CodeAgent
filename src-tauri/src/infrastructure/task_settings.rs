@@ -1,7 +1,6 @@
 use std::{
     io,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
@@ -9,8 +8,6 @@ use thiserror::Error;
 use tokio::fs;
 
 use crate::domain::conversation::AgentTaskSettings;
-
-static TEMP_FILE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Error)]
 pub enum TaskSettingsError {
@@ -60,24 +57,13 @@ pub async fn write_task_settings(
         return Err(TaskSettingsError::InvalidData);
     }
     let target = settings_path(app_data, project_id, task_id).await?;
-    let parent = target
-        .parent()
-        .ok_or(TaskSettingsError::InvalidIdentifier)?;
-    fs::create_dir_all(parent).await?;
     let stored = StoredTaskSettings {
         project_id: project_id.to_owned(),
         settings: settings.clone(),
         task_id: task_id.to_owned(),
     };
     let bytes = serde_json::to_vec(&stored)?;
-    let temp = temporary_path(parent, task_id);
-    fs::write(&temp, bytes).await?;
-
-    // 与其他设置共用原子覆盖；失败时保留旧文件，不能先删除旧数据。
-    if let Err(error) = super::app_storage::replace_file_atomic(&temp, &target).await {
-        let _ = fs::remove_file(&temp).await;
-        return Err(error.into());
-    }
+    super::atomic_file::write_bytes(&target, bytes).await?;
     Ok(())
 }
 
@@ -125,11 +111,6 @@ fn project_path(app_data: &Path, project_id: &str) -> Result<PathBuf, TaskSettin
         return Err(TaskSettingsError::InvalidIdentifier);
     }
     Ok(app_data.join("task-settings").join(project_id))
-}
-
-fn temporary_path(parent: &Path, task_id: &str) -> PathBuf {
-    let id = TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed);
-    parent.join(format!(".{task_id}.{}.{id}.tmp", std::process::id()))
 }
 
 fn valid_identifier(value: &str) -> bool {

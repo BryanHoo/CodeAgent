@@ -127,12 +127,9 @@ mod private_runtime {
     use crate::domain::runtime::CodexRuntimeAvailabilityStatus as Status;
     use std::os::unix::fs::PermissionsExt;
 
-    fn fixture() -> std::path::PathBuf {
-        let unique = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir().join(format!("codeagent-private-runtime-{unique}"))
+    fn fixture() -> tempfile::TempDir {
+        // 独占临时目录避免并发测试取得相同时间戳后互相覆盖。
+        tempfile::tempdir().unwrap()
     }
 
     fn binary(path: &Path, version: &str) {
@@ -143,7 +140,8 @@ mod private_runtime {
 
     #[tokio::test]
     async fn startup_should_attempt_private_install_and_report_filesystem_failure() {
-        let root = fixture();
+        let directory = fixture();
+        let root = directory.path().join("app");
         std::fs::write(&root, "blocks application data directory").unwrap();
         let events = std::sync::Mutex::new(Vec::new());
         let state = crate::application::state::AppState::default();
@@ -165,7 +163,8 @@ mod private_runtime {
 
     #[tokio::test]
     async fn inspection_should_ignore_active_manifest_redirects() {
-        let root = fixture();
+        let directory = fixture();
+        let root = directory.path().join("app");
         let alternate = root.join("providers/codex/bin/alternate/bin/codex");
         binary(&alternate, "0.154.0");
         std::fs::write(
@@ -180,7 +179,8 @@ mod private_runtime {
 
     #[tokio::test]
     async fn installation_should_reuse_valid_private_binary_without_progress_or_manifest_writes() {
-        let root = fixture();
+        let directory = fixture();
+        let root = directory.path().join("app");
         binary(&private_codex_binary_path(&root), "0.154.0");
         let result = install_codex_runtime(&root, |_| panic!("healthy runtime must not install"))
             .await
@@ -192,7 +192,8 @@ mod private_runtime {
 
     #[tokio::test]
     async fn inspection_should_reject_wrong_version_and_corrupt_private_binary() {
-        let root = fixture();
+        let directory = fixture();
+        let root = directory.path().join("app");
         let path = private_codex_binary_path(&root);
         binary(&path, "0.150.0");
         let result = inspect_codex_runtime(&root).await;

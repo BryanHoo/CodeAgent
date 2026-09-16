@@ -6,7 +6,7 @@ use std::{
 
 use super::app_storage::{
     CustomBackgroundInput, initialize_storage, list_custom_backgrounds, read_custom_background,
-    replace_file_atomic, update_custom_backgrounds, update_preferences,
+    update_custom_backgrounds, update_preferences,
 };
 
 fn test_root() -> std::path::PathBuf {
@@ -130,13 +130,40 @@ async fn storage_should_replace_existing_files_atomically() {
     let root = test_root();
     fs::create_dir_all(&root).unwrap();
     let target = root.join("app.json");
-    let replacement = root.join(".app.json.tmp");
     fs::write(&target, b"old").unwrap();
-    fs::write(&replacement, b"new").unwrap();
 
-    replace_file_atomic(&replacement, &target).await.unwrap();
+    super::atomic_file::write_bytes(&target, b"new".to_vec())
+        .await
+        .unwrap();
 
     assert_eq!(fs::read(&target).unwrap(), b"new");
-    assert!(!replacement.exists());
+    assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn storage_should_not_overwrite_unrelated_temporary_files() {
+    let root = test_root();
+    fs::create_dir_all(&root).unwrap();
+    // 模拟此前进程遗留或同目录其他写入者占用的临时路径。
+    for id in 1..=128 {
+        fs::write(
+            root.join(format!(".app-storage-{}-{id}.tmp", std::process::id())),
+            b"preserve",
+        )
+        .unwrap();
+    }
+    update_preferences(
+        &root,
+        BTreeMap::from([("codeagent.test".into(), Some("value".into()))]),
+    )
+    .await
+    .unwrap();
+    for id in 1..=128 {
+        assert_eq!(
+            fs::read(root.join(format!(".app-storage-{}-{id}.tmp", std::process::id()))).unwrap(),
+            b"preserve"
+        );
+    }
     fs::remove_dir_all(root).unwrap();
 }

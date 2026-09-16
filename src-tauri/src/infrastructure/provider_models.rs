@@ -1,7 +1,6 @@
 use std::{
     io,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
@@ -13,7 +12,6 @@ const PROVIDER_MODELS_VERSION: u8 = 1;
 const MAX_PROVIDER_MODELS_BYTES: usize = 2 * 1024 * 1024;
 // 同一进程内串行化读写，配合原子替换避免重新连接与模型刷新互相覆盖。
 static PROVIDER_MODELS_LOCK: Mutex<()> = Mutex::const_new(());
-static TEMP_FILE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Error)]
 pub enum ProviderModelsError {
@@ -78,18 +76,7 @@ pub async fn write_provider_models(
         return Err(ProviderModelsError::InvalidData);
     }
     let target = provider_models_path(app_data);
-    let parent = target.parent().ok_or(ProviderModelsError::InvalidData)?;
-    fs::create_dir_all(parent).await?;
-    let temporary = parent.join(format!(
-        ".custom-models-{}-{}.tmp",
-        std::process::id(),
-        TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::write(&temporary, bytes).await?;
-    if let Err(error) = super::app_storage::replace_file_atomic(&temporary, &target).await {
-        let _ = fs::remove_file(&temporary).await;
-        return Err(error.into());
-    }
+    super::atomic_file::write_bytes(&target, bytes).await?;
     Ok(())
 }
 

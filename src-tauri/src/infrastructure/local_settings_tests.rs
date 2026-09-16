@@ -143,3 +143,95 @@ async fn concurrent_settings_updates_should_preserve_both_atomic_changes() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[tokio::test]
+async fn settings_should_reject_duplicate_persisted_fields() {
+    let root = test_root();
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("agent-settings.json"), br#"{"version":1,"global":{"followUpBehavior":"queue","followUpBehavior":"steer"},"projects":{}}"#).unwrap();
+    assert!(read_global_settings(&root).await.is_err());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn typed_settings_should_enforce_fields_nullability_and_bounds() {
+    use super::local_settings::validate_global_settings;
+    for (field, value) in [
+        ("fastMode", json!("true")),
+        ("followUpBehavior", json!("invalid")),
+        ("sandboxMode", json!("invalid")),
+        ("approvalsReviewer", json!("invalid")),
+        ("modelVerbosity", json!("invalid")),
+        ("webSearch", json!("invalid")),
+        ("approvalPolicy", json!("untrusted")),
+        ("approvalPolicy", json!({"granular": true})),
+        ("model", json!(" ")),
+        ("reasoningEffort", json!("x".repeat(65))),
+        ("commitMessageModel", json!("x".repeat(257))),
+        ("commitMessagePrompt", json!("x".repeat(4001))),
+        ("pet", json!({"enabled":false})),
+    ] {
+        let mut settings = default_global_settings();
+        settings[field] = value;
+        assert!(validate_global_settings(&settings).is_err(), "{field}");
+    }
+    for field in ["defaultOpenAppId", "modelVerbosity", "pet", "model"] {
+        let mut settings = default_global_settings();
+        settings.as_object_mut().unwrap().remove(field);
+        assert!(
+            validate_global_settings(&settings).is_err(),
+            "missing {field}"
+        );
+    }
+    let mut settings = default_global_settings();
+    settings["extra"] = json!(true);
+    assert!(validate_global_settings(&settings).is_err());
+    let mut settings = default_global_settings();
+    settings["approvalPolicy"] = json!({"granular":{"sandbox_approval":true}});
+    settings["commitMessagePrompt"] = json!("x".repeat(4000));
+    assert!(validate_global_settings(&settings).is_ok());
+}
+
+#[tokio::test]
+async fn invalid_settings_should_leave_existing_file_unchanged() {
+    let root = test_root();
+    let mut settings = default_global_settings();
+    settings["followUpBehavior"] = json!("steer");
+    update_global_settings(&root, settings.clone())
+        .await
+        .unwrap();
+    let original = fs::read(root.join("agent-settings.json")).unwrap();
+    settings["pet"] = json!({"enabled": "yes", "selectedPetId": null});
+    assert!(update_global_settings(&root, settings).await.is_err());
+    assert_eq!(
+        fs::read(root.join("agent-settings.json")).unwrap(),
+        original
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn typed_settings_should_reject_positional_arrays() {
+    let mut settings = default_global_settings();
+    settings["pet"] = json!([false, null]);
+    assert!(super::local_settings::validate_global_settings(&settings).is_err());
+}
+
+#[tokio::test]
+async fn stored_settings_should_reject_arrays_in_object_fields() {
+    let root = test_root();
+    fs::create_dir_all(&root).unwrap();
+    for document in [
+        json!({"version":1,"global":[],"projects":{}}),
+        json!({"version":1,"global":{},"projects":{"a":["never","user",false,"model","high","read-only"]}}),
+        json!({"version":1,"global":{"pet":[false,null]},"projects":{}}),
+    ] {
+        fs::write(
+            root.join("agent-settings.json"),
+            serde_json::to_vec(&document).unwrap(),
+        )
+        .unwrap();
+        assert!(read_global_settings(&root).await.is_err());
+    }
+    fs::remove_dir_all(root).unwrap();
+}

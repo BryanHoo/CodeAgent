@@ -2,13 +2,17 @@ use std::{
     collections::BTreeMap,
     io,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
 use tokio::{fs, sync::Mutex};
+
+#[path = "local_settings_types.rs"]
+mod types;
+use super::settings_object::{Object, object};
+use types::{GlobalSettings, LocalPreferences, ProjectSettings};
 
 const SETTINGS_VERSION: u8 = 1;
 pub(crate) const GLOBAL_FIELDS: [&str; 13] = [
@@ -42,7 +46,6 @@ const PROJECT_FIELDS: [&str; 6] = [
     "sandboxMode",
 ];
 static SETTINGS_LOCK: Mutex<()> = Mutex::const_new(());
-static TEMP_FILE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Error)]
 pub enum LocalSettingsError {
@@ -63,15 +66,16 @@ pub struct SettingsUpdate {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SettingsFile {
-    global: Value,
-    projects: BTreeMap<String, Value>,
+    #[serde(deserialize_with = "object")]
+    global: LocalPreferences,
+    projects: BTreeMap<String, Object<ProjectSettings>>,
     version: u8,
 }
 
 impl Default for SettingsFile {
     fn default() -> Self {
         Self {
-            global: default_global_settings(),
+            global: LocalPreferences::default(),
             projects: BTreeMap::new(),
             version: SETTINGS_VERSION,
         }
@@ -80,19 +84,19 @@ impl Default for SettingsFile {
 
 pub async fn read_global_settings(app_data: &Path) -> Result<Value, LocalSettingsError> {
     let _guard = SETTINGS_LOCK.lock().await;
-    Ok(read_settings_file(app_data).await?.global)
+    global_value(&read_settings_file(app_data).await?.global)
 }
 
 pub async fn update_global_settings(
     app_data: &Path,
     settings: Value,
 ) -> Result<SettingsUpdate, LocalSettingsError> {
-    validate_global_settings(&settings)?;
+    let parsed = parse_global(&settings)?;
     let _guard = SETTINGS_LOCK.lock().await;
     let mut stored = read_settings_file(app_data).await?;
-    let changed_fields = changed_fields(&stored.global, &settings, &LOCAL_FIELDS);
+    let changed_fields = changed_fields(&global_value(&stored.global)?, &settings, &LOCAL_FIELDS);
     if !changed_fields.is_empty() {
-        stored.global = settings.clone();
+        stored.global = parsed.into_local();
         write_settings_file(app_data, &stored).await?;
     }
     Ok(SettingsUpdate {
@@ -108,7 +112,12 @@ pub async fn read_project_defaults(
     validate_identifier(project_id)?;
     let _guard = SETTINGS_LOCK.lock().await;
     let stored = read_settings_file(app_data).await?;
-    Ok(stored.projects.get(project_id).cloned())
+    stored
+        .projects
+        .get(project_id)
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(Into::into)
 }
 
 pub async fn update_project_defaults(
@@ -117,19 +126,20 @@ pub async fn update_project_defaults(
     settings: Value,
 ) -> Result<SettingsUpdate, LocalSettingsError> {
     validate_identifier(project_id)?;
-    validate_project_defaults(&settings)?;
+    let parsed = parse_project(&settings)?;
     let _guard = SETTINGS_LOCK.lock().await;
     let mut stored = read_settings_file(app_data).await?;
     let current = stored
         .projects
         .get(project_id)
-        .cloned()
+        .map(serde_json::to_value)
+        .transpose()?
         .unwrap_or(Value::Null);
     let changed_fields = changed_fields(&current, &settings, &PROJECT_FIELDS);
     if !changed_fields.is_empty() {
         stored
             .projects
-            .insert(project_id.to_owned(), settings.clone());
+            .insert(project_id.to_owned(), Object(parsed));
         write_settings_file(app_data, &stored).await?;
     }
     Ok(SettingsUpdate {
@@ -144,26 +154,16 @@ async fn read_settings_file(app_data: &Path) -> Result<SettingsFile, LocalSettin
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(SettingsFile::default()),
         Err(error) => return Err(error.into()),
     };
-    let mut stored: SettingsFile = serde_json::from_slice(&bytes)?;
-    if stored.version != SETTINGS_VERSION {
+    // 直接从字节构建固定配置结构，重复字段由 Serde 拒绝。
+    let stored: SettingsFile = serde_json::from_slice(&bytes)?;
+    if stored.version != SETTINGS_VERSION || !stored.global.is_valid() {
         return Err(LocalSettingsError::InvalidData);
     }
-    // 本地文件只提供应用偏好；智能体默认值统一由 Codex 配置读取，旧值不再参与回退。
-    let local = stored
-        .global
-        .as_object()
-        .ok_or(LocalSettingsError::InvalidData)?;
-    let mut global = default_global_settings();
-    for key in LOCAL_FIELDS {
-        if let Some(value) = local.get(key) {
-            global[key] = value.clone();
-        }
-    }
-    stored.global = global;
-    validate_global_settings(&stored.global)?;
     for (project_id, settings) in &stored.projects {
         validate_identifier(project_id)?;
-        validate_project_defaults(settings)?;
+        if !settings.0.is_valid() {
+            return Err(LocalSettingsError::InvalidData);
+        }
     }
     Ok(stored)
 }
@@ -172,31 +172,19 @@ async fn write_settings_file(
     app_data: &Path,
     settings: &SettingsFile,
 ) -> Result<(), LocalSettingsError> {
-    fs::create_dir_all(app_data).await?;
-    let target = settings_path(app_data);
-    let temporary = app_data.join(format!(
-        ".agent-settings-{}-{}.tmp",
-        std::process::id(),
-        TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed)
-    ));
-    let local: serde_json::Map<String, Value> = LOCAL_FIELDS
-        .iter()
-        .map(|key| ((*key).to_owned(), settings.global[*key].clone()))
-        .collect();
-    fs::write(
-        &temporary,
-        serde_json::to_vec(&json!({
-            "global": local,
-            "projects": settings.projects,
-            "version": settings.version,
-        }))?,
-    )
-    .await?;
-    if let Err(error) = super::app_storage::replace_file_atomic(&temporary, &target).await {
-        let _ = fs::remove_file(&temporary).await;
-        return Err(error.into());
-    }
+    super::atomic_file::write_bytes(&settings_path(app_data), serde_json::to_vec(settings)?)
+        .await?;
     Ok(())
+}
+
+fn global_value(local: &LocalPreferences) -> Result<Value, LocalSettingsError> {
+    let mut global = default_global_settings();
+    if let Value::Object(fields) = serde_json::to_value(local)? {
+        for (key, value) in fields {
+            global[key] = value;
+        }
+    }
+    Ok(global)
 }
 
 pub(crate) fn changed_fields(current: &Value, next: &Value, fields: &[&str]) -> Vec<String> {
@@ -237,101 +225,23 @@ pub(crate) fn project_defaults_from_global(global: &Value) -> Value {
 }
 
 pub(crate) fn validate_global_settings(settings: &Value) -> Result<(), LocalSettingsError> {
-    validate_exact_fields(settings, &GLOBAL_FIELDS)?;
-    validate_common_settings(settings, false)?;
-    required_string(settings, "commitMessageModel", 256)?;
-    required_string_allow_empty(settings, "commitMessagePrompt", 4_000)?;
-    let valid = matches!(
-        settings.get("defaultOpenAppId"),
-        Some(Value::Null) | Some(Value::String(_))
-    ) && matches!(
-        settings.get("followUpBehavior").and_then(Value::as_str),
-        Some("queue" | "steer")
-    ) && valid_pet(settings.get("pet"))
-        && matches!(
-            settings.get("webSearch").and_then(Value::as_str),
-            Some("disabled" | "cached" | "live")
-        )
-        && (settings.get("modelVerbosity") == Some(&Value::Null)
-            || matches!(
-                settings.get("modelVerbosity").and_then(Value::as_str),
-                Some("low" | "medium" | "high")
-            ));
-    valid.then_some(()).ok_or(LocalSettingsError::InvalidData)
+    parse_global(settings).map(|_| ())
 }
 
-fn validate_project_defaults(settings: &Value) -> Result<(), LocalSettingsError> {
-    validate_exact_fields(settings, &PROJECT_FIELDS)?;
-    validate_common_settings(settings, true)
+fn parse_global(settings: &Value) -> Result<GlobalSettings, LocalSettingsError> {
+    let parsed: GlobalSettings = object(settings).map_err(|_| LocalSettingsError::InvalidData)?;
+    if !parsed.is_valid() {
+        return Err(LocalSettingsError::InvalidData);
+    }
+    Ok(parsed)
 }
 
-fn validate_exact_fields(settings: &Value, expected: &[&str]) -> Result<(), LocalSettingsError> {
-    let object = settings
-        .as_object()
-        .ok_or(LocalSettingsError::InvalidData)?;
-    (object.len() == expected.len() && expected.iter().all(|field| object.contains_key(*field)))
-        .then_some(())
-        .ok_or(LocalSettingsError::InvalidData)
-}
-
-fn validate_common_settings(
-    settings: &Value,
-    allow_untrusted: bool,
-) -> Result<(), LocalSettingsError> {
-    required_string(settings, "model", 256)?;
-    required_string(settings, "reasoningEffort", 64)?;
-    let approval = settings
-        .get("approvalPolicy")
-        .ok_or(LocalSettingsError::InvalidData)?;
-    let approval_valid = matches!(approval.as_str(), Some("on-request" | "never"))
-        || (allow_untrusted && approval.as_str() == Some("untrusted"))
-        || approval.get("granular").is_some_and(Value::is_object);
-    let valid = approval_valid
-        && matches!(
-            settings.get("approvalsReviewer").and_then(Value::as_str),
-            Some("user" | "auto_review")
-        )
-        && matches!(
-            settings.get("sandboxMode").and_then(Value::as_str),
-            Some("read-only" | "workspace-write" | "danger-full-access")
-        )
-        && settings.get("fastMode").is_some_and(Value::is_boolean);
-    valid.then_some(()).ok_or(LocalSettingsError::InvalidData)
-}
-
-fn required_string(settings: &Value, key: &str, max: usize) -> Result<(), LocalSettingsError> {
-    let value = settings
-        .get(key)
-        .and_then(Value::as_str)
-        .ok_or(LocalSettingsError::InvalidData)?;
-    (!value.trim().is_empty() && value.len() <= max)
-        .then_some(())
-        .ok_or(LocalSettingsError::InvalidData)
-}
-
-fn required_string_allow_empty(
-    settings: &Value,
-    key: &str,
-    max: usize,
-) -> Result<(), LocalSettingsError> {
-    let value = settings
-        .get(key)
-        .and_then(Value::as_str)
-        .ok_or(LocalSettingsError::InvalidData)?;
-    (value.len() <= max)
-        .then_some(())
-        .ok_or(LocalSettingsError::InvalidData)
-}
-
-fn valid_pet(value: Option<&Value>) -> bool {
-    value.is_some_and(|pet| {
-        pet.as_object().is_some_and(|object| object.len() == 2)
-            && pet.get("enabled").is_some_and(Value::is_boolean)
-            && matches!(
-                pet.get("selectedPetId"),
-                Some(Value::Null) | Some(Value::String(_))
-            )
-    })
+fn parse_project(settings: &Value) -> Result<ProjectSettings, LocalSettingsError> {
+    let parsed: ProjectSettings = object(settings).map_err(|_| LocalSettingsError::InvalidData)?;
+    if !parsed.is_valid() {
+        return Err(LocalSettingsError::InvalidData);
+    }
+    Ok(parsed)
 }
 
 fn validate_identifier(value: &str) -> Result<(), LocalSettingsError> {

@@ -1,4 +1,5 @@
 pub mod app_storage;
+pub(crate) mod atomic_file;
 pub mod bing_wallpaper;
 pub mod codex;
 pub mod diagnostics;
@@ -8,6 +9,7 @@ pub mod personalization;
 pub mod provider_models;
 pub(crate) mod queued_media;
 pub mod scheduled_tasks;
+mod settings_object;
 pub mod skills_market;
 pub mod task_settings;
 pub mod temporary_task_storage;

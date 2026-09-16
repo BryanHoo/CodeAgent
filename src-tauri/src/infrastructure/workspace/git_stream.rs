@@ -52,7 +52,7 @@ where
                     Err(invalid("stream", "missing NUL terminator"))
                 };
             }
-            let end = bytes.iter().position(|byte| *byte == 0);
+            let end = memchr::memchr(0, bytes);
             let count = end.map_or(bytes.len(), |index| index + 1);
             if record.len() + count > MAX_RECORD_BYTES {
                 return Err(invalid("stream", "record exceeds path budget"));

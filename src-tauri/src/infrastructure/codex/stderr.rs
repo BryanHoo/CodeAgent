@@ -166,7 +166,7 @@ async fn read_bounded_line<R: AsyncBufRead + Unpin>(
                 Ok(Some(oversized))
             };
         }
-        let newline = available.iter().position(|byte| *byte == b'\n');
+        let newline = memchr::memchr(b'\n', available);
         let content_len = newline.unwrap_or(available.len());
         let remaining = limit.saturating_sub(output.len());
         output.extend_from_slice(&available[..content_len.min(remaining)]);

@@ -124,7 +124,7 @@ fn apply_combined_diff(
             change.truncated = true;
         }
     }
-    let Some(separator) = output.windows(2).position(|window| window == [0, 0]) else {
+    let Some(separator) = memchr::memmem::find(output, &[0, 0]) else {
         // 只有冲突元数据而无补丁，或预算耗尽于元数据部分，都不能伪造文件正文。
         if truncated || output.ends_with(&[0]) {
             return Ok(());

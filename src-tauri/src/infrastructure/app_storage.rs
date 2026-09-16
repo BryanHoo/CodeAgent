@@ -2,7 +2,6 @@ use std::{
     collections::BTreeMap,
     io,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +13,6 @@ const MAX_BACKGROUND_BYTES: usize = 20 * 1024 * 1024;
 const MAX_PREFERENCE_BYTES: usize = 1024 * 1024;
 const MAX_TOTAL_PREFERENCE_BYTES: usize = 8 * 1024 * 1024;
 static STORAGE_LOCK: Mutex<()> = Mutex::const_new(());
-static TEMP_FILE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Error)]
 pub enum AppStorageError {
@@ -178,7 +176,7 @@ async fn update_backgrounds_unlocked(
         .images
         .retain(|image| !deleted_ids.contains(&image.id));
     for image in images {
-        write_bytes_atomic(&background_file_path(app_data, &image.id), &image.bytes).await?;
+        write_bytes_atomic(&background_file_path(app_data, &image.id), image.bytes).await?;
         index.images.retain(|stored| stored.id != image.id);
         index.images.push(CustomBackgroundMetadata {
             created_at: image.created_at,
@@ -310,38 +308,13 @@ fn image_type_matches(media_type: &str, bytes: &[u8]) -> bool {
 }
 
 async fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), AppStorageError> {
-    write_bytes_atomic(path, &serde_json::to_vec(value)?).await
-}
-
-async fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), AppStorageError> {
-    let parent = path.parent().ok_or(AppStorageError::InvalidData)?;
-    fs::create_dir_all(parent).await?;
-    let temporary = parent.join(format!(
-        ".app-storage-{}-{}.tmp",
-        std::process::id(),
-        TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::write(&temporary, bytes).await?;
-    if let Err(error) = replace_file_atomic(&temporary, path).await {
-        let _ = fs::remove_file(&temporary).await;
-        return Err(error.into());
-    }
+    super::atomic_file::write_bytes(path, serde_json::to_vec(value)?).await?;
     Ok(())
 }
 
-#[cfg(not(target_os = "windows"))]
-pub(super) async fn replace_file_atomic(source: &Path, destination: &Path) -> io::Result<()> {
-    fs::rename(source, destination).await
-}
-
-#[cfg(target_os = "windows")]
-pub(super) async fn replace_file_atomic(source: &Path, destination: &Path) -> io::Result<()> {
-    let source = source.to_owned();
-    let destination = destination.to_owned();
-    // MoveFileExW 原子覆盖并等待磁盘提交，放入阻塞线程避免占用 Tokio 调度线程。
-    tokio::task::spawn_blocking(move || atomicwrites::replace_atomic(&source, &destination))
-        .await
-        .map_err(io::Error::other)?
+async fn write_bytes_atomic(path: &Path, bytes: Vec<u8>) -> Result<(), AppStorageError> {
+    super::atomic_file::write_bytes(path, bytes).await?;
+    Ok(())
 }
 
 fn storage_path(app_data: &Path) -> PathBuf {

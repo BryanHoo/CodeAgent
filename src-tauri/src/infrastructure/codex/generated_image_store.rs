@@ -1,9 +1,8 @@
 use std::{
     collections::HashMap,
-    fs::{self, File, OpenOptions},
+    fs::File,
     io::{Cursor, Read, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use base64::{engine::general_purpose::STANDARD, read::DecoderReader};
@@ -16,7 +15,6 @@ pub(super) const IMAGE_ATTACHMENT_FIELD: &str = "codeagentAttachment";
 const IMAGE_GENERATION_MARKER: &[u8] = b"\"imageGeneration\"";
 const MAX_GENERATED_IMAGE_BYTES: usize = 50 * 1024 * 1024;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
-static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub(super) struct GeneratedImageStore {
@@ -56,9 +54,7 @@ impl GeneratedImageStore {
     }
 
     pub(super) fn contains_image_generation(frame: &[u8]) -> bool {
-        frame
-            .windows(IMAGE_GENERATION_MARKER.len())
-            .any(|window| window == IMAGE_GENERATION_MARKER)
+        memchr::memmem::find(frame, IMAGE_GENERATION_MARKER).is_some()
     }
 
     pub(super) fn sanitize_frame(&self, frame: Vec<u8>) -> Result<Vec<u8>, serde_json::Error> {
@@ -154,17 +150,7 @@ impl GeneratedImageStore {
     }
 
     fn store_reader(&self, reader: impl Read) -> Option<StoredImage> {
-        fs::create_dir_all(&self.directory).ok()?;
-        let temp = self.directory.join(format!(
-            ".generated.{}.{}.tmp",
-            std::process::id(),
-            NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed)
-        ));
-        let mut file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&temp)
-            .ok()?;
+        let mut file = crate::infrastructure::atomic_file::create(&self.directory).ok()?;
         let mut reader = reader.take((MAX_GENERATED_IMAGE_BYTES + 1) as u64);
         let mut hasher = Sha256::new();
         let mut header = [0_u8; 12];
@@ -189,28 +175,20 @@ impl GeneratedImageStore {
                 hasher.update(&buffer[..read]);
                 file.write_all(&buffer[..read])?;
             }
-            file.sync_all()
+            file.as_file().sync_all()
         })();
 
-        let Some((media_type, extension)) = (write_result.ok())
+        let (media_type, extension) = write_result
+            .ok()
             .filter(|_| total > 0)
-            .and_then(|_| detect_image(&header[..header_len]))
-        else {
-            drop(file);
-            let _ = fs::remove_file(&temp);
-            return None;
-        };
-        drop(file);
-
+            .and_then(|_| detect_image(&header[..header_len]))?;
         let digest = encode_lower_hex(hasher.finalize());
         let destination = self.directory.join(format!("{digest}.{extension}"));
-        if destination.is_file() {
-            let _ = fs::remove_file(&temp);
-        } else if fs::rename(&temp, &destination).is_err() {
-            let _ = fs::remove_file(&temp);
-            if !destination.is_file() {
-                return None;
-            }
+        if !destination.is_file()
+            && crate::infrastructure::atomic_file::publish(file, &destination).is_err()
+            && !destination.is_file()
+        {
+            return None;
         }
         Some(StoredImage {
             path: destination,
@@ -306,6 +284,7 @@ fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::time::SystemTime;
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]

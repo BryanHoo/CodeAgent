@@ -1,7 +1,6 @@
 use std::{
     io,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use chrono::{DateTime, Utc};
@@ -18,7 +17,6 @@ mod seek;
 pub const MAX_SCHEDULED_TASK_RUNS: usize = 20;
 const MIN_RECURRENCE_MILLIS: i64 = 60_000;
 const STORAGE_SCHEMA_VERSION: u32 = 1;
-static TEMP_FILE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Error)]
 pub enum ScheduledTaskStoreError {
@@ -174,33 +172,14 @@ pub async fn write_scheduled_tasks(
         }
     }
     let target = storage_path(app_data);
-    let parent = target
-        .parent()
-        .ok_or(ScheduledTaskStoreError::InvalidData)?;
-    fs::create_dir_all(parent).await?;
     let bytes = serde_json::to_vec(&StoredScheduledTasks {
         schema_version: STORAGE_SCHEMA_VERSION,
         tasks: bounded_tasks,
     })?;
-    let temporary = temporary_path(parent);
-    fs::write(&temporary, bytes).await?;
-    replace_file(&temporary, &target).await
-}
-
-async fn replace_file(temporary: &Path, target: &Path) -> Result<(), ScheduledTaskStoreError> {
-    // 复用跨平台原子替换，禁止先删旧数据再重命名。
-    if let Err(error) = super::app_storage::replace_file_atomic(temporary, target).await {
-        let _ = fs::remove_file(temporary).await;
-        return Err(error.into());
-    }
+    super::atomic_file::write_bytes(&target, bytes).await?;
     Ok(())
 }
 
 fn storage_path(app_data: &Path) -> PathBuf {
     app_data.join("scheduled-tasks").join("v1.json")
-}
-
-fn temporary_path(parent: &Path) -> PathBuf {
-    let id = TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed);
-    parent.join(format!(".v1.{}.{id}.tmp", std::process::id()))
 }

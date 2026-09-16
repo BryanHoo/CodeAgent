@@ -1,8 +1,7 @@
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use base64::{engine::general_purpose::STANDARD, read::DecoderReader};
@@ -12,7 +11,6 @@ use sha2::{Digest, Sha256};
 use crate::encoding::encode_lower_hex;
 
 const MAX_MEDIA_BYTES: usize = 50 * 1024 * 1024;
-static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 pub(crate) struct QueuedMediaStore {
@@ -71,8 +69,7 @@ impl QueuedMediaStore {
             Ok(metadata) if metadata.is_file() => metadata.len(),
             Ok(_) => return Err(invalid()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                fs::create_dir_all(&directory)?;
-                persist(&directory, &path, encoded, image)?
+                persist(&path, encoded, image)?
             }
             Err(error) => return Err(error),
         };
@@ -90,14 +87,8 @@ impl QueuedMediaStore {
     }
 }
 
-fn persist(directory: &Path, destination: &Path, encoded: &str, image: bool) -> io::Result<u64> {
-    let sequence = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
-    let temporary = directory.join(format!(".queue-{}-{sequence}.tmp", std::process::id()));
-    let result = (|| {
-        let mut file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&temporary)?;
+fn persist(destination: &Path, encoded: &str, image: bool) -> io::Result<u64> {
+    super::atomic_file::write_with(destination, |file| {
         let mut decoder = DecoderReader::new(encoded.as_bytes(), &STANDARD);
         let mut buffer = [0_u8; 64 * 1024];
         let mut prefix = Vec::with_capacity(12);
@@ -118,15 +109,8 @@ fn persist(directory: &Path, destination: &Path, encoded: &str, image: bool) -> 
             return Err(invalid());
         }
         file.sync_all()?;
-        // Windows 上先关闭句柄，再原子替换；失败只清理本次临时文件。
-        drop(file);
-        fs::rename(&temporary, destination)?;
         Ok(total as u64)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+    })
 }
 
 fn is_image(bytes: &[u8]) -> bool {

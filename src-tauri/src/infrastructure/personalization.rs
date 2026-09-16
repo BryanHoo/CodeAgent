@@ -45,27 +45,16 @@ pub async fn save_instructions(
         Err(error) if error.kind() == io::ErrorKind::NotFound => path,
         Err(error) => return Err(error),
     };
-    use tokio::io::AsyncWriteExt;
-    let temporary = target.with_file_name(format!(".AGENTS-{}.tmp", std::process::id()));
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)
-        .await?;
-    let result = async {
-        if let Ok(metadata) = fs::metadata(&target).await {
-            file.set_permissions(metadata.permissions()).await?;
-        }
-        file.write_all(content.as_bytes()).await?;
-        file.sync_all().await?;
-        drop(file);
-        super::app_storage::replace_file_atomic(&temporary, &target).await
-    }
-    .await;
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary).await;
-    }
-    result?;
+    let bytes = content.as_bytes().to_vec();
+    tokio::task::spawn_blocking(move || {
+        super::atomic_file::write_with(&target, |file| {
+            use std::io::Write;
+            file.write_all(&bytes)?;
+            file.sync_all()
+        })
+    })
+    .await
+    .map_err(io::Error::other)??;
     read_instructions(home).await
 }
 
