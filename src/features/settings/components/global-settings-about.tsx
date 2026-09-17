@@ -95,7 +95,7 @@ export function GlobalSettingsAbout({
             </Button>
           </SettingsField>
           <SettingsField alignStart label={t("about.update")}>
-            <div className="flex min-w-0 flex-wrap items-center gap-2 py-2">
+            <div className="flex min-w-0 flex-nowrap items-center gap-2 py-2">
               <p
                 className={cn(
                   "shrink-0 text-body-small",
