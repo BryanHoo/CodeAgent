@@ -38,7 +38,7 @@ export function providerConnectionQueryOptions(
 export async function invalidateProviderConnectionQueries(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ exact: true, queryKey: providerConnectionQueryKey }),
-    queryClient.invalidateQueries({ exact: true, queryKey: ["models"] }),
+    queryClient.resetQueries({ exact: true, queryKey: ["models"] }),
     queryClient.invalidateQueries({ exact: true, queryKey: ["settings"] }),
     queryClient.invalidateQueries({
       predicate: (query) => query.queryKey[0] === "projects" && query.queryKey[2] === "defaults",

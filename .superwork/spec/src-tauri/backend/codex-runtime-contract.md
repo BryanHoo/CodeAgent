@@ -47,6 +47,9 @@
 - Codex `config.toml` 只写入标准 Provider 字段：内置 OpenAI 覆盖使用 `openai_base_url`，自定义 Provider 使用 `model_provider` 与 `model_providers.<id>`
 - CodeAgent 自有的模型目录不得写入 `desktop.codeagent.provider`；应原子保存到应用数据目录，并按 `providerId` 与 `baseUrl` 精确匹配，防止跨端点复用模型
 - 重新连接未提交模型列表时复用当前端点的本地目录；旧 `desktop.codeagent.provider.customModels` 仅允许作为一次性迁移来源，成功保存后清理整个旧配置段
+- 自定义 Provider 必须设置 `model_catalog_url = "${baseUrl}/models"` 并启用 `features.api_key_model_discovery`；旧配置在进程启动时补齐，写入后重启一次以重新绑定 Provider
+- 模型目录使用最新磁盘配置启动的独立 App Server 读取；自定义目录优先采用在线发现后的 `model/list`（含 CLI 回退），不可用时才读取相同 Provider 和 baseUrl 的本地目录。成功读取后持久化模型及 `supportedReasoningEfforts`
+- 官方登录清除 `openai_base_url`，官方模型与思考量以 `model/list` 为准；自定义模型未提供有效思考档位或仅返回 `none` 时默认提供 low、medium、high。切换登录方式或自定义端点时重置前端模型缓存
 
 ## 新增通知与请求
 

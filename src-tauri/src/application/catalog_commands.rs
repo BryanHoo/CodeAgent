@@ -17,8 +17,13 @@ fn provider_error(error: codex::ProviderError) -> AppError {
 
 #[tauri::command]
 pub async fn list_models(app: AppHandle, state: State<'_, AppState>) -> Result<Value, AppError> {
-    let connection = state.codex_connection().await?;
-    codex::list_provider_models(&connection, &app_data_dir(&app)?)
+    state.codex_connection().await?;
+    let app_data = app_data_dir(&app)?;
+    // 主连接固定启动时的 Provider；目录连接按最新磁盘配置独立启动。
+    let catalog_process = codex::CodexProcess::start(&app_data)
+        .await
+        .map_err(|_| AppError::CodexRuntimeStartFailed)?;
+    codex::list_provider_models(&catalog_process.connection(), &app_data)
         .await
         .map_err(provider_error)
 }

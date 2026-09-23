@@ -59,6 +59,19 @@ pub struct CodexProcess {
 
 impl CodexProcess {
     pub async fn start(app_data: &Path) -> Result<Self, ProcessError> {
+        let process = Self::start_once(app_data).await?;
+        if super::auth::ensure_custom_model_discovery(&process.connection)
+            .await
+            .map_err(ProcessError::Handshake)?
+        {
+            // Provider 与模型管理器在握手时固定；配置迁移后必须重新创建进程。
+            drop(process);
+            return Self::start_once(app_data).await;
+        }
+        Ok(process)
+    }
+
+    async fn start_once(app_data: &Path) -> Result<Self, ProcessError> {
         let (program, version, runtime_path) = find_compatible_codex_binary(app_data).await?;
         let mut child = build_app_server_command(program.as_os_str(), runtime_path.as_deref())
             .spawn()

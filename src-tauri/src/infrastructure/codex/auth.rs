@@ -59,15 +59,96 @@ pub async fn list_provider_models(
     let config = read_config(connection).await?;
     if provider_mode(&config) == "custom" {
         let provider_id = selected_provider_id(&config);
-        if let Some(base_url) = configured_custom_base_url(&config)
-            && let Some(models) = read_provider_models(app_data, provider_id, base_url)
+        if let Some(base_url) = configured_custom_base_url(&config) {
+            // 在线目录及当前 CLI 目录优先；只有两者均不可用才读取相同端点的旧快照。
+            let cli_models = list_models(connection).await;
+            if cli_models.as_ref().is_ok_and(model_page_has_data) {
+                let mut models = cli_models?;
+                normalize_custom_reasoning(&mut models);
+                write_provider_models(app_data, provider_id, base_url, &models).await?;
+                return Ok(models);
+            }
+            if let Some(mut models) = read_provider_models(app_data, provider_id, base_url)
                 .await?
                 .or_else(|| legacy_provider_models(&config, base_url))
-        {
-            return Ok(models);
+            {
+                normalize_custom_reasoning(&mut models);
+                write_provider_models(app_data, provider_id, base_url, &models).await?;
+                return Ok(models);
+            }
+            return Ok(cli_models?);
         }
     }
     Ok(list_models(connection).await?)
+}
+
+fn normalize_custom_reasoning(models: &mut Value) {
+    let Some(data) = models.get_mut("data").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for model in data {
+        let has_reasoning = model
+            .get("supportedReasoningEfforts")
+            .and_then(Value::as_array)
+            .is_some_and(|efforts| {
+                efforts.iter().any(|effort| {
+                    effort
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| id != "none")
+                })
+            });
+        if !has_reasoning {
+            model["defaultReasoningEffort"] = json!("medium");
+            model["supportedReasoningEfforts"] = json!([
+                {"description": "Low", "id": "low"},
+                {"description": "Medium", "id": "medium"},
+                {"description": "High", "id": "high"}
+            ]);
+        }
+    }
+}
+
+pub async fn ensure_custom_model_discovery(
+    connection: &AppServerConnection,
+) -> Result<bool, ConnectionError> {
+    let config = read_config(connection).await?;
+    if provider_mode(&config) != "custom" {
+        return Ok(false);
+    }
+    let Some(base_url) = configured_custom_base_url(&config) else {
+        return Ok(false);
+    };
+    let catalog_url = format!("{}/models", base_url.trim_end_matches('/'));
+    let provider_id = selected_provider_id(&config);
+    let mut edits = Vec::new();
+    if provider_id == "openai" {
+        edits.push(edit("model_provider", json!(DEFAULT_CUSTOM_PROVIDER_ID)));
+        edits.push(edit("openai_base_url", Value::Null));
+        edits.push(edit(
+            &format!("model_providers.{DEFAULT_CUSTOM_PROVIDER_ID}"),
+            custom_provider_config(DEFAULT_CUSTOM_PROVIDER_ID, base_url),
+        ));
+    } else if config
+        .pointer(&format!("/model_providers/{provider_id}/model_catalog_url"))
+        .and_then(Value::as_str)
+        != Some(catalog_url.as_str())
+    {
+        let mut provider = config
+            .pointer(&format!("/model_providers/{provider_id}"))
+            .cloned()
+            .ok_or(ConnectionError::InvalidMessage)?;
+        provider["model_catalog_url"] = json!(catalog_url);
+        edits.push(edit(&format!("model_providers.{provider_id}"), provider));
+    }
+    if config.pointer("/features/api_key_model_discovery") != Some(&json!(true)) {
+        edits.push(edit("features.api_key_model_discovery", json!(true)));
+    }
+    if edits.is_empty() {
+        return Ok(false);
+    }
+    write_config(connection, edits).await?;
+    Ok(true)
 }
 
 pub async fn get_provider_connection(
@@ -117,6 +198,7 @@ pub async fn start_official_provider_login(
         connection,
         vec![
             edit("model_provider", json!("openai")),
+            edit("openai_base_url", Value::Null),
             edit("desktop.codeagent.provider", Value::Null),
         ],
     )
@@ -192,7 +274,10 @@ pub async fn configure_custom_provider(
     let existing_custom_provider_id = (provider_mode(&config) == "custom")
         .then(|| configured_provider_id(&config))
         .flatten();
-    let provider_id = existing_custom_provider_id.unwrap_or(DEFAULT_CUSTOM_PROVIDER_ID);
+    let provider_id = match existing_custom_provider_id {
+        Some("openai") | None => DEFAULT_CUSTOM_PROVIDER_ID,
+        Some(provider_id) => provider_id,
+    };
     let submitted_models = match input.get("models") {
         Some(models) => map_custom_models(Some(models))?,
         None => empty_model_page(),
@@ -209,9 +294,7 @@ pub async fn configure_custom_provider(
     if model_page_has_data(&models) {
         write_provider_models(app_data, provider_id, base_url, &models).await?;
     }
-    let mut edits = if provider_id == "openai" {
-        vec![edit("openai_base_url", json!(base_url))]
-    } else {
+    let mut edits = {
         let provider_name = config
             .get("model_providers")
             .and_then(Value::as_object)
@@ -219,17 +302,16 @@ pub async fn configure_custom_provider(
             .and_then(|provider| provider.get("name"))
             .and_then(non_empty_string)
             .unwrap_or(provider_id);
-        let provider = json!({
-            "name": provider_name,
-            "base_url": base_url,
-            "wire_api": "responses",
-            "requires_openai_auth": true,
-        });
+        let provider = custom_provider_config(provider_name, base_url);
         vec![edit(&format!("model_providers.{provider_id}"), provider)]
     };
     edits.push(edit("desktop.codeagent.provider", Value::Null));
-    if existing_custom_provider_id.is_none() {
+    edits.push(edit("features.api_key_model_discovery", json!(true)));
+    if existing_custom_provider_id.is_none() || existing_custom_provider_id == Some("openai") {
         edits.push(edit("model_provider", json!(DEFAULT_CUSTOM_PROVIDER_ID)));
+    }
+    if configured_openai_base_url(&config).is_some() {
+        edits.push(edit("openai_base_url", Value::Null));
     }
     write_config(connection, edits).await?;
 
@@ -258,6 +340,16 @@ pub async fn configure_custom_provider(
             "pendingLogin": null, "state": "connected"
         }
     }))
+}
+
+fn custom_provider_config(name: &str, base_url: &str) -> Value {
+    json!({
+        "name": name,
+        "base_url": base_url,
+        "model_catalog_url": format!("{}/models", base_url.trim_end_matches('/')),
+        "wire_api": "responses",
+        "requires_openai_auth": true,
+    })
 }
 
 fn map_custom_models(value: Option<&Value>) -> Result<Value, ConnectionError> {

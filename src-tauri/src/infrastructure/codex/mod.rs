@@ -53,6 +53,12 @@ pub mod task_title;
 mod tasks;
 
 #[cfg(test)]
+#[path = "auth_connection_tests.rs"]
+mod auth_connection_tests;
+#[cfg(test)]
+#[path = "auth_model_fallback_tests.rs"]
+mod auth_model_fallback_tests;
+#[cfg(test)]
 #[path = "auth_provider_config_tests.rs"]
 mod auth_provider_config_tests;
 #[cfg(test)]

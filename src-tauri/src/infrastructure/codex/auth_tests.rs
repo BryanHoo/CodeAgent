@@ -9,7 +9,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex, split};
 use crate::infrastructure::provider_models::{read_provider_models, write_provider_models};
 
 use super::{
-    AppServerConnection, configure_custom_provider, get_provider_connection, list_provider_models,
+    AppServerConnection, configure_custom_provider, list_provider_models,
     start_official_provider_login,
 };
 
@@ -20,71 +20,8 @@ fn test_root() -> std::path::PathBuf {
     std::env::temp_dir().join(format!("codeagent-auth-{}-{id}", std::process::id()))
 }
 
-async fn read_provider_connection(config: Value, account: Value) -> Value {
-    let (client, server) = duplex(32 * 1024);
-    let (client_reader, client_writer) = split(client);
-    let (server_reader, mut server_writer) = split(server);
-    let connection = AppServerConnection::new(client_reader, client_writer);
-
-    let server_task = tokio::spawn(async move {
-        let mut lines = BufReader::new(server_reader).lines();
-        for result in [json!({"config": config}), account] {
-            let request: Value =
-                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
-            server_writer
-                .write_all(
-                    format!(
-                        "{}\n",
-                        json!({"id": request["id"].clone(), "result": result})
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-        }
-    });
-
-    let status = get_provider_connection(&connection, None).await.unwrap();
-    server_task.await.unwrap();
-    status
-}
-
 #[tokio::test]
-async fn provider_connection_should_detect_selected_custom_provider_without_login() {
-    let status = read_provider_connection(
-        json!({
-            "model_provider": "relay",
-            "model_providers": {
-                "relay": {"base_url": "https://relay.example/v1"}
-            }
-        }),
-        json!({"account": null, "requiresOpenaiAuth": false}),
-    )
-    .await;
-
-    assert_eq!(status["mode"], "custom");
-    assert_eq!(status["customBaseUrl"], "https://relay.example/v1");
-    assert_eq!(status["state"], "connected");
-}
-
-#[tokio::test]
-async fn provider_connection_should_detect_openai_base_url_override() {
-    let status = read_provider_connection(
-        json!({
-            "model_provider": "openai",
-            "openai_base_url": "https://relay.example/v1"
-        }),
-        json!({"account": {"type": "apiKey"}, "requiresOpenaiAuth": true}),
-    )
-    .await;
-
-    assert_eq!(status["mode"], "custom");
-    assert_eq!(status["customBaseUrl"], "https://relay.example/v1");
-    assert_eq!(status["state"], "connected");
-}
-
-#[tokio::test]
-async fn custom_provider_models_should_restore_page_from_persisted_data() {
+async fn custom_provider_models_should_prefer_live_catalog_to_persisted_data() {
     let root = test_root();
     let stored_models = json!({
         "data": [{"displayName": "Custom A", "id": "custom-a"}],
@@ -123,10 +60,36 @@ async fn custom_provider_models_should_restore_page_from_persisted_data() {
             )
             .await
             .unwrap();
+        let request: Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(request["method"], "model/list");
+        server_writer.write_all(format!("{}\n", json!({
+            "id": request["id"], "result": {"data": [{
+                "id": "online-a", "displayName": "Online A", "defaultReasoningEffort": "none",
+                "supportedReasoningEfforts": [{"reasoningEffort": "none", "description": "None"}]
+            }], "nextCursor": null}
+        })).as_bytes()).await.unwrap();
     });
 
     let models = list_provider_models(&connection, &root).await.unwrap();
-    assert_eq!(models, stored_models);
+    assert_eq!(models["data"][0]["id"], "online-a");
+    assert_eq!(
+        models["data"][0]["supportedReasoningEfforts"][0]["id"],
+        "low"
+    );
+    assert_eq!(
+        models["data"][0]["supportedReasoningEfforts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(
+        read_provider_models(&root, "relay", "https://relay.example/v1")
+            .await
+            .unwrap(),
+        Some(models)
+    );
     server_task.await.unwrap();
     fs::remove_dir_all(root).unwrap();
 }
@@ -335,6 +298,18 @@ async fn custom_provider_should_default_to_openai_when_provider_is_missing() {
         assert!(
             edits
                 .iter()
+                .any(|edit| edit["keyPath"] == "features.api_key_model_discovery"
+                    && edit["value"] == true)
+        );
+        assert!(
+            edits
+                .iter()
+                .any(|edit| edit["keyPath"] == "model_providers.OpenAI"
+                    && edit["value"]["model_catalog_url"] == "https://api.example/v1/models")
+        );
+        assert!(
+            edits
+                .iter()
                 .any(|edit| { edit["keyPath"] == "model_provider" && edit["value"] == "OpenAI" })
         );
         server_writer
@@ -378,6 +353,13 @@ async fn provider_login_should_keep_secrets_out_of_config_payloads() {
                 .is_some_and(|edits| edits.iter().any(|edit| {
                     edit["keyPath"] == "desktop.codeagent.provider" && edit["value"].is_null()
                 }))
+        );
+        assert!(
+            official_config["params"]["edits"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|edit| edit["keyPath"] == "openai_base_url" && edit["value"].is_null())
         );
         server_writer
             .write_all(

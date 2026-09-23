@@ -296,10 +296,11 @@ where
 fn map_model(model: Value) -> Option<Value> {
     let id = model.get("id")?.as_str()?;
     let display_name = model.get("displayName")?.as_str()?;
-    let efforts = model
-        .get("supportedReasoningEfforts")?
-        .as_array()?
-        .iter()
+    let mut efforts = model
+        .get("supportedReasoningEfforts")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
         .filter_map(|effort| {
             Some(json!({
                 "description": effort.get("description")?.as_str()?,
@@ -307,11 +308,12 @@ fn map_model(model: Value) -> Option<Value> {
             }))
         })
         .collect::<Vec<_>>();
+    // 第三方模型可能省略推理元数据；自定义 Provider 会在上层补齐可选档位。
     if efforts.is_empty() {
-        return None;
+        efforts.push(json!({"description": "None", "id": "none"}));
     }
     Some(json!({
-        "defaultReasoningEffort": model.get("defaultReasoningEffort")?.as_str()?,
+        "defaultReasoningEffort": model.get("defaultReasoningEffort").and_then(Value::as_str).unwrap_or("none"),
         "description": model.get("description").and_then(Value::as_str).unwrap_or_default(),
         "displayName": display_name,
         "id": id,
