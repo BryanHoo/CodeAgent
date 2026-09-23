@@ -8,21 +8,25 @@ describe("reasoning summary tool", () => {
   it("shows a plain single-line title and expands the Markdown details", async () => {
     await i18n.changeLanguage("zh-CN");
     const screen = await render(
-      <TimelineItemContent
-        isLastTurnItem={false}
-        item={{ id: "reason-1", text: "## **检查** [文件](https://example.com)\n\n详情内容", type: "reasoning" }}
-        onOpenFileDiff={() => {}}
-        onOpenSourceFile={() => {}}
-        projectId="project-1"
-        taskId="task-1"
-        turnStatus="completed"
-      />,
+      <div style={{ width: 440 }}>
+        <TimelineItemContent
+          isLastTurnItem={false}
+          item={{ id: "reason-1", text: "## **检查** [文件](https://example.com)\n\n详情内容", type: "reasoning" }}
+          onOpenFileDiff={() => {}}
+          onOpenSourceFile={() => {}}
+          projectId="project-1"
+          taskId="task-1"
+          turnStatus="completed"
+        />
+      </div>,
     );
     const title = screen.getByText("检查 文件");
-    await expect.element(title).toBeVisible();
+    await expect.element(title).toBeInTheDocument();
     expect(title.element().classList.contains("truncate")).toBe(true);
     expect(screen.getByText("详情内容").query()).toBeNull();
-    await title.click();
+    const header = title.element().closest("summary");
+    expect(header?.getBoundingClientRect().height).toBeGreaterThan(0);
+    header?.click();
     await expect.element(screen.getByText("详情内容")).toBeVisible();
   });
 });

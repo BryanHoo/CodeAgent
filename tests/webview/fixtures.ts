@@ -263,9 +263,8 @@ function createLongTaskItem(turnIndex: number, itemIndex: number, itemCount: num
   }
   if (itemIndex % 3 === 0) {
     return {
-      content: longColdTurnText,
       id: itemId,
-      summary: `推理摘要 ${String(itemIndex)}`,
+      text: `推理摘要 ${String(itemIndex)}\n\n${longColdTurnText}`,
       type: "reasoning",
     } as const;
   }

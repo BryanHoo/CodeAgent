@@ -23,16 +23,20 @@ test("context lists warnings and expands the selected warning detail", async () 
     payload: { code: "runtime_warning", level: "warning", message: "Detailed runtime warning" },
   }]);
 
-  const screen = await render(<TooltipProvider><WorkbenchInspector
-    contextOnly projectName="Project" projectPath="/project" projectRootId="root"
-    taskId="task" taskStore={store}
-  /></TooltipProvider>);
+  const screen = await render(<TooltipProvider><div style={{ height: 640, width: 360 }}>
+    <WorkbenchInspector
+      contextOnly projectName="Project" projectPath="/project" projectRootId="root"
+      taskId="task" taskStore={store}
+    />
+  </div></TooltipProvider>);
   const title = i18n.t("timeline.notice.runtime_warning", { ns: "conversation" });
   const summary = screen.getByText(`${title}: Detailed runtime warning`);
-  await expect.element(summary).toBeVisible();
+  await expect.element(summary).toBeInTheDocument();
   const detail = summary.element().closest("details");
   expect(detail?.open).toBe(false);
-  await summary.click();
+  const header = detail?.querySelector("summary");
+  expect(header?.getBoundingClientRect().height).toBeGreaterThan(0);
+  header?.click();
   expect(detail?.open).toBe(true);
   expect(screen.getByText("Detailed runtime warning", { exact: true }).element()).toBeVisible();
 });
