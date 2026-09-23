@@ -76,6 +76,16 @@ export function createTaskStore(
             ...nextState,
             ...applyAcceptedEvent(nextState, event, changedItemStores),
           };
+          if (
+            clearsRuntimeWarning(event) &&
+            nextState.notices.some((notice) => notice.payload.code === "runtime_warning")
+          ) {
+            // 后续有效输出或任务终态表示临时警告已过期，其他通知仍按自身生命周期展示。
+            nextState = {
+              ...nextState,
+              notices: nextState.notices.filter((notice) => notice.payload.code !== "runtime_warning"),
+            };
+          }
           const touchedCommandOutputItemIds = getTouchedCommandOutputItemKeys(
             previousState,
             nextState,
@@ -282,7 +292,7 @@ function measureEventEntityBytes(state: TaskStoreState, event: AgentEvent): numb
   ) {
     retainedBytes += estimateRetainedBytes(state.turnsById[event.turnId]);
   }
-  if (event.type === "task.notice" || event.type === "turn.completed") {
+  if (event.type === "task.notice" || event.type === "turn.completed" || clearsRuntimeWarning(event)) {
     retainedBytes += state.notices.reduce(
       (total, notice) => total + estimateRetainedBytes(notice),
       0,
@@ -310,6 +320,23 @@ function measureEventEntityBytes(state: TaskStoreState, event: AgentEvent): numb
     }
   }
   return retainedBytes;
+}
+
+function clearsRuntimeWarning(event: AgentEvent): boolean {
+  switch (event.type) {
+    case "message.delta":
+    case "plan.delta":
+    case "command.output_delta":
+    case "tool.progress":
+    case "file_change.updated":
+    case "item.started":
+    case "item.completed":
+      return true;
+    case "task.status_updated":
+      return event.payload.status !== "running";
+    default:
+      return false;
+  }
 }
 
 function getEventItemKeys(state: TaskStoreState, event: AgentEvent): readonly string[] {
