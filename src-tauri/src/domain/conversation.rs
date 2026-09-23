@@ -254,6 +254,8 @@ pub enum AgentItem {
     },
     #[serde(rename = "plan")]
     Plan { id: String, text: String },
+    #[serde(rename = "reasoning")]
+    Reasoning { id: String, text: String },
     #[serde(rename = "activity")]
     Activity {
         #[serde(skip_serializing_if = "Option::is_none")]

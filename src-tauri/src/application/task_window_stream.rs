@@ -196,6 +196,8 @@ impl TaskWindowProjection {
             let kind = match delta.event_type {
                 AgentDeltaType::Message => "message",
                 AgentDeltaType::Plan => "plan",
+                // 小窗只保留回复与计划，推理摘要不计入正文。
+                AgentDeltaType::Reasoning => return,
                 // 执行输出量大，小窗只展示命令和工具摘要。
                 _ => return,
             };

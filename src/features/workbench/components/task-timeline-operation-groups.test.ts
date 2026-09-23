@@ -43,6 +43,13 @@ const fileChange: AgentItem = {
 };
 
 describe("groupConsecutiveTimelineOperations", () => {
+  it("groups reasoning with tools and file edits", () => {
+    expect(groupItems([
+      { id: "reason-1", text: "**Inspect** files", type: "reasoning" },
+      webSearch,
+      fileChange,
+    ])).toEqual([{ itemKeys: ["reason-1", "search-1", "file-change-1"], key: "reason-1", type: "operation_group" }]);
+  });
   it("groups visually consecutive operations", () => {
     const items: AgentItem[] = [
       webSearch,

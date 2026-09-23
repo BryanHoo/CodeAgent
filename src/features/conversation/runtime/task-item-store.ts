@@ -13,7 +13,7 @@ export interface TaskItemStoreState {
 
 type DeltaEvent = Extract<
   AgentEvent,
-  { type: "command.output_delta" | "message.delta" | "plan.delta" }
+  { type: "command.output_delta" | "message.delta" | "plan.delta" | "reasoning.delta" }
 >;
 
 export interface TaskItemStore extends StoreApi<TaskItemStoreState> {
@@ -56,7 +56,10 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
   function textBuffer(field: StreamedTextField): AppendOnlyTextBuffer {
     let buffer = chunksByField.get(field);
     if (buffer === undefined) {
-      const initialText = baseItem.type === "message" || baseItem.type === "plan" ? baseItem.text : "";
+      const initialText =
+        baseItem.type === "message" || baseItem.type === "plan" || baseItem.type === "reasoning"
+          ? baseItem.text
+          : "";
       buffer = new AppendOnlyTextBuffer(initialText);
       chunksByField.set(field, buffer);
     }
@@ -85,6 +88,11 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
         appendChunk("plan", event.payload.delta);
         return true;
       }
+      if (event.type === "reasoning.delta") {
+        if (baseItem.type !== "reasoning") return false;
+        appendChunk("text", event.payload.delta);
+        return true;
+      }
       if (baseItem.type !== "command") {
         return false;
       }
@@ -104,7 +112,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
         return materializedItem;
       }
       let nextItem = baseItem;
-      if (baseItem.type === "message" || baseItem.type === "plan") {
+      if (baseItem.type === "message" || baseItem.type === "plan" || baseItem.type === "reasoning") {
         const chunks = chunksByField.get(baseItem.type === "plan" ? "plan" : "text");
         if (chunks !== undefined) {
           nextItem = { ...baseItem, text: chunks.materialize() };
@@ -128,7 +136,9 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
     },
     readText(): TextSnapshot | undefined {
       if (baseItem.type === "plan") return textBuffer("plan").getSnapshot();
-      if (baseItem.type === "message") return textBuffer("text").getSnapshot();
+      if (baseItem.type === "message" || baseItem.type === "reasoning") {
+        return textBuffer("text").getSnapshot();
+      }
       return undefined;
     },
     replace(item: AgentItem): void {

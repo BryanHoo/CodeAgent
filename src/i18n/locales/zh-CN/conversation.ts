@@ -213,6 +213,7 @@ export const conversation = {
     orchestrating: "正在协调子代理",
   },
   timeline: {
+    reasoning: "推理摘要",
     approvalReview: {
       action: {
         command: "命令",

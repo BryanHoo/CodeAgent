@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::conversation_advanced::get_goal;
-use super::conversation_items::is_reasoning_item;
 pub(super) use super::conversation_items::map_item;
 use super::conversation_items::map_status;
 use super::{connection::ConnectionError, sidebar::unix_seconds_to_rfc3339};
@@ -277,9 +276,7 @@ pub async fn read_task_preview(
             if entry.turn_id != turn.id {
                 return Err(ConnectionError::InvalidMessage);
             }
-            if !is_reasoning_item(&entry.item) {
-                items.push(map_item(entry.item)?);
-            }
+            items.push(map_item(entry.item)?);
         }
     }
     Ok((
@@ -334,9 +331,7 @@ async fn hydrate_paginated_turn(
             if entry.turn_id != turn.id || items.len() >= MAX_TURN_ITEMS {
                 return Err(ConnectionError::InvalidMessage);
             }
-            if !is_reasoning_item(&entry.item) {
-                items.push(entry.item);
-            }
+            items.push(entry.item);
         }
         let Some(next_cursor) = page.next_cursor else {
             break;
@@ -404,7 +399,6 @@ pub(super) fn map_turn(turn: NativeTurn) -> Result<AgentTurn, ConnectionError> {
     let mut items = turn
         .items
         .into_iter()
-        .filter(|item| !is_reasoning_item(item))
         .map(super::conversation_items::map_item_without_skill_normalization)
         .collect::<Result<Vec<_>, _>>()?;
     crate::domain::conversation_skills::normalize_turn_skills(&mut items);

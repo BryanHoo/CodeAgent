@@ -11,6 +11,14 @@ function delta(text: string): Extract<AgentEvent, { type: "message.delta" }> {
 }
 
 describe("streamed item reads", () => {
+  it("streams only the reasoning summary into its item", () => {
+    const store = createTaskItemStore({ id: "reason", text: "", type: "reasoning" });
+    expect(store.appendDelta({ ...delta(""), itemId: "reason", type: "reasoning.delta", payload: { delta: "**检查**" } })).toBe(true);
+    expect(store.read()).toMatchObject({ text: "**检查**", type: "reasoning" });
+    expect(store.readText()?.chunks.slice(0, store.readText()?.chunkCount).join("")).toBe("**检查**");
+    store.replace({ id: "reason", text: "完整摘要", type: "reasoning" });
+    expect(store.read()).toMatchObject({ text: "完整摘要" });
+  });
   it("does not join historical chunks again after each read", () => {
     const store = createTaskItemStore({ id: "message", type: "message", role: "assistant", text: "" });
     const originalJoin = Array.prototype.join;

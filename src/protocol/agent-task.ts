@@ -37,6 +37,15 @@ export const AgentToolItemSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AgentReasoningItemSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    text: Type.String(),
+    type: Type.Literal("reasoning"),
+  },
+  { additionalProperties: false },
+);
+
 const AgentSafetyBufferingItemSchema = Type.Object(
   {
     fasterModel: Type.Optional(Type.String({ minLength: 1 })),
@@ -201,6 +210,7 @@ export const AgentItemSchema = Type.Union([
   AgentCommandItemSchema,
   AgentFileChangeItemSchema,
   AgentToolItemSchema,
+  AgentReasoningItemSchema,
   AgentPlanItemSchema,
   AgentActivityItemSchema,
   AgentApprovalReviewItemSchema,

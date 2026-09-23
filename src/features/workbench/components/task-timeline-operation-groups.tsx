@@ -14,7 +14,7 @@ import type { TaskStore } from "../../conversation/runtime/task-store.js";
 
 type TimelineOperationItem = Extract<
   AgentItem,
-  { type: "command" } | { type: "file_change" } | { type: "tool" }
+  { type: "command" } | { type: "file_change" } | { type: "tool" } | { type: "reasoning" }
 >;
 
 export type TimelineOperationGroup =
@@ -22,7 +22,8 @@ export type TimelineOperationGroup =
   | Readonly<{ itemKeys: readonly string[]; key: string; type: "operation_group" }>;
 
 function isTimelineOperation(item: AgentItem | undefined): item is TimelineOperationItem {
-  return item?.type === "command" || item?.type === "file_change" || item?.type === "tool";
+  return item?.type === "command" || item?.type === "file_change" ||
+    item?.type === "tool" || item?.type === "reasoning";
 }
 
 export function groupConsecutiveTimelineOperations(
@@ -89,9 +90,10 @@ export function summarizeTimelineOperations(items: readonly AgentItem[]): Timeli
       commandCount += 1;
     } else if (item.type === "file_change") {
       fileCount += item.changes.length;
-    } else {
+    } else if (item.type === "tool") {
       toolCount += 1;
     }
+    if (item.type === "reasoning") continue;
     if (item.status === "pending" || item.status === "running") {
       isActive = true;
     } else if (
@@ -149,11 +151,13 @@ function formatTimelineOperationSummary(summary: TimelineOperationSummary): stri
       count: summary.toolCount,
       ns: "conversation",
     });
-  } else {
+  } else if (summary.commandCount > 0) {
     baseSummary = i18n.t("timeline.operationGroup.commandsOnly", {
       count: summary.commandCount,
       ns: "conversation",
     });
+  } else {
+    baseSummary = i18n.t("timeline.reasoning", { ns: "conversation" });
   }
 
   return summary.failedCount === 0
@@ -249,7 +253,7 @@ export function TimelineOperationGroupDisclosure({
         className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-surface bg-control px-3 py-1 text-label text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
       >
         <ListChecks aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 font-medium">{summaryText}</span>
+        <span className="min-w-0 flex-1 truncate font-medium">{summaryText}</span>
         {summary.failedCount === 0 ? (
           <CheckCircle aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
         ) : (

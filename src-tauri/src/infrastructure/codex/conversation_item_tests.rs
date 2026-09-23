@@ -95,43 +95,30 @@ fn file_patch_should_budget_normalized_realtime_content_including_headers() {
 }
 
 #[test]
-fn reasoning_notifications_should_be_ignored() {
+fn reasoning_summary_should_be_visible_without_raw_content() {
     let reasoning = json!({
-        "id": "reasoning-a", "type": "reasoning", "summary": ["hidden"], "content": []
+        "id": "reasoning-a", "type": "reasoning", "summary": ["**检查**\n文件"], "content": ["private"]
     });
-    for (method, params) in [
-        (
-            "item/reasoning/summaryTextDelta",
-            json!({"threadId": "thread-a", "turnId": "turn-a", "itemId": "reasoning-a", "delta": "hidden", "summaryIndex": 0}),
-        ),
-        (
-            "item/reasoning/textDelta",
-            json!({"threadId": "thread-a", "turnId": "turn-a", "itemId": "reasoning-a", "delta": "hidden", "contentIndex": 0}),
-        ),
-        (
-            "item/reasoning/summaryPartAdded",
-            json!({"threadId": "thread-a", "turnId": "turn-a", "itemId": "reasoning-a", "summaryIndex": 0}),
-        ),
-        (
-            "item/started",
-            json!({"threadId": "thread-a", "turnId": "turn-a", "item": reasoning.clone()}),
-        ),
-        (
-            "item/completed",
-            json!({"threadId": "thread-a", "turnId": "turn-a", "item": reasoning}),
-        ),
-    ] {
+    let mapped = to_value(map_item(reasoning.clone()).unwrap()).unwrap();
+    assert_eq!(mapped["type"], "reasoning");
+    assert_eq!(mapped["text"], "**检查**\n文件");
+    assert!(mapped.get("content").is_none());
+    for method in ["item/started", "item/completed"] {
         let event = map_server_message(
             ServerMessage {
                 id: None,
                 method: method.to_owned(),
-                params: to_raw_value(&params).unwrap(),
+                params: to_raw_value(
+                    &json!({"threadId": "thread-a", "turnId": "turn-a", "item": reasoning}),
+                )
+                .unwrap(),
             },
             1,
             "2025-01-01T00:00:00Z",
         )
+        .unwrap()
         .unwrap();
-        assert!(event.is_none(), "{method} should be filtered");
+        assert_eq!(event["payload"]["item"], mapped);
     }
 }
 

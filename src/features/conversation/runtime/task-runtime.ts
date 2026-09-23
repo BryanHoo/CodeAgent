@@ -105,6 +105,7 @@ function isDeltaEvent(
 > {
   return (
     event.type === "message.delta" ||
+    event.type === "reasoning.delta" ||
     event.type === "plan.delta" ||
     event.type === "command.output_delta"
   );

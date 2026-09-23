@@ -36,6 +36,8 @@ export function getTouchedCommandOutputItemKeys(
 function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentItem | undefined {
   switch (event.type) {
     case "message.delta":
+    case "reasoning.delta":
+      if (event.type === "reasoning.delta") return { id: event.itemId, text: "", type: "reasoning" };
       return {
         id: event.itemId,
         role: "assistant",
@@ -178,6 +180,7 @@ export function applyAcceptedEvent(
       };
     }
     case "message.delta":
+    case "reasoning.delta":
     case "plan.delta":
     case "command.output_delta": {
       const currentTurn = state.turnsById[event.turnId];

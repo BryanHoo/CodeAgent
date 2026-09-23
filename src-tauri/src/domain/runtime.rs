@@ -84,6 +84,8 @@ pub enum AgentDeltaType {
     Message,
     #[serde(rename = "plan.delta")]
     Plan,
+    #[serde(rename = "reasoning.delta")]
+    Reasoning,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -152,6 +154,7 @@ impl AgentEvent {
                 AgentDeltaType::CommandOutput => "command.output_delta",
                 AgentDeltaType::Message => "message.delta",
                 AgentDeltaType::Plan => "plan.delta",
+                AgentDeltaType::Reasoning => "reasoning.delta",
             }),
             Self::Json(event) => event.get("type").and_then(Value::as_str),
         }

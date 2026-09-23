@@ -135,18 +135,12 @@ async fn read_task_snapshot_should_map_native_thread_history() {
         value["snapshot"]["turns"][0]["items"][1]["phase"],
         "final_answer"
     );
-    assert_eq!(
-        value["snapshot"]["turns"][0]["items"][2]["command"],
-        "pnpm check"
-    );
-    assert_eq!(
-        value["snapshot"]["turns"][0]["items"][3]["type"],
-        "file_change"
-    );
-    assert_eq!(
-        value["snapshot"]["turns"][0]["items"][4]["name"],
-        "docs/search"
-    );
+    let items = value["snapshot"]["turns"][0]["items"].as_array().unwrap();
+    assert_eq!(items[2]["type"], "reasoning");
+    assert_eq!(items[2]["text"], "摘要");
+    assert_eq!(items[3]["command"], "pnpm check");
+    assert_eq!(items[4]["type"], "file_change");
+    assert_eq!(items[5]["name"], "docs/search");
     assert_eq!(
         value["checkpoint"],
         json!({"sequence": 0, "sessionId": "codeagent-runtime"})

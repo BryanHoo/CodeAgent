@@ -97,7 +97,7 @@ pub(super) const fn thread_config() -> ThreadConfig {
         update_plan_enabled: true,
         web_search: None,
         model_verbosity: None,
-        model_reasoning_summary: "none",
+        model_reasoning_summary: "auto",
     }
 }
 
@@ -269,7 +269,7 @@ pub async fn start_turn(
         .request(
             "turn/start",
             &TurnStartParams {
-                summary: "none",
+                summary: "auto",
                 approval_policy: &options.approval_policy,
                 approvals_reviewer: map_approvals_reviewer(&options.approvals_reviewer)?,
                 collaboration_mode: collaboration_mode(&options),
@@ -332,7 +332,7 @@ pub async fn update_thread_settings(
         .request(
             "thread/settings/update",
             &ThreadSettingsUpdateParams {
-                summary: "none",
+                summary: "auto",
                 approval_policy: &options.approval_policy,
                 approvals_reviewer: map_approvals_reviewer(&options.approvals_reviewer)?,
                 collaboration_mode: collaboration_mode(options),

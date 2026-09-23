@@ -27,7 +27,8 @@ pub(super) fn map_delta_message(
     received_at_unix_ms: u64,
 ) -> Result<Option<AgentDeltaEvent>, ConnectionError> {
     let event_type = match message.method.as_str() {
-        "item/reasoning/textDelta" | "item/reasoning/summaryTextDelta" => return Ok(None),
+        "item/reasoning/textDelta" => return Ok(None),
+        "item/reasoning/summaryTextDelta" => AgentDeltaType::Reasoning,
         "item/agentMessage/delta" => AgentDeltaType::Message,
         "item/commandExecution/outputDelta" => AgentDeltaType::CommandOutput,
         "item/plan/delta" => AgentDeltaType::Plan,
@@ -82,10 +83,13 @@ mod tests {
     }
 
     #[test]
-    fn ignores_reasoning_deltas() {
-        for method in [
-            "item/reasoning/summaryTextDelta",
-            "item/reasoning/textDelta",
+    fn forwards_only_reasoning_summary_deltas() {
+        for (method, expected) in [
+            (
+                "item/reasoning/summaryTextDelta",
+                Some(AgentDeltaType::Reasoning),
+            ),
+            ("item/reasoning/textDelta", None),
         ] {
             let message = ServerMessage {
                 id: None,
@@ -101,10 +105,11 @@ mod tests {
                 .unwrap(),
             };
 
-            assert!(
+            assert_eq!(
                 map_delta_message(&message, 1, "2025-01-01T00:00:00Z", 0)
                     .unwrap()
-                    .is_none()
+                    .map(|event| event.event_type),
+                expected
             );
         }
     }

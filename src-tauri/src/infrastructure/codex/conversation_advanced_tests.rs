@@ -63,7 +63,7 @@ async fn goal_start_should_persist_settings_before_setting_objective() {
         assert_eq!(settings["method"], "thread/settings/update");
         assert_eq!(settings["params"]["threadId"], "thread-a");
         assert_eq!(settings["params"]["model"], "gpt-5.6-sol");
-        assert_eq!(settings["params"]["summary"], "none");
+        assert_eq!(settings["params"]["summary"], "auto");
         server_writer
             .write_all(
                 format!("{}\n", json!({"id": settings["id"].clone(), "result": {}})).as_bytes(),

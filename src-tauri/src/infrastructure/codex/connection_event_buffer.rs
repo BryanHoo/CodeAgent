@@ -15,11 +15,11 @@ const RECOVERABLE_DELTA_METHODS: &[&str] = &[
     "item/agentMessage/delta",
     "item/commandExecution/outputDelta",
     "item/plan/delta",
+    "item/reasoning/summaryTextDelta",
 ];
 
 const IGNORED_REASONING_METHODS: &[&str] = &[
     "item/reasoning/textDelta",
-    "item/reasoning/summaryTextDelta",
     "item/reasoning/summaryPartAdded",
 ];
 
@@ -82,7 +82,7 @@ impl NotificationBuffer {
     }
 
     pub(super) fn push(&mut self, message: ServerMessage) -> bool {
-        // 推理内容不进入排队链路，避免无效事件占用内存和触发重同步。
+        // 原始推理内容不入队；摘要 Delta 按可恢复事件处理。
         if is_ignored_reasoning_notification(&message) {
             return true;
         }
@@ -236,5 +236,18 @@ mod tests {
         }
 
         assert!(buffer.is_empty());
+
+        buffer.push(ServerMessage {
+            id: None,
+            method: "item/reasoning/summaryTextDelta".to_owned(),
+            params: to_raw_value(&serde_json::json!({
+                "threadId": "thread-a", "turnId": "turn-a", "itemId": "reason-a", "delta": "摘要"
+            }))
+            .unwrap(),
+        });
+        assert_eq!(
+            buffer.pop_front().unwrap().method,
+            "item/reasoning/summaryTextDelta"
+        );
     }
 }

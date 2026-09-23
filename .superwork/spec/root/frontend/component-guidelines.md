@@ -31,7 +31,7 @@
 - 壁纸模糊必须在 Chromium 与 WebKit 验证实际像素变化及归零恢复，不能仅断言 Canvas `filter` 赋值。缺少原生模糊接口时按需加载有界采样的软件实现，过期异步绘制不得覆盖最新参数。
 - 已落盘的自定义背景必须使用 Rust 动态授权的 Tauri asset URL 展示；显式读取大图时使用 raw `Response`/`ArrayBuffer`，仅未保存的浏览器草稿创建 blob URL，禁止将图片作为 `number[]` JSON 响应传输
 - 对话、推理、工具调用、终端、计划、文件树和 Diff 优先复用 `src/shared/components/agent/`；菜单与弹窗使用 Radix 交互语义
-- 推理摘要在 Codex 请求中固定关闭；实时 Delta、Item 生命周期和历史快照中的 reasoning 均由 Rust 适配层过滤，不进入 IPC、前端状态或任务小窗。
+- 推理摘要在 Codex 请求中启用 auto；Rust 仅映射 summary，不传原始 reasoning content。主时间线将摘要作为可展开工具项，并与工具和文件编辑共同折叠；任务小窗不展示推理摘要。
 - 完成态 Turn 必须保留首条用户入口，并将同一 Turn 内后续用户引导与执行过程统一折叠；折叠项必须先从可见序列移除再执行消息分组，确保最终答复与文件审核摘要归入末组
 - 运行中 Turn 的连续 `command`、`tool`（包括 MCP）与 `file_change` 必须按同一操作组处理，单个 `file_change` 内的多文件按多项操作计数；操作组在后续 Assistant 文本开始输出后收起为摘要，此前保留原始操作行；流式 `message.delta` 与完整 Item 到达时必须保持相同触发行为，Turn 终态继续使用整体执行过程折叠
 - 桌面文件系统选择器切换盘符或路径时必须保留最近一次成功发现的根列表，加载或失败状态不得卸载盘符选择器；Windows `\\?\` verbatim 路径必须先按普通盘符语义归一化再匹配当前根项

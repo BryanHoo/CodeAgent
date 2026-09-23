@@ -11,7 +11,6 @@ use super::{
     conversation_advanced::{NativeGoal, map_native_goal},
     conversation_delta_events::map_delta_message,
     conversation_items::apply_transient_item_lifecycle,
-    conversation_items::is_reasoning_item,
     conversation_runtime_events::map_runtime_notification,
     sidebar::unix_seconds_to_rfc3339,
 };
@@ -37,9 +36,7 @@ pub fn map_server_message(
     }
     if matches!(
         message.method.as_str(),
-        "item/reasoning/summaryTextDelta"
-            | "item/reasoning/summaryPartAdded"
-            | "item/reasoning/textDelta"
+        "item/reasoning/summaryPartAdded" | "item/reasoning/textDelta"
     ) {
         return Ok(None);
     }
@@ -156,9 +153,6 @@ pub fn map_server_message(
                 .get("item")
                 .cloned()
                 .ok_or(ConnectionError::InvalidMessage)?;
-            if is_reasoning_item(&native_item) {
-                return Ok(None);
-            }
             let item_id = native_item
                 .as_object()
                 .and_then(|item| item.get("id"))

@@ -49,6 +49,7 @@ import { MessageImageAttachment } from "./message-image-attachment.js";
 import { SkillToken } from "./skill-token.js";
 import { AsyncQuestionHistory } from "./async-question-history.js";
 import { parseSubagentOperation } from "./subagent.js";
+import { reasoningTitle } from "./reasoning-title.js";
 
 import type { BuildPlanAction } from "./task-timeline-contracts.js";
 import { FileChangeButton } from "./task-timeline-file-changes.js";
@@ -195,6 +196,26 @@ export function TimelineItemContent({
       );
     case "approval_review":
       return <ApprovalReviewItem item={item} />;
+    case "reasoning": {
+      const fallback = i18n.t("timeline.reasoning", { ns: "conversation" });
+      return (
+        <Tool>
+          <ToolHeader
+            state={turnStatus === "running" && isLastTurnItem ? "input-available" : "output-available"}
+            title={reasoningTitle(item.text, fallback)}
+          />
+          <ToolContent>
+            <LazyMessageResponse
+              {...(textSource === undefined ? {} : { textSource })}
+              mode={turnStatus === "running" && isLastTurnItem ? "streaming" : "static"}
+              onOpenFileReference={onOpenSourceFile}
+            >
+              {item.text}
+            </LazyMessageResponse>
+          </ToolContent>
+        </Tool>
+      );
+    }
     case "command": {
       const commandLabel = getCommandLabel(item.command);
       const renderedCommandOutput =

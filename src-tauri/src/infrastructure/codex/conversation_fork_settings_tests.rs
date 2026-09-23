@@ -37,7 +37,7 @@ async fn fork_should_inherit_each_available_source_field_and_preserve_local_fall
                         );
                         assert_eq!(
                             request["params"]["config"]["model_reasoning_summary"],
-                            "none"
+                            "auto"
                         );
                         assert_eq!(request["params"]["excludeTurns"], true);
                         assert!(request["params"].get("lastTurnId").is_none());

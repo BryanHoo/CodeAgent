@@ -213,6 +213,7 @@ export const conversation = {
     orchestrating: "Coordinating subagents",
   },
   timeline: {
+    reasoning: "Reasoning summary",
     approvalReview: {
       action: {
         command: "Command",

@@ -17,6 +17,7 @@ describe("completed turn process projection", () => {
         type: "message",
       },
       { changes: [], id: "file-change", status: "completed", type: "file_change" },
+      { id: "reasoning", text: "检查变更", type: "reasoning" },
       { id: "user-steer", role: "user", text: "Do not publish", type: "message" },
       {
         id: "commentary-after-steer",
@@ -39,7 +40,7 @@ describe("completed turn process projection", () => {
     const processItemIds = new Set(resolveCompletedTurnProcessItemIds(items, "completed"));
 
     expect(processItemIds).toEqual(
-      new Set(["commentary-before-steer", "user-steer", "commentary-after-steer"]),
+      new Set(["commentary-before-steer", "reasoning", "user-steer", "commentary-after-steer"]),
     );
     expect(groupStoredTurnTimelineItems(items.map((item) => item.id), itemStoresByKey, processItemIds))
       .toEqual([

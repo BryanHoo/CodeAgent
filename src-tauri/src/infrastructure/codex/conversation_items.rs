@@ -11,10 +11,6 @@ use crate::domain::conversation::{AgentCommandOutputOmission, AgentFileChange, A
 const MAX_COMMAND_OUTPUT_BYTES: usize = 1_048_576;
 const MAX_COMMAND_OUTPUT_LINES: usize = 10_000;
 
-pub(super) fn is_reasoning_item(value: &Value) -> bool {
-    value.get("type").and_then(Value::as_str) == Some("reasoning")
-}
-
 pub(super) fn map_item(value: Value) -> Result<AgentItem, ConnectionError> {
     let mut item = map_item_without_skill_normalization(value)?;
     crate::domain::conversation_skills::normalize_user_skill_text(&mut item);
@@ -29,6 +25,17 @@ pub(super) fn map_item_without_skill_normalization(
     let item_type = required_string(item, "type")?;
 
     match item_type {
+        "reasoning" => Ok(AgentItem::Reasoning {
+            id,
+            // 仅透出摘要；原始推理内容不进入 IPC。
+            text: item["summary"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+        }),
         "userMessage" => {
             let (text, attachments, skills) = map_user_message(item)?;
             Ok(AgentItem::Message {
