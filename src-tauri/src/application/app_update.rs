@@ -92,7 +92,29 @@ pub(super) async fn check_for_update(current_version: &str, app: &AppHandle) -> 
             return update;
         }
     };
-    resolve_release_response_for_channel(current_version, &response, Some(required_asset))
+    let update =
+        resolve_release_response_for_channel(current_version, &response, Some(required_asset));
+    if update.status != "check-failed" {
+        return update;
+    }
+    let candidate = resolve_release_response_for_channel(current_version, &response, None);
+    if candidate.status != "available" {
+        return update;
+    }
+
+    // API 资产列表可能暂时为空；仅在此时用当前渠道的清单核实版本和可安装平台。
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(_) => return failed_update(current_version),
+    };
+    match updater.check().await {
+        Ok(manifest) => confirm_release_with_manifest(
+            current_version,
+            candidate,
+            manifest.as_ref().map(|update| update.version.as_str()),
+        ),
+        Err(_) => failed_update(current_version),
+    }
 }
 
 pub(super) async fn install_update(
@@ -221,10 +243,10 @@ fn resolve_release_response_for_channel(
     let latest = latest_version.to_string();
 
     if latest_version > current {
-        // 复用发布响应检查当前渠道清单，避免构建尚未上传完成时提示不可安装的更新。
+        // 资产列表缺失时不能判定为最新；交由当前渠道的 updater 清单核实。
         if required_asset.is_some_and(|name| !release.assets.iter().any(|asset| asset.name == name))
         {
-            return current_update(current_version, None);
+            return failed_update(current_version);
         }
         AppUpdate {
             latest_version: Some(latest.clone()),
@@ -243,6 +265,18 @@ fn resolve_release_response_for_channel(
         }
     } else {
         current_update(current_version, Some(latest))
+    }
+}
+
+fn confirm_release_with_manifest(
+    current_version: &str,
+    candidate: AppUpdate,
+    manifest_version: Option<&str>,
+) -> AppUpdate {
+    if candidate.status == "available" && candidate.latest_version.as_deref() == manifest_version {
+        candidate
+    } else {
+        current_update(current_version, None)
     }
 }
 
@@ -290,7 +324,7 @@ fn truncate_notes(notes: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppUpdate, resolve_release_response_for_channel};
+    use super::{AppUpdate, confirm_release_with_manifest, resolve_release_response_for_channel};
 
     #[tokio::test]
     async fn stalled_response_body_should_report_connection_failure() {
@@ -377,5 +411,44 @@ mod tests {
             super::resolve_release_response_for_channel("0.1.0", body, Some("latest.json"))
                 .update_available
         );
+    }
+
+    #[test]
+    fn missing_api_assets_should_require_manifest_confirmation() {
+        let update = resolve_release_response_for_channel(
+            "0.2.3",
+            br#"[{"tag_name":"v0.2.4","body":"Notes","assets":[]}]"#,
+            Some("latest.json"),
+        );
+
+        assert_eq!(update.status, "check-failed");
+    }
+
+    #[test]
+    fn matching_channel_manifest_should_offer_release_when_api_assets_are_missing() {
+        let candidate = resolve_release_response_for_channel(
+            "0.2.3",
+            br#"[{"tag_name":"v0.2.4","body":"Notes","assets":[]}]"#,
+            None,
+        );
+
+        let update = confirm_release_with_manifest("0.2.3", candidate, Some("0.2.4"));
+
+        assert_eq!(update.status, "available");
+        assert_eq!(update.latest_version.as_deref(), Some("0.2.4"));
+    }
+
+    #[test]
+    fn older_channel_manifest_should_not_offer_uninstallable_release() {
+        let candidate = resolve_release_response_for_channel(
+            "0.2.3",
+            br#"[{"tag_name":"v0.2.4","body":"Notes","assets":[]}]"#,
+            None,
+        );
+
+        let update = confirm_release_with_manifest("0.2.3", candidate, Some("0.2.2"));
+
+        assert_eq!(update.status, "current");
+        assert!(!update.update_available);
     }
 }
