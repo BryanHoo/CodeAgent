@@ -481,6 +481,7 @@ export function WorkbenchShellLayout({
           terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
           {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
           {...(taskId === undefined ? {} : { taskId })}
+          {...(runtime.store === undefined ? {} : { taskStore: runtime.store })}
           {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
         />
       ) : null}

@@ -13,6 +13,7 @@ import { lazy, Suspense, useMemo } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
+import type { TaskStore } from "../../conversation/runtime/task-store.js";
 import { FileDiffPanel } from "../../diff/file-diff-panel.js";
 import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import { Button } from "../../../shared/components/core/button.js";
@@ -27,7 +28,6 @@ import {
   McpServerSection,
   SubagentSection,
 } from "./workbench-inspector-sections.js";
-import { InspectorSources } from "./workbench-inspector-sources.js";
 import { PlanSection } from "./workbench-inspector-plan.js";
 import { deriveInspectorGitChangeState } from "./workbench-inspector-git-status.js";
 import { InspectorGitChangesSection } from "./workbench-inspector-git-changes.js";
@@ -55,6 +55,14 @@ const LazyGitHistoryPanel = lazy(async () => {
 const LazyWorkbenchInspectorChanges = lazy(async () => {
   const module = await import("./workbench-inspector-changes.js");
   return { default: module.WorkbenchInspectorChanges };
+});
+const LazyRuntimeWarningsSection = lazy(async () => {
+  const module = await import("./workbench-inspector-runtime-warnings.js");
+  return { default: module.StoreRuntimeWarningsSection };
+});
+const LazyInspectorSources = lazy(async () => {
+  const module = await import("./workbench-inspector-sources.js");
+  return { default: module.InspectorSources };
 });
 type WorkbenchInspectorProps = Readonly<{
   backgroundTerminals?: readonly AgentBackgroundTerminal[];
@@ -104,6 +112,7 @@ type WorkbenchInspectorProps = Readonly<{
   tab?: WorkbenchInspectorTab;
   task?: Pick<AgentTaskSnapshot, "turns"> & Partial<Pick<AgentTaskSnapshot, "goal" | "plan">>;
   taskId?: string;
+  taskStore?: TaskStore;
   terminatingTerminalId?: string | null;
 }>;
 
@@ -168,6 +177,7 @@ export function WorkbenchInspector({
   tab = "project",
   task,
   taskId,
+  taskStore,
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   useTranslation("conversation");
@@ -204,6 +214,9 @@ export function WorkbenchInspector({
       {task?.goal === null || task?.goal === undefined ? null : (
         <GoalSection goal={task.goal} onClear={onClearGoal} onStatusChange={onGoalStatusChange} />
       )}
+      {taskStore === undefined ? null : (
+        <Suspense fallback={null}><LazyRuntimeWarningsSection store={taskStore} /></Suspense>
+      )}
       {backgroundTerminals.length > 0 ? (
         <BackgroundTerminalSection
           onTerminate={onTerminateBackgroundTerminal}
@@ -221,13 +234,15 @@ export function WorkbenchInspector({
         onRetry={onReloadMcpServers}
         servers={mcpServers}
       />
-      <InspectorSources
-        onOpenAttachment={onOpenTaskAttachment}
-        {...(projectId === undefined ? {} : { projectId })}
-        skills={skills}
-        {...(taskId === undefined ? {} : { taskId })}
-        turns={task?.turns ?? []}
-      />
+      <Suspense fallback={null}>
+        <LazyInspectorSources
+          onOpenAttachment={onOpenTaskAttachment}
+          {...(projectId === undefined ? {} : { projectId })}
+          skills={skills}
+          {...(taskId === undefined ? {} : { taskId })}
+          turns={task?.turns ?? []}
+        />
+      </Suspense>
       {task?.plan === null || task?.plan === undefined ? null : <PlanSection plan={task.plan} />}
       <p className="hidden min-h-full place-items-center px-4 text-center text-body-small text-muted-foreground only:grid">
         {i18n.t("inspector.emptyContext", { ns: "conversation" })}

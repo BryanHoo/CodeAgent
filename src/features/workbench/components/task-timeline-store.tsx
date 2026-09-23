@@ -1,6 +1,6 @@
 import { HistoryNavigation, type HistoryAnchor } from "../../search/history-navigation.js";
 import type { PendingRequest } from "@/protocol/index.js";
-import { AlertTriangle, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { useStore } from "zustand";
 import { i18n } from "../../../i18n/i18n.js";
@@ -265,28 +265,12 @@ export const StoreTurnTimelineSection = memo(function StoreTurnTimelineSection({
   );
 });
 
-function TaskNoticeRow({ notice }: Readonly<{ notice: TaskNotice }>) {
-  const isWarning = notice.payload.level === "warning";
-  const message =
-    notice.payload.code === "model_verification"
-      ? i18n.t("timeline.notice.modelVerification", { ns: "conversation" })
-      : notice.payload.code === "strict_review_required"
-        ? i18n.t("timeline.notice.strictReviewRequired", { ns: "conversation" })
-        : notice.payload.message;
+function TaskInfoNotice({ notice }: Readonly<{ notice: TaskNotice }>) {
+  const message = notice.payload.message;
   const title = i18n.t(`timeline.notice.${notice.payload.code}`, { ns: "conversation" });
-
   return (
-    <div
-      className={`flex items-start gap-2 border-l-2 px-3 py-2 text-label leading-5 ${
-        isWarning ? "border-warning text-warning" : "border-separator-strong text-muted-foreground"
-      }`}
-      role={isWarning ? "alert" : "status"}
-    >
-      {isWarning ? (
-        <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-      ) : (
-        <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-      )}
+    <div className="flex items-start gap-2 border-l-2 border-separator-strong px-3 py-2 text-label leading-5 text-muted-foreground" role="status">
+      <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
       <div className="min-w-0">
         <p className="font-medium text-foreground">{title}</p>
         <p className="break-words">{message}</p>
@@ -295,10 +279,13 @@ function TaskNoticeRow({ notice }: Readonly<{ notice: TaskNotice }>) {
   );
 }
 
-export function StoreTaskNoticeList({ store }: Readonly<{ store: TaskStore }>) {
-  const notices = useStore(store, (state) => state.notices);
+export function getTimelineNotices(notices: readonly TaskNotice[]): readonly TaskNotice[] {
+  return notices.filter((notice) => notice.payload.level !== "warning");
+}
+
+function StoreTaskInfoNotices({ notices }: Readonly<{ notices: readonly TaskNotice[] }>) {
   return notices.map((notice) => (
-    <TaskNoticeRow key={`${notice.sessionId}:${String(notice.sequence)}`} notice={notice} />
+    <TaskInfoNotice key={`${notice.sessionId}:${String(notice.sequence)}`} notice={notice} />
   ));
 }
 
@@ -412,7 +399,8 @@ export function TaskStoreTimeline({
     submissionStartedAt !== undefined &&
     submissionHandoffState !== undefined;
   const showPendingFooter = showPendingSubmission && submissionHandoffState === "footer";
-  const hasNotices = notices.length > 0;
+  const timelineNotices = getTimelineNotices(notices);
+  const hasNotices = timelineNotices.length > 0;
   if (
     turnIds.length === 0 &&
     !hasVisiblePendingRequest &&
@@ -433,7 +421,7 @@ export function TaskStoreTimeline({
         ? {
             footer: (
               <>
-                {hasNotices ? <StoreTaskNoticeList store={store} /> : null}
+                {hasNotices ? <StoreTaskInfoNotices notices={timelineNotices} /> : null}
                 {hasVisiblePendingRequest ? (
                   <StorePendingRequestList
                     connected={connected}

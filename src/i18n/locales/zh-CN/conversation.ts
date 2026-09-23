@@ -70,6 +70,7 @@ export const conversation = {
     context: "上下文",
     contextSources: "上下文来源",
     emptyContext: "暂无上下文",
+    runtimeWarnings: "运行时警告",
     emptyFolder: "空文件夹",
     fileTree: "项目文件",
     file: "文件",

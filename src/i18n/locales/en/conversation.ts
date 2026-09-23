@@ -70,6 +70,7 @@ export const conversation = {
     context: "Context",
     contextSources: "Context sources",
     emptyContext: "No context available",
+    runtimeWarnings: "Runtime warnings",
     emptyFolder: "Empty folder",
     fileTree: "Project files",
     file: "File",

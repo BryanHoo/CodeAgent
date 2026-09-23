@@ -76,16 +76,6 @@ export function createTaskStore(
             ...nextState,
             ...applyAcceptedEvent(nextState, event, changedItemStores),
           };
-          if (
-            clearsRuntimeWarning(event) &&
-            nextState.notices.some((notice) => notice.payload.code === "runtime_warning")
-          ) {
-            // 后续有效输出或任务终态表示临时警告已过期，其他通知仍按自身生命周期展示。
-            nextState = {
-              ...nextState,
-              notices: nextState.notices.filter((notice) => notice.payload.code !== "runtime_warning"),
-            };
-          }
           const touchedCommandOutputItemIds = getTouchedCommandOutputItemKeys(
             previousState,
             nextState,
@@ -144,13 +134,18 @@ export function createTaskStore(
       ) {
         throw new Error("Task store identity does not match the snapshot");
       }
-      set((state) => ({
-        ...normalizeSnapshot(response),
-        // Snapshot 替换会重建 Turn 与 Item 容器，必须推进修订号以失效兼容快照 memo。
-        itemStructureRevision: state.itemStructureRevision + 1,
-        connectionState: "connecting",
-        error: null,
-      }));
+      set((state) => {
+        const normalized = normalizeSnapshot(response);
+        return {
+          ...normalized,
+          notices: state.notices.filter((notice) => notice.payload.level === "warning"),
+          retainedBytes: normalized.retainedBytes + retainedWarningBytes(state),
+          // Snapshot 替换会重建 Turn 与 Item 容器，必须推进修订号以失效兼容快照 memo。
+          itemStructureRevision: state.itemStructureRevision + 1,
+          connectionState: "connecting",
+          error: null,
+        };
+      });
     },
     projectId: identity.projectId,
     prependHistory(response) {
@@ -183,8 +178,11 @@ export function createTaskStore(
           // 同一事件会话内禁止旧 Snapshot 回滚 Store，否则历史回放会重复追加 Delta。
           return state;
         }
+        const normalized = normalizeSnapshot(reconcileSnapshot(state, response));
         return {
-          ...normalizeSnapshot(reconcileSnapshot(state, response)),
+          ...normalized,
+          notices: state.notices.filter((notice) => notice.payload.level === "warning"),
+          retainedBytes: normalized.retainedBytes + retainedWarningBytes(state),
           // 即使 Task 元数据未变，缺失或新增 Turn 也必须通知快照消费者重新读取 Store。
           itemStructureRevision: state.itemStructureRevision + 1,
           connectionState: "connecting",
@@ -292,7 +290,7 @@ function measureEventEntityBytes(state: TaskStoreState, event: AgentEvent): numb
   ) {
     retainedBytes += estimateRetainedBytes(state.turnsById[event.turnId]);
   }
-  if (event.type === "task.notice" || event.type === "turn.completed" || clearsRuntimeWarning(event)) {
+  if (event.type === "task.notice" || event.type === "turn.completed" || event.type === "turn.started") {
     retainedBytes += state.notices.reduce(
       (total, notice) => total + estimateRetainedBytes(notice),
       0,
@@ -322,21 +320,11 @@ function measureEventEntityBytes(state: TaskStoreState, event: AgentEvent): numb
   return retainedBytes;
 }
 
-function clearsRuntimeWarning(event: AgentEvent): boolean {
-  switch (event.type) {
-    case "message.delta":
-    case "plan.delta":
-    case "command.output_delta":
-    case "tool.progress":
-    case "file_change.updated":
-    case "item.started":
-    case "item.completed":
-      return true;
-    case "task.status_updated":
-      return event.payload.status !== "running";
-    default:
-      return false;
-  }
+function retainedWarningBytes(state: TaskStoreState): number {
+  return state.notices.reduce(
+    (total, notice) => total + (notice.payload.level === "warning" ? estimateRetainedBytes(notice) : 0),
+    0,
+  );
 }
 
 function getEventItemKeys(state: TaskStoreState, event: AgentEvent): readonly string[] {

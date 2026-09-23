@@ -284,11 +284,14 @@ export function applyAcceptedEvent(
       };
     }
     case "task.notice": {
-      // 自动审批结果已由 approval_review Item 展示，避免 Guardian 摘要在底部永久重复出现。
-      const notices =
-        event.payload.code === "guardian_warning"
-          ? state.notices
-          : [...state.notices, event].slice(-MAX_RETAINED_TASK_NOTICES);
+      // 警告全部保留在当前 Task 的上下文；只有普通状态通知维持有界数量。
+      const notices = [...state.notices, event];
+      if (event.payload.level !== "warning") {
+        const infoCount = notices.filter((notice) => notice.payload.level !== "warning").length;
+        if (infoCount > MAX_RETAINED_TASK_NOTICES) {
+          notices.splice(notices.findIndex((notice) => notice.payload.level !== "warning"), 1);
+        }
+      }
       return {
         checkpoint,
         notices,
@@ -393,8 +396,8 @@ export function applyAcceptedEvent(
         ...(currentTurn === undefined
           ? {}
           : replaceTurnItems(state, event.turnId, items, changedItemStores)),
-        // Notice 仅描述当前流式运行过程；Turn 终态到达后由最终回复或错误承载结果。
-        notices: [],
+        // 警告供右栏跨回合查看；普通状态通知仅属于当前运行过程。
+        notices: state.notices.filter((notice) => notice.payload.level === "warning"),
         snapshotMetadata: {
           ...snapshotMetadata,
           status: completedTurn.status === "failed" ? "failed" : "idle",
