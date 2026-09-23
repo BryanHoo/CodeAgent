@@ -12,6 +12,7 @@
 
 ## 验证
 
+- macOS release 构建仅对宿主构建依赖设置 `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false`，规避 macOS 27 拒绝异常 proc-macro Mach-O；目标应用必须继续执行 release strip。
 - 运行 `pnpm codex:protocol:check` 验证本机 Codex 版本与协议快照。
 - 运行 `pnpm tauri:constraints:test` 覆盖脚本的跨平台调用契约。
 - 合并前运行 `pnpm check`。

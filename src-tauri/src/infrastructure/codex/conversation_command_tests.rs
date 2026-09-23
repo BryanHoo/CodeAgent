@@ -166,7 +166,7 @@ async fn new_task_first_turn_should_confirm_loaded_state_after_missing_rollout()
                 json!({"code": -32600, "message": "no rollout found for thread id thread-a"}),
             ),
             ("thread/read", {
-                // Codex 154 在首条消息落盘前使用 live snapshot，项目字段尚未回填。
+                // 首条消息落盘前使用 live snapshot，项目字段尚未回填。
                 let mut thread = native_task("thread-a");
                 thread["projectId"] = Value::Null;
                 json!({"thread": thread})

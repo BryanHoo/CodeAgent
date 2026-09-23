@@ -40,7 +40,7 @@ async fn queued_image_snapshot_should_support_add_list_and_resubmission() {
     let server_task = tokio::spawn(async move {
         let (reader, mut writer) = split(server);
         let mut lines = BufReader::new(reader).lines();
-        // Codex 0.154.0 入队时将 localImage 快照为 image，响应不再返回原始路径。
+        // Codex 入队时将 localImage 快照为 image，响应不再返回原始路径。
         let submission = json!({
             "id":"queue-image", "clientUserMessageId":"message-image",
             "input":[

@@ -23,6 +23,8 @@ pnpm tauri:legacy --bundles app,dmg
 
 `pnpm tauri build` 默认匹配主机架构。`pnpm tauri:legacy` 固定 Intel，统一设置 `MACOSX_DEPLOYMENT_TARGET=12.4` 并合并兼容配置。Legacy 使用 `src-tauri/target/legacy`，避免覆盖 Modern 缓存和安装包。禁止绕过入口只修改 `minimumSystemVersion`；元数据不能自动兼容依赖或 WebKit。
 
+macOS release 入口设置 `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false`，规避 macOS 27 对 Rust strip 后异常 proc-macro Mach-O 的拒绝。该覆盖只作用于宿主构建依赖，目标应用仍按 release profile strip，避免扩大安装包。
+
 ## 兼容策略
 
 - Modern 保留 Tailwind CSS 4、原生 `light-dark()`、Pierre Diff 和现代 JS 目标。原先的 `14.0` / `safari17.4` 低于已使用的 `light-dark()` 要求，现按官方支持版本对齐为 `14.5` / `safari17.5`。
@@ -33,7 +35,7 @@ pnpm tauri:legacy --bundles app,dmg
 - Legacy Diff 使用 jsdiff 解析 unified patch，保留增删行、双行号与虚拟列表，省去语法/词级 Diff 高亮；避免替旧 WebKit 模拟 constructable stylesheets。代码块仍保留 Shiki 高亮，亮暗 token 由 CSS 切换。
 - 不支持 container queries 的旧系统保留表单默认单列布局。视觉特性可以降级，任务执行、审批和数据契约共用。
 - 原生新 API 应集中在平台模块，通过 availability / selector 能力检查调用，确保新符号不会在旧系统启动时被强链接。不能仅在 Rust 分支里判断版本后直接引用新符号。
-- 官方 Codex 0.154.0 的 Intel 主程序 Mach-O 最低版本为 10.12，内置 zsh 为 15.0（已解包并使用 `otool -l` 核对）。因此 macOS 15 以下在进程参数中关闭 `shell_zsh_fork`，使用标准系统 shell；15 及以上保留用户配置。不修改用户的 Codex 配置文件。
+- 官方 Codex 0.156.0 的 Intel 主程序 Mach-O 最低版本为 10.12，内置 zsh 为 15.0（已解包并使用 `otool -l` 核对）。因此 macOS 15 以下在进程参数中关闭 `shell_zsh_fork`，使用标准系统 shell；15 及以上保留用户配置。不修改用户的 Codex 配置文件。
 
 ## 发布与更新
 
@@ -58,6 +60,7 @@ xcrun vtool -show-build src-tauri/target/legacy/x86_64-apple-darwin/debug/codeag
 - [Apple availability checks](https://developer.apple.com/documentation/xcode/running-code-on-a-specific-version)
 - [Apple weak linking](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPFrameworks/Concepts/WeakLinking.html)
 - [Rust macOS deployment target](https://doc.rust-lang.org/rustc/platform-support/apple-darwin.html)
+- [Rust #157750：macOS 27 无法加载 strip 后的动态库](https://github.com/rust-lang/rust/issues/157750)
 - [Safari 17.5：light-dark()](https://webkit.org/blog/15383/webkit-features-in-safari-17-5/)
 - [Safari 15.4：:has() 与 cascade layers](https://webkit.org/blog/12445/new-webkit-features-in-safari-15-4/)
 - [Vite 官方 Legacy 插件](https://github.com/vitejs/vite/tree/main/packages/plugin-legacy)

@@ -71,3 +71,19 @@ export function resolveTauriArguments(
   }
   return resolved;
 }
+
+export function resolveTauriEnvironment(
+  argumentsList,
+  platform = process.platform,
+  profile = "modern",
+) {
+  if (platform !== "darwin" || argumentsList[0] !== "build") {
+    return {};
+  }
+
+  return {
+    // macOS 27 会拒绝 Rust strip 产生的异常 proc-macro Mach-O，仅禁用宿主构建依赖的 strip。
+    CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP: "false",
+    MACOSX_DEPLOYMENT_TARGET: profile === "legacy" ? "12.4" : "14.5",
+  };
+}

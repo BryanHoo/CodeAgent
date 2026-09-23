@@ -27,7 +27,7 @@ pub fn validate_objective(objective: &str) -> Result<&str, GoalInputError> {
     if objective.is_empty() {
         return Err(GoalInputError::Required);
     }
-    // 与 Codex 0.154.0 的 Unicode 标量计数一致，超限即停止，不分配正文副本。
+    // 与 Codex 0.156.0 的 Unicode 标量计数一致，超限即停止，不分配正文副本。
     if objective.chars().nth(MAX_OBJECTIVE_CHARS).is_some() {
         return Err(GoalInputError::TooLong);
     }

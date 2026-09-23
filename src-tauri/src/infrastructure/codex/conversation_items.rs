@@ -344,11 +344,21 @@ fn map_user_message(
             }
             Some("localImage") => attachments.push(map_local_image_attachment(part)?),
             Some("image") => {
-                let url = required_string(part, "url")?;
-                attachments.push(json!({
-                    "id": url, "kind": "image", "mediaType": "image/png",
-                    "name": "image.png", "size": 1,
-                }));
+                if let Some(url) = part.get("url").and_then(Value::as_str) {
+                    attachments.push(json!({
+                        "id": url, "kind": "image", "mediaType": "image/png",
+                        "name": "image.png", "size": 1,
+                    }));
+                } else if part
+                    .get("fileId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|file_id| !file_id.is_empty())
+                {
+                    // 远程 fileId 不能通过本地资源协议读取，仅保留可理解的历史占位。
+                    text.push("[图片]".to_owned());
+                } else {
+                    return Err(ConnectionError::InvalidMessage);
+                }
             }
             Some("skill") => skills.push(json!({"name": required_string(part, "name")?})),
             Some("localAudio") => attachments.push(map_local_audio_attachment(part)?),

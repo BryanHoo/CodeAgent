@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::connection::{AppServerConnection, ConnectionError};
+use super::plugin_assets::{map_apps, map_plugin_skills};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const OFFICIAL_MARKETPLACES: [&str; 3] = [
@@ -198,10 +199,7 @@ fn map_plugin_detail(plugin: &Value) -> Option<Value> {
         .to_owned();
     let fields = summary.as_object_mut()?;
     fields.insert("description".to_owned(), json!(description));
-    fields.insert(
-        "skills".to_owned(),
-        json!(map_named_assets(plugin.get("skills"))),
-    );
+    fields.insert("skills".to_owned(), json!(map_plugin_skills(plugin)));
     fields.insert(
         "mcpServers".to_owned(),
         plugin
@@ -230,34 +228,6 @@ fn map_plugin_detail(plugin: &Value) -> Option<Value> {
             .unwrap_or(Value::Null),
     );
     Some(summary)
-}
-
-fn map_named_assets(value: Option<&Value>) -> Vec<Value> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|asset| Some(json!({
-            "description": asset.get("shortDescription").or_else(|| asset.get("description")).and_then(Value::as_str).unwrap_or_default(),
-            "name": asset.get("name")?.as_str()?,
-        })))
-        .collect()
-}
-
-fn map_apps(value: Option<&Value>) -> Vec<Value> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|app| {
-            Some(json!({
-                "description": app.get("description").and_then(Value::as_str).unwrap_or_default(),
-                "id": app.get("id")?.as_str()?,
-                "installUrl": app.get("installUrl").cloned().unwrap_or(Value::Null),
-                "name": app.get("name")?.as_str()?,
-            }))
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -418,7 +388,11 @@ mod tests {
                                 "installed": false, "enabled": false,
                                 "interface": {"displayName": "Game Studio", "shortDescription": "Build games"}
                             },
-                            "description": "Build polished games", "skills": [], "mcpServers": [],
+                            "description": "Build polished games", "skills": [],
+                            "onboardingSkill": {
+                                "name": "game-studio-onboarding",
+                                "shortDescription": "Set up Game Studio"
+                            }, "mcpServers": [],
                             "apps": [], "hooks": []
                         }}})
                     )
@@ -469,6 +443,8 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(detail["description"], "Build polished games");
+        assert_eq!(detail["skills"].as_array().unwrap().len(), 1);
+        assert_eq!(detail["skills"][0]["name"], "game-studio-onboarding");
         let installed = install_official_plugin(
             &connection,
             "openai-api-curated",

@@ -11,14 +11,14 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ```
 
 运行时不再使用 Codexly HTTP、WebSocket 或 mock。协议基线固定为本地
-`/Users/bryanhu/Develop/person/codex` `rust-v0.154.0`；应用私有运行时仅接受精确版本
-`0.154.0`，安装包校验官方 SHA-512，不扫描或回退全局 CLI。
+`/Users/bryanhu/Develop/person/codex` `rust-v0.156.0`；应用私有运行时仅接受精确版本
+`0.156.0`，安装包校验官方 SHA-512，不扫描或回退全局 CLI。
 
-### 0.154.0 接入边界
+### 0.156.0 接入边界
 
-- 完整升级评估见 [Codex 154 升级评估](./codex-154-upgrade.md)。六个平台固定官方 SHA-512；无订阅空闲线程沿用 154 默认 60 秒卸载，不新增定时器。
-- MCP `toolsError` 只将 `connected` / `unknown` 摘要修正为 `failed`，保留认证和禁用态，不传错误正文；`openai/userVerification` 映射为可取消/拒绝的 `unsupported`，不传 `challenge`，后端禁止接受或伪造证明。
-- `originator`、`environments`、`daybreakEnabled` 不进入桌面任务投影；不向本地 app-server 发送仅托管后端支持的 `originators` 筛选。配额 fallback、设备验证、远程环境及原始 `configuration_update` 不新增产品入口。
+- 完整升级评估见 [Codex 156 升级评估](./codex-156-upgrade.md)。六个平台固定官方 SHA-512；无订阅空闲线程沿用 0.156 源码默认 60 秒卸载，不新增定时器。
+- MCP `toolsError` 只将 `connected` / `unknown` 摘要修正为 `failed`，保留认证和禁用态，不传错误正文；`openai/userVerification` 映射为可取消/拒绝的 `unsupported`，不伪装仅受支持的官方客户端。
+- 远程 `image.fileId` 历史降级为文字占位，不暴露不可读取的身份；持久线程附件 API 不等于消息附件，未使用的 `thread/attachment/updated` 在握手时关闭。
 
 - 定时任务由 Rust 创建独立线程后，通过主窗口 `scheduled-task://started` 事件发送轻量任务摘要，WebView 直接更新左栏缓存并恢复运行状态订阅；自动触发与立即运行共用此链路，不依赖当前页面或项目订阅，不新增轮询。
 - 定时任务提供可视化重复表单、中文/英文规则摘要和最多 5 次执行预览；星期、多月日、月末、序号星期、小时至年间隔及结束条件统一转换为 RRULE。预览复用 Rust 调度引擎，不连接 Codex；有限规则耗尽正常停用，原始时区与周期起点在编辑后保持。
@@ -26,15 +26,15 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 - `agentMessage.questions` 在 Composer 上方固定显示单选及自由回答，支持折叠、多组切换、未回答数量与限高内部滚动；时间线只读留存。首项预选但不自动发送，复用 Composer 在运行中追加消息或结束后开启回合，不清空草稿、不继承计划/Goal 模式。实时和历史共用有界映射，超预算回退官方 `text`；发送成功移出固定区，恢复历史时识别完整格式化回答，Delta 不重建问题列表。
 - `Thread.model` / `reasoningEffort` 通过现有读取直接恢复到 Composer 的模型与思考强度，续聊发送沿用该配置；空值回退任务设置，用户手动选择优先，刷新不覆盖手动选择。沿用模型可用性与推理强度校验，不在 Inspector 重复展示，不增加读取、轮询或自动配置写回。
 - 现有审批模式选择可在运行中切换 reviewer；只更新后续步骤审核路由，沙箱与已有审批不变。精确目标已结束时仅保存未来设置并提示，被托管策略拒绝则保留原设置。
-- `plugin/reconcile` 和按 App 账户审批暂不新增入口；当前无插件管理流程，原始 usage metadata 不进入 WebView。
-- 保持单一 stdio 连接、RawValue Delta 映射、有界队列与分页历史；协议快照由本机 `codex-cli 0.154.0` 携带 `--experimental` 生成。
+- 插件详情的 `onboardingSkill` 合并进现有只读 Skills 列表并按名称去重；`plugin/reconcile` 和按 App 账户审批暂不新增入口，原始 usage metadata 不进入 WebView。
+- 保持单一 stdio 连接、RawValue Delta 映射、有界队列与分页历史；协议快照由本机 `codex-cli 0.156.0` 携带 `--experimental` 生成。
 
 ## 逐项矩阵
 
 | 能力 | Codexly 公共方法 | CodeAgent 实现 | 状态 |
 | --- | --- | --- | --- |
 | 个性化说明与记忆 | Codex CLI 原生配置 | 当前运行时 `CODEX_HOME/AGENTS.md` 原文读取、显式保存与外部修改冲突检查；存在有效 `AGENTS.override.md` 时提示优先级。记忆通过 `config/read`、`config/batchWrite` 控制 `features.memories`、生成/使用及外部上下文资格；清除调用实验接口 `memory/reset`，保留聊天记录 | 已实现 |
-| 运行时与健康 | `getHealth`, `getCapabilities` | 仅使用应用私有 Codex `0.154.0`，首次缺失、损坏或版本不符时自动安装；六个平台固定官方 npm 包通过 SHA-512 校验后原子切换，失败提供重试；后台已就绪时恢复窗口跳过检测，Rust supervisor 按 1–30 秒有界退避恢复；CI 验证私有安装、app-server 生命周期与实验协议 Schema | 已实现 |
+| 运行时与健康 | `getHealth`, `getCapabilities` | 仅使用应用私有 Codex `0.156.0`，首次缺失、损坏或版本不符时自动安装；六个平台固定官方 npm 包通过 SHA-512 校验后原子切换，失败提供重试；后台已就绪时恢复窗口跳过检测，Rust supervisor 按 1–30 秒有界退避恢复；CI 验证私有安装、app-server 生命周期与实验协议 Schema | 已实现 |
 | 项目列表 | `listProjects`, `addProject`, `renameProject`, `removeProject`, `reorderProjects` | 原生 `project/*` app-server 方法；兼容 0.152 `recencyAt`，继续按用户维护的 `position` 排序且不请求 `recencyAt` 排序 | 已实现 |
 | 项目目录 | `listProjectDirectories` | Rust 受限目录枚举，不向 WebView 暴露 shell | 已实现 |
 | 项目打开方式 | `getProjectOpenCapabilities`, `openProject` | 探测编辑器、终端与文件管理器；本机绝对文件路径直接打开，不限制项目目录，相对路径按当前目录或任务 cwd 定位；分别提示文件不可访问与应用启动失败 | 已实现 |
@@ -55,7 +55,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | Review 提交 | `submitReview` | Rust 创建后执行 `review/start`，保留部分成功摘要；独立有界启动登记合并同键请求，取消等待不取消 worker；不提供跨重启整体恢复 | 已实现 |
 | 高级会话 | `compactTask`, `forkTask` | 原生 `thread/compact/start`, `thread/fork`；Fork 显式继承源线程当前模型与思考强度，缺失字段回退源任务设置，并同步保存到新任务 | 已实现 |
 | 任务设置 | `getTaskSettings`, `updateTaskSettings` | 应用私有原子 JSON；启动回合前持久化并同步线程设置 | 已实现 |
-| 排队提交 | `list/add/delete/move/startQueuedSubmission` | 原生 `thread/queue/*`；恢复 0.154.0 返回的 `image`/`audio` 内联快照到按任务隔离的本地缓存，WebView 只接收附件元数据；编辑先撤回原项并恢复完整输入，不维护服务端编辑状态 | 已实现 |
+| 排队提交 | `list/add/delete/move/startQueuedSubmission` | 原生 `thread/queue/*`；恢复 0.156.0 返回的 `image`/`audio` 内联快照到按任务隔离的本地缓存，WebView 只接收附件元数据；编辑先撤回原项并恢复完整输入，不维护服务端编辑状态 | 已实现 |
 | 后台终端 | `listBackgroundTerminals`, `terminateBackgroundTerminal` | 原生 `thread/backgroundTerminals/*` | 已实现 |
 | 流式时间线 | `subscribeEvents` | 单一 Tauri `Channel`；消费 ACK、1 MiB 在途预算、4 MiB 待发送预算和控制预留；单调序号、显式缺口重同步、失败重连；上下文占用读取 `tokenUsage.last` | 已实现 |
 | 会话元数据恢复 | `readTask` | Rust 补齐最近计划/用量及同任务待审批请求；计划/用量最多 256 任务、4 MiB 编码字节，单字段 256 KiB；WebView 重建复用，Provider 重启清空 | 已实现 |
@@ -64,11 +64,11 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 小窗访问 | Task 只读输出 | 440×220 横向透明无外框置顶小窗，最多 3 个且同任务复用；工作台同源样式的 12px Markdown 与 160 字符操作标题；仅挂载可视块，支持滚动查看最近输出，置底时跟随新输出；独立入口与受限 Channel，单窗最多一个未确认包、12 项、每项 4 KiB；仅读取最近回合一页；双击恢复对应普通/临时任务路由后销毁，主窗口销毁不影响输出 | 已实现 |
 | 系统通知 | Task 终态、失败与待处理请求 | Rust 按持久化偏好直接发送，不依赖 WebView 是否存在、可见或处于前台 | 已实现 |
 | 状态栏任务 | Task 运行态与任务跳转 | Rust `TaskActivityState` 统一维护运行、等待、完成、失败及项目/标题元数据；图标旁实时显示数量，左键显示动态菜单；WebView 只能读取状态快照并渲染 | 已实现 |
-| Item 映射 | 消息、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.154.0 官方可见 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；推理 Item 在适配层过滤，未知类型降级为可见活动 | 已实现 |
+| Item 映射 | 消息、计划、命令、Diff、MCP 等 | 覆盖 Codex 0.156.0 官方可见 Item，包括 `functionCallOutput`、新增协作工具与子代理完成态；推理 Item 在适配层过滤，未知类型降级为可见活动 | 已实现 |
 | 输出背压 | 命令输出 | 历史输出限制 1 MiB/10,000 行；上游通知队列与缓冲分别限制 8 MiB，WebView 消费 ACK 释放在途额度；普通输出不能占用审批控制预留，超预算副本触发快照恢复，事实缓冲耗尽显式失败 | 已实现 |
 | 审批与输入 | `resolvePendingRequest` | 严格区分 `command`/`writeStdin`，终端输入保留会话、stdin 与 cwd，Guardian 输入进入自动审批时间线；原生回写权限、用户输入及 MCP elicitation。Rust 校验回答完整性、题目身份及单项非空字符串，保留自由文本；权限类别、唯一性与作用域由 Rust 校验，仅回写原生请求中的所选权限。完整身份与回答参与幂等登记，同键重放，取消等待不取消处理；控制预算独立，旧连接结果不污染新连接，不代表上游确认或跨重启恢复 | 已实现 |
 | 文件树与搜索 | `list/search/stop/read/rename/deleteProjectFile` | 文件预览、读取与操作支持项目外绝对路径及父目录跳转；保留文件树过滤、ignore 缓存索引、会话取消和结果上限；源码与图片支持轻量原生独立窗口预览 | 已实现 |
-| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 0.152 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用，历史、实时与队列按该字段还原为附件，路径不进入可见正文；浏览器上传使用 raw IPC，宿主文件单遍流式缓存；队列与历史完整恢复 | 已实现 |
+| 附件 | `uploadAttachment`, `importHostAttachment`, `openTaskAttachment` | 对齐 `text`/`localImage`/`localAudio`；图片固定 `detail: auto`，普通文件通过 `text_elements.placeholder` 保留身份并作为路径引用；0.156 远程 `image.fileId` 在无下载接口时降级为 `[图片]` 且不暴露 ID；浏览器上传使用 raw IPC，宿主文件单遍流式缓存 | 已实现 |
 | 模型输入能力 | `model/list.inputModalities` | 提交前按所选模型动态校验图片与音频能力；保留未知新模态，不使用本地硬编码模型名单 | 已实现 |
 | 通用文件原生输入 | `input_file` | Codex 0.152 app-server `ContentItem` 没有该类型；项目不绕过 app-server，也不伪造协议，普通文件以本地路径交给 Codex 工具读取 | 上游未提供 |
 | 生成图片 | `imageGeneration` | JSONL 接收边界验证并落盘 Base64，Timeline 和 Tauri `Channel` 仅传递固定大小附件元数据 | 已实现 |
@@ -83,6 +83,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 | 分支与 worktree | switch/create/list | 受限 Git 命令和项目根校验 | 已实现 |
 | 右栏检查器 | 文件、Sources、Changes、历史、MCP | MCP 按当前 Task 读取线程级权威快照并展示紧凑连接态与工具数 | 已实现 |
 | 模型与 Skills | `listModels`, `listSkills` | 原生 `model/list`, `skills/list` | 已实现 |
+| 官方插件 | `list/get/install/uninstallOfficialPlugin` | 原生 `plugin/*`；官方目录由认证模式选择，本地与远程身份严格分离；详情只读展示 Skills、引导 Skill、MCP 与 Apps，引导 Skill 按名称合并去重 | 已实现 |
 | MCP | `listMcpServers`, `retryMcpServers` | 原生 `mcpServerStatus/list`, `config/value/write`, `config/mcpServer/reload`；“扩展中心”的“MCP 管理”仅投影非插件来源的全局服务名称与启用状态，切换后热重载连接；当前 Task 继续精确保留 0.152 线程连接态，启动通知只触发清单失效，IPC 仅传固定大小摘要；`openaiForm` 与 `openai/form` 均显式降级为 unsupported | 已实现 |
 | Provider 认证 | login/cancel/logout/custom provider | 原生账号协议与受限配置写入；密钥不持久化到 WebView | 已实现 |
 | 全局/项目设置 | get/update settings/defaults | `appData/agent-settings.json` 原子配置；返回实际变化字段，模型与权限默认值不写入 Codex 配置 | 已实现 |
@@ -140,7 +141,7 @@ React -> Tauri invoke / Channel -> Rust -> codex app-server -> stdio JSONL
 ## 参考资料
 
 - [Codex App Server 官方文档](https://developers.openai.com/codex/app-server)
-- [Codex 0.154.0 app-server 源码](https://github.com/openai/codex/tree/rust-v0.154.0/codex-rs/app-server/src)
+- [Codex 0.156.0 app-server 源码](https://github.com/openai/codex/tree/rust-v0.156.0/codex-rs/app-server/src)
 - [Codex 官方更新日志](https://developers.openai.com/codex/changelog)
 - [Tauri Rust 到前端通信](https://v2.tauri.app/develop/calling-frontend/)
 - [Tauri 前端调用 Rust](https://v2.tauri.app/develop/calling-rust/)

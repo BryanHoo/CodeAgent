@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { resolveTauriArguments } from "./tauri-build-constraints.mjs";
+import {
+  resolveTauriArguments,
+  resolveTauriEnvironment,
+} from "./tauri-build-constraints.mjs";
 
 void test("the project Tauri command should enforce platform build constraints", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url)));
@@ -26,6 +29,13 @@ void test("macOS builds should default to the Apple Silicon target", () => {
     "aarch64-apple-darwin",
     "--no-sign",
   ]);
+});
+
+void test("macOS release builds should disable Cargo strip for proc-macro libraries", () => {
+  assert.deepEqual(resolveTauriEnvironment(["build"], "darwin", "modern"), {
+    CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP: "false",
+    MACOSX_DEPLOYMENT_TARGET: "14.5",
+  });
 });
 
 void test("macOS builds should preserve an explicit Intel target", () => {

@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { resolveTauriArguments } from "./tauri-build-constraints.mjs";
+import {
+  resolveTauriArguments,
+  resolveTauriEnvironment,
+} from "./tauri-build-constraints.mjs";
 
 const tauriCli = fileURLToPath(
   new URL("../node_modules/@tauri-apps/cli/tauri.js", import.meta.url),
@@ -20,8 +23,8 @@ const result = spawnSync(process.execPath, [tauriCli, ...argumentsList], {
   stdio: "inherit",
   env: {
     ...process.env,
+    ...resolveTauriEnvironment(argumentsList, process.platform, profile),
     ...(process.platform === "darwin" && argumentsList[0] === "build" ? {
-      MACOSX_DEPLOYMENT_TARGET: profile === "legacy" ? "12.4" : "14.5",
       // 兼容构建独立缓存，防止不同最低系统版本的本地依赖与安装包互相覆盖。
       ...(profile === "legacy" ? {
         CARGO_TARGET_DIR: fileURLToPath(new URL("../src-tauri/target/legacy", import.meta.url)),

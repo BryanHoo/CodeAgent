@@ -91,7 +91,7 @@
 
 - 左侧扩展管理入口统一显示为“扩展中心”，固定提供“Skills 管理”“MCP 管理”“官方插件”“三方市场”四个独立路由分区；各分区必须使用独立查询键与安装生命周期，不得把官方插件安装并入 ClawHub Skill 安装
 - 官方插件必须通过启用 `plugins` 的 Codex app-server 执行 `plugin/list`、`plugin/read`、`plugin/install` 和 `plugin/uninstall`；目录列表不指定 `marketplaceKinds`，由 app-server 按认证模式选择官方本地或远程目录；本地目录使用 `marketplacePath`，远程目录使用 `remoteMarketplaceName`，两者不得同时传递，也不得将插件下载或展开逻辑复制到 WebView
-- 官方插件内置的 Skills、MCP 与 Apps 只在插件详情中只读展示；带 `pluginId` 的 Skill 与 MCP 不得进入独立 Skills/MCP 管理列表
+- 官方插件内置的 Skills、0.156 独立返回的 `onboardingSkill`、MCP 与 Apps 只在插件详情中只读展示；引导技能按名称合并去重，带 `pluginId` 的 Skill 与 MCP 不得进入独立 Skills/MCP 管理列表
 - 官方插件列表必须先展示已安装分组、再展示未安装分组，并使用适合桌面目录扫描的紧凑卡片；官方插件与三方市场详情统一使用右侧 Sheet，不得回退为居中 Dialog
 - 会话内 `request_plugin_install` 只信任 `codex_apps` 的官方 suggestion 元数据；时间线内联卡承担安装确认，右侧详情面板只补充来源与资产信息。插件安装必须在向 app-server 回复 `accept` 前成功完成，失败时保留待处理请求；永久拒绝必须回传 `_meta.persist: always`
 - 官方插件安装完成后必须提示用户新建会话加载能力；需要授权的 App 使用 `appsNeedingAuth` 提供的 HTTP(S) 地址，不得自动授权或接受其他 URL scheme

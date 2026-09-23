@@ -54,7 +54,7 @@ pub(super) fn read_file_text_input(
     object: &Map<String, Value>,
 ) -> Result<Option<FileTextInput>, ConnectionError> {
     let text = required_string(object, "text")?;
-    // Codex 154 的 UserInput 字段为 text_elements，内部区间仍为 byteRange。
+    // UserInput 字段为 text_elements，内部区间仍为 byteRange。
     let Some(elements) = object.get("text_elements").and_then(Value::as_array) else {
         return Ok(None);
     };

@@ -35,6 +35,7 @@ pub const IGNORED_NOTIFICATION_METHODS: &[&str] = &[
     "rawResponseItem/completed",
     "remoteControl/status/changed",
     "project/changed",
+    "thread/attachment/updated",
     "thread/closed",
     "thread/compacted",
     "thread/environment/connected",
