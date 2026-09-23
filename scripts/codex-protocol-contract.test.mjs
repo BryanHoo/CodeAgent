@@ -56,7 +56,9 @@ void test("resolves the npm Codex shim on Windows", () => {
 });
 
 void test("runs the pinned protocol contract check in CI", () => {
-  assert.match(qualityWorkflow, /npm install --global @openai\/codex@0\.154\.0/u);
+  assert.ok(
+    qualityWorkflow.includes(`npm install --global @openai/codex@${REQUIRED_CODEX_VERSION}`),
+  );
   assert.match(qualityWorkflow, /pnpm codex:protocol:check/u);
 });
 

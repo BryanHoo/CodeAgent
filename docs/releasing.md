@@ -56,10 +56,11 @@ macOS Modern 构建生成 Tauri updater artifact、`.sig` 和 `latest.json`。ma
 ## 发布步骤
 
 1. 在 `CHANGELOG.md` 添加 `## [版本] - YYYY-MM-DD` 日志，并更新版本比较链接。
-2. 同步更新 `package.json`、`src-tauri/Cargo.toml` 和 `src-tauri/tauri.conf.json` 的版本。
-3. 执行 `pnpm version:check` 和 `pnpm check`。
-4. 推送与版本完全一致的标签，例如 `git tag v0.1.0 && git push origin v0.1.0`。
-5. 确认 GitHub Actions 全部成功，并核对正式 Release 的正文、安装包、更新元数据与签名产物。
+2. 同步更新 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 中的应用包和 `src-tauri/tauri.conf.json` 的版本。
+3. 执行 `pnpm version:check`、`pnpm codex:protocol:check` 和 `pnpm check`；确认 `Quality` 中的 `Codex Protocol Contract` 安装版本与 `REQUIRED_CODEX_VERSION` 一致。
+4. 提交并推送版本变更，等待 `main` 的 `Quality` 和 `Native WebView` 门禁通过。
+5. 推送与版本完全一致的标签，例如 `git tag v0.2.4 && git push origin v0.2.4`。
+6. 确认 GitHub Actions 全部成功，并核对正式 Release 的正文、安装包、更新元数据与签名产物。
 
 无签名应用会触发 Windows SmartScreen 和 macOS Gatekeeper 警告，Linux 包也没有可验证的发行者
 签名。这是当前阶段的明确限制，不应引导用户关闭系统安全机制。正式公开发布前必须补齐各平台

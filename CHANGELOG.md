@@ -5,14 +5,24 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-09-23
+
+### Added
+
+- 支持 Codex 推理摘要流式展示，并将工具调用与文件编辑按操作分组。
+- 支持自定义 Provider 在线发现模型，在不可用时回退本地模型目录。
+- 在上下文面板保留并查看运行时警告详情。
+
 ### Changed
 
 - 升级私有 Codex 运行时至 `0.156.0`，同步六个平台校验值、协议快照与版本门禁。
 - 更新插件详情映射，展示并去重 0.156 新增的引导 Skill。
+- 更新 `reqwest` 至 `0.13.5`，并同步 CI 的 Codex 协议检查版本。
 
 ### Fixed
 
 - 修复远程 `fileId` 图片导致历史会话解析失败的问题，并关闭未使用的线程附件通知。
+- 修复运行时警告在有效输出或任务终态后的清理，以及关于页面更新控件换行。
 
 ## [0.2.3] - 2026-09-16
 
@@ -293,7 +303,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.0...v0.2.1
