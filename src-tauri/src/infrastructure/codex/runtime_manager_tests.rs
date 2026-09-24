@@ -13,14 +13,15 @@ async fn staged_runtime_should_allow_cold_launch_without_relaxing_regular_probes
     // 同一进程延迟用于验证安装与日常探测的不同预算，不依赖网络或 macOS 缓存。
     std::fs::write(
         &binary,
-        b"#!/bin/sh\nsleep 4\nprintf 'codex-cli 0.156.0\\n'\n",
+        b"#!/bin/sh\nsleep 6\nprintf 'codex-cli 0.156.0\\n'\n",
     )
     .unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
-    assert!(matches!(
-        probe_codex_version(&binary, None).await,
-        Err(ProcessError::VersionProbeTimeout)
-    ));
+    let probe = probe_codex_version(&binary, None).await;
+    assert!(
+        matches!(probe, Err(ProcessError::VersionProbeTimeout)),
+        "regular probe should time out: {probe:?}"
+    );
     let result = super::runtime_manager::validate_staged_runtime(&binary).await;
     std::fs::remove_dir_all(&root).unwrap();
     assert!(result.is_ok(), "cold install should validate: {result:?}");
