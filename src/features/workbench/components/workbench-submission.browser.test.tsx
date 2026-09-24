@@ -115,7 +115,7 @@ test.each([1280, 1920].flatMap((width) =>
   expect(container.scrollHeight).toBeGreaterThan(container.clientHeight);
   const anchor = historyAnchor.element();
   const historyRow = anchor.closest<HTMLElement>('[data-virtual-row="turn"]')!;
-  await expect.poll(() => container.getBoundingClientRect().bottom - historyRow.getBoundingClientRect().bottom).toBe(28);
+  await expect.poll(() => Math.abs(container.getBoundingClientRect().bottom - historyRow.getBoundingClientRect().bottom - 28)).toBeLessThanOrEqual(1);
   const samples: number[] = [anchor.getBoundingClientRect().top];
   const overlaps: number[] = [];
   let userHasAppeared = false;
@@ -218,8 +218,8 @@ test.each([1280, 1920].flatMap((width) =>
   expect(container.scrollHeight - container.scrollTop - container.clientHeight).toBeLessThan(1);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   // 持续输出时必须能点击并编辑下一条草稿，不能依赖切换任务恢复焦点。
-  const editorNode = editor.element() as HTMLElement;
-  await expect.poll(() => editorNode.isContentEditable).toBe(true);
+  const editorNode = editor.element() as HTMLTextAreaElement;
+  await expect.poll(() => editorNode.disabled).toBe(false);
   let sequence = 4;
   store.getState().applyEvents([{
     version: 2, provider: "codex", sessionId: "session", sequence: sequence++,
@@ -237,12 +237,12 @@ test.each([1280, 1920].flatMap((width) =>
     await expect.element(screen.getByText(`流式段落 ${batch}：${"持续输出内容。".repeat(80)}`, { exact: true })).toBeVisible();
     editorNode.blur();
     const rect = editorNode.getBoundingClientRect();
-    expect(editorNode.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))).toBe(true);
+    expect(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)).toBe(editorNode);
     await editor.click();
     expect(document.activeElement).toBe(editorNode);
     await editor.fill(`未发送草稿 ${batch}`);
     await nextFrame();
     expect(document.activeElement).toBe(editorNode);
-    expect(editorNode.textContent).toBe(`未发送草稿 ${batch}`);
+    expect(editorNode.value).toBe(`未发送草稿 ${batch}`);
   }
 });

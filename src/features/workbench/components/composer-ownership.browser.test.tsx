@@ -45,19 +45,19 @@ test.each([1280, 1920])("locks the whole composer while preserving the draft and
     </ComposerDraftProvider></ProjectDraftProvider></TooltipProvider>
   </QueryClientProvider>;
   const screen = await render(view("checking"));
-  const coldEditor = screen.getByRole("textbox").element() as HTMLElement;
-  expect(coldEditor.isContentEditable).toBe(false);
+  const coldEditor = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+  expect(coldEditor.disabled).toBe(true);
   expect(coldEditor.closest("[inert]")).not.toBeNull();
   await screen.rerender(view("writable"));
   await screen.getByRole("textbox").click();
   expect(document.activeElement).toBe(coldEditor);
-  expect(coldEditor.isContentEditable).toBe(true);
+  expect(coldEditor.disabled).toBe(false);
   await screen.getByRole("textbox").fill("保留未发送草稿");
-  const editor = document.querySelector('[contenteditable="true"]') as HTMLElement;
-  expect(editor.textContent).toContain("保留未发送草稿");
+  const editor = coldEditor;
+  expect(editor.value).toContain("保留未发送草稿");
   await screen.rerender(view("external"));
   await expect.element(screen.getByText("当前任务正在其他客户端进行")).toBeVisible();
-  expect(editor.getAttribute("contenteditable")).toBe("false");
+  expect(editor.disabled).toBe(true);
   expect(editor.closest("[inert]")).not.toBeNull();
   const overlay = screen.getByText("当前任务正在其他客户端进行").element().parentElement!;
   const form = editor.closest("form")!;
@@ -75,8 +75,8 @@ test.each([1280, 1920])("locks the whole composer while preserving the draft and
   await expect(composerRef.current!.answerQuestions("回答")).resolves.toBe(false);
   await expect(composerRef.current!.buildPlan()).resolves.toBe(false);
   expect(onCaptureSubmission).not.toHaveBeenCalled();
-  expect(editor.textContent).toContain("保留未发送草稿");
+  expect(editor.value).toContain("保留未发送草稿");
   await screen.rerender(view("writable", "task-b"));
-  expect(document.querySelector('[contenteditable="true"]')).not.toBeNull();
+  expect(screen.getByRole("textbox").element().hasAttribute("disabled")).toBe(false);
   await expect.element(screen.getByText("当前任务正在其他客户端进行")).not.toBeInTheDocument();
 });

@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-09-24
+
+### Changed
+
+- 改用纯文本编辑 Skill 与项目文件引用，提交时保留 `$name` 正文及结构化 Skill 数据，避免时间线和队列中重复显示标记。
+- 最小化主窗口时将其收纳到托盘，保持应用在后台运行。
+
+### Fixed
+
+- 修复更新渠道缺少安装资产时的确认与错误提示，并校验更新清单的目标版本。
+- 修复 Provider 目录迁移与重命名路径处理，并稳定 Codex 运行时探测超时测试。
+
 ## [0.2.4] - 2026-09-23
 
 ### Added
@@ -303,7 +315,8 @@
 
 - 添加最小化 Tauri 权限、依赖供应链审计与 Provider 运行时完整性校验。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.2.1...v0.2.2
