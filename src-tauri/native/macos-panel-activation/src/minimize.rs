@@ -9,12 +9,12 @@ use objc2_app_kit::{
 use objc2_foundation::{NSNotification, NSNotificationCenter, NSObjectProtocol, NSOperationQueue};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-/// 在主线程最小化窗口；全屏时等 AppKit 完成退出动画后再执行，完成或窗口关闭后调用回调。
-pub fn minimize_window(
+/// 隐藏窗口前退出全屏；等待 AppKit 完成动画后调用回调，避免窗口状态与 Tauri 脱节。
+pub fn exit_fullscreen_before_hide(
     handle: &impl HasWindowHandle,
     completed: impl FnOnce() + 'static,
 ) -> Result<(), &'static str> {
-    let _mtm = MainThreadMarker::new().ok_or("minimize requires the main thread")?;
+    let _mtm = MainThreadMarker::new().ok_or("fullscreen exit requires the main thread")?;
     let handle = handle.window_handle().map_err(|_| "window handle unavailable")?;
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
         return Err("expected an AppKit window handle");
@@ -23,7 +23,6 @@ pub fn minimize_window(
     let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
     let window = view.window().ok_or("native window unavailable")?;
     if !window.styleMask().contains(NSWindowStyleMask::FullScreen) {
-        window.miniaturize(None);
         completed();
         return Ok(());
     }
@@ -64,11 +63,11 @@ fn wait_for_fullscreen_exit(window: &NSWindow, completed: impl FnOnce() + 'stati
             return;
         }
 
-        // 等本轮通知和 Tao 的窗口样式恢复结束再最小化，不使用固定延迟或状态轮询。
+        // 等本轮通知和 Tao 的窗口样式恢复结束再通知 Tauri 隐藏，不使用固定延迟或状态轮询。
         let finish = RefCell::new(Some((callback_window.clone(), completed)));
         let operation = RcBlock::new(move || {
             if let Some((window, completed)) = finish.borrow_mut().take() {
-                window.miniaturize(None);
+                drop(window);
                 completed();
             }
         });

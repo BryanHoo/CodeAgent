@@ -36,14 +36,24 @@ await test("shared close confirmation uses a visible native parent and three cho
   assert.ok(lifecycle.includes("window.is_minimized()"));
   assert.ok(lifecycle.includes("MessageDialogButtons::YesNoCancelCustom"));
   assert.ok(lifecycle.includes("show_with_result"));
-  assert.ok(lifecycle.includes("request_minimize"), "minimize must wait for the native fullscreen transition");
+  assert.ok(lifecycle.includes("request_minimize"), "minimize to tray must wait for the native fullscreen transition");
 });
 
-await test("macOS fullscreen minimization waits for the native completion notification", async () => {
+await test("minimize to tray hides the window without closing its terminal owner", async () => {
+  const application = await readFile(new URL("../src-tauri/src/application/app_minimize.rs", import.meta.url), "utf8");
+  const terminals = await readFile(new URL("../src-tauri/src/application/terminal_lifecycle.rs", import.meta.url), "utf8");
+  assert.ok(application.includes("window.hide()"));
+  assert.ok(!application.includes("window.close()"));
+  assert.ok(terminals.includes("WindowEvent::Destroyed"));
+});
+
+await test("macOS fullscreen tray hide waits for the native completion notification", async () => {
   const native = await readFile(new URL("../src-tauri/native/macos-panel-activation/src/minimize.rs", import.meta.url), "utf8");
   const application = await readFile(new URL("../src-tauri/src/application/app_minimize.rs", import.meta.url), "utf8");
   assert.ok(application.includes("run_on_main_thread"));
-  assert.ok(application.includes("macos_panel_activation::minimize_window"));
+  assert.ok(application.includes("macos_panel_activation::exit_fullscreen_before_hide"));
+  assert.ok(application.includes("set_dock_visibility(false)"));
+  assert.ok(!native.includes("window.miniaturize(None)"));
   assert.ok(native.includes("NSWindowDidExitFullScreenNotification"));
   assert.ok(native.includes("NSWindowWillCloseNotification"));
   assert.ok(native.includes("removeObserver"));

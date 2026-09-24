@@ -1,5 +1,5 @@
 mod minimize;
-pub use minimize::minimize_window;
+pub use minimize::exit_fullscreen_before_hide;
 
 use objc2::{MainThreadMarker, msg_send, runtime::NSObjectProtocol as _, sel};
 use objc2_app_kit::{NSApplication, NSEvent, NSPanel};
