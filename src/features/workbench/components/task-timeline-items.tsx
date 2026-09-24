@@ -99,22 +99,26 @@ export function TimelineItemContent({
       }
       const attachments = item.attachments ?? [];
       const skills = item.role === "user" ? (item.skills ?? []) : [];
+      const mentionedSkillNames = new Set(
+        [...item.text.matchAll(/\$([A-Za-z0-9_-]+)/gu)].map((match) => match[1]),
+      );
+      const missingSkills = skills.filter((skill) => !mentionedSkillNames.has(skill.name));
       const responseRendering = resolveMessageResponseRendering({
         isLastTurnItem,
         role: item.role,
         turnStatus,
       });
-      const hasTextContent = skills.length > 0 || item.text.length > 0;
+      const hasTextContent = missingSkills.length > 0 || item.text.length > 0;
       const messageBody = hasTextContent ? (
         <div>
-          {skills.length === 0 ? null : (
+          {missingSkills.length === 0 ? null : (
             <span
               className="inline"
               aria-label={i18n.t("timeline.skillsUsed", { ns: "conversation" })}
             >
-              {skills.map((skill) => (
+              {missingSkills.map((skill) => (
                 <SkillToken
-                  className="relative top-1 me-1.5 bg-raised px-2 text-body leading-6"
+                  className="me-1.5"
                   data-message-skill={skill.name}
                   data-skill-token=""
                   key={skill.name}
@@ -126,7 +130,7 @@ export function TimelineItemContent({
           {item.text.length === 0 ? null : (
             <LazyMessageResponse
               className={cn(
-                skills.length > 0 && "inline [&>p:first-child]:inline",
+                missingSkills.length > 0 && "inline [&>p:first-child]:inline",
                 item.role === "user" && preservedUserMessageClassName,
               )}
               {...responseRendering}

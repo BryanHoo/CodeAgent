@@ -22,12 +22,16 @@ export function createPromptSkillContentFromSubmission(
   text: string,
   skills: readonly AgentSkill[],
 ): PromptSkillContent {
+  const parsed = parsePromptReferenceText(text, [], skills);
+  const presentSkillIds = new Set(
+    parsed.flatMap((part) => (part.type === "skill" ? [part.skill.id] : [])),
+  );
   return normalizePromptSkillContent([
-    ...skills.flatMap((skill) => [
+    ...skills.filter((skill) => !presentSkillIds.has(skill.id)).flatMap((skill) => [
       { skill, type: "skill" as const },
       { text: " ", type: "text" as const },
     ]),
-    ...(text === "" ? [] : [{ text, type: "text" as const }]),
+    ...parsed,
   ]);
 }
 
@@ -231,6 +235,59 @@ export function recognizePromptSkillReferences(
   return changed ? normalizePromptSkillContent(recognized) : content;
 }
 
+export function parsePromptReferenceText(
+  text: string,
+  previous: PromptSkillContent,
+  availableSkills: readonly AgentSkill[],
+): PromptSkillContent {
+  // 只把完整匹配的已知引用恢复为提交元数据；改名或删掉的片段立即退回普通文本。
+  const skills = new Map(availableSkills.map((skill) => [skillPlainText(skill), skill]));
+  const files = new Map<string, ProjectFileSearchEntry>();
+  for (const part of previous) {
+    if (part.type === "skill") skills.set(skillPlainText(part.skill), part.skill);
+    if (part.type === "file") files.set(fileReferencePlainText(part.file), part.file);
+  }
+  const references = [...skills.keys(), ...files.keys()].sort((a, b) => b.length - a.length);
+  const parts: PromptSkillContentPart[] = [];
+  let start = 0;
+  let position = 0;
+  const selectedSkills = new Set<string>();
+  while (position < text.length) {
+    const boundary = position === 0 || /\s/u.test(text[position - 1] ?? "");
+    const reference = boundary && (text[position] === "$" || text[position] === "@")
+      ? references.find((value) => text.startsWith(value, position))
+      : undefined;
+    if (reference === undefined) {
+      position += 1;
+      continue;
+    }
+    const end = position + reference.length;
+    const next = text[end];
+    const continuesReference = reference.startsWith("$")
+      ? next !== undefined && /[\w/\\-]/u.test(next)
+      : next !== undefined && !/[\s,!?;:，。！？；：、()[\]{}"'`]/u.test(next);
+    if (continuesReference) {
+      position += 1;
+      continue;
+    }
+    if (start < position) parts.push({ text: text.slice(start, position), type: "text" });
+    const skill = skills.get(reference);
+    const file = files.get(reference);
+    if (skill !== undefined && !selectedSkills.has(skill.id)) {
+      parts.push({ skill, type: "skill" });
+      selectedSkills.add(skill.id);
+    } else if (file !== undefined) {
+      parts.push({ file, type: "file" });
+    } else {
+      parts.push({ text: reference, type: "text" });
+    }
+    position = end;
+    start = end;
+  }
+  if (start < text.length) parts.push({ text: text.slice(start), type: "text" });
+  return normalizePromptSkillContent(parts);
+}
+
 export function removePromptSlashCommand(
   content: PromptSkillContent,
   slashCommand: Pick<PromptSlashCommand, "end" | "start">,
@@ -273,28 +330,15 @@ export function serializePromptSkillContent(content: PromptSkillContent): string
 
 export function toPromptSkillSubmission(content: PromptSkillContent): PromptSkillSubmission {
   const skills: AgentSkill[] = [];
-  let text = "";
-  let needsFileBoundary = false;
+  const seenSkillIds = new Set<string>();
   for (const part of content) {
-    if (part.type === "skill") {
+    if (part.type === "skill" && !seenSkillIds.has(part.skill.id)) {
       skills.push(part.skill);
-      continue;
+      seenSkillIds.add(part.skill.id);
     }
-    const partText = part.type === "file" ? fileReferencePlainText(part.file) : part.text;
-    if (partText === "") {
-      continue;
-    }
-    if (
-      (part.type === "file" && text !== "" && !/\s$/u.test(text)) ||
-      (needsFileBoundary && !/^\s/u.test(partText))
-    ) {
-      // 纯文本协议使用空格保留不可编辑文件 Token 的前后边界。
-      text += " ";
-    }
-    text += partText;
-    needsFileBoundary = part.type === "file";
   }
-  return { skills, text: text.trim() };
+  // Codex App Server 需要正文中的 `$name` 与独立 skill 输入同时存在。
+  return { skills, text: serializePromptSkillContent(content).trim() };
 }
 
 export function isPromptSkillContentEmpty(content: PromptSkillContent): boolean {

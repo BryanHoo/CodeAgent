@@ -37,7 +37,6 @@ import { ComposerApprovalControls } from "./workbench-composer-approval-controls
 import { shouldNavigatePromptHistory } from "./prompt-history.js";
 import { PromptSkillEditor } from "./prompt-skill-editor.js";
 import { ProjectRootSelector } from "./project-root-selector.js";
-import { selectionOffset } from "./prompt-skill-editor-dom.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
 import { ComposerDraftSaveButton } from "./project-draft-controls.js";
@@ -283,7 +282,6 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
         >
           <ComposerAttachments />
           <PromptInputBody>
-            <input name="message" type="hidden" value={props.promptSubmissionText} />
             <PromptSkillEditor
               aria-activedescendant={props.activeCommandItemId}
               aria-controls={
@@ -321,15 +319,13 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   (event.key === "ArrowDown" || event.key === "ArrowUp") &&
                   !(event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
                 ) {
-                  const selection = document.getSelection();
                   const direction = event.key === "ArrowUp" ? "previous" : "next";
-                  const serializedText = event.currentTarget.dataset["serializedValue"] ?? "";
+                  const input = event.currentTarget;
                   if (
-                    selection?.isCollapsed === true &&
-                    event.currentTarget.contains(selection.anchorNode) &&
+                    input.selectionStart === input.selectionEnd &&
                     shouldNavigatePromptHistory(
-                      serializedText,
-                      selectionOffset(event.currentTarget),
+                      input.value,
+                      input.selectionStart,
                       direction,
                     ) &&
                     props.onPromptHistoryNavigate(direction)

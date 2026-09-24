@@ -82,6 +82,26 @@ mod tests {
     }
 
     #[test]
+    fn skill_prompt_should_preserve_marker_and_structured_input() {
+        let input = AgentPromptInput {
+            attachments: Vec::new(),
+            skills: vec![json!({"id": "/skills/review/SKILL.md", "name": "review"})],
+            text: "$review 检查代码".to_owned(),
+        };
+        let native = map_prompt_input(&input).expect("skill prompt should map");
+
+        assert_eq!(native[0]["text"], "$review 检查代码");
+        assert_eq!(
+            native[1],
+            json!({
+                "type": "skill",
+                "name": "review",
+                "path": "/skills/review/SKILL.md",
+            })
+        );
+    }
+
+    #[test]
     fn prompt_file_should_preserve_attachment_identity_in_text_elements() {
         let path = std::env::temp_dir()
             .join("report.json")

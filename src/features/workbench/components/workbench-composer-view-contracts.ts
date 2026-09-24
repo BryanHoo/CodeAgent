@@ -107,7 +107,6 @@ export type WorkbenchComposerViewProps = Readonly<{
   projectDrafts: readonly ProjectDraftRecord[];
   projectName: string;
   promptContent: PromptSkillContent;
-  promptSubmissionText: string;
   queuedPrompts: readonly QueuedComposerPrompt[];
   removeQueuedPrompt: (queuedPromptId: string) => void;
   reviewMenuMode: "branches" | "scopes" | null;

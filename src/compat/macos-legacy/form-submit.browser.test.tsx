@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { PromptInput, PromptInputTextarea } from "../../shared/components/agent/prompt-input.js";
-import { PromptSkillEditor } from "../../features/workbench/components/prompt-skill-editor.js";
 import { installLegacyFormSubmit } from "./form-submit.js";
 
 const descriptor = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "requestSubmit")!;
@@ -13,15 +12,12 @@ describe("Legacy 表单提交", () => {
   });
   afterEach(() => Object.defineProperty(HTMLFormElement.prototype, "requestSubmit", descriptor));
 
-  it.each(["editor", "textarea"])("%s 在缺少原生 requestSubmit 时按 Enter 提交一次", async (kind) => {
+  it("textarea 在缺少原生 requestSubmit 时按 Enter 提交一次", async () => {
     const submit = vi.fn();
     const screen = await render(<PromptInput onSubmit={submit}>
-      {kind === "editor" ? <>
-        <input name="message" type="hidden" value="测试消息" />
-        <PromptSkillEditor content={[{ type: "text", text: "测试消息" }]} onChange={() => undefined} placeholder="输入" skills={[]} scope="test" />
-      </> : <PromptInputTextarea defaultValue="测试消息" />}
+      <PromptInputTextarea defaultValue="测试消息" />
     </PromptInput>);
-    const input = screen.container.querySelector(kind === "editor" ? '[contenteditable="true"]' : "textarea")!;
+    const input = screen.container.querySelector("textarea")!;
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true, cancelable: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));

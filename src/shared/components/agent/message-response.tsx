@@ -1,4 +1,4 @@
-import { Copy, ExternalLink, File, FolderOpen } from "lucide-react";
+import { Copy, ExternalLink, FolderOpen } from "lucide-react";
 import { markdownTypographyClassName } from "./markdown-typography.js";
 import {
   createContext,
@@ -37,7 +37,6 @@ import type { TextSnapshot } from "../../lib/append-only-text.js";
 import { unparsedStrongRemarkPlugin } from "./markdown-strong-plugin.js";
 import { StreamingMarkdown } from "./streaming-markdown.js";
 import { openMarkdownLink } from "./markdown-link-navigation.js";
-import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
   node?: unknown;
@@ -245,13 +244,8 @@ function MarkdownLink({
 
   if (fileReference !== null) {
     if (fileReference.prompt) {
-      const classNames = `${promptReferenceTokenClassName} relative top-0.5 select-none ${className}`;
-      const content = (
-        <>
-          <File aria-hidden="true" className="size-4 shrink-0" />
-          <span className="truncate">{children}</span>
-        </>
-      );
+      const classNames = `text-inherit ${className}`;
+      const content = <>@{fileReference.path}</>;
 
       if (onOpenFileReference !== null) {
         const reference = { lineNumber: null, path: fileReference.path };
@@ -260,7 +254,7 @@ function MarkdownLink({
             <Button
               variant="embedded"
               aria-label={`@${fileReference.path}`}
-              className={`${classNames} cursor-pointer hover:bg-control-hover`}
+              className={`${classNames} cursor-pointer hover:underline`}
               data-prompt-file-reference={fileReference.path}
               onClick={() => {
                 onOpenFileReference(reference);

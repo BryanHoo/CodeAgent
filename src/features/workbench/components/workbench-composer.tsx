@@ -445,7 +445,6 @@ export function WorkbenchComposer({
       projectDrafts={projectDrafts}
       projectName={projectName}
       promptContent={promptContent}
-      promptSubmissionText={promptSubmission.text}
       queuedPrompts={composerQueue.queuedPrompts}
       removeQueuedPrompt={(queuedPromptId) => {
         void composerQueue.removeQueuedPrompt(queuedPromptId).catch(setMutationError);
