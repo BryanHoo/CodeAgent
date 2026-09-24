@@ -134,12 +134,10 @@ pub async fn ensure_custom_model_discovery(
         .and_then(Value::as_str)
         != Some(catalog_url.as_str())
     {
-        let mut provider = config
-            .pointer(&format!("/model_providers/{provider_id}"))
-            .cloned()
-            .ok_or(ConnectionError::InvalidMessage)?;
-        provider["model_catalog_url"] = json!(catalog_url);
-        edits.push(edit(&format!("model_providers.{provider_id}"), provider));
+        edits.push(edit(
+            &format!("model_providers.{provider_id}.model_catalog_url"),
+            json!(catalog_url),
+        ));
     }
     if config.pointer("/features/api_key_model_discovery") != Some(&json!(true)) {
         edits.push(edit("features.api_key_model_discovery", json!(true)));

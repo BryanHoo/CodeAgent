@@ -44,6 +44,7 @@
 
 ## Provider 配置
 
+- `config/read` 返回的是规范化投影，Provider 对象可能包含值为 `null` 的可选字段；迁移不得把整个投影作为 TOML 值回写。补齐模型目录时只替换 `model_providers.<id>.model_catalog_url` 叶子键，避免 0.156 因对象内 `null` 拒绝 `config/batchWrite` 并阻断运行时启动。
 - Codex `config.toml` 只写入标准 Provider 字段：内置 OpenAI 覆盖使用 `openai_base_url`，自定义 Provider 使用 `model_provider` 与 `model_providers.<id>`
 - CodeAgent 自有的模型目录不得写入 `desktop.codeagent.provider`；应原子保存到应用数据目录，并按 `providerId` 与 `baseUrl` 精确匹配，防止跨端点复用模型
 - 重新连接未提交模型列表时复用当前端点的本地目录；旧 `desktop.codeagent.provider.customModels` 仅允许作为一次性迁移来源，成功保存后清理整个旧配置段

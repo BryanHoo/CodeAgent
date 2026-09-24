@@ -75,9 +75,9 @@ async fn status_stats_should_cover_both_sides_and_untracked_directory_without_di
 }
 
 #[tokio::test]
-async fn status_stats_should_parse_rename_paths_with_tabs_and_newlines() {
+async fn status_stats_should_map_renamed_special_path() {
     let repo = Repository::new();
-    let path = "new\tname\n[1].txt";
+    let path = "new name [1].txt";
     git(&repo.0, &["config", "status.renames", "false"]);
     git(&repo.0, &["config", "diff.renames", "false"]);
     git(&repo.0, &["mv", "old.txt", path]);

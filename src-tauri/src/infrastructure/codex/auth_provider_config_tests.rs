@@ -106,7 +106,8 @@ async fn legacy_custom_provider_should_gain_catalog_on_next_model_read() {
         server_writer.write_all(format!("{}\n", json!({
             "id": read["id"], "result": {"config": {
                 "model_provider": "relay", "model_providers": {"relay": {
-                    "name": "Relay", "base_url": "https://relay.example/v1", "wire_api": "responses"
+                    "name": "Relay", "base_url": "https://relay.example/v1", "wire_api": "responses",
+                    "env_key": null, "http_headers": null, "query_params": null
                 }}
             }}
         })).as_bytes()).await.unwrap();
@@ -115,13 +116,10 @@ async fn legacy_custom_provider_should_gain_catalog_on_next_model_read() {
             serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
         assert_eq!(write["method"], "config/batchWrite");
         let edits = write["params"]["edits"].as_array().unwrap();
-        assert!(
-            edits
-                .iter()
-                .any(|edit| edit["keyPath"] == "model_providers.relay"
-                    && edit["value"]["model_catalog_url"] == "https://relay.example/v1/models"
-                    && edit["value"]["wire_api"] == "responses")
-        );
+        assert!(edits.iter().any(|edit| edit["keyPath"]
+            == "model_providers.relay.model_catalog_url"
+            && edit["value"] == "https://relay.example/v1/models"));
+        assert!(edits.iter().all(|edit| !edit["value"].is_object()));
         assert!(
             edits
                 .iter()

@@ -126,3 +126,25 @@ fn number(value: Option<&[u8]>) -> Result<usize, WorkspaceError> {
         None => Err(invalid("numstat", "missing count")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numstat_should_parse_rename_path_with_tabs_and_newlines() {
+        let stats = FileChangeStats {
+            additions: 1,
+            removals: 0,
+        };
+        let mut parser = Numstat::default();
+
+        assert_eq!(parser.record(b"1\t0\t\0").unwrap(), None);
+        assert_eq!(parser.record(b"old.txt\0").unwrap(), None);
+        assert_eq!(
+            parser.record(b"new\tname\n[1].txt\0").unwrap(),
+            Some(("new\tname\n[1].txt", stats))
+        );
+        assert!(parser.rename.is_none());
+    }
+}
